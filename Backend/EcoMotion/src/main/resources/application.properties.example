@@ -1,0 +1,50 @@
+spring.application.name=EcoMotion
+
+
+# ===============================
+# Database configuration
+# ===============================
+spring.datasource.url=jdbc:postgresql://localhost:5432/ecomotion
+spring.datasource.username=
+spring.datasource.password=
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+
+# ===============================
+# HikariCP Connection Pool
+# ===============================
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.minimum-idle=5
+
+spring.datasource.hikari.connection-timeout=30000
+spring.datasource.hikari.idle-timeout=600000
+spring.datasource.hikari.max-lifetime=1800000
+
+
+# ===============================
+# Server port
+# ===============================
+server.port=8080
+
+
+# ===============================
+# Hibernate properties
+# ===============================
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.show-sql=true
+spring.jpa.hibernate.ddl-auto=update
+spring.data.jpa.repositories.enabled=true
+
+
+# ===============================
+# SpringDoc / Swagger
+# ===============================
+
+springdoc.api-docs.enabled=true
+springdoc.api-docs.path=/v3/api-docs
+springdoc.swagger-ui.enabled=true
+springdoc.swagger-ui.path=/swagger-ui.html
+springdoc.swagger-ui.try-it-out-enabled=true
+springdoc.swagger-ui.operations-sorter=method
+springdoc.swagger-ui.tags-sorter=alpha
+springdoc.packages-to-scan=com.fptufa26.ecomotion.controller
