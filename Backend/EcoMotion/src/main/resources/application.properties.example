@@ -5,8 +5,8 @@ spring.application.name=EcoMotion
 # Database configuration
 # ===============================
 spring.datasource.url=jdbc:postgresql://localhost:5432/ecomotion
-spring.datasource.username=
-spring.datasource.password=
+spring.datasource.username=your_username
+spring.datasource.password=your_password
 spring.datasource.driver-class-name=org.postgresql.Driver
 
 
@@ -37,6 +37,37 @@ spring.data.jpa.repositories.enabled=true
 
 
 # ===============================
+# JWT
+# ===============================
+# app.jwt.secret MUST be at least 32 bytes (256 bit) or HS256 signing fails with WeakKeyException.
+app.jwt.secret=your-256-bit-secret-at-least-32-chars
+app.jwt.access-token-ttl=15m
+app.jwt.issuer=ecomotion
+
+
+# ===============================
+# Refresh token
+# ===============================
+app.refresh-token.ttl-remember-me=7d
+app.refresh-token.ttl-default=1d
+
+
+# ===============================
+# Cookie
+# ===============================
+app.cookie.name=refresh_token
+app.cookie.path=/api/auth
+app.cookie.secure=false
+app.cookie.same-site=Lax
+
+
+# ===============================
+# CORS
+# ===============================
+app.cors.allowed-origins=http://localhost:3000,http://localhost:5173
+
+
+# ===============================
 # SpringDoc / Swagger
 # ===============================
 
@@ -47,4 +78,4 @@ springdoc.swagger-ui.path=/swagger-ui.html
 springdoc.swagger-ui.try-it-out-enabled=true
 springdoc.swagger-ui.operations-sorter=method
 springdoc.swagger-ui.tags-sorter=alpha
-springdoc.packages-to-scan=com.fptufa26.ecomotion.controller
+springdoc.packages-to-scan=com.fptufa26.ecomotion
