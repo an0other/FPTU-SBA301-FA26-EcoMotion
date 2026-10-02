@@ -106,6 +106,7 @@ Xây dựng **nền tảng cho thuê xe hơi có tài xế theo khối thời gi
 ```
 FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 ├── README.md
+├── .gitignore                            ← ignore cho CẢ repo (Java + Node/React)
 ├── AGENT_CONTEXT.md                      ← FILE NÀY — điểm vào cho agent
 ├── docs/                                 ← TÀI LIỆU DỰ ÁN
 │   ├── SBA301_FALL26.md                  ← ĐẶC TẢ CHỨC NĂNG (v8.0) — NGUỒN SỰ THẬT nghiệp vụ
@@ -117,7 +118,7 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 │       ├── pom.xml
 │       ├── AGENT_CODE_STRUCTURE.md       ← QUY ƯỚC CẤU TRÚC CODE (đọc trước khi code Java)
 │       ├── mvnw / mvnw.cmd
-│       ├── .gitignore
+│       ├── .gitignore                    ← ignore riêng cho backend (chi tiết hơn)
 │       └── src\
 │           ├── main\
 │           │   ├── java\com\fptufa26\ecomotion\
@@ -138,6 +139,8 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 │               └── resources\application.properties     ← H2 in-memory, secret giả (an toàn)
 └── Frontend\                             ← ⚠️ TRỐNG — chưa khởi tạo
 ```
+
+**Quy tắc ignore:** có **2 tầng** `.gitignore` — root (bao quát cả repo: Java + Node/React + IDE + secret) và `Backend/EcoMotion/` (chi tiết cho Spring Boot). Cả 2 đều chặn `application.properties` chứa credentials.
 
 **Ngoài repo (công cụ QA, không thuộc dự án):** `Group_Project\lib\mermaid.min.js`, `Group_Project\qc-scripts\`, `Group_Project\note.txt`  
 → Cân nhắc **không** đẩy vào repo vì chỉ là công cụ nội bộ, làm repo phình.
@@ -659,3 +662,6 @@ Phần này ghi lại các lỗi **đã thực sự gặp** để không lặp l
 | **File `.md` tạo ngoài git repo rồi mới move vào** | File tạo ở thư mục cha (ngoài git) có thể **mất** khi có tiến trình khác tác động lên repo root. **Luôn tạo file trực tiếp trong repo**, không tạo ngoài rồi move |
 | Tài liệu quan trọng nằm ngoài git                  | `git clone` về không có spec → **đặt tài liệu trong `docs/`** ngay từ đầu                                                                                         |
 | Commit secret                                      | Kiểm tra `git log --all -- <path>` để biết file có **từng** bị commit không — xoá file ở commit mới **không xoá được** khỏi lịch sử                               |
+| **Commit `node_modules/` / `target/`**             | Rất khó gỡ (hàng chục nghìn file). Phải có `.gitignore` **ở root** trước khi tạo `Frontend/`                                                                       |
+| **Ép commit file đã bị ignore**                    | `git add -f <file>` — chỉ dùng khi thật sự cần, và phải hiểu mình đang bỏ qua lớp bảo vệ nào                                                                      |
+| Sửa `.gitignore` cho file **đã lỡ track**          | Thêm vào `.gitignore` **không** tự bỏ track. Phải `git rm --cached <file>` rồi commit                                                                             |
