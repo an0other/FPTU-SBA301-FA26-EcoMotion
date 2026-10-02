@@ -1,0 +1,137 @@
+# ============================================================
+#  .gitignore — EcoMotion (root)
+#  Monorepo: Backend (Spring Boot / Java 21) + Frontend (ReactJS)
+#  Quy tắc: ignore theo TỪNG LOẠI, không dùng wildcard quá rộng.
+# ============================================================
+
+# ------------------------------------------------------------
+#  BÍ MẬT & CẤU HÌNH MÔI TRƯỜNG  —  QUAN TRỌNG NHẤT
+#  Không bao giờ commit file chứa mật khẩu / khoá bí mật.
+# ------------------------------------------------------------
+# Backend: file config thật (chứa DB_PASSWORD, JWT_SECRET)
+**/src/main/resources/application.properties
+**/src/main/resources/application-*.properties
+!**/src/test/resources/application*.properties
+
+# Frontend / Node: biến môi trường
+.env
+.env.*
+!.env.example
+*.local
+
+# Khoá & chứng chỉ
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# ------------------------------------------------------------
+#  JAVA / SPRING BOOT / MAVEN
+# ------------------------------------------------------------
+target/
+build/
+out/
+bin/
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Maven wrapper jar (một số team không commit)
+.mvn/wrapper/maven-wrapper.jar
+
+# Log & file tạm của Spring Boot
+*.log
+logs/
+*.pid
+*.hprof
+spring-shell.log
+
+# ------------------------------------------------------------
+#  NODE / REACTJS
+# ------------------------------------------------------------
+node_modules/
+dist/
+build/
+.next/
+out/
+.vite/
+.cache/
+.parcel-cache/
+coverage/
+
+# Trình quản lý gói (chọn 1, nhưng ignore hết cho chắc)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.npm/
+.pnpm-store/
+.yarn/
+
+# Log của npm/yarn
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npmrc
+
+# ------------------------------------------------------------
+#  IDE & EDITOR
+# ------------------------------------------------------------
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse / STS
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+
+# VS Code (giữ lại .vscode/extensions.json nếu là quy ước team)
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Vim / Emacs / OS
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------
+#  CÔNG CỤ AI / BUILD TOOL CỤC BỘ
+#  (không commit lên remote — mỗi máy tự sinh)
+# ------------------------------------------------------------
+.workbuddy-ai/
+.claude/
+.cursor/
+.aider*
+
+# ------------------------------------------------------------
+#  DỮ LIỆU SEED & FILE SINH TỰ ĐỘNG
+# ------------------------------------------------------------
+**/src/main/java/**/seed/
+*.sql.gz
+*.dump
+
+# ------------------------------------------------------------
+#  KHÁC
+# ------------------------------------------------------------
+HELP.md
+*.tmp
+*.bak
+*.orig
+*.rej
