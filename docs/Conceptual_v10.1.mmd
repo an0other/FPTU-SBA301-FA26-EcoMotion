@@ -1,0 +1,411 @@
+%% =====================================================================
+%% CONCEPTUAL DIAGRAM v10.1 — Nền tảng thuê xe có tài xế (chauffeur-hire)
+%% Sinh từ SBA301_FALL26.md · build từng entity từ đầu
+%% ---------------------------------------------------------------------
+%% 15 THỰC THỂ · 25 QUAN HỆ
+%% ---------------------------------------------------------------------
+%% MỤC ĐÍCH: sơ đồ khái niệm cho team dev — hiểu nghiệp vụ trong 1 phút.
+%% KHÔNG phải ERD vật lý (xem ERD vật lý riêng để triển khai DB).
+%% ---------------------------------------------------------------------
+%% THAY ĐỔI v10.0 -> v10.1
+%%   - THÊM BOOKING_POLICY_SNAPSHOT (1-1 với BOOKING): chốt LUẬT TÍNH TIỀN
+%%     lúc đặt (đơn giá slot, % cọc, mức vượt, % phụ phí, bán kính...)
+%%     -> RENTAL_PLAN / PROVIDER được tự do sửa, không phá đơn cũ
+%%   - BOOKING_CHARGE: BỎ status + updated_at + base_amount
+%%     THÊM quantity + unit_price + is_waived
+%%     (base_amount = quantity * unit_price -> suy ra, không lưu)
+%%   - BỎ cảnh báo #1 (engine_no unique) — vì chassis_no/engine_no BẤT BIẾN
+%% ---------------------------------------------------------------------
+%% NGUYÊN TẮC THIẾT KẾ
+%%   - VEHICLE_SCHEDULE = KẾ HOẠCH (planned) · BOOKING = THỰC TẾ (actual)
+%%   - BA TẦNG TIỀN, BA VAI TRÒ (không chồng nhau):
+%%       BOOKING_POLICY_SNAPSHOT = LUẬT  (để TÍNH)
+%%       BOOKING_CHARGE          = KẾT QUẢ (để GIẢI TRÌNH)
+%%       PAYMENT_TRANSACTION     = TIỀN   (để ĐỐI SOÁT ngân hàng)
+%%   - Giấy tờ NGƯỜI nhúng cột vào bảng cha (1-2 loại)
+%%     Giấy tờ XE tách bảng (4 loại, mỗi loại 1 hạn → query cảnh báo 1 chỗ)
+%%   - 4 loại phụ phí tách thành `charge_type` riêng → báo cáo bằng GROUP BY
+%%   - Cọc: % do PROVIDER đặt, CHỈ áp gói giờ/ngày/tháng
+%%     Gói năm dùng UPFRONT (số tuyệt đối) THAY cọc
+%%   - Vượt giờ = LÀM TRÒN PHẦN VƯỢT THÀNH SLOT, KHÔNG tạo booking mới
+%% ---------------------------------------------------------------------
+%% QUY TẮC SNAPSHOT GIÁ (BẮT BUỘC khi code)
+%%   1. Chốt snapshot LÚC KHÁCH GỬI YÊU CẦU (status=PENDING), KHÔNG phải
+%%      lúc provider accept — vì giữa 2 mốc đó giá có thể đổi, và khách
+%%      phải được giữ đúng con số mình đã nhìn thấy.
+%%   2. MỌI tính tiền sau đó (vượt giờ, chờ, cuối tuần, ngoài bán kính,
+%%      quy đổi giá ngày, hoàn cọc) ĐỌC TỪ SNAPSHOT — không đọc
+%%      RENTAL_PLAN / PROVIDER. Hai bảng đó chỉ dùng cho đơn MỚI.
+%%   3. Snapshot là BẤT BIẾN — không sửa sau khi tạo.
+%%   4. Cọc hoàn khi huỷ tính theo snap.deposit_ratio, KHÔNG theo
+%%      PROVIDER.deposit_ratio hiện tại.
+%%   => Nhờ đó RENTAL_PLAN / PROVIDER được tự do sửa mà không phá đơn cũ.
+%%   => Giá đổi trong lúc đơn còn PENDING: provider không đồng ý thì DENY,
+%%      khách đặt lại theo giá mới (không có cơ chế "thông báo giá mới").
+%% ---------------------------------------------------------------------
+%% SỬA THÔNG TIN XE — 3 TẦNG (chốt để không nhập nhằng)
+%%   TẦNG 1 — ĐỊNH DANH VẬT LÝ: chassis_no, engine_no
+%%            -> BẤT BIẾN. Sai thì phải tạo xe mới (không sửa được).
+%%   TẦNG 2 — ĐỊNH DANH PHÁP LÝ: license_plate, giấy tờ xe (VEHICLE_DOCUMENT)
+%%            -> SỬA ĐƯỢC nhưng PHẢI DUYỆT LẠI (gắn chứng từ nhà nước).
+%%   TẦNG 3 — MÔ TẢ: brand, model, year, color, seat_count, transmission,
+%%            fuel_type, maintenance_buffer_minutes, ảnh xe
+%%            -> SỬA TỰ DO, KHÔNG duyệt lại.
+%%   Lưu ý KHÔNG đối xứng với DRIVER (cố ý): DRIVER sửa BẤT KỲ gì cũng tụt
+%%   về PENDING duyệt lại — vì tài xế là ĐỊNH DANH CON NGƯỜI. Xe là tài sản
+%%   có phân tầng trường nên kiểm soát theo tầng.
+%% ---------------------------------------------------------------------
+%% CHÍNH SÁCH HUỶ (chốt — KHÔNG có bồi thường)
+%%   - Renter huỷ: hoàn % CỌC theo mốc thời gian do ADMIN cấu hình.
+%%   - Provider huỷ (MỌI lý do): hoàn 100% cọc, KHÔNG bồi thường.
+%%   - Gói năm: không áp (không có cọc) — theo điều khoản hợp đồng.
+%%   - Tỷ lệ % hoàn cọc là QUY TẮC NGHIỆP VỤ (admin config), KHÔNG phải
+%%     bảng dữ liệu → cố ý không có CANCELLATION_POLICY trong sơ đồ này.
+%%   - KHÔNG có: bồi thường, phạt provider, quỹ bồi thường,
+%%     caused_by_booking_id (FK tự trỏ), charge_type=COMPENSATION.
+%%   - Quyết định có chủ đích: nghiệp vụ truy trách nhiệm chuỗi
+%%     (khách trước về trễ làm hỏng chuyến sau) quá phức tạp so với
+%%     giá trị mang lại → cắt khỏi phạm vi, chỉ HOÀN CỌC + ghi vết.
+%% ---------------------------------------------------------------------
+%% CẢNH BÁO KHI TRIỂN KHAI
+%%   1. REVIEW unique với cột nullable → cần 2 PARTIAL UNIQUE INDEX
+%%      UNIQUE(booking_id, vehicle_id) WHERE vehicle_id IS NOT NULL
+%%      UNIQUE(booking_id, driver_id)  WHERE driver_id  IS NOT NULL
+%%   2. BOOKING.vehicle_id là MUTABLE → phải cập nhật VEHICLE_SCHEDULE theo
+%%   3. Ràng buộc "không giao nhau" của VEHICLE_SCHEDULE chỉ đúng lúc ĐẶT;
+%%      thực tế khách về trễ phá vỡ nó → ghi nhận bằng status=CANCELLED + DISPUTE
+%%      Hệ quả: xe không kịp giao cho chuyến sau → provider huỷ chuyến sau,
+%%      HOÀN 100% CỌC cho khách sau, KHÔNG bồi thường (xem chính sách huỷ).
+%%   4. grace hiệu dụng = min(allowed_overtime_minutes, maintenance_buffer_minutes)
+%%      nếu không, khách vượt trong grace sẽ đâm vào lịch người sau
+%%   5. Phụ phí vượt ghi trên BOOKING GỐC (qua BOOKING_CHARGE), không phải
+%%      trên dòng lịch vượt
+%%   6. PROVIDER.deposit_ratio KHÔNG áp cho gói năm
+%%   7. rating_avg/rating_count là CACHE ở CẢ 3 bảng (VEHICLE, DRIVER,
+%%      PROVIDER). Một review mới phải cập nhật ĐỦ 3 bảng — lệch 1 chỗ là
+%%      3 con số khác nhau. PROVIDER.rating_avg là DẪN XUẤT BẬC 2 (gộp
+%%      review của xe + tài xế) → sẽ nhảy khi danh mục xe đổi. Nguồn sự
+%%      thật vẫn là REVIEW.
+%%   8. BOOKING.cancelled_at là BẮT BUỘC để tính % hoàn cọc theo mốc
+%%      thời gian; updated_at KHÔNG thay thế được.
+%%   9. BOOKING_POLICY_SNAPSHOT phải tạo CÙNG LÚC với BOOKING (1-1) —
+%%      không có đơn nào thiếu snapshot.
+%%  10. BOOKING_CHARGE.quantity đa nghĩa theo charge_type:
+%%      BASE_RENTAL=slot · OVERTIME=slot vượt · WAITING=phút ·
+%%      OUT_OF_RADIUS=km · DEPOSIT/WEEKEND=null
+%% ---------------------------------------------------------------------
+%% CẢNH BÁO VỀ LAYOUT (đã đo bằng Chrome headless)
+%%   REVIEW cố ý chỉ giữ 8 dòng. Nếu thêm lại field (ví dụ updated_at),
+%%   bảng REVIEW cao thêm ~47px và nhãn cạnh BOOKING->DISPUTE sẽ đè lên
+%%   đỉnh bảng REVIEW. Đây là giới hạn của layout Sugiyama trong Mermaid —
+%%   đã kiểm chứng bằng thực nghiệm, không phải phỏng đoán.
+%%   Ghi chú: Mermaid ERD BẮT BUỘC mọi quan hệ phải có nhãn (dấu ':');
+%%   viết `A ||--o{ B` không có nhãn sẽ lỗi parse.
+%% ---------------------------------------------------------------------
+%% Dán vào https://app.diagrams.net → Arrange > Insert > Advanced > Mermaid
+%% =====================================================================
+
+erDiagram
+
+    %% ==================================================================
+    %% TẦNG 1 — CON NGƯỜI (3 vai trò, khác vòng đời)
+    %% ==================================================================
+
+    USER {
+        bigint   id PK
+        string   email UK
+        string   phone UK
+        string   password_hash
+        string   full_name
+        string   avatar_url
+        enum     role "RENTER | PROVIDER | DRIVER | ADMIN"
+        enum     status "ACTIVE | LOCKED | PENDING"
+        enum     ekyc_status "UNVERIFIED | PENDING | VERIFIED | REJECTED"
+        datetime created_at
+        datetime updated_at
+    }
+
+    PROVIDER {
+        bigint   id PK
+        bigint   user_id FK, UK "1-1 với USER role=PROVIDER"
+        enum     provider_type "INDIVIDUAL | BUSINESS"
+        string   display_name
+        string   hotline "khách gọi hỏi trước khi đặt (3.1.b)"
+        string   depot_address "gốc tính bán kính phục vụ (4.5)"
+        float    commission_rate "hoa hồng nền tảng giữ lại (3.4.e)"
+        decimal  deposit_ratio "% CỌC do PROVIDER đặt — CHỈ gói giờ/ngày/tháng (4.5)"
+        string   bank_name "nhận chi trả (3.2.f)"
+        string   bank_account_no
+        string   bank_account_holder
+        string   business_license_no "chỉ khi BUSINESS (3.4.a)"
+        string   tax_code "chỉ khi BUSINESS"
+        enum     status "PENDING | APPROVED | LOCKED"
+        decimal  rating_avg "CACHE bậc 2 — gộp review xe + tài xế (cảnh báo 7)"
+        int      rating_count
+        datetime created_at
+        datetime updated_at
+    }
+
+    RENTER {
+        bigint   id PK
+        bigint   user_id FK, UK "1-1 với USER role=RENTER"
+        string   cccd_no "CMND/CCCD gắn chip (3.1.a)"
+        string   cccd_image_url
+        string   license_no "chỉ cần cho gói năm (3.1.a)"
+        string   license_class
+        date     license_expiry
+        boolean  license_verified "đã duyệt → được đặt gói năm"
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% Luồng: NHÀ XE tạo tài khoản hộ → ADMIN duyệt mới active.
+    %% Nhà xe được sửa / vô hiệu hoá (SUSPENDED) driver mình tạo.
+    %% Sửa BẤT KỲ hồ sơ đã duyệt → tụt về PENDING, admin duyệt lại.
+    DRIVER {
+        bigint   id PK
+        bigint   user_id FK, UK "1-1 với USER role=DRIVER"
+        bigint   provider_id FK "thuộc ĐÚNG MỘT nhà cung cấp (3.2.e)"
+        string   license_no "số GPLX (3.3)"
+        string   license_class
+        date     license_expiry "để cảnh báo sắp hết hạn"
+        string   portrait_url "ảnh chân dung (3.3)"
+        string   license_image_url "ảnh GPLX (3.3)"
+        enum     status "PENDING | APPROVED | REJECTED | SUSPENDED"
+        string   reject_reason "lý do admin từ chối — nhà xe sửa rồi gửi lại"
+        decimal  rating_avg "cache từ REVIEW — job cập nhật lại"
+        int      rating_count
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ==================================================================
+    %% TẦNG 2 — TÀI SẢN & SẢN PHẨM
+    %% ==================================================================
+
+    %% chassis_no + engine_no BẤT BIẾN · license_plate + giấy tờ: duyệt lại
+    %% hãng/dòng/màu/... : sửa tự do (xem "SỬA THÔNG TIN XE — 3 TẦNG")
+    VEHICLE {
+        bigint   id PK
+        bigint   provider_id FK "chủ sở hữu"
+        string   license_plate UK "BẤT BIẾN? không — sửa được + duyệt lại (3.2.a)"
+        string   chassis_no UK "BẤT BIẾN — định danh vật lý"
+        string   engine_no UK "BẤT BIẾN — định danh vật lý"
+        string   brand
+        string   model
+        int      manufacture_year
+        int      seat_count "dùng để lọc và điều xe (3.1.b)"
+        enum     transmission "MANUAL | AUTOMATIC"
+        string   color
+        enum     fuel_type "EV | GASOLINE | DIESEL | HYBRID"
+        enum     status "PENDING | APPROVED | REJECTED | HIDDEN"
+        int      maintenance_buffer_minutes "đệm bảo trì giữa 2 booking (3.2.b)"
+        decimal  rating_avg "cache từ REVIEW — xe ĐƯỢC review trực tiếp"
+        int      rating_count
+        datetime created_at
+        datetime updated_at
+    }
+
+    VEHICLE_IMAGE {
+        bigint   id PK
+        bigint   vehicle_id FK
+        string   image_url
+        int      display_order "0 = ảnh bìa (3.1.b)"
+        string   caption
+    }
+
+    VEHICLE_DOCUMENT {
+        bigint   id PK
+        bigint   vehicle_id FK
+        enum     doc_type "REGISTRATION | INSPECTION | INSURANCE | BUSINESS_BADGE"
+        string   doc_number
+        date     expiry_date "null với loại không hết hạn"
+        string   file_url
+        enum     status "PENDING | VERIFIED | REJECTED | EXPIRED"
+        datetime created_at
+        datetime updated_at
+    }
+
+    RENTAL_PLAN {
+        bigint   id PK
+        bigint   vehicle_id FK "gói giá theo TỪNG XE (3.2.b)"
+        enum     plan_type "HOURLY | DAILY | MONTHLY | YEARLY"
+        int      slot_length_minutes "60 | 1440 | tháng | năm"
+        decimal  slot_price "đơn giá 1 slot — ĐÃ gồm chi phí tài xế"
+        decimal  upfront_amount "gói năm — THAY cọc, provider đặt theo xe"
+        enum     status "ACTIVE | INACTIVE"
+        int      allowed_overtime_minutes "grace — vượt thì làm tròn lên slot (4.4)"
+        decimal  overtime_surcharge_ratio "% phạt cho slot vượt"
+        int      free_radius_km "bán kính đón miễn phí (4.5)"
+        decimal  out_of_radius_rate "phụ phí ngoài bán kính / km (4.5)"
+        int      waiting_free_minutes "thời gian chờ miễn phí (4.5)"
+        decimal  waiting_rate "phụ phí chờ / phút (4.5)"
+        decimal  weekend_surcharge_ratio "phụ thu cuối tuần / lễ Tết (4.5)"
+        int      hourly_to_daily_threshold_minutes "mốc quy đổi giá ngày — chỉ gói giờ (4.1.a)"
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% Trục thời gian của xe — KẾ HOẠCH, không phải thực tế
+    VEHICLE_SCHEDULE {
+        bigint   id PK
+        bigint   vehicle_id FK
+        enum     type "BOOKED | MAINTENANCE | BLOCKED"
+        datetime start_at "kế hoạch"
+        datetime end_at "kế hoạch = scheduled_end_at"
+        bigint   booking_id FK "null khi là MAINTENANCE / BLOCKED"
+        boolean  is_extension "true = dòng sinh do gia hạn / vượt giờ"
+        enum     status "ACTIVE | CANCELLED"
+        string   reason "lý do chặn (3.2.b)"
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ==================================================================
+    %% TẦNG 3 — GIAO DỊCH (trung tâm)
+    %% ==================================================================
+
+    BOOKING {
+        bigint   id PK
+        string   booking_code UK "giữ để bảo mật — không lộ id tuần tự"
+        bigint   renter_id FK "→ RENTER"
+        bigint   vehicle_id FK "MUTABLE — đổi được khi dời xe (cảnh báo 2)"
+        bigint   plan_id FK
+        bigint   driver_id FK "gán theo chuyến, KHÔNG gán trước"
+        enum     status "PENDING | REJECTED | ACCEPTED | CONFIRMED | IN_PROGRESS | COMPLETED | CANCELLED"
+        datetime actual_start_at "THỰC TẾ — tài xế xác nhận bắt đầu"
+        datetime actual_end_at "THỰC TẾ — để tính phần vượt"
+        datetime renter_confirmed_at "xong khi CẢ HAI xác nhận (3.1.e)"
+        datetime provider_confirmed_at
+        string   pickup_address "MỘT điểm đón duy nhất (3.1.b)"
+        datetime pickup_time
+        int      passenger_count "chỉ để điều đúng loại xe (3.1.b)"
+        string   contract_url "gói tháng (tuỳ chọn) / gói năm (bắt buộc)"
+        decimal  total_amount
+        bigint   cancelled_by FK "→ USER (renter | provider | admin)"
+        enum     cancel_reason "RENTER_REQUEST | PROVIDER_NO_VEHICLE | PROVIDER_NO_DRIVER | PREVIOUS_RENTER_OVERDUE | FORCE_MAJEURE | SYSTEM"
+        datetime cancelled_at "BẮT BUỘC — mốc để tính % hoàn cọc (cảnh báo 8)"
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% LUẬT tính tiền — chốt lúc PENDING, BẤT BIẾN sau đó.
+    %% Mọi tính tiền (vượt giờ, chờ, cuối tuần, ngoài bán kính, quy đổi
+    %% giá ngày, hoàn cọc) ĐỌC TỪ ĐÂY, không đọc RENTAL_PLAN / PROVIDER.
+    BOOKING_POLICY_SNAPSHOT {
+        bigint   id PK
+        bigint   booking_id FK, UK "1-1 với BOOKING — tạo cùng lúc"
+        decimal  slot_price "đơn giá slot LÚC ĐẶT"
+        int      slot_length_minutes "độ dài slot LÚC ĐẶT"
+        enum     plan_type "hình thức thuê LÚC ĐẶT"
+        decimal  deposit_ratio "% cọc LÚC ĐẶT — null với gói năm"
+        decimal  upfront_amount "trả trước LÚC ĐẶT — null với gói có cọc"
+        int      allowed_overtime_minutes "grace LÚC ĐẶT"
+        decimal  overtime_surcharge_ratio "% phụ phí vượt LÚC ĐẶT"
+        int      waiting_free_minutes "LÚC ĐẶT"
+        decimal  waiting_rate "LÚC ĐẶT"
+        decimal  weekend_surcharge_ratio "LÚC ĐẶT"
+        int      free_radius_km "LÚC ĐẶT"
+        decimal  out_of_radius_rate "LÚC ĐẶT"
+        int      hourly_to_daily_threshold_minutes "LÚC ĐẶT"
+        datetime created_at "= thời điểm tạo booking"
+    }
+
+    %% KẾT QUẢ — bóc tách khoản PHẢI TRẢ (hoá đơn tự chứa)
+    %% base_amount = quantity * unit_price -> suy ra, KHÔNG lưu
+    %% SETTLED / DISPUTED suy diễn được (qua PAYMENT_TRANSACTION / DISPUTE)
+    BOOKING_CHARGE {
+        bigint   id PK
+        bigint   booking_id FK
+        enum     charge_type "BASE_RENTAL | DEPOSIT | OVERTIME | WAITING | WEEKEND | OUT_OF_RADIUS"
+        string   description "diễn giải — VÌ SAO có khoản này"
+        int      quantity "số slot / phút / km — nghĩa tuỳ charge_type (cảnh báo 10)"
+        decimal  unit_price "đơn giá 1 đơn vị"
+        decimal  applied_rate "% áp dụng — null nếu không có"
+        decimal  amount "số tiền cuối cùng"
+        bigint   created_by FK "→ USER — provider ghi / hệ thống tự sinh"
+        boolean  is_waived "nhà xe miễn khoản này"
+        string   evidence_url "ảnh/mốc chứng minh — chỉ phụ phí ghi tay (3.2.d)"
+        datetime created_at
+    }
+
+    %% TIỀN THỰC CHUYỂN — chỉ giao dịch "mức to"
+    PAYMENT_TRANSACTION {
+        bigint   id PK
+        bigint   booking_id FK
+        bigint   charge_id FK "nullable — 1 payment có thể tất toán nhiều charge"
+        enum     type "DEPOSIT_PAY | UPFRONT_PAY | SETTLEMENT | REFUND | PAYOUT"
+        decimal  amount "luôn dương — chiều do direction quyết định"
+        enum     direction "IN | OUT"
+        enum     method "CASH | BANK_TRANSFER | E_WALLET | CARD"
+        string   gateway_ref "mã giao dịch cổng — đối soát & chống trùng webhook"
+        enum     status "PENDING | PAID | FAILED"
+        string   receipt_url "biên lai điện tử (3.1.e)"
+        datetime paid_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ==================================================================
+    %% TẦNG 4 — SAU CHUYẾN
+    %% ==================================================================
+
+    REVIEW {
+        bigint   id PK
+        bigint   booking_id FK "unique cùng vehicle_id / driver_id (cảnh báo 1)"
+        bigint   vehicle_id FK "nullable — CHECK đúng 1 trong 2 khác null"
+        bigint   driver_id FK "nullable"
+        int      rating "1..5"
+        string   comment
+        string   media "ảnh đính kèm (3.1.g)"
+        datetime created_at "ngày đánh giá — người đánh giá suy từ BOOKING.renter_id"
+    }
+
+    DISPUTE {
+        bigint   id PK
+        bigint   booking_id FK "tranh chấp chung của chuyến"
+        bigint   charge_id FK "nullable — khiếu nại MỘT khoản phí cụ thể"
+        bigint   raised_by FK "→ USER (renter HOẶC provider)"
+        bigint   handled_by FK "→ USER (admin)"
+        enum     category "CHARGE | SERVICE_QUALITY | DEPOSIT_REFUND | TRIP_NOT_CONFIRMED"
+        enum     status "OPEN | IN_REVIEW | RESOLVED | REJECTED"
+        string   resolution
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ==================================================================
+    %% QUAN HỆ KHÁI NIỆM (25)
+    %% ==================================================================
+
+    %% --- Con người ---
+    USER     ||--o| PROVIDER : "là nhà cung cấp"
+    USER     ||--o| RENTER   : "là người thuê"
+    USER     ||--o| DRIVER   : "là tài xế"
+    USER     ||--o{ DISPUTE  : "mở / xử lý"
+
+    %% --- Tài sản & sản phẩm ---
+    PROVIDER ||--o{ VEHICLE          : "sở hữu xe"
+    PROVIDER ||--o{ DRIVER           : "quản lý đội tài xế"
+    VEHICLE  ||--o{ VEHICLE_IMAGE    : "có ảnh"
+    VEHICLE  ||--o{ VEHICLE_DOCUMENT : "có giấy tờ"
+    VEHICLE  ||--o{ RENTAL_PLAN      : "niêm yết gói giá"
+    VEHICLE  ||--o{ VEHICLE_SCHEDULE : "có trục thời gian"
+
+    %% --- Giao dịch ---
+    RENTER   ||--o{ BOOKING          : "đặt xe"
+    VEHICLE  ||--o{ BOOKING          : "được thuê"
+    RENTAL_PLAN ||--o{ BOOKING       : "áp gói giá"
+    DRIVER   ||--o{ BOOKING          : "được phân công"
+    BOOKING  ||--o{ VEHICLE_SCHEDULE : "chiếm lịch (1 booking, n dòng khi gia hạn)"
+    BOOKING  ||--|| BOOKING_POLICY_SNAPSHOT : "chốt luật tính tiền lúc đặt"
+    BOOKING  ||--o{ BOOKING_CHARGE   : "bóc tách khoản phải trả"
+    BOOKING  ||--o{ PAYMENT_TRANSACTION : "các lần tiền thực chuyển"
+    BOOKING_CHARGE ||--o{ PAYMENT_TRANSACTION : "được tất toán bởi"
+
+    %% --- Sau chuyến ---
+    VEHICLE  ||--o{ REVIEW           : "đánh giá xe"
+    DRIVER   ||--o{ REVIEW           : "đánh giá tài xế"
+    BOOKING  ||--o{ REVIEW           : "được đánh giá"
+    BOOKING  ||--o{ DISPUTE          : "phát sinh tranh chấp"
+    BOOKING_CHARGE ||--o{ DISPUTE    : "bị khiếu nại khoản phí"
