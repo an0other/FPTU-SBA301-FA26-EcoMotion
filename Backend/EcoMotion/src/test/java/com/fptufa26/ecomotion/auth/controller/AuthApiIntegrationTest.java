@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.auth.controller;
 import com.fptufa26.ecomotion.auth.entity.RefreshToken;
 import com.fptufa26.ecomotion.auth.repository.RefreshTokenRepository;
 import com.fptufa26.ecomotion.common.security.JwtService;
+import com.fptufa26.ecomotion.user.entity.EkycStatus;
 import com.fptufa26.ecomotion.user.entity.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.entity.UserStatus;
@@ -85,15 +86,20 @@ class AuthApiIntegrationTest {
         insertUser(RENTER_EMAIL, Role.RENTER, UserStatus.ACTIVE);
         insertUser(PROVIDER_EMAIL, Role.PROVIDER, UserStatus.ACTIVE);
         insertUser(ADMIN_EMAIL, Role.ADMIN, UserStatus.ACTIVE);
-        insertUser("inactive01@ecomotion.vn", Role.RENTER, UserStatus.INACTIVE);
+        insertUser("inactive01@ecomotion.vn", Role.RENTER, UserStatus.LOCKED);
     }
+
+    private int phoneSequence = 1;
 
     private void insertUser(String email, Role role, UserStatus status) {
         User user = new User();
         user.setEmail(email);
+        user.setPhone(String.format("090%07d", phoneSequence++));
+        user.setFullName(email);
         user.setPasswordHash(PASSWORD_HASH);
         user.setRole(role);
         user.setStatus(status);
+        user.setEkycStatus(EkycStatus.VERIFIED);
         userRepository.save(user);
     }
 
@@ -326,7 +332,7 @@ class AuthApiIntegrationTest {
                 .andExpect(status().isOk());
 
         User user = userRepository.findByEmailIgnoreCase(RENTER_EMAIL).orElseThrow();
-        user.setStatus(UserStatus.INACTIVE);
+        user.setStatus(UserStatus.LOCKED);
         userRepository.saveAndFlush(user);
 
         // The JWT is still well within its 15-minute lifetime — the filter reloading the user
@@ -358,7 +364,7 @@ class AuthApiIntegrationTest {
     // -------------------------------------------------------------- /me happy path
 
     @Test
-    @DisplayName("GET /api/auth/me returns the fresh user record including last_login_at")
+    @DisplayName("GET /api/auth/me returns the fresh user record")
     void meReturnsCurrentUser() throws Exception {
         String token = login(ADMIN_EMAIL, PASSWORD, false).accessToken();
 
@@ -367,7 +373,6 @@ class AuthApiIntegrationTest {
                 .andExpect(jsonPath("$.email").value(ADMIN_EMAIL))
                 .andExpect(jsonPath("$.role").value("ADMIN"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.lastLoginAt").isNotEmpty())
                 .andExpect(jsonPath("$.username").doesNotExist());
     }
 

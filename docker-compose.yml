@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecomotion-postgres
+    environment:
+      POSTGRES_DB: ecomotion
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ecomotion}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ecomotion_pg_data:/var/lib/postgresql/data
+      - ./Backend/EcoMotion/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ecomotion"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  ecomotion_pg_data:

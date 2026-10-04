@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.common.security;
 
 import com.fptufa26.ecomotion.user.entity.Role;
 import com.fptufa26.ecomotion.user.entity.User;
+import com.fptufa26.ecomotion.user.entity.UserStatus;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -51,7 +52,7 @@ public class SecurityUser implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        return user.getStatus() != UserStatus.LOCKED;
     }
 
     @Override

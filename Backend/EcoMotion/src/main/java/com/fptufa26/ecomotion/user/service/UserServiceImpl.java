@@ -10,7 +10,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -45,11 +44,6 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public void markLastLogin(Long userId) {
-        userRepository.findById(userId).ifPresent(user -> user.setLastLoginAt(Instant.now()));
-    }
-
-    @Override
     @Transactional(readOnly = true)
     public boolean existsByEmail(String email) {
         return email != null
@@ -57,12 +51,24 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public User createUser(String email, String rawPassword, Role role, UserStatus status) {
+    public User createUser(
+            String email,
+            String rawPassword,
+            String fullName,
+            String phone,
+            Role role,
+            UserStatus status) {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email is required");
         }
         if (rawPassword == null || rawPassword.isBlank()) {
             throw new IllegalArgumentException("Password is required");
+        }
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("Full name is required");
+        }
+        if (phone == null || phone.isBlank()) {
+            throw new IllegalArgumentException("Phone is required");
         }
 
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
@@ -72,6 +78,8 @@ public class UserServiceImpl implements UserService {
 
         User user = new User();
         user.setEmail(normalizedEmail);
+        user.setPhone(phone.trim());
+        user.setFullName(fullName.trim());
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
         user.setRole(role);
         user.setStatus(status == null ? UserStatus.ACTIVE : status);

@@ -2,5 +2,6 @@ package com.fptufa26.ecomotion.user.entity;
 
 public enum UserStatus {
     ACTIVE,
-    INACTIVE
+    LOCKED,
+    PENDING
 }

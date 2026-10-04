@@ -116,7 +116,6 @@ class AuthServiceImplTest {
         assertThat(result.response().tokenType()).isEqualTo("Bearer");
         assertThat(result.response().expiresIn()).isEqualTo(900);
         assertThat(result.response().user().role()).isEqualTo(Role.RENTER);
-        verify(userService).markLastLogin(42L);
     }
 
     @Test
@@ -193,7 +192,7 @@ class AuthServiceImplTest {
     @DisplayName("inactive account throws 403")
     void loginWithInactiveAccountThrowsAccountInactive() {
         User user = activeUser();
-        user.setStatus(UserStatus.INACTIVE);
+        user.setStatus(UserStatus.LOCKED);
         when(userService.findByEmail(EMAIL)).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> authService.login(
@@ -269,7 +268,7 @@ class AuthServiceImplTest {
     @DisplayName("refresh for an account deactivated after issuance is rejected")
     void refreshWithInactiveUserThrowsAccountInactive() {
         User user = activeUser();
-        user.setStatus(UserStatus.INACTIVE);
+        user.setStatus(UserStatus.LOCKED);
         RefreshToken stored = storedToken(user, Instant.now().plus(Duration.ofDays(1)), null);
         when(refreshTokenRepository.findByTokenHash(AuthServiceImpl.sha256Hex(RAW_REFRESH_TOKEN)))
                 .thenReturn(Optional.of(stored));
@@ -323,7 +322,6 @@ class AuthServiceImplTest {
     @DisplayName("current user is mapped from the persisted row")
     void getCurrentUserReturnsMappedUser() {
         User user = activeUser();
-        user.setLastLoginAt(Instant.parse("2026-09-25T08:33:17Z"));
         when(userService.findById(42L)).thenReturn(Optional.of(user));
 
         var response = authService.getCurrentUser(42L);
@@ -332,7 +330,6 @@ class AuthServiceImplTest {
         assertThat(response.email()).isEqualTo(EMAIL);
         assertThat(response.role()).isEqualTo(Role.RENTER);
         assertThat(response.status()).isEqualTo(UserStatus.ACTIVE);
-        assertThat(response.lastLoginAt()).isEqualTo(Instant.parse("2026-09-25T08:33:17Z"));
     }
 
     @Test
