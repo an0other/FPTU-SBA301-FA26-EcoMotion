@@ -167,13 +167,16 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 
 **Frontend:**
 
-| Thành phần       | Công nghệ   | Trạng thái                                                         |
-| ---------------- | ----------- | ------------------------------------------------------------------ |
-| Framework        | **ReactJS** | ⚠️ **Chưa khởi tạo** — thư mục `Frontend/` còn trống               |
-| Build tool       | *chưa chốt* | CORS đã cho phép `localhost:3000` (CRA) và `localhost:5173` (Vite) |
-| UI / HTTP client | *chưa chốt* |                                                                    |
+| Thành phần       | Công nghệ                                                       | Trạng thái                                                                 |
+| ---------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Framework        | **ReactJS 19**                                                   | ✅ Đã khởi tạo tại `Frontend/EcoMotion/` (JSX, không TypeScript)           |
+| Build tool       | **Vite 8**                                                       | ✅ Dev proxy `/api` → `http://localhost:8080` (tránh CORS, cookie first-party) |
+| Routing          | **react-router-dom 7**                                           | ✅ `/login` public + route bảo vệ theo role                                |
+| UI               | **CSS thuần + design tokens** (theo `Login-regis-template/DESIGN.md`) | ✅ Font Be Vietnam Pro; chưa dùng Tailwind                            |
+| HTTP client      | **axios** (`services/apiClient.js`, `baseURL: '/api'`, `withCredentials`) | ✅ Interceptor gắn Bearer + chuẩn hoá lỗi                         |
+| State (auth)     | **Context API** (`contexts/AuthProvider.jsx` + `hooks/useAuth.js`) | ✅ Login / Logout / khôi phục phiên qua `/api/auth/me`                  |
 
-> **Ghi chú FE:** CORS trong backend đã mở sẵn cho cả **3000** và **5173** → có thể dùng CRA hoặc Vite mà không cần sửa backend. Tài liệu hướng dẫn tạo project React + Bootstrap do giảng viên cung cấp (PDF nằm ở thư mục môn học, **không** trong repo).
+> **Ghi chú FE:** Đã hoàn thành **chức năng đăng nhập** (login-only): trang `pages/LoginPage.jsx` (port từ `Login-regis-template/code.html`, chỉ tab Đăng nhập), `AuthContext` + `ProtectedRoute`, dashboard placeholder 3 role. Lưu ý: `LoginRequest` của backend **chỉ nhận `email`** (không nhận SĐT) nên label ô nhập đã đổi thành "Email". Đăng ký / quên mật khẩu / auto-refresh 401 **chưa** làm (ngoài phạm vi). CORS backend vẫn mở cho cả 3000 và 5173.
 
 **Công cụ QA tài liệu (không thuộc runtime app):**
 
