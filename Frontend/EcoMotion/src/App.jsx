@@ -8,10 +8,8 @@ import AdminDashboard from './pages/AdminDashboard'
 export default function App() {
   return (
     <Routes>
-      {/* Public */}
       <Route path="/login" element={<LoginPage />} />
 
-      {/* Protected */}
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Navigate to="/renter" replace />} />
         <Route path="/renter" element={<RenterDashboard />} />
@@ -19,7 +17,6 @@ export default function App() {
         <Route path="/admin" element={<AdminDashboard />} />
       </Route>
 
-      {/* Fallback */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )
