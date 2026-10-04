@@ -35,4 +35,3 @@ build/
 ### Project Config ###
 /src/main/resources/application.properties
 /.workbuddy-ai
-/src/main/java/com/fptufa26/ecomotion/seed
