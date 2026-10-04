@@ -22,7 +22,8 @@ import java.util.Locale;
 @Table(
         name = "users",
         uniqueConstraints = {
-                @UniqueConstraint(name = "uk_users_email", columnNames = "email")
+                @UniqueConstraint(name = "uk_users_email", columnNames = "email"),
+                @UniqueConstraint(name = "uk_users_phone", columnNames = "phone")
         }
 )
 @Getter
@@ -32,41 +33,56 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "user_id")
-    private Long userId;
+    private Long id;
 
-    @Column(name = "email", nullable = false, length = 255)
+    @Column(nullable = false, length = 255)
     private String email;
 
-    /** BCrypt hash — never the raw password. */
+    @Column(nullable = false, length = 20)
+    private String phone;
+
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
+    @Column(name = "full_name", nullable = false, length = 150)
+    private String fullName;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false, length = 20)
+    @Column(nullable = false, length = 20)
     private Role role;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
-    private UserStatus status = UserStatus.ACTIVE;
+    @Column(nullable = false, length = 20)
+    private UserStatus status = UserStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ekyc_status", nullable = false, length = 20)
+    private EkycStatus ekycStatus = EkycStatus.UNVERIFIED;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Column(name = "updated_at")
+    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    @Column(name = "last_login_at")
-    private Instant lastLoginAt;
 
     @PrePersist
     void onCreate() {
         normalize();
+        Instant now = Instant.now();
         if (createdAt == null) {
-            createdAt = Instant.now();
+            createdAt = now;
+        }
+        if (updatedAt == null) {
+            updatedAt = now;
         }
         if (status == null) {
-            status = UserStatus.ACTIVE;
+            status = UserStatus.PENDING;
+        }
+        if (ekycStatus == null) {
+            ekycStatus = EkycStatus.UNVERIFIED;
         }
     }
 
@@ -76,11 +92,21 @@ public class User {
         updatedAt = Instant.now();
     }
 
-    /** Trims and lowercases the email. Idempotent. */
     public void normalize() {
         if (email != null) {
             email = email.trim().toLowerCase(Locale.ROOT);
         }
+        if (phone != null) {
+            phone = phone.trim();
+        }
+    }
+
+    public Long getUserId() {
+        return id;
+    }
+
+    public void setUserId(Long userId) {
+        this.id = userId;
     }
 
     public boolean isActive() {

@@ -14,9 +14,7 @@ public interface UserService {
 
     Optional<User> findById(Long userId);
 
-    void markLastLogin(Long userId);
-
     boolean existsByEmail(String email);
 
-    User createUser(String email, String rawPassword, Role role, UserStatus status);
+    User createUser(String email, String rawPassword, String fullName, String phone, Role role, UserStatus status);
 }

@@ -84,8 +84,6 @@ public class AuthServiceImpl implements AuthService {
         entity.setIpAddress(truncate(ipAddress, IP_ADDRESS_MAX));
         refreshTokenRepository.save(entity);
 
-        userService.markLastLogin(user.getUserId());
-
         LoginResponse response = authMapper.toLoginResponse(
                 user, accessToken, jwtService.getAccessTokenTtlSeconds());
         return new LoginResult(response, rawRefreshToken, request.rememberMe());
