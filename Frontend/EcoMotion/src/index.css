@@ -1,55 +1,36 @@
-/* ============================================================
-   EcoMotion — Global styles & design tokens
-   Derived from Login-regis-template/DESIGN.md
-   ============================================================ */
+@import 'tailwindcss';
 
-:root {
-  /* Brand emerald */
-  --brand-50: #ecfdf5;
-  --brand-100: #d1fae5;
-  --brand-300: #6ee7b7;
-  --brand-400: #34d399;
-  --brand-500: #10b981;
-  --brand-600: #059669;
-  --brand-700: #047857;
-  --brand-800: #065f46;
+@theme {
+  --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  /* Neutral / slate */
-  --slate-950: #020617;
-  --slate-900: #0b1c30;
-  --slate-800: #1e293b;
-  --slate-700: #334155;
-  --slate-600: #475569;
-  --slate-500: #64748b;
-  --slate-400: #94a3b8;
-  --slate-300: #cbd5e1;
-  --slate-200: #e2e8f0;
-  --slate-100: #f1f5f9;
-  --slate-50: #f8f9ff;
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
 
-  /* Semantic */
-  --error: #ba1a1a;
-  --error-bg: #ffdad6;
-  --error-fg: #93000a;
+  --color-surface: #f8f9ff;
+  --color-surface-dim: #cbdbf5;
+  --color-ink: #0b1c30;
+  --color-ink-variant: #3d4a42;
+  --color-outline: #6d7a72;
+  --color-outline-variant: #bccac0;
 
-  /* Misc */
-  --input-bg: #f8fafc;
-  --white: #ffffff;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
 
-  --radius-sm: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
 
   --shadow-card: 0 2px 8px -2px rgba(15, 23, 42, 0.05);
-  --shadow-lg: 0 12px 24px -4px rgba(15, 23, 42, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.03);
-  --focus-glow: 0 0 0 4px rgba(5, 150, 105, 0.12);
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+  --shadow-lg: 0 12px 24px -4px rgba(15, 23, 42, 0.08),
+    0 4px 8px -2px rgba(15, 23, 42, 0.03);
 }
 
 html,
@@ -59,11 +40,11 @@ body {
 }
 
 body {
-  font-family: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
-  color: var(--slate-900);
-  background: var(--slate-50);
+  color: var(--color-ink);
+  background: var(--color-surface);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -72,38 +53,17 @@ body {
   min-height: 100vh;
 }
 
-a {
-  color: var(--brand-600);
-  text-decoration: none;
-}
-
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
-
-/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--slate-100);
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--slate-300);
-  border-radius: var(--radius-full);
+  background: #cbd5e1;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--slate-400);
-}
-
-/* Route-level loading fallback */
-.route-loading {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--slate-500);
-  font-weight: 500;
+  background: #94a3b8;
 }

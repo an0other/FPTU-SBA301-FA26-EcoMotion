@@ -1,5 +1,3 @@
-/** Lightweight client-side form validation helpers. */
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function isValidEmail(email) {
