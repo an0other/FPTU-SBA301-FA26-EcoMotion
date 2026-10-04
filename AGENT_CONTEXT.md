@@ -172,11 +172,13 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 | Framework        | **ReactJS 19**                                                   | ✅ Đã khởi tạo tại `Frontend/EcoMotion/` (JSX, không TypeScript)           |
 | Build tool       | **Vite 8**                                                       | ✅ Dev proxy `/api` → `http://localhost:8080` (tránh CORS, cookie first-party) |
 | Routing          | **react-router-dom 7**                                           | ✅ `/login` public + route bảo vệ theo role                                |
-| UI               | **CSS thuần + design tokens** (theo `Login-regis-template/DESIGN.md`) | ✅ Font Be Vietnam Pro; chưa dùng Tailwind                            |
+| UI               | **Tailwind CSS v4** (`@tailwindcss/vite`) + design tokens EcoMotion trong `src/index.css` (`@theme`) | ✅ Font Be Vietnam Pro; brand-*/ink/surface/shadow-card; không còn file `.css` riêng |
 | HTTP client      | **axios** (`services/apiClient.js`, `baseURL: '/api'`, `withCredentials`) | ✅ Interceptor gắn Bearer + chuẩn hoá lỗi                         |
 | State (auth)     | **Context API** (`contexts/AuthProvider.jsx` + `hooks/useAuth.js`) | ✅ Login / Logout / khôi phục phiên qua `/api/auth/me`                  |
 
 > **Ghi chú FE:** Đã hoàn thành **chức năng đăng nhập** (login-only): trang `pages/LoginPage.jsx` (port từ `Login-regis-template/code.html`, chỉ tab Đăng nhập), `AuthContext` + `ProtectedRoute`, dashboard placeholder 3 role. Lưu ý: `LoginRequest` của backend **chỉ nhận `email`** (không nhận SĐT) nên label ô nhập đã đổi thành "Email". Đăng ký / quên mật khẩu / auto-refresh 401 **chưa** làm (ngoài phạm vi). CORS backend vẫn mở cho cả 3000 và 5173.
+>
+> **UI dùng Tailwind CSS v4** (không dùng Tailwind CDN nữa): plugin `@tailwindcss/vite` gắn trong `vite.config.js`, `src/index.css` chứa `@import 'tailwindcss'` + `@theme` port palette EcoMotion từ `DESIGN.md` (`--color-brand-*`, `--color-ink`, `--color-surface`, `--shadow-card`, radius). Dùng utility class trực tiếp trong JSX (`bg-brand-600`, `text-slate-900`, `rounded-lg`…). Toàn bộ component đã chuyển sang Tailwind, **không còn file `.css` riêng lẻ** (chỉ giữ `src/index.css`).
 
 **Công cụ QA tài liệu (không thuộc runtime app):**
 

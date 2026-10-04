@@ -1,12 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { IconCar } from '../components/icons/Icons'
-import './Dashboard.css'
 
-/**
- * Shared placeholder dashboard shell — shows the current session and a logout
- * button. Real role features (vehicles, bookings, …) land here later.
- */
 export default function Dashboard({ title, subtitle }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -17,36 +12,42 @@ export default function Dashboard({ title, subtitle }) {
   }
 
   return (
-    <div className="dashboard">
-      <header className="dashboard__header">
-        <div className="dashboard__brand">
-          <IconCar />
-          EcoMotion <span>VN</span>
+    <div className="min-h-screen bg-slate-50">
+      <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-4">
+        <div className="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-slate-900">
+          <IconCar className="h-5 w-5 text-brand-600" />
+          EcoMotion <span className="text-[11px] font-semibold text-brand-600">VN</span>
         </div>
-        <button type="button" className="dashboard__logout" onClick={handleLogout}>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="rounded-lg border border-slate-200 bg-white px-4.5 py-2.5 text-[13px] font-semibold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-100"
+        >
           Đăng xuất
         </button>
       </header>
 
-      <main className="dashboard__main">
-        <div className="dashboard__card">
-          <h1 className="dashboard__title">{title}</h1>
-          <p className="dashboard__subtitle">{subtitle}</p>
+      <main className="mx-auto max-w-3xl px-6 py-10">
+        <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-card">
+          <h1 className="mb-1.5 text-2xl font-bold tracking-tight">{title}</h1>
+          <p className="mb-6 text-sm text-slate-500">{subtitle}</p>
 
-          <dl className="dashboard__info">
-            <div className="dashboard__row">
-              <dt>Email</dt>
-              <dd>{user?.email}</dd>
+          <dl className="grid gap-3">
+            <div className="flex justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <dt className="font-medium text-slate-500">Email</dt>
+              <dd className="font-semibold text-slate-900">{user?.email}</dd>
             </div>
-            <div className="dashboard__row">
-              <dt>Vai trò</dt>
+            <div className="flex justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <dt className="font-medium text-slate-500">Vai trò</dt>
               <dd>
-                <span className="dashboard__badge">{user?.role}</span>
+                <span className="inline-block rounded-full bg-brand-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+                  {user?.role}
+                </span>
               </dd>
             </div>
-            <div className="dashboard__row">
-              <dt>Trạng thái tài khoản</dt>
-              <dd>{user?.status}</dd>
+            <div className="flex justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <dt className="font-medium text-slate-500">Trạng thái tài khoản</dt>
+              <dd className="font-semibold text-slate-900">{user?.status}</dd>
             </div>
           </dl>
         </div>
