@@ -1,8 +1,3 @@
-/**
- * Inline SVG icons ported from Login-regis-template (Lucide-style outline set).
- * Each accepts a `className` prop so styling stays with the consumer.
- */
-
 function Svg({ className = 'w-5 h-5', children }) {
   return (
     <svg

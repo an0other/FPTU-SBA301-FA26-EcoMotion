@@ -3,22 +3,11 @@ import { AuthContext } from './authContext'
 import { authService } from '../services/authService'
 import { clearAccessToken, getAccessToken, setAccessToken } from '../utils/tokenStore'
 
-/**
- * AuthProvider — holds the session state for the whole app.
- *
- * - `user`            current user ({userId,email,role,status}) or null
- * - `accessToken`     current JWT (mirrored in tokenStore)
- * - `loading`         true while the initial session restore is running
- * - `isAuthenticated` derived from `user`
- * - `login()`         authenticates and persists the session
- * - `logout()`        revokes the refresh token and clears local state
- */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [accessToken, setTokenState] = useState(() => getAccessToken())
   const [loading, setLoading] = useState(true)
 
-  // On mount: if a token is stored, validate it via /auth/me and restore the user.
   useEffect(() => {
     let active = true
 
@@ -61,7 +50,7 @@ export function AuthProvider({ children }) {
     try {
       await authService.logout()
     } catch {
-      /* clear locally regardless of the API result */
+      void 0
     }
     clearAccessToken()
     setUser(null)
