@@ -66,6 +66,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Malformed request body", request);
     }
 
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException ex, HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(ConflictException ex, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
