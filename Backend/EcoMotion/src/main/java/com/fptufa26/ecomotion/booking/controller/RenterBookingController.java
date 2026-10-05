@@ -1,0 +1,45 @@
+package com.fptufa26.ecomotion.booking.controller;
+
+import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
+import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.common.response.ApiResponse;
+import com.fptufa26.ecomotion.common.security.SecurityUser;
+import com.fptufa26.ecomotion.vehicle.dto.response.BookableVehicleResponse;
+import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/renter/bookings")
+@RequiredArgsConstructor
+@Tag(name = "renter-bookings")
+public class RenterBookingController {
+
+    private final BookingService bookingService;
+    private final VehicleCatalogService vehicleCatalogService;
+
+    @GetMapping("/vehicles")
+    public ApiResponse<List<BookableVehicleResponse>> listVehicles() {
+        return ApiResponse.success(vehicleCatalogService.listApproved());
+    }
+
+    @PostMapping
+    public ResponseEntity<ApiResponse<CreateBookingResponse>> create(
+            @AuthenticationPrincipal SecurityUser user,
+            @Valid @RequestBody CreateBookingRequest request) {
+        CreateBookingResponse created = bookingService.create(user.getUserId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(created));
+    }
+}

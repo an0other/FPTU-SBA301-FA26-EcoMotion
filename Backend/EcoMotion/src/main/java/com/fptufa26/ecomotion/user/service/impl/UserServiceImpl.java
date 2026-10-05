@@ -1,9 +1,13 @@
-package com.fptufa26.ecomotion.user.service;
+package com.fptufa26.ecomotion.user.service.impl;
 
+import com.fptufa26.ecomotion.common.exception.NotFoundException;
+import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,6 +23,7 @@ import java.util.Optional;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final RenterRepository renterRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -84,5 +89,12 @@ public class UserServiceImpl implements UserService {
         user.setRole(role);
         user.setStatus(status == null ? UserStatus.ACTIVE : status);
         return userRepository.save(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Renter requireRenterByUserId(Long userId) {
+        return renterRepository.findByUser_Id(userId)
+                .orElseThrow(() -> new NotFoundException("Renter profile not found"));
     }
 }
