@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.booking.service.impl;
 
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
@@ -135,6 +136,16 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<BookingSummaryResponse> listMine(Long userId, BookingStatus status) {
+        Renter renter = userService.requireRenterByUserId(userId);
+        List<Booking> bookings = status == null
+                ? bookingRepository.findByRenter_IdOrderByPickupTimeDesc(renter.getId())
+                : bookingRepository.findByRenter_IdAndStatusOrderByPickupTimeDesc(renter.getId(), status);
+        return bookings.stream().map(this::toSummary).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public CheckoutPreviewResponse previewCheckout(Long userId, String bookingCode) {
         Booking booking = requireAccepted(userId, bookingCode);
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
@@ -192,6 +203,14 @@ public class BookingServiceImpl implements BookingService {
         scheduleService.book(booking.getVehicle(), booking, booking.getPickupTime(), end);
         booking.setStatus(BookingStatus.CONFIRMED);
         return bookingMapper.toCheckoutResult(booking, payment, end);
+    }
+
+    private BookingSummaryResponse toSummary(Booking booking) {
+        PlanType planType = snapshotRepository.findByBooking_Id(booking.getId())
+                .map(BookingPolicySnapshot::getPlanType)
+                .orElseGet(() -> booking.getPlan().getPlanType());
+        String imageUrl = vehicleCatalogService.coverImageUrl(booking.getVehicle().getId());
+        return bookingMapper.toSummary(booking, planType, imageUrl);
     }
 
     private Booking requireAccepted(Long userId, String bookingCode) {

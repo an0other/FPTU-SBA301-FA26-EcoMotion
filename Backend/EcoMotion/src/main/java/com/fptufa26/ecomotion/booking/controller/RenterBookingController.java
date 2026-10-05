@@ -2,7 +2,9 @@ package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
+import com.fptufa26.ecomotion.booking.entity.BookingStatus;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
 import com.fptufa26.ecomotion.booking.service.BookingService;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,6 +36,13 @@ public class RenterBookingController {
 
     private final BookingService bookingService;
     private final VehicleCatalogService vehicleCatalogService;
+
+    @GetMapping
+    public ApiResponse<List<BookingSummaryResponse>> listMine(
+            @AuthenticationPrincipal SecurityUser user,
+            @RequestParam(required = false) BookingStatus status) {
+        return ApiResponse.success(bookingService.listMine(user.getUserId(), status));
+    }
 
     @GetMapping("/vehicles")
     public ApiResponse<List<BookableVehicleResponse>> listVehicles() {

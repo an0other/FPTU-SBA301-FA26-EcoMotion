@@ -51,6 +51,7 @@ public class DevDataSeeder implements ApplicationRunner {
     public static final String PROVIDER_EMAIL = "provider01@ecomotion.vn";
     public static final String VEHICLE_PLATE = "51K-888.88";
     public static final String ACCEPTED_BOOKING_CODE = "EM-2026-9001";
+    public static final String PENDING_BOOKING_CODE = "EM-2026-9002";
 
     private static final String VEHICLE_IMAGE =
             "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=800&q=80";
@@ -75,7 +76,10 @@ public class DevDataSeeder implements ApplicationRunner {
         Renter renter = seedRenter(renterUser);
         Provider provider = seedProvider(providerUser);
         Vehicle vehicle = seedVehicle(provider);
-        seedAcceptedBooking(renter, renterUser, provider, vehicle);
+        seedSampleBooking(renter, renterUser, provider, vehicle,
+                ACCEPTED_BOOKING_CODE, BookingStatus.ACCEPTED, Instant.parse("2026-12-20T01:00:00Z"));
+        seedSampleBooking(renter, renterUser, provider, vehicle,
+                PENDING_BOOKING_CODE, BookingStatus.PENDING, Instant.parse("2026-12-28T01:00:00Z"));
     }
 
     private User seedUser(String email, String phone, String fullName, Role role) {
@@ -150,8 +154,14 @@ public class DevDataSeeder implements ApplicationRunner {
         return vehicle;
     }
 
-    private void seedAcceptedBooking(Renter renter, User renterUser, Provider provider, Vehicle vehicle) {
-        if (bookingRepository.existsByBookingCode(ACCEPTED_BOOKING_CODE)) {
+    private void seedSampleBooking(Renter renter,
+                                   User renterUser,
+                                   Provider provider,
+                                   Vehicle vehicle,
+                                   String bookingCode,
+                                   BookingStatus status,
+                                   Instant pickupTime) {
+        if (bookingRepository.existsByBookingCode(bookingCode)) {
             return;
         }
         RentalPlan daily = rentalPlanRepository
@@ -162,13 +172,13 @@ public class DevDataSeeder implements ApplicationRunner {
                 .orElseThrow();
 
         Booking booking = new Booking();
-        booking.setBookingCode(ACCEPTED_BOOKING_CODE);
+        booking.setBookingCode(bookingCode);
         booking.setRenter(renter);
         booking.setVehicle(vehicle);
         booking.setPlan(daily);
-        booking.setStatus(BookingStatus.ACCEPTED);
+        booking.setStatus(status);
         booking.setPickupAddress(provider.getDepotAddress());
-        booking.setPickupTime(Instant.parse("2026-12-20T01:00:00Z"));
+        booking.setPickupTime(pickupTime);
         booking.setPassengerCount(2);
         booking.setTotalAmount(daily.getSlotPrice());
         bookingRepository.save(booking);

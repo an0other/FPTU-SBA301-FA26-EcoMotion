@@ -1,5 +1,10 @@
 import { apiClient } from './apiClient'
 
+export async function listMyBookings() {
+  const { data } = await apiClient.get('/renter/bookings')
+  return data.data ?? []
+}
+
 export async function listVehiclesForBooking() {
   const { data } = await apiClient.get('/renter/bookings/vehicles')
   return data.data ?? []

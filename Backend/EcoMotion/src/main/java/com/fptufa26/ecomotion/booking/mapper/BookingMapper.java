@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.mapper;
 
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
+import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
@@ -70,5 +71,21 @@ public class BookingMapper {
                 payment.getType(),
                 payment.getAmount(),
                 endTime);
+    }
+
+    public BookingSummaryResponse toSummary(Booking booking, PlanType planType, String imageUrl) {
+        Vehicle vehicle = booking.getVehicle();
+        return new BookingSummaryResponse(
+                booking.getBookingCode(),
+                booking.getStatus(),
+                planType,
+                vehicle.getBrand() + " " + vehicle.getModel(),
+                vehicle.getManufactureYear(),
+                vehicle.getLicensePlate(),
+                imageUrl,
+                booking.getPickupAddress(),
+                booking.getPickupTime(),
+                booking.getPassengerCount(),
+                booking.getTotalAmount());
     }
 }
