@@ -2,11 +2,16 @@ package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest;
+import com.fptufa26.ecomotion.booking.dto.response.BookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
+import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
-import com.fptufa26.ecomotion.booking.entity.BookingStatus;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
+import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
+import com.fptufa26.ecomotion.booking.entity.BookingStatus;
+import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.booking.service.BookingService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
@@ -70,5 +75,34 @@ public class RenterBookingController {
             @PathVariable String bookingCode,
             @Valid @RequestBody CheckoutRequest request) {
         return ApiResponse.success(bookingService.checkout(user.getUserId(), bookingCode, request));
+    }
+
+    @GetMapping("/{bookingCode}")
+    public ApiResponse<BookingDetailResponse> detail(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(bookingService.detail(user.getUserId(), bookingCode));
+    }
+
+    @PostMapping("/{bookingCode}/cancel")
+    public ApiResponse<CancelBookingResponse> cancel(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(bookingService.cancel(user.getUserId(), bookingCode));
+    }
+
+    @PostMapping("/{bookingCode}/confirm-end")
+    public ApiResponse<ConfirmEndResponse> confirmEnd(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(bookingService.confirmEnd(user.getUserId(), bookingCode));
+    }
+
+    @PostMapping("/{bookingCode}/disputes")
+    public ApiResponse<DisputeOpenedResponse> openDispute(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            @Valid @RequestBody OpenDisputeRequest request) {
+        return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
     }
 }
