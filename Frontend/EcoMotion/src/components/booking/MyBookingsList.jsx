@@ -168,7 +168,7 @@ export const MyBookingsList = ({
                       className="px-4 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-medium shadow-xs whitespace-nowrap cursor-pointer active:scale-98 transition-all duration-180"
                       type="button"
                     >
-                      Thanh toán giữ chỗ
+                      Thanh toán {booking.planType === 'YEARLY' ? 'trả trước' : 'giữ chỗ'}
                     </button>
                   </div>
                 )}

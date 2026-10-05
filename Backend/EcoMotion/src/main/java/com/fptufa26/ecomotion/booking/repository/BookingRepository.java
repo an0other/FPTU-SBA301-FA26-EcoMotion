@@ -17,4 +17,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     boolean existsByBookingCode(String bookingCode);
 
     List<Booking> findByRenter_IdAndStatusIn(Long renterId, Collection<BookingStatus> statuses);
+
+    List<Booking> findByRenter_IdOrderByPickupTimeDesc(Long renterId);
+
+    List<Booking> findByRenter_IdAndStatusOrderByPickupTimeDesc(Long renterId, BookingStatus status);
 }
