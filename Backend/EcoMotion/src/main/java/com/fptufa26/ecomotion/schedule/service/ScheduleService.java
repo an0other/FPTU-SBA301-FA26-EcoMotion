@@ -10,4 +10,6 @@ public interface ScheduleService {
     boolean isRangeFree(Long vehicleId, Instant start, Instant end);
 
     void book(Vehicle vehicle, Booking booking, Instant start, Instant end);
+
+    void release(Long bookingId);
 }

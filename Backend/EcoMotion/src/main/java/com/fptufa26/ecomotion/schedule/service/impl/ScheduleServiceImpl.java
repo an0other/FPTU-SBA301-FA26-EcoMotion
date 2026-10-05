@@ -38,4 +38,14 @@ public class ScheduleServiceImpl implements ScheduleService {
         row.setStatus(ScheduleStatus.ACTIVE);
         vehicleScheduleRepository.save(row);
     }
+
+    @Override
+    @Transactional
+    public void release(Long bookingId) {
+        for (VehicleSchedule row : vehicleScheduleRepository.findByBooking_Id(bookingId)) {
+            if (row.getStatus() == ScheduleStatus.ACTIVE) {
+                row.setStatus(ScheduleStatus.CANCELLED);
+            }
+        }
+    }
 }

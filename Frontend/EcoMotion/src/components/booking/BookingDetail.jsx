@@ -1,6 +1,13 @@
 import { useState } from 'react';
+import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
 
+const DISPUTE_LABELS = {
+  CHARGE: 'Phụ phí / khoản phí',
+  SERVICE_QUALITY: 'Chất lượng dịch vụ / tài xế',
+  DEPOSIT_REFUND: 'Hoàn cọc',
+  TRIP_NOT_CONFIRMED: 'Chuyến chưa được xác nhận kết thúc',
+};
 
 export const BookingDetail = ({
   booking,
@@ -9,21 +16,28 @@ export const BookingDetail = ({
   onPayDeposit,
   onCancelBooking,
   onCompleteBooking,
+  onOpenDispute,
 }) => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [complaintCategory, setComplaintCategory] = useState('');
-  const [complaintNote, setComplaintNote] = useState('');
-  const [complaintSubmitted, setComplaintSubmitted] = useState(false);
+  const [complaintCharge, setComplaintCharge] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [disputeNote, setDisputeNote] = useState('');
 
-  const handleComplaintSubmit = (e) => {
+  const handleComplaintSubmit = async (e) => {
     e.preventDefault();
-    setComplaintSubmitted(true);
-    setTimeout(() => {
-      alert('Đã gửi khiếu nại thành công! Bộ phận CSKH EcoMotion sẽ phản hồi trong 30 phút.');
-      setComplaintSubmitted(false);
+    setActionError('');
+    try {
+      await onOpenDispute({
+        category: complaintCategory,
+        chargeType: complaintCategory === 'CHARGE' ? complaintCharge : undefined,
+      });
+      setDisputeNote('Đã gửi khiếu nại. Admin sẽ xem xét.');
       setComplaintCategory('');
-      setComplaintNote('');
-    }, 400);
+      setComplaintCharge('');
+    } catch (err) {
+      setActionError(readErrorMessage(err));
+    }
   };
 
   return (
@@ -92,6 +106,7 @@ export const BookingDetail = ({
             Thời gian gửi: <span className="font-medium text-[#14221A]">{booking.createdAt}</span>
           </div>
         </div>
+        {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
       </div>
 
       {/* Main 2-Column Grid */}
@@ -123,23 +138,50 @@ export const BookingDetail = ({
           )}
 
           {/* IN_PROGRESS HERO GREEN BANNER */}
+          {booking.status === 'PENDING' && (
+            <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-[#14221A]">Đơn đang chờ chủ xe</h2>
+                <p className="text-xs text-gray-600 mt-1">Chưa thu cọc. Bạn có thể huỷ yêu cầu.</p>
+              </div>
+              <button
+                onClick={() => setIsCancelModalOpen(true)}
+                type="button"
+                className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Huỷ đơn
+              </button>
+            </div>
+          )}
+
           {booking.status === 'IN_PROGRESS' && (
             <div className="p-5 text-white bg-[#15803D] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <h2 className="text-base font-bold text-white">Chuyến đang diễn ra</h2>
                 <p className="text-xs sm:text-sm text-white/90">
-                  Bắt đầu thực tế: {booking.actualStartTime || '08:05, 25/10/2026'}
+                  {booking.actualStartTime
+                    ? `Bắt đầu thực tế: ${booking.actualStartTime}`
+                    : 'Chưa có giờ bắt đầu thực tế'}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              {booking.canConfirmEnd ? (
                 <button
-                  onClick={() => onCompleteBooking(booking.id)}
+                  onClick={async () => {
+                    setActionError('');
+                    try {
+                      await onCompleteBooking(booking.id);
+                    } catch (err) {
+                      setActionError(readErrorMessage(err));
+                    }
+                  }}
                   type="button"
                   className="px-5 py-2.5 bg-white text-[#15803D] font-bold text-sm rounded-[12px] shadow-xs hover:bg-emerald-50 transition-all cursor-pointer active:scale-95 shrink-0"
                 >
                   Xác nhận kết thúc chuyến
                 </button>
-              </div>
+              ) : (
+                <p className="text-sm font-medium text-white">Đang chờ phía nhà cung cấp xác nhận</p>
+              )}
             </div>
           )}
 
@@ -149,16 +191,27 @@ export const BookingDetail = ({
               <div>
                 <h2 className="text-base font-bold text-[#15803D]">Chủ xe đã chấp nhận đơn!</h2>
                 <p className="text-xs text-gray-600 mt-1">
-                  Vui lòng hoàn tất thanh toán cọc giữ chỗ ({booking.depositAmount.toLocaleString('vi-VN')} đ) để khóa lịch xe.
+                  {booking.upfront
+                    ? 'Vui lòng thanh toán khoản trả trước để khóa lịch xe.'
+                    : 'Vui lòng hoàn tất thanh toán cọc giữ chỗ để khóa lịch xe.'}
                 </p>
               </div>
-              <button
-                onClick={() => onPayDeposit(booking)}
-                type="button"
-                className="px-6 py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm rounded-[12px] shadow-sm transition-all cursor-pointer whitespace-nowrap"
-              >
-                Thanh toán giữ chỗ ngay
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  type="button"
+                  className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Huỷ đơn
+                </button>
+                <button
+                  onClick={() => onPayDeposit(booking)}
+                  type="button"
+                  className="px-6 py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm rounded-[12px] shadow-sm transition-all cursor-pointer whitespace-nowrap"
+                >
+                  {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán giữ chỗ ngay'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -168,7 +221,9 @@ export const BookingDetail = ({
               <div>
                 <h2 className="text-base font-bold text-[#14221A]">Chuyến xe đã được xác nhận</h2>
                 <p className="text-xs text-gray-600 mt-1">
-                  Lịch xe đã khóa thành công. Tài xế {booking.driver?.name || 'chuyên trách'} sẽ đón bạn đúng giờ.
+                  {booking.upfront
+                    ? 'Lịch xe đã khóa. Bạn tự lái theo hợp đồng.'
+                    : `Lịch xe đã khóa thành công. ${booking.driver?.name ? `Tài xế ${booking.driver.name} sẽ đón bạn đúng giờ.` : 'Tài xế sẽ được phân công trước giờ đón.'}`}
                 </p>
               </div>
               <button
@@ -200,10 +255,10 @@ export const BookingDetail = ({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#F3F4F6] text-[#14221A]">
-                    Gói ngày
+                    {booking.planTitle}
                   </span>
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#F3F4F6] text-[#14221A]">
-                    {booking.slots} slot ({booking.slots * 24}h)
+                    {booking.slots} slot
                   </span>
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#E8F6EE] text-[#15803D]">
                     {booking.totalAmount.toLocaleString('vi-VN')} đ
@@ -283,6 +338,9 @@ export const BookingDetail = ({
                 <div className="flex flex-col">
                   <span className="text-base font-bold text-[#14221A]">{booking.driver.name}</span>
                   <span className="text-xs font-mono text-[#6D7A72] mt-0.5">{booking.driver.phone}</span>
+                  <span className="text-xs text-[#6D7A72] mt-0.5">
+                    {Number(booking.driver.ratingAvg).toFixed(1)} / 5 ({booking.driver.ratingCount} đánh giá)
+                  </span>
                 </div>
                 <div className="ml-auto">
                   <a
@@ -311,81 +369,27 @@ export const BookingDetail = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E6EBE8]">
-                  <tr>
-                    <td className="py-3 px-3 font-medium text-[#14221A]">Tiền thuê</td>
-                    <td className="py-3 px-3 text-[#6D7A72]">Thuê {booking.slots} slot ngày</td>
-                    <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">
-                      {booking.slots} × 1.450.000 đ
-                    </td>
-                    <td className="py-3 px-3 text-right font-bold font-mono text-[#14221A]">
-                      {booking.totalAmount.toLocaleString('vi-VN')} đ
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 px-3 font-medium text-[#14221A]">Cọc giữ chỗ</td>
-                    <td className="py-3 px-3 text-[#6D7A72]">30% tiền thuê</td>
-                    <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">
-                      {booking.totalAmount.toLocaleString('vi-VN')} × 30%
-                    </td>
-                    <td className="py-3 px-3 text-right font-bold font-mono text-[#15803D]">
-                      {booking.depositAmount.toLocaleString('vi-VN')} đ
-                    </td>
-                  </tr>
+                  {booking.charges.map((charge) => (
+                    <tr key={`${charge.chargeType}-${charge.description}`}>
+                      <td className="py-3 px-3 font-medium text-[#14221A]">{charge.label}</td>
+                      <td className="py-3 px-3 text-[#6D7A72]">{charge.description}</td>
+                      <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">{charge.formula}</td>
+                      <td className="py-3 px-3 text-right font-bold font-mono text-[#14221A]">
+                        {charge.amount.toLocaleString('vi-VN')} đ
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* CARD: TRANSACTIONS TABLE (if paid/confirmed) */}
-          {(booking.status === 'CONFIRMED' || booking.status === 'IN_PROGRESS' || booking.status === 'COMPLETED') && (
-            <div className="bg-white p-5 flex flex-col gap-3 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
-              <h3 className="text-sm font-bold text-[#14221A]">Lịch sử giao dịch</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <tbody className="divide-y divide-[#E6EBE8]">
-                    <tr>
-                      <td className="py-3 px-3 font-medium text-[#14221A]">Cọc giữ chỗ</td>
-                      <td className="py-3 px-3 font-mono font-bold text-[#14221A]">
-                        {booking.depositAmount.toLocaleString('vi-VN')} đ
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#E8F6EE] text-[#15803D]">
-                          Thu vào
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-gray-500">Thẻ (VNPay)</td>
-                      <td className="py-3 px-3">
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#E8F6EE] text-[#15803D]">
-                          Đã thanh toán
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-mono whitespace-nowrap text-gray-500">
-                        {booking.paidAt || '25/10/2026 07:40'}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => alert('Biên lai điện tử đã được gửi đến email đăng ký.')}
-                          className="font-semibold text-[#15803D] hover:underline cursor-pointer"
-                        >
-                          Xem biên lai
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* CARD: COMPLAINT FORM (In progress/completed) */}
-          {(booking.status === 'IN_PROGRESS' || booking.status === 'COMPLETED') && (
+          {booking.disputeCategories.length > 0 && (
             <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
-              <h3 className="text-sm font-bold text-[#14221A]">Khiếu nại & Hỗ trợ</h3>
+              <h3 className="text-sm font-bold text-[#14221A]">Khiếu nại</h3>
               <form onSubmit={handleComplaintSubmit} className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-[#14221A]">
-                    Loại khiếu nại
-                  </label>
+                  <label className="text-xs font-semibold text-[#14221A]">Loại khiếu nại</label>
                   <select
                     value={complaintCategory}
                     onChange={(e) => setComplaintCategory(e.target.value)}
@@ -393,30 +397,35 @@ export const BookingDetail = ({
                     className="w-full h-11 px-3.5 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none cursor-pointer"
                   >
                     <option value="" disabled>-- Chọn loại khiếu nại --</option>
-                    <option value="phu-phi">Phụ phí phát sinh</option>
-                    <option value="chat-luong">Chất lượng dịch vụ / Tài xế</option>
-                    <option value="hoan-coc">Yêu cầu hoàn cọc</option>
-                    <option value="khac">Khác</option>
+                    {booking.disputeCategories.map((category) => (
+                      <option key={category} value={category}>{DISPUTE_LABELS[category]}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-[#14221A]">
-                    Ghi chú chi tiết
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={complaintNote}
-                    onChange={(e) => setComplaintNote(e.target.value)}
-                    placeholder="Mô tả sự cố hoặc yêu cầu cần hỗ trợ..."
-                    className="w-full p-3 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none resize-none"
-                  />
-                </div>
+                {complaintCategory === 'CHARGE' && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-[#14221A]">Khoản phí</label>
+                    <select
+                      value={complaintCharge}
+                      onChange={(e) => setComplaintCharge(e.target.value)}
+                      required
+                      className="w-full h-11 px-3.5 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none cursor-pointer"
+                    >
+                      <option value="" disabled>-- Chọn khoản --</option>
+                      {booking.charges.map((charge) => (
+                        <option key={charge.chargeType} value={charge.chargeType}>{charge.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {disputeNote && <p className="text-sm text-[#15803D]">{disputeNote}</p>}
+                {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
 
                 <div className="flex justify-end pt-1">
                   <button
                     type="submit"
-                    disabled={complaintSubmitted}
                     className="px-5 py-2 font-semibold text-xs border border-[#B42318] text-[#B42318] rounded-xl hover:bg-rose-50 transition-colors cursor-pointer active:scale-95"
                   >
                     Gửi khiếu nại
@@ -502,9 +511,15 @@ export const BookingDetail = ({
         bookingId={booking.id}
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
-        onConfirmCancel={(id, reason) => {
-          setIsCancelModalOpen(false);
-          onCancelBooking(id, reason);
+        refundExplanation={booking.refundExplanation}
+        onConfirmCancel={async () => {
+          setActionError('');
+          try {
+            await onCancelBooking(booking.id);
+            setIsCancelModalOpen(false);
+          } catch (err) {
+            setActionError(readErrorMessage(err));
+          }
         }}
       />
     </div>
