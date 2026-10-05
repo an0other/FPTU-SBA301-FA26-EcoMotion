@@ -6,8 +6,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 
 public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule, Long> {
+
+    List<VehicleSchedule> findByBooking_Id(Long bookingId);
 
     @Query("""
             select count(s) > 0 from VehicleSchedule s

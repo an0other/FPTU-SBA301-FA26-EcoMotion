@@ -1,5 +1,13 @@
 package com.fptufa26.ecomotion.seed;
 
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.entity.BookingCharge;
+import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
+import com.fptufa26.ecomotion.booking.entity.BookingStatus;
+import com.fptufa26.ecomotion.booking.entity.ChargeType;
+import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
+import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
+import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.user.entity.EkycStatus;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.ProviderStatus;
@@ -31,6 +39,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Component
 @Profile("dev")
@@ -41,6 +50,7 @@ public class DevDataSeeder implements ApplicationRunner {
     public static final String RENTER_EMAIL = "renter01@ecomotion.vn";
     public static final String PROVIDER_EMAIL = "provider01@ecomotion.vn";
     public static final String VEHICLE_PLATE = "51K-888.88";
+    public static final String ACCEPTED_BOOKING_CODE = "EM-2026-9001";
 
     private static final String VEHICLE_IMAGE =
             "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=800&q=80";
@@ -51,6 +61,9 @@ public class DevDataSeeder implements ApplicationRunner {
     private final VehicleRepository vehicleRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final RentalPlanRepository rentalPlanRepository;
+    private final BookingRepository bookingRepository;
+    private final BookingPolicySnapshotRepository snapshotRepository;
+    private final BookingChargeRepository chargeRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -59,9 +72,10 @@ public class DevDataSeeder implements ApplicationRunner {
         User renterUser = seedUser(RENTER_EMAIL, "0901000001", "Renter 01", Role.RENTER);
         User providerUser = seedUser(PROVIDER_EMAIL, "0901000002", "Provider 01", Role.PROVIDER);
         seedUser("admin01@ecomotion.vn", "0901000003", "Admin 01", Role.ADMIN);
-        seedRenter(renterUser);
+        Renter renter = seedRenter(renterUser);
         Provider provider = seedProvider(providerUser);
-        seedVehicle(provider);
+        Vehicle vehicle = seedVehicle(provider);
+        seedAcceptedBooking(renter, renterUser, provider, vehicle);
     }
 
     private User seedUser(String email, String phone, String fullName, Role role) {
@@ -78,13 +92,12 @@ public class DevDataSeeder implements ApplicationRunner {
         });
     }
 
-    private void seedRenter(User user) {
-        if (renterRepository.existsByUser_Id(user.getId())) {
-            return;
-        }
-        Renter renter = new Renter();
-        renter.setUser(user);
-        renterRepository.save(renter);
+    private Renter seedRenter(User user) {
+        return renterRepository.findByUser_Id(user.getId()).orElseGet(() -> {
+            Renter renter = new Renter();
+            renter.setUser(user);
+            return renterRepository.save(renter);
+        });
     }
 
     private Provider seedProvider(User user) {
@@ -102,7 +115,7 @@ public class DevDataSeeder implements ApplicationRunner {
         });
     }
 
-    private void seedVehicle(Provider provider) {
+    private Vehicle seedVehicle(Provider provider) {
         Vehicle vehicle = vehicleRepository.findByLicensePlate(VEHICLE_PLATE).orElseGet(() -> {
             Vehicle created = new Vehicle();
             created.setProvider(provider);
@@ -134,6 +147,59 @@ public class DevDataSeeder implements ApplicationRunner {
             rentalPlanRepository.save(plan(vehicle, PlanType.MONTHLY, 43200, "32000000.00", null, false));
             rentalPlanRepository.save(plan(vehicle, PlanType.YEARLY, 525600, "280000000.00", "50000000.00", false));
         }
+        return vehicle;
+    }
+
+    private void seedAcceptedBooking(Renter renter, User renterUser, Provider provider, Vehicle vehicle) {
+        if (bookingRepository.existsByBookingCode(ACCEPTED_BOOKING_CODE)) {
+            return;
+        }
+        RentalPlan daily = rentalPlanRepository
+                .findByVehicle_IdAndStatusOrderByIdAsc(vehicle.getId(), PlanStatus.ACTIVE)
+                .stream()
+                .filter(plan -> plan.getPlanType() == PlanType.DAILY)
+                .findFirst()
+                .orElseThrow();
+
+        Booking booking = new Booking();
+        booking.setBookingCode(ACCEPTED_BOOKING_CODE);
+        booking.setRenter(renter);
+        booking.setVehicle(vehicle);
+        booking.setPlan(daily);
+        booking.setStatus(BookingStatus.ACCEPTED);
+        booking.setPickupAddress(provider.getDepotAddress());
+        booking.setPickupTime(Instant.parse("2026-12-20T01:00:00Z"));
+        booking.setPassengerCount(2);
+        booking.setTotalAmount(daily.getSlotPrice());
+        bookingRepository.save(booking);
+
+        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
+        snapshot.setBooking(booking);
+        snapshot.setSlotPrice(daily.getSlotPrice());
+        snapshot.setSlotLengthMinutes(daily.getSlotLengthMinutes());
+        snapshot.setPlanType(daily.getPlanType());
+        snapshot.setDepositRatio(provider.getDepositRatio());
+        snapshot.setUpfrontAmount(null);
+        snapshot.setAllowedOvertimeMinutes(daily.getAllowedOvertimeMinutes());
+        snapshot.setOvertimeSurchargeRatio(daily.getOvertimeSurchargeRatio());
+        snapshot.setWaitingFreeMinutes(daily.getWaitingFreeMinutes());
+        snapshot.setWaitingRate(daily.getWaitingRate());
+        snapshot.setWeekendSurchargeRatio(daily.getWeekendSurchargeRatio());
+        snapshot.setFreeRadiusKm(daily.getFreeRadiusKm());
+        snapshot.setOutOfRadiusRate(daily.getOutOfRadiusRate());
+        snapshot.setHourlyToDailyThresholdMinutes(daily.getHourlyToDailyThresholdMinutes());
+        snapshotRepository.save(snapshot);
+
+        BookingCharge charge = new BookingCharge();
+        charge.setBooking(booking);
+        charge.setChargeType(ChargeType.BASE_RENTAL);
+        charge.setDescription("Thuê 1 slot");
+        charge.setQuantity(1);
+        charge.setUnitPrice(daily.getSlotPrice());
+        charge.setAmount(daily.getSlotPrice());
+        charge.setCreatedBy(renterUser);
+        charge.setWaived(false);
+        chargeRepository.save(charge);
     }
 
     private RentalPlan plan(Vehicle vehicle,

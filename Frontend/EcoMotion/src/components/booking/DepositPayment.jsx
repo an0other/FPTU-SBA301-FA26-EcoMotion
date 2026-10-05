@@ -3,20 +3,32 @@ import { useState } from 'react';
 
 export const DepositPayment = ({
   booking,
-  onPaymentSuccess,
+  onPay,
+  onViewDetail,
   onGoToMyBookings,
+  planSummary,
+  payTitle = 'Cọc giữ chỗ',
+  ratioText,
+  payHint = 'Đây là tiền cọc giữ chỗ, không phải cả tiền thuê',
+  successText,
+  amountLabel = 'Số tiền cọc:',
 }) => {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
+    setError('');
+    try {
+      await onPay(paymentMethod);
       setShowSuccessModal(true);
-      onPaymentSuccess(booking.id);
-    }, 600);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Không thanh toán được');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -83,7 +95,7 @@ export const DepositPayment = ({
               <div>
                 <div className="text-xs font-semibold text-gray-500">Gói thuê</div>
                 <div className="text-sm font-semibold text-[#14221A] mt-0.5">
-                  Gói ngày ({booking.slots} slot liên tiếp = {booking.slots * 24} giờ) • Đã gồm tài xế
+                  {planSummary}
                 </div>
               </div>
             </div>
@@ -119,7 +131,7 @@ export const DepositPayment = ({
         {/* Right Column: Deposit Payment Card */}
         <section className="lg:col-span-5 bg-white rounded-2xl border border-[#E6EBE8] p-6 shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
           <h2 className="text-lg font-bold text-[#14221A] pb-4 border-b border-[#E6EBE8] mb-4">
-            Cọc giữ chỗ
+            {payTitle}
           </h2>
 
           <div className="space-y-2 mb-4 text-sm">
@@ -127,10 +139,12 @@ export const DepositPayment = ({
               <span>Tiền thuê:</span>
               <span className="font-medium text-[#14221A]">{booking.totalAmount.toLocaleString('vi-VN')} đ</span>
             </div>
-            <div className="flex justify-between items-center text-gray-600">
-              <span>Tỷ lệ cọc đã chốt:</span>
-              <span className="font-medium text-[#14221A]">30%</span>
-            </div>
+            {ratioText ? (
+              <div className="flex justify-between items-center text-gray-600">
+                <span>Tỷ lệ cọc đã chốt:</span>
+                <span className="font-medium text-[#14221A]">{ratioText}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="p-4 rounded-xl bg-[#E8F6EE] border border-[#15803D]/20 mb-5">
@@ -139,7 +153,7 @@ export const DepositPayment = ({
               {booking.depositAmount.toLocaleString('vi-VN')} đ
             </div>
             <p className="text-xs text-gray-600 mt-2 italic">
-              Đây là tiền cọc giữ chỗ, không phải cả tiền thuê
+              {payHint}
             </p>
           </div>
 
@@ -246,6 +260,7 @@ export const DepositPayment = ({
             )}
           </button>
 
+          {error ? <p className="mt-3 text-xs text-[#B42318]">{error}</p> : null}
           <p className="text-[11px] text-center text-gray-500 mt-3">
             Giao dịch được bảo mật và lịch xe sẽ được khóa tự động sau khi thanh toán.
           </p>
@@ -267,13 +282,12 @@ export const DepositPayment = ({
 
             <h3 className="text-xl font-bold text-[#14221A] mb-1.5">Lịch xe đã được khóa</h3>
             <p className="text-xs text-gray-600 leading-relaxed mb-6">
-              Bạn đã thanh toán cọc giữ chỗ thành công cho đơn{' '}
-              <span className="font-mono font-semibold text-[#14221A]">{booking.id}</span>. Tài xế sẽ liên hệ đón đúng giờ hẹn.
+              {successText}
             </p>
 
             <div className="bg-[#F7F8F6] rounded-xl p-3.5 border border-[#E6EBE8] mb-6 text-left text-xs space-y-1.5">
               <div className="flex justify-between text-gray-600">
-                <span>Số tiền cọc:</span>
+                <span>{amountLabel}</span>
                 <span className="font-bold text-[#15803D]">
                   {booking.depositAmount.toLocaleString('vi-VN')} đ
                 </span>
@@ -289,7 +303,7 @@ export const DepositPayment = ({
             <button
               onClick={() => {
                 setShowSuccessModal(false);
-                onGoToMyBookings();
+                onViewDetail();
               }}
               className="w-full py-3 px-4 rounded-xl bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm transition-all duration-180 active:scale-[0.98] cursor-pointer"
               type="button"
