@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { IconCar } from '../components/icons/Icons'
 
@@ -18,13 +18,21 @@ export default function Dashboard({ title, subtitle }) {
           <IconCar className="h-5 w-5 text-brand-600" />
           EcoMotion <span className="text-[11px] font-semibold text-brand-600">VN</span>
         </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-lg border border-slate-200 bg-white px-4.5 py-2.5 text-[13px] font-semibold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-100"
-        >
-          Đăng xuất
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/me"
+            className="rounded-lg border border-slate-200 bg-white px-4.5 py-2.5 text-[13px] font-semibold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-100"
+          >
+            Trang của tôi
+          </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-lg border border-slate-200 bg-white px-4.5 py-2.5 text-[13px] font-semibold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-100"
+          >
+            Đăng xuất
+          </button>
+        </div>
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-10">

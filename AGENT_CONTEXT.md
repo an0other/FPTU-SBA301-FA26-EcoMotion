@@ -123,7 +123,9 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 │           ├── main\
 │           │   ├── java\com\fptufa26\ecomotion\
 │           │   │   ├── EcoMotionApplication.java
-│           │   │   ├── auth\           ← module đăng nhập
+│           │   │   ├── auth\           ← module đăng nhập / token / kích hoạt
+│           │   │   │     controller\ service\ dto\{request,response}\ ekyc\ otp\ storage\
+│           │   │   │     entity\ repository\ mapper\ exception\
 │           │   │   ├── user\           ← module người dùng
 │           │   │   ├── common\         ← config / exception / response / security
 │           │   │   └── seed\           ← DevDataSeeder (gitignored)
@@ -132,12 +134,19 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 │           │       └── application.properties.example  ← template, an toàn commit
 │           └── test\
 │               ├── java\com\fptufa26\ecomotion\
-│               │   ├── auth\controller\AuthApiIntegrationTest.java
-│               │   ├── auth\service\AuthServiceImplTest.java
-│               │   ├── common\security\JwtServiceTest.java
+│               │   ├── auth\controller\  ← AuthApiIntegrationTest, RegistrationApiIntegrationTest,
+│               │   │                        ActivationApiIntegrationTest,
+│               │   │                        CaptchaEnforcementIntegrationTest
+│               │   ├── auth\service\     ← AuthServiceImplTest, RegistrationServiceImplTest,
+│               │   │                        CaptchaServiceTest
+│               │   ├── auth\otp\         ← SmtpOtpSenderTest
+│               │   ├── common\security\  ← JwtServiceTest
+│               │   ├── common\crypto\    ← DeterministicCipherTest
+│               │   ├── seed\             ← DevDataSeederTest
+│               │   ├── support\          ← TestRoleController
 │               │   └── EcoMotionApplicationTests.java
 │               └── resources\application.properties     ← H2 in-memory, secret giả (an toàn)
-└── Frontend\                             ← ⚠️ TRỐNG — chưa khởi tạo
+└── Frontend\EcoMotion\                   ← React 19 + Vite; Tailwind v4 qua @tailwindcss/vite
 ```
 
 **Quy tắc ignore:** có **2 tầng** `.gitignore` — root (bao quát cả repo: Java + Node/React + IDE + secret) và `Backend/EcoMotion/` (chi tiết cho Spring Boot). Cả 2 đều chặn `application.properties` chứa credentials.
@@ -218,11 +227,25 @@ com.fptufa26.ecomotion/
 │   ├── exception/              ← ErrorResponse, GlobalExceptionHandler
 │   ├── response/               ← ApiResponse<T>
 │   └── security/               ← JwtService, JwtAuthenticationFilter, SecurityUser, ...
-├── auth/                       ← module: đăng nhập / token
-│   ├── controller/  service/  repository/  entity/  dto/  mapper/  exception/
+├── auth/                       ← module: đăng nhập / token / kích hoạt
+│   ├── controller/             ← AuthController, ActivationController
+│   ├── service/                ← AuthService(+Impl), RegistrationService(+Impl),
+│   │                             ActivationService(+Impl), OtpService(+Impl),
+│   │                             CaptchaService, TokenService
+│   ├── dto/request/            ← *Request
+│   ├── dto/response/           ← *Response
+│   ├── ekyc/                   ← EkycService (interface) + Mock/FptAi impls
+│   ├── otp/                    ← OtpSender (interface) + Smtp/Logging impls, OtpEntry
+│   ├── storage/                ← FileStorageService
+│   ├── entity/  repository/  mapper/  exception/
 └── user/                       ← module: người dùng
-    ├── entity/  repository/  service/  dto/
+    ├── entity/  repository/  service/
+    └── dto/response/           ← UserResponse
 ```
+
+**Quy ước `dto/`:** module nào có nhiều DTO thì tách `dto/request/` và `dto/response/`
+(xem `Backend/EcoMotion/AGENT_CODE_STRUCTURE.md` §5.1). DTO nào vừa gửi vừa nhận thì để thẳng
+trong `dto/`.
 
 **Layer responsibilities:**
 
@@ -431,9 +454,10 @@ public record ApiResponse<T>(String code, String message, T data) {
 - `application.properties.example` là template an toàn để commit.
 - Config có thể override bằng environment variable: `${DB_USERNAME:postgres}`, `${JWT_SECRET:...}`.
 
-### 4.2. Frontend (ReactJS) — quy ước đề xuất
+### 4.2. Frontend (ReactJS)
 
-> ⚠️ Frontend **chưa khởi tạo**. Dưới đây là quy ước **đề xuất**, sẽ chốt khi khởi tạo.
+> Frontend đã khởi tạo tại `Frontend/EcoMotion/` — React 19 + Vite (rolldown) + react-router-dom 7
+> + Tailwind CSS v4. Lệnh kiểm chứng: `cd Frontend/EcoMotion && npm run lint && npm run build`.
 
 | Loại        | Quy ước đề xuất                                                               |
 | ----------- | ----------------------------------------------------------------------------- |
@@ -511,6 +535,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 | T13 | **Chrome headless + CDP để QC sơ đồ Mermaid**                         | jsdom **không chạy được** `mermaid.render()` — cần browser thật                               |
 | T14 | **Đo layout bằng `getBoundingClientRect()` + scale viewBox**          | `getBBox()` trả giá trị sai trong layout Mermaid                                              |
 | T15 | **Đưa tài liệu dự án vào `docs/` trong repo**                         | `git clone` về là có đủ ngữ cảnh; tài liệu có lịch sử thay đổi                                |
+| T16 | **`dto/` tách `request/` + `response/`**                             | Module có nhiều DTO thì chia 2 chiều cho rõ; DTO dùng cả 2 chiều để thẳng `dto/`              |
+| T17 | **Chỉ tạo service interface khi có ≥2 impl hoặc là boundary module** | Interface 1-1 với impl là boilerplate; class cụ thể gọn hơn (xem `AGENT_CODE_STRUCTURE.md` §9.1) |
 
 ---
 
@@ -614,12 +640,22 @@ npm start        # port 3000 (CRA) hoặc npm run dev → 5173 (Vite)
 
 ### 6.5. Endpoint hiện có
 
-| Method | Path                | Mô tả                                             |
-| ------ | ------------------- | ------------------------------------------------- |
-| `POST` | `/api/auth/login`   | Đăng nhập → trả access token + set refresh cookie |
-| `POST` | `/api/auth/logout`  | Đăng xuất (thu hồi refresh token)                 |
-| `POST` | `/api/auth/refresh` | Làm mới access token từ refresh cookie            |
-| `GET`  | `/api/auth/me`      | Thông tin user hiện tại                           |
+| Method | Path                                   | Mô tả                                             |
+| ------ | -------------------------------------- | ------------------------------------------------- |
+| `POST` | `/api/auth/login`                      | Đăng nhập → trả access token + set refresh cookie |
+| `POST` | `/api/auth/logout`                     | Đăng xuất (thu hồi refresh token)                 |
+| `POST` | `/api/auth/refresh`                    | Làm mới access token từ refresh cookie            |
+| `GET`  | `/api/auth/me`                         | Thông tin user hiện tại                           |
+| `POST` | `/api/auth/register/send-otp`          | Gửi OTP đăng ký (409 nếu email đã có tài khoản)   |
+| `POST` | `/api/auth/register/verify-otp`        | Xác thực OTP → registration token                 |
+| `POST` | `/api/auth/register`                   | Tạo tài khoản PENDING → activation token          |
+| `POST` | `/api/auth/activate/send-phone-otp`    | (B2) Gửi OTP xác thực số điện thoại               |
+| `POST` | `/api/auth/activate/verify-phone-otp`  | (B2) Xác thực số điện thoại                       |
+| `POST` | `/api/auth/activate/status`            | Tiến độ kích hoạt (dựng lại từ DB)                |
+| `POST` | `/api/auth/activate/scan-cccd`         | (B3) Upload 2 mặt CCCD → OCR + lưu hồ sơ          |
+| `POST` | `/api/auth/activate/face-match`        | (B4) Selfie vs ảnh CCCD; khớp → ACTIVE            |
+| `POST` | `/api/auth/activate/resume-otp`        | Gửi OTP để tiếp tục kích hoạt sau                   |
+| `POST` | `/api/auth/activate/resume`            | Xác thực OTP resume → activation token mới         |
 
 ---
 

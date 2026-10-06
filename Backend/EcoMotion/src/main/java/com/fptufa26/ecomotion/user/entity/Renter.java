@@ -1,6 +1,8 @@
 package com.fptufa26.ecomotion.user.entity;
 
+import com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -33,11 +35,34 @@ public class Renter {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(name = "cccd_no", length = 20)
+    /**
+     * CCCD (citizen ID) number, stored two-way encrypted (AES-256-GCM) at rest. Wider than the
+     * plaintext because it holds Base64 ciphertext; kept deterministic so the partial UNIQUE index
+     * {@code uk_renter_cccd_no} still works.
+     */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "cccd_no", length = 255)
     private String cccdNo;
+
+    /** Identity fields auto-filled from the CCCD OCR during activation. */
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(length = 10)
+    private String gender;
+
+    @Column(length = 255)
+    private String address;
 
     @Column(name = "cccd_image_url", length = 500)
     private String cccdImageUrl;
+
+    @Column(name = "cccd_image_back_url", length = 500)
+    private String cccdImageBackUrl;
+
+    /** Selfie uploaded for the CCCD face-match check. */
+    @Column(name = "portrait_url", length = 500)
+    private String portraitUrl;
 
     @Column(name = "license_no", length = 20)
     private String licenseNo;

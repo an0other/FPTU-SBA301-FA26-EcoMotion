@@ -1,12 +1,33 @@
+# ===========================================================================
+# EcoMotion Backend — mẫu cấu hình môi trường
+#
+# CÁCH DÙNG:
+#   cp application.properties.example application.properties
+# rồi điền các giá trị thật.
+#
+# `application.properties` KHÔNG được commit (đã có trong
+# Backend/EcoMotion/.gitignore) — file này mới là bản an toàn để commit.
+#
+# QUY TẮC: KHÔNG ghi secret thật vào file này. Mọi giá trị nhạy cảm dùng cú
+# pháp ${ENV_VAR:default} và phải được set qua biến môi trường khi deploy.
+# ===========================================================================
+
+
 spring.application.name=EcoMotion
+
+
+# ===============================
+# Profile
+# ===============================
+spring.profiles.active=${SPRING_PROFILES_ACTIVE:dev}
 
 
 # ===============================
 # Database configuration
 # ===============================
 spring.datasource.url=jdbc:postgresql://localhost:5432/ecomotion
-spring.datasource.username=your_username
-spring.datasource.password=your_password
+spring.datasource.username=${DB_USERNAME:postgres}
+spring.datasource.password=${DB_PASSWORD:your_password}
 spring.datasource.driver-class-name=org.postgresql.Driver
 
 
@@ -33,6 +54,7 @@ server.port=8080
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.show-sql=true
 # Schema is created by src/main/resources/db/schema.sql. Do not let Hibernate alter it.
+# Dev may use `create-drop`; production MUST stay `none`.
 spring.jpa.hibernate.ddl-auto=none
 spring.data.jpa.repositories.enabled=true
 
@@ -41,9 +63,20 @@ spring.data.jpa.repositories.enabled=true
 # JWT
 # ===============================
 # app.jwt.secret MUST be at least 32 bytes (256 bit) or HS256 signing fails with WeakKeyException.
-app.jwt.secret=your-256-bit-secret-at-least-32-chars
+# Generated with: openssl rand -base64 48
+# There is deliberately NO default: a committed fallback would let anyone forge tokens.
+app.jwt.secret=${JWT_SECRET:}
 app.jwt.access-token-ttl=15m
 app.jwt.issuer=ecomotion
+
+
+# ===============================
+# PII encryption (two-way, reversible)
+# ===============================
+# Encrypts short PII at rest: users.phone and renter.cccd_no.
+# MUST be at least 32 bytes. Override DATA_CRYPTO_SECRET in every real environment.
+# WARNING: rotating this key makes previously stored values unreadable — treat it like the JWT secret.
+app.crypto.secret=${DATA_CRYPTO_SECRET:}
 
 
 # ===============================
@@ -57,15 +90,116 @@ app.refresh-token.ttl-default=1d
 # Cookie
 # ===============================
 app.cookie.name=refresh_token
+# Scoping the cookie to /api/auth keeps it off every other endpoint.
 app.cookie.path=/api/auth
-app.cookie.secure=false
+# MUST be true behind HTTPS. Leaving it false in production lets the refresh token travel in clear.
+app.cookie.secure=${COOKIE_SECURE:false}
+# Lax is what blocks cross-site POSTs (CSRF) to /api/auth/refresh and /logout.
+# Never set this to None without adding an explicit CSRF token.
 app.cookie.same-site=Lax
 
 
 # ===============================
 # CORS
 # ===============================
-app.cors.allowed-origins=http://localhost:3000,http://localhost:5173
+# Exact origins only — never "*", because allowCredentials(true) is set in CorsConfig.
+# Add the deployed frontend origin (e.g. https://ecomotion.vn) before going live.
+app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+
+
+# ===============================
+# Registration token
+# ===============================
+# Binds a verified OTP to the final register call. Stateless — nothing is stored server-side.
+app.registration-token.ttl=30m
+
+
+# ===============================
+# Email OTP
+# ===============================
+# OTP is transient (never persisted in the DB).
+# provider=smtp    -> sends a real email; an SMTP rejection fails the request with 502,
+#                     which doubles as the "does this mailbox exist" gate.
+# provider=logging -> writes the code to the app log (local dev / tests).
+app.otp.provider=smtp
+app.otp.length=6
+app.otp.ttl=5m
+app.otp.max-attempts=5
+app.otp.resend-cooldown=60s
+# Never echo the OTP back to the client in a real environment: it must arrive only via email.
+app.otp.expose-in-response=false
+
+
+# ===============================
+# reCAPTCHA v3
+# ===============================
+# The secret key is read from the environment so it is never committed.
+# Set RECAPTCHA_SECRET_KEY before starting the app; if it is blank the protected endpoints
+# fail closed with 403 (see CaptchaService.verify).
+app.captcha.enabled=${CAPTCHA_ENABLED:true}
+app.captcha.secret-key=${RECAPTCHA_SECRET_KEY:}
+app.captcha.min-score=0.5
+
+
+# ===============================
+# SMTP (real email delivery for OTP)
+# ===============================
+# Credentials come from env vars so no secret is committed. With Gmail use an app password.
+# If credentials are absent the app still boots; POST /api/auth/register/send-otp returns 502.
+app.mail.from=${MAIL_FROM:no-reply@ecomotion.vn}
+spring.mail.host=${MAIL_HOST:smtp.gmail.com}
+spring.mail.port=${MAIL_PORT:587}
+spring.mail.username=${MAIL_USERNAME:}
+spring.mail.password=${MAIL_PASSWORD:}
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.connectiontimeout=5000
+spring.mail.properties.mail.smtp.timeout=5000
+spring.mail.properties.mail.smtp.writetimeout=5000
+
+
+# ===============================
+# eKYC (identity verification on the activation page)
+# ===============================
+# provider=mock  -> no network, always succeeds (local dev / tests).
+# provider=fptai -> calls the FPT.AI sandbox: CCCD OCR + face match. Requires FPT_AI_API_KEY.
+app.ekyc.provider=${EKYC_PROVIDER:mock}
+app.ekyc.mock.force-fail=false
+app.ekyc.fptai.api-key=${FPT_AI_API_KEY:}
+app.ekyc.fptai.idr-url=https://api.fpt.ai/vision/idr/vnm
+app.ekyc.fptai.face-url=https://api.fpt.ai/dmp/checkface/v1
+app.ekyc.fptai.min-similarity=70
+
+
+# ===============================
+# Account activation (post-registration)
+# ===============================
+# After register the account is PENDING; the client gets a short-lived activation token instead
+# of a session and completes the profile on the activation page.
+app.activation-token.ttl=60m
+# Mock phone OTP: no SMS gateway, so the code is returned to the caller.
+app.phone-otp.length=6
+app.phone-otp.ttl=5m
+app.phone-otp.max-attempts=5
+app.phone-otp.resend-cooldown=60s
+
+
+# ===============================
+# File upload
+# ===============================
+# Layout on disk: {app.upload.dir}/{entity}/{userId}/{filename}
+# e.g. D:/ecomotion/renter/42/cccd-front.jpg
+# Use an absolute path outside the repo so uploads are never committed.
+app.upload.dir=${UPLOAD_DIR:./uploads}
+app.upload.max-file-size-bytes=8388608
+spring.servlet.multipart.max-file-size=8MB
+spring.servlet.multipart.max-request-size=24MB
+
+
+# ===============================
+# Password policy
+# ===============================
+app.password.min-length=8
 
 
 # ===============================
