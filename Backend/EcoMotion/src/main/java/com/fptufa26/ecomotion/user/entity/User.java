@@ -1,6 +1,8 @@
 package com.fptufa26.ecomotion.user.entity;
 
+import com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -38,13 +40,19 @@ public class User {
     @Column(nullable = false, length = 255)
     private String email;
 
-    @Column(nullable = false, length = 20)
+    /**
+     * Phone number, stored two-way encrypted (AES-256-GCM) at rest. The column is wider than the
+     * plaintext because it holds the Base64 ciphertext. Kept deterministic so the
+     * {@code uk_users_phone} UNIQUE constraint still rejects duplicates.
+     */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(length = 255)
     private String phone;
 
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    @Column(name = "full_name", nullable = false, length = 150)
+    @Column(name = "full_name", length = 150)
     private String fullName;
 
     @Column(name = "avatar_url", length = 500)
