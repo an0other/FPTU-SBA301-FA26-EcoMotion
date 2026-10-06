@@ -20,6 +20,7 @@ export const ChoosePlanStep = ({
 }) => {
   const selected = plans.find((plan) => plan.id === selectedPlanId) ?? plans[0]
   const selectedCopy = planLabel(selected?.planType)
+  const yearly = selected?.planType === 'YEARLY'
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -150,7 +151,9 @@ export const ChoosePlanStep = ({
 
         <div className="bg-white p-5 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
           <label className="block text-sm font-bold text-[#14221A]">Thời điểm bắt đầu</label>
-          <p className="text-xs text-gray-500 mt-0.5">Chọn ngày và giờ chính xác để tài xế phục vụ đúng hẹn</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {yearly ? 'Chọn ngày và giờ nhận xe theo hợp đồng' : 'Chọn ngày và giờ chính xác để tài xế phục vụ đúng hẹn'}
+          </p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div>
               <span className="block text-xs text-gray-500 mb-1 font-medium">Ngày nhận xe</span>

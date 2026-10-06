@@ -98,7 +98,8 @@ export const RequestSubmitted = ({
                 {booking.formattedStart}
               </span>
               <span className="text-xs text-gray-500 block">
-                Thời lượng: {booking.slots} ngày liên tiếp kèm tài xế chuyên trách
+                Thời lượng: {booking.slots} slot liên tiếp
+                {booking.planType === 'YEARLY' ? ' theo hợp đồng' : ' kèm tài xế'}
               </span>
             </div>
           </div>
