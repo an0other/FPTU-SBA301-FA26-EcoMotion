@@ -96,7 +96,10 @@ public class BookingServiceImpl implements BookingService {
         Vehicle vehicle = vehicleCatalogService.requireApproved(request.vehicleId());
         RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(), request.planId());
 
-        if (request.passengerCount() > vehicle.getSeatCount()) {
+        int passengerLimit = plan.getPlanType() == PlanType.YEARLY
+                ? vehicle.getSeatCount()
+                : vehicle.getSeatCount() - 1;
+        if (passengerLimit < 1 || request.passengerCount() > passengerLimit) {
             throw new ConflictException("Passenger count exceeds seat count");
         }
 

@@ -12,6 +12,8 @@ export const PickupStep = ({
   setPickupAddress,
   passengerCount,
   setPassengerCount,
+  seatCount,
+  driverIncluded,
   maxPassengers,
   onBack,
   onNext,
@@ -210,7 +212,10 @@ export const PickupStep = ({
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
                 <span className="material-symbols-outlined text-[18px] text-[#004F35]">groups</span>
-                <span>Tối đa {maxPassengers} hành khách cho dòng vehicle này</span>
+                <span>
+                  Xe {seatCount} chỗ
+                  {driverIncluded ? `, một chỗ cho tài xế, tối đa ${maxPassengers} khách` : `, tối đa ${maxPassengers} người trên xe`}
+                </span>
               </div>
             </div>
           </div>

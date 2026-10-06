@@ -46,6 +46,12 @@ export function BookingRequestPage() {
 
   const vehicle = vehicles.find((row) => row.id === vehicleId) ?? null
   const plan = vehicle?.plans.find((row) => row.id === selectedPlanId) ?? null
+  const driverIncluded = plan?.planType !== 'YEARLY'
+  const maxPassengers = vehicle
+    ? driverIncluded
+      ? Math.max(1, vehicle.seatCount - 1)
+      : vehicle.seatCount
+    : 1
   const totalAmount = plan ? Number(plan.slotPrice) * slots : 0
   const depositAmount = plan?.planType === 'YEARLY'
     ? Number(plan.upfrontAmount ?? 0)
@@ -66,6 +72,10 @@ export function BookingRequestPage() {
       timeZone: 'Asia/Ho_Chi_Minh',
     }).format(end)
   }, [plan, slots, startDate, startTime])
+
+  useEffect(() => {
+    setPassengerCount((current) => Math.min(current, maxPassengers))
+  }, [maxPassengers])
 
   async function handleSubmit() {
     if (!vehicle || !plan) return
@@ -144,7 +154,9 @@ export function BookingRequestPage() {
           setPickupAddress={setPickupAddress}
           passengerCount={passengerCount}
           setPassengerCount={setPassengerCount}
-          maxPassengers={vehicle.seatCount}
+          seatCount={vehicle.seatCount}
+          driverIncluded={driverIncluded}
+          maxPassengers={maxPassengers}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
