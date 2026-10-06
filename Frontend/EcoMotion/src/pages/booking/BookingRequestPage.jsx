@@ -91,6 +91,7 @@ export function BookingRequestPage() {
               image: vehicle.imageUrl,
             },
             slots,
+            planType: plan.planType,
             formattedStart: `${startTime}, ${startDate}`,
             pickupAddress,
             depositAmount,
@@ -137,6 +138,8 @@ export function BookingRequestPage() {
           plateNumber={vehicle.licensePlate}
           vehicleImage={vehicle.imageUrl}
           slots={slots}
+          planSummary={plan ? `${planLabel(plan.planType).title} (${slots} slot)` : ''}
+          priceLabel={plan ? formatCurrency(plan.slotPrice) : ''}
           pickupAddress={pickupAddress}
           setPickupAddress={setPickupAddress}
           passengerCount={passengerCount}

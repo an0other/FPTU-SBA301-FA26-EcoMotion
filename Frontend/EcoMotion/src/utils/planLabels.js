@@ -20,7 +20,7 @@ export const PLAN_LABELS = {
   YEARLY: {
     title: 'Gói năm',
     detail: '1 slot = 12 tháng.',
-    footer: 'Tự lái theo hợp đồng, kỳ 3–5 năm',
+    footer: 'Tự lái theo hợp đồng, tính theo năm',
     unit: 'năm',
   },
 }

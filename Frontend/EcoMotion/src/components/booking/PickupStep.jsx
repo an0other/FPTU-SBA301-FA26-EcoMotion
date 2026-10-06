@@ -6,6 +6,8 @@ export const PickupStep = ({
   plateNumber,
   vehicleImage,
   slots,
+  planSummary,
+  priceLabel,
   pickupAddress,
   setPickupAddress,
   passengerCount,
@@ -65,7 +67,7 @@ export const PickupStep = ({
                 <span className="truncate">
                   Gói đã chọn:{' '}
                   <strong className="text-[#14221A]">
-                    Gói ngày ({slots} slot × 24 giờ = {slots * 24} giờ)
+                    {planSummary || `${slots} slot`}
                   </strong>
                 </span>
               </div>
@@ -74,8 +76,8 @@ export const PickupStep = ({
           <div className="flex sm:flex-col items-baseline sm:items-end justify-between w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-[#E6EBE8]">
             <span className="text-xs text-[#3D4A42]">Đơn giá niêm yết</span>
             <div className="text-right">
-              <span className="text-2xl font-bold text-[#004F35]">1.450.000</span>
-              <span className="text-xs text-[#3D4A42] font-medium"> đ/ngày</span>
+              <span className="text-2xl font-bold text-[#004F35]">{priceLabel}</span>
+              <span className="text-xs text-[#3D4A42] font-medium"> / slot</span>
             </div>
           </div>
         </div>
