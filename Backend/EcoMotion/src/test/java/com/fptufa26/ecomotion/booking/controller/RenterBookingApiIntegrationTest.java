@@ -91,6 +91,44 @@ class RenterBookingApiIntegrationTest {
         assertThat(paymentTransactionRepository.count()).isEqualTo(paymentsBefore);
     }
 
+    @Test
+    @DisplayName("driver plan rejects a passenger count that leaves no seat for the driver")
+    void passengerCountAboveGuestSeatsConflicts() throws Exception {
+        String token = login();
+        JsonNode vehicles = read(mockMvc.perform(get("/api/renter/bookings/vehicles")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        JsonNode vehicle = vehicles.get("data").get(0);
+        JsonNode daily = null;
+        for (JsonNode plan : vehicle.get("plans")) {
+            if ("DAILY".equals(plan.get("planType").asText())) {
+                daily = plan;
+            }
+        }
+        assertThat(daily).isNotNull();
+        int seatCount = vehicle.get("seatCount").asInt();
+
+        String body = """
+                {
+                  "vehicleId": %d,
+                  "planId": %d,
+                  "slotCount": 1,
+                  "pickupTime": "2035-04-01T01:00:00Z",
+                  "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
+                  "passengerCount": %d
+                }
+                """.formatted(vehicle.get("id").asLong(), daily.get("id").asLong(), seatCount);
+
+        mockMvc.perform(post("/api/renter/bookings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isConflict());
+    }
+
     private String login() throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
