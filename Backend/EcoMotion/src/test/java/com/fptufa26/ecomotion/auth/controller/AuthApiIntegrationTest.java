@@ -373,6 +373,8 @@ class AuthApiIntegrationTest {
                 .andExpect(jsonPath("$.email").value(ADMIN_EMAIL))
                 .andExpect(jsonPath("$.role").value("ADMIN"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
+                // The phone is stored two-way encrypted; /me must return the decrypted plaintext.
+                .andExpect(jsonPath("$.phone").value("0900000003"))
                 .andExpect(jsonPath("$.username").doesNotExist());
     }
 

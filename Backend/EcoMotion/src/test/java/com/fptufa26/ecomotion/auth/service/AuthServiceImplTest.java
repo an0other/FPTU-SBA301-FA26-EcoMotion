@@ -1,8 +1,9 @@
 package com.fptufa26.ecomotion.auth.service;
 
-import com.fptufa26.ecomotion.auth.dto.LoginRequest;
+import com.fptufa26.ecomotion.auth.dto.request.LoginRequest;
 import com.fptufa26.ecomotion.auth.entity.RefreshToken;
 import com.fptufa26.ecomotion.auth.exception.AccountInactiveException;
+import com.fptufa26.ecomotion.auth.exception.AccountPendingException;
 import com.fptufa26.ecomotion.auth.exception.InvalidCredentialsException;
 import com.fptufa26.ecomotion.auth.exception.InvalidRefreshTokenException;
 import com.fptufa26.ecomotion.auth.mapper.AuthMapper;
@@ -52,6 +53,9 @@ class AuthServiceImplTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Mock
+    private CaptchaService captchaService;
+
     private PasswordEncoder passwordEncoder;
     private AuthServiceImpl authService;
 
@@ -65,6 +69,7 @@ class AuthServiceImplTest {
                 passwordEncoder,
                 jwtService,
                 new AuthMapper(),
+                captchaService,
                 TTL_REMEMBER_ME,
                 TTL_DEFAULT);
     }
@@ -199,6 +204,21 @@ class AuthServiceImplTest {
                 new LoginRequest(EMAIL, PASSWORD, false), "127.0.0.1", null))
                 .isInstanceOf(AccountInactiveException.class)
                 .hasMessage(AccountInactiveException.MESSAGE);
+
+        verifyNoInteractions(refreshTokenRepository);
+    }
+
+    @Test
+    @DisplayName("pending account throws the dedicated activation error")
+    void loginWithPendingAccountThrowsAccountPending() {
+        User user = activeUser();
+        user.setStatus(UserStatus.PENDING);
+        when(userService.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(
+                new LoginRequest(EMAIL, PASSWORD, false), "127.0.0.1", null))
+                .isInstanceOf(AccountPendingException.class)
+                .hasMessage(AccountPendingException.MESSAGE);
 
         verifyNoInteractions(refreshTokenRepository);
     }

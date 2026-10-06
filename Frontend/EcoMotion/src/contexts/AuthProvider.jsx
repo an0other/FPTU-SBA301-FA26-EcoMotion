@@ -38,8 +38,8 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const login = useCallback(async (email, password, rememberMe) => {
-    const data = await authService.login(email, password, rememberMe)
+  const login = useCallback(async (email, password, rememberMe, captchaToken) => {
+    const data = await authService.login(email, password, rememberMe, captchaToken)
     setAccessToken(data.accessToken)
     setTokenState(data.accessToken)
     setUser(data.user)
@@ -57,6 +57,38 @@ export function AuthProvider({ children }) {
     setTokenState(null)
   }, [])
 
+  const register = useCallback((payload) => authService.register(payload), [])
+
+  const sendRegisterOtp = useCallback((email) => authService.sendRegisterOtp(email), [])
+
+  const verifyRegisterOtp = useCallback((email, otp) => authService.verifyRegisterOtp(email, otp), [])
+
+  const activateStatus = useCallback((activationToken) => authService.activateStatus(activationToken), [])
+
+  const activateSendPhoneOtp = useCallback(
+    (activationToken, phone) => authService.activateSendPhoneOtp(activationToken, phone),
+    [],
+  )
+
+  const activateVerifyPhoneOtp = useCallback(
+    (activationToken, otp) => authService.activateVerifyPhoneOtp(activationToken, otp),
+    [],
+  )
+
+  const activateScanCccd = useCallback(
+    (activationToken, files) => authService.activateScanCccd(activationToken, files),
+    [],
+  )
+
+  const activateFaceMatch = useCallback(
+    (activationToken, portrait) => authService.activateFaceMatch(activationToken, portrait),
+    [],
+  )
+
+  const activateResumeOtp = useCallback((email) => authService.activateResumeOtp(email), [])
+
+  const activateResume = useCallback((email, otp) => authService.activateResume(email, otp), [])
+
   const value = useMemo(
     () => ({
       user,
@@ -65,8 +97,34 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(user),
       login,
       logout,
+      register,
+      sendRegisterOtp,
+      verifyRegisterOtp,
+      activateStatus,
+      activateSendPhoneOtp,
+      activateVerifyPhoneOtp,
+      activateScanCccd,
+      activateFaceMatch,
+      activateResumeOtp,
+      activateResume,
     }),
-    [user, accessToken, loading, login, logout],
+    [
+      user,
+      accessToken,
+      loading,
+      login,
+      logout,
+      register,
+      sendRegisterOtp,
+      verifyRegisterOtp,
+      activateStatus,
+      activateSendPhoneOtp,
+      activateVerifyPhoneOtp,
+      activateScanCccd,
+      activateFaceMatch,
+      activateResumeOtp,
+      activateResume,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

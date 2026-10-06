@@ -1,8 +1,8 @@
 package com.fptufa26.ecomotion.auth.mapper;
 
-import com.fptufa26.ecomotion.auth.dto.CurrentUserResponse;
-import com.fptufa26.ecomotion.auth.dto.LoginResponse;
-import com.fptufa26.ecomotion.auth.dto.RefreshResponse;
+import com.fptufa26.ecomotion.auth.dto.response.CurrentUserResponse;
+import com.fptufa26.ecomotion.auth.dto.response.LoginResponse;
+import com.fptufa26.ecomotion.auth.dto.response.RefreshResponse;
 import com.fptufa26.ecomotion.user.dto.response.UserResponse;
 import com.fptufa26.ecomotion.user.entity.User;
 import org.springframework.stereotype.Component;
@@ -24,8 +24,11 @@ public class AuthMapper {
         return new CurrentUserResponse(
                 user.getUserId(),
                 user.getEmail(),
+                user.getFullName(),
+                user.getPhone(),
                 user.getRole(),
-                user.getStatus());
+                user.getStatus(),
+                user.getEkycStatus());
     }
 
     public UserResponse toUserResponse(User user) {

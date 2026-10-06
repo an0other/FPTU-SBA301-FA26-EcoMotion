@@ -38,7 +38,10 @@ public class SecurityConfig {
                         .accessDeniedHandler(restAccessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST,
-                                "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
+                                "/api/auth/login", "/api/auth/refresh", "/api/auth/logout",
+                                "/api/auth/register", "/api/auth/register/send-otp",
+                                "/api/auth/register/verify-otp",
+                                "/api/auth/activate/**").permitAll()
                         .requestMatchers(
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()

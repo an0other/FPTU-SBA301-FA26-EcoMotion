@@ -146,8 +146,10 @@ Example:
 ├── entity/
 │   └── Example.java
 ├── dto/
-│   ├── CreateExampleRequest.java
-│   └── ExampleResponse.java
+│   ├── request/
+│   │   └── CreateExampleRequest.java
+│   └── response/
+│       └── ExampleResponse.java
 ├── mapper/
 │   └── ExampleMapper.java
 └── exception/
@@ -157,6 +159,19 @@ Example:
 Not every module must contain every layer.
 
 Do NOT create empty packages only for symmetry.
+
+### 5.1. Splitting `dto/` into `request/` and `response/`
+
+Once a module has more than a handful of DTOs, split them:
+
+```text
+<module>/dto/
+├── request/     ← inbound: what the client sends
+└── response/    ← outbound: what the API returns
+```
+
+A DTO that is both sent and received does not belong in either sub-package — keep it directly in
+`dto/`. Do not create `dto/` at all for a module that has no DTOs.
 
 ---
 
@@ -300,6 +315,8 @@ Location:
 
 ```text
 <module>/dto/
+<module>/dto/request/
+<module>/dto/response/
 ```
 
 DTOs are used to transfer data between API/application boundaries.
@@ -525,6 +542,22 @@ Do NOT create interfaces mechanically for every class.
 If a concrete service is sufficient for the existing project design, a concrete service is acceptable.
 
 When modifying existing code, follow the project's established convention unless there is a concrete reason to change it.
+
+## 9.1. Service Splitting Checklist
+
+Before adding a new service to a module, ask:
+
+1. **Does it already exist?** Two services with the same shape and one differing parameter are one
+   service with an extra argument or an enum, not two classes.
+2. **Does it have more than one implementation?** If not, and it is not a deliberate module
+   boundary, a concrete `@Service`/`@Component` class is enough — no interface.
+3. **Is it a use case or a helper?** Helpers used by one service can be private methods or
+   package-private collaborators; only real use cases deserve their own public service.
+4. **Is the abstraction earning its keep?** Count the call sites. One call site is usually a sign
+   the abstraction is premature.
+
+Iterating over a collection with a lambda (`java.util.function.Supplier`, `Consumer`, …) is
+preferred over duplicating a near-identical private method per variant.
 
 ---
 
