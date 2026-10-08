@@ -20,11 +20,14 @@ public interface VehicleService {
      * @param planType optional filter: only vehicles offering this rental plan
      * @param maxPrice optional ceiling, read on the scale of {@code planType} — or of the cheapest
      *                 plan when no plan filter is set
+     * @param sort     ordering, applied to the whole matching set <em>before</em> the page is cut,
+     *                 so page 1 of a price-ascending list really holds the cheapest cars
      * @param offset   zero-based index of the first row to return (clamped to {@code >= 0})
      * @param limit    page size; clamped to a sane range by the caller
      */
     PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
                                                            String fuelType, String planType,
                                                            java.math.BigDecimal maxPrice,
+                                                           VehicleSort sort,
                                                            int offset, int limit);
 }

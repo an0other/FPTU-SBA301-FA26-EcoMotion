@@ -4,6 +4,7 @@ import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
+import com.fptufa26.ecomotion.vehicle.service.VehicleSort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -30,17 +31,20 @@ public class VehicleController {
     @GetMapping
     @Operation(summary = "List rentable vehicles",
             description = "One offset/limit page of approved vehicles with cover image and active "
-                    + "plans. All filters optional. Responds with items + total/offset/limit/hasMore.")
+                    + "plans. All filters optional. `sortBy` orders the whole matching set before "
+                    + "the page is cut, so paging stays consistent with the chosen order. "
+                    + "Responds with items + total/offset/limit/hasMore.")
     public ApiResponse<PageResponse<VehicleCardResponse>> listVehicles(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String location,
             @RequestParam(required = false) String fuelType,
             @RequestParam(required = false) String planType,
             @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "6") int limit) {
         return ApiResponse.success(vehicleService.listRentableVehicles(
-                keyword, location, fuelType, planType, maxPrice,
+                keyword, location, fuelType, planType, maxPrice, VehicleSort.from(sortBy),
                 Math.max(0, offset), clampLimit(limit)));
     }
 
