@@ -1,12 +1,5 @@
 import { IconChevronRight } from '../icons/Icons'
 
-const SORT_OPTIONS = [
-  { value: 'default', label: 'Mặc định' },
-  { value: 'price-asc', label: 'Giá thấp → cao' },
-  { value: 'price-desc', label: 'Giá cao → thấp' },
-  { value: 'rating', label: 'Đánh giá cao' },
-]
-
 /** How the active plan reads in the breadcrumb — same wording the template uses. */
 const PLAN_PHRASES = {
   HOURLY: 'theo giờ',
@@ -17,8 +10,12 @@ const PLAN_PHRASES = {
 
 /**
  * Result bar sitting between the header and the grid: breadcrumb on the left (where the renter is
- * and what is currently filtered), page range + sort on the right. It replaces the old
+ * and what is currently filtered), page range on the right. It replaces the old
  * "Tìm thấy N xe phù hợp" line, which said less than the range does.
+ *
+ * <p>The sort control used to live here. It now sits in the filter sidebar so it is sent to the API
+ * with the other filters — ordering server-side reorders the whole fleet, whereas reordering in the
+ * browser only reshuffled the six cards already on screen.
  */
 export default function VehicleListToolbar({
   planType,
@@ -27,8 +24,6 @@ export default function VehicleListToolbar({
   total,
   offset,
   shown,
-  sortBy,
-  onSortChange,
   onHome,
 }) {
   const planPhrase = PLAN_PHRASES[planType] ?? 'theo giờ'
@@ -57,28 +52,11 @@ export default function VehicleListToolbar({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-medium text-slate-500">
-            {total === 0
-              ? 'Không có xe nào phù hợp'
-              : `Hiển thị ${start}–${end} trong ${total} xe`}
-          </span>
-
-          <label className="flex items-center gap-2 text-slate-500">
-            <span className="font-medium">Sắp xếp</span>
-            <select
-              value={sortBy}
-              onChange={(event) => onSortChange(event.target.value)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors focus:border-brand-600"
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <span className="font-medium text-slate-500">
+          {total === 0
+            ? 'Không có xe nào phù hợp'
+            : `Hiển thị ${start}–${end} trong ${total} xe`}
+        </span>
       </div>
     </div>
   )
