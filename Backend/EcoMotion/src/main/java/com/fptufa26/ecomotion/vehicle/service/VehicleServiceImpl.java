@@ -37,6 +37,7 @@ public class VehicleServiceImpl implements VehicleService {
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
                                                                   String fuelType, String planType,
                                                                   BigDecimal maxPrice,
+                                                                  VehicleSort sort,
                                                                   int offset, int limit) {
         List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
         if (vehicles.isEmpty()) {
@@ -58,9 +59,10 @@ public class VehicleServiceImpl implements VehicleService {
         FuelType fuelFilter = parseFuelType(fuelType);
         PlanType planFilter = parsePlanType(planType);
 
-        // Filter the whole fleet first, then cut the page: the filters need the mapped card
-        // (keyword spans provider name, price reads the cheapest plan), so the slice cannot be
-        // pushed into SQL. `total` is therefore the count of ALL matching rows, not just this page.
+        // Filter and order the whole fleet first, then cut the page: both steps need the mapped card
+        // (keyword spans provider name, price reads the plan), so neither can be pushed into SQL.
+        // `total` is therefore the count of ALL matching rows, not just this page - and sorting here
+        // rather than in the browser is what makes "price low to high" hold across pages.
         List<VehicleCardResponse> matching = vehicles.stream()
                 .map(vehicle -> toCard(vehicle,
                         imagesByVehicle.getOrDefault(vehicle.getId(), List.of()),
@@ -71,7 +73,8 @@ public class VehicleServiceImpl implements VehicleService {
                 .filter(card -> planFilter == null
                         || card.plans().stream().anyMatch(p -> p.planType() == planFilter))
                 .filter(card -> maxPrice == null
-                        || priceCeilingBasis(card, planFilter).compareTo(maxPrice) <= 0)
+                        || planScopedPrice(card, planFilter).compareTo(maxPrice) <= 0)
+                .sorted(comparatorFor(sort, planFilter))
                 .toList();
 
         return PageResponse.of(matching, offset, limit);
@@ -126,13 +129,20 @@ public class VehicleServiceImpl implements VehicleService {
     }
 
     /**
-     * The price the {@code maxPrice} ceiling is read against. With a plan filter the ceiling has to
-     * use THAT plan's price: an hourly slot is in the hundreds of thousands and a monthly one in
-     * the tens of millions, so judging a monthly filter against the hourly figure let every car
-     * through. Without a plan filter it keeps following the cheapest plan, which is what the card
-     * prints as "Từ ...".
+     * The price a card is judged by, shared by the {@code maxPrice} ceiling and the price sort.
+     *
+     * <p>With a plan filter it is THAT plan's price: an hourly slot is in the hundreds of thousands
+     * and a monthly one in the tens of millions, so judging a monthly filter against the hourly
+     * figure let every car through. Without a plan filter it follows the cheapest plan, which is
+     * what the card prints as "Từ ...".
+     *
+     * <p>One helper for both jobs on purpose: if the sort read a different figure than the ceiling,
+     * "price low to high" could disagree with the prices printed on the cards.
+     *
+     * <p>A vehicle with no plan at all gets the max sentinel, which parks it at the end of a
+     * price-ascending list rather than making it look free.
      */
-    private BigDecimal priceCeilingBasis(VehicleCardResponse card, PlanType planFilter) {
+    private BigDecimal planScopedPrice(VehicleCardResponse card, PlanType planFilter) {
         if (planFilter == null) {
             return cheapestPrice(card);
         }
@@ -142,6 +152,36 @@ public class VehicleServiceImpl implements VehicleService {
                 .filter(Objects::nonNull)
                 .min(Comparator.naturalOrder())
                 .orElse(BigDecimal.valueOf(Long.MAX_VALUE));
+    }
+
+    /**
+     * Ordering for the fleet.
+     *
+     * <p>{@code DEFAULT} restates the repository's id order explicitly instead of skipping the sort,
+     * so the result never depends on the order rows happened to arrive in. Every branch ends with an
+     * id tiebreak: without one, two cars at the same price could be ordered differently between
+     * requests, and a page boundary could then repeat or skip a car.
+     */
+    private Comparator<VehicleCardResponse> comparatorFor(VehicleSort sort, PlanType planFilter) {
+        VehicleSort effective = sort == null ? VehicleSort.DEFAULT : sort;
+        return switch (effective) {
+            case PRICE_ASC -> Comparator
+                    .comparing((VehicleCardResponse card) -> planScopedPrice(card, planFilter))
+                    .thenComparing(VehicleCardResponse::id);
+            case PRICE_DESC -> Comparator
+                    .comparing((VehicleCardResponse card) -> planScopedPrice(card, planFilter))
+                    .reversed()
+                    .thenComparing(VehicleCardResponse::id);
+            case RATING -> Comparator
+                    // An unrated car carries ratingAvg = 0 (the schema forbids NULL), so it lands at
+                    // the bottom of a highest-rated-first list instead of topping it.
+                    .comparing((VehicleCardResponse card) -> card.ratingAvg() == null
+                            ? BigDecimal.ZERO
+                            : card.ratingAvg())
+                    .reversed()
+                    .thenComparing(VehicleCardResponse::id);
+            case DEFAULT -> Comparator.comparing(VehicleCardResponse::id);
+        };
     }
 
     private boolean matchesKeyword(VehicleCardResponse card, String keyword) {

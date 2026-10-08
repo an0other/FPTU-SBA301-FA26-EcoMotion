@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import AppHeader from '../components/AppHeader'
 import FilterSidebar from '../components/vehicles/FilterSidebar'
 import VehicleListToolbar from '../components/vehicles/VehicleListToolbar'
@@ -8,39 +8,16 @@ import { useVehicles } from '../hooks/useVehicles'
 
 // "Mọi gói" was dropped from the plan filter, so the list always opens on the hourly plan — the
 // shortest one, which is what most renters want and what the card price is quoted against.
+// `sortBy` sits in here rather than in its own state because it travels with the other filters: the
+// backend orders the whole fleet before cutting the page. Ordering in the browser only reshuffled
+// the six cards already on screen, which left page 2 unrelated to page 1.
 const EMPTY_FILTERS = {
   keyword: '',
   location: '',
   fuelType: '',
   planType: 'HOURLY',
   maxPrice: '',
-}
-
-/**
- * Price of one card, used by the client-side sort. When a plan filter is active the sort compares
- * that plan's price (the same figure the card prints), otherwise the cheapest plan wins.
- */
-function priceOf(vehicle, planType) {
-  const plans = vehicle.plans ?? []
-  if (!plans.length) return Number.POSITIVE_INFINITY
-  const scoped = planType ? plans.filter((plan) => plan.planType === planType) : plans
-  const pool = scoped.length ? scoped : plans
-  return pool.reduce((min, plan) => Math.min(min, Number(plan.slotPrice)), Number.POSITIVE_INFINITY)
-}
-
-/** Applied client-side because the backend returns the fleet already filtered. */
-function sortVehicles(vehicles, sortBy, planType) {
-  const copy = [...vehicles]
-  switch (sortBy) {
-    case 'price-asc':
-      return copy.sort((a, b) => priceOf(a, planType) - priceOf(b, planType))
-    case 'price-desc':
-      return copy.sort((a, b) => priceOf(b, planType) - priceOf(a, planType))
-    case 'rating':
-      return copy.sort((a, b) => Number(b.ratingAvg ?? 0) - Number(a.ratingAvg ?? 0))
-    default:
-      return copy
-  }
+  sortBy: 'default',
 }
 
 function SkeletonCard() {
@@ -59,18 +36,12 @@ function SkeletonCard() {
 
 export default function VehicleListPage() {
   const [filters, setFilters] = useState(EMPTY_FILTERS)
-  const [sortBy, setSortBy] = useState('default')
   const [offset, setOffset] = useState(0)
 
   const { vehicles, total, limit, hasMore, loading, error } = useVehicles({ ...filters, offset })
 
-  const sorted = useMemo(
-    () => sortVehicles(vehicles, sortBy, filters.planType),
-    [vehicles, sortBy, filters.planType],
-  )
-
-  // Any filter change invalidates the current page, so jump back to the first one. Sorting is
-  // client-side and only reorders the current page, so it does not reset paging.
+  // Any filter change invalidates the current page, so jump back to the first one. Changing the
+  // sort counts as one: the whole fleet gets reordered, so staying on page 3 would be meaningless.
   const handleFiltersChange = (next) => {
     setFilters(next)
     setOffset(0)
@@ -78,7 +49,6 @@ export default function VehicleListPage() {
 
   const handleReset = () => {
     setFilters(EMPTY_FILTERS)
-    setSortBy('default')
     setOffset(0)
   }
 
@@ -100,9 +70,7 @@ export default function VehicleListPage() {
         keyword={filters.keyword}
         total={total}
         offset={offset}
-        shown={sorted.length}
-        sortBy={sortBy}
-        onSortChange={setSortBy}
+        shown={vehicles.length}
         onHome={handleReset}
       />
 
@@ -138,7 +106,7 @@ export default function VehicleListPage() {
               </div>
             )}
 
-            {!error && !loading && sorted.length === 0 && (
+            {!error && !loading && vehicles.length === 0 && (
               <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-card">
                 <p className="text-[15px] font-semibold text-slate-900">
                   Không tìm thấy xe phù hợp
@@ -149,10 +117,10 @@ export default function VehicleListPage() {
               </div>
             )}
 
-            {!error && !loading && sorted.length > 0 && (
+            {!error && !loading && vehicles.length > 0 && (
               <>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                  {sorted.map((vehicle) => (
+                  {vehicles.map((vehicle) => (
                     <VehicleCard
                       key={vehicle.id}
                       vehicle={vehicle}
