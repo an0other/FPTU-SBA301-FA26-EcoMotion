@@ -1,8 +1,9 @@
+// Renters and drivers land on the car list, which is the public home page at "/".
 export const ROLE_HOME = {
-  RENTER: '/renter',
+  RENTER: '/',
   PROVIDER: '/provider',
   ADMIN: '/admin',
-  DRIVER: '/renter',
+  DRIVER: '/',
 }
 
 export function homeRouteForRole(role) {

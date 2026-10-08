@@ -16,6 +16,13 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        // Vehicle photos are served by the backend as absolute paths ("/images/{uid}/{vid}/{file}")
+        // and are referenced as-is by <img src>, so they must be proxied too. Without this the
+        // browser asks the Vite dev server for /images/... and gets a 404 instead of the photo.
+        '/images': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
       },
     },
   }
