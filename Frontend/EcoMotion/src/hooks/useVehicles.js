@@ -23,7 +23,7 @@ const INITIAL_STATE = {
  * means a filter change naturally shows the loading state again.
  */
 export function useVehicles(filters = {}) {
-  const { keyword, location, fuelType, planType, maxPrice, offset = 0 } = filters
+  const { keyword, location, fuelType, planType, maxPrice, sortBy, offset = 0 } = filters
   const [state, setState] = useState(INITIAL_STATE)
 
   useEffect(() => {
@@ -38,6 +38,7 @@ export function useVehicles(filters = {}) {
           fuelType,
           planType,
           maxPrice,
+          sortBy,
           offset,
           limit: PAGE_SIZE,
         })
@@ -67,7 +68,7 @@ export function useVehicles(filters = {}) {
     return () => {
       active = false
     }
-  }, [keyword, location, fuelType, planType, maxPrice, offset])
+  }, [keyword, location, fuelType, planType, maxPrice, sortBy, offset])
 
   return state
 }

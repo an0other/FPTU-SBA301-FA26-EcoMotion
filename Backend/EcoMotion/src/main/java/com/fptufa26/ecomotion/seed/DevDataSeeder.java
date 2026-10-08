@@ -215,7 +215,12 @@ public class DevDataSeeder implements ApplicationRunner {
 
         seedVehicle(providerB.getId(), 6L, PROVIDER_B_USER_ID, "Porsche", "911 Carrera", 2024, 4, Transmission.AUTOMATIC,
                 COLOR_SILVER, FuelType.GASOLINE, "51A-66666",
-                "5.00", 6, new PlanPrices("700000.00", "4500000.00", "60000000.00"),
+                // Dearest car by the hour, but only mid-pack by the month: the provider discounts
+                // long-term rentals hard to get an exotic off the lot. Kept deliberately
+                // non-proportional so the price sort has to read the SELECTED plan's price - with
+                // proportional prices every plan would rank the fleet identically and a sort that
+                // ignored the plan filter would still look correct.
+                "5.00", 6, new PlanPrices("700000.00", "4500000.00", "25000000.00"),
                 List.of(
                         "360_F_469231916_yBXAlwxLVTAvJ5JkyE2PdnjCOXUp2wwE.webp",
                         "Feature-650x420-1-13-8-500x323.webp",

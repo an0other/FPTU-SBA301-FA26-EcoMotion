@@ -22,11 +22,19 @@ const PLAN_SUFFIX = {
   YEARLY: '/năm',
 }
 
+// Values must stay in sync with VehicleSort.from() on the backend.
+const SORT_OPTIONS = [
+  { value: 'default', label: 'Mặc định' },
+  { value: 'price-asc', label: 'Giá thấp → cao' },
+  { value: 'price-desc', label: 'Giá cao → thấp' },
+  { value: 'rating', label: 'Đánh giá cao' },
+]
+
 /**
  * The price ceiling is read on the same scale as the plan it filters (see `VehicleServiceImpl`), so
  * the slider has to switch scale with the plan as well: an hourly slot lives in the hundreds of
- * thousands, a monthly one in the tens of millions. "Mọi gói" keeps the widest range because it
- * falls back to the cheapest plan, which is always the shortest one.
+ * thousands, a monthly one in the tens of millions. The `''` entry is now only a fallback for a
+ * missing or unrecognised planType, since "Mọi gói" was dropped from the plan options.
  */
 const PLAN_PRICE_RANGES = {
   '': { min: 50000, max: 20000000, step: 100000 },
@@ -87,6 +95,24 @@ export default function FilterSidebar({ filters, onChange, onReset }) {
         >
           Đặt lại
         </button>
+      </div>
+
+      {/* Ordering lives in the filter box so it is sent to the API with the rest of the criteria.
+          The backend sorts the whole fleet before slicing the page, so "giá thấp → cao" gives the
+          cheapest cars on page 1 instead of just reshuffling the current six. */}
+      <div>
+        <SectionTitle>Sắp xếp</SectionTitle>
+        <select
+          value={filters.sortBy}
+          onChange={(event) => set({ sortBy: event.target.value })}
+          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] font-semibold text-slate-700 outline-none transition-colors focus:border-brand-600"
+        >
+          {SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>
