@@ -3,7 +3,13 @@ package com.fptufa26.ecomotion.seed;
 import com.fptufa26.ecomotion.user.entity.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.vehicle.entity.PlanType;
+import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
+import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
+import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,9 +17,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Verifies the dev-profile seed data required by plan §11 Phase 4. */
+/** Verifies the dev-profile seed data required by plan 11 Phase 4. */
 @SpringBootTest
 @ActiveProfiles("dev")
 class DevDataSeederTest {
@@ -22,27 +30,142 @@ class DevDataSeederTest {
     private UserRepository userRepository;
 
     @Autowired
+    private ProviderRepository providerRepository;
+
+    @Autowired
+    private VehicleRepository vehicleRepository;
+
+    @Autowired
+    private RentalPlanRepository rentalPlanRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
     private DevDataSeeder devDataSeeder;
 
     @Test
-    @DisplayName("three test accounts exist with the documented emails, roles and password")
-    void seedsThreeAccounts() {
+    @DisplayName("the five dev accounts exist with the documented emails, roles and password")
+    void seedsDevAccounts() {
         assertSeed("renter01@ecomotion.vn", Role.RENTER);
-        assertSeed("provider01@ecomotion.vn", Role.PROVIDER);
+        assertSeed("provider.a@ecomotion.vn", Role.PROVIDER);
         assertSeed("admin01@ecomotion.vn", Role.ADMIN);
+        assertSeed("provider.b@ecomotion.vn", Role.PROVIDER);
+        assertSeed("renter.demo@ecomotion.vn", Role.RENTER);
     }
 
     @Test
     @DisplayName("re-running the seeder does not duplicate accounts")
     void isIdempotent() {
-        long before = userRepository.count();
+        // Run once to reach a settled state, then a second time and assert nothing changed.
+        // Snapshotting before the *first* run would be flaky: JUnit does not guarantee another
+        // test already triggered the seeder, so `before` could legitimately be 0.
+        devDataSeeder.run(null);
+        long settled = userRepository.count();
 
         devDataSeeder.run(null);
 
-        assertThat(userRepository.count()).isEqualTo(before);
+        assertThat(userRepository.count()).isEqualTo(settled);
+    }
+
+    /**
+     * Guards the two failure modes that previously slipped through unnoticed.
+     *
+     * <p>First, the provider users must sit on the exact ids the images folder names encode
+     * (2 and 4); otherwise every {@code vehicle_image.image_url} points at a missing folder.
+     * Second, the display text must survive the source encoding: literal Vietnamese in the .java
+     * file once got mangled to mojibake, and because javac quietly substitutes replacement
+     * characters the build stayed green while the seeded names were corrupted. Asserting the
+     * decoded values catches that.
+     */
+    @Test
+    @DisplayName("providers occupy the ids images expects and the text decoded cleanly")
+    void pinnedIdsAndTextAreIntact() {
+        User providerA = userRepository.findById(2L).orElseThrow();
+        User providerB = userRepository.findById(4L).orElseThrow();
+        assertThat(providerA.getEmail()).isEqualTo("provider.a@ecomotion.vn");
+        assertThat(providerA.getRole()).isEqualTo(Role.PROVIDER);
+        assertThat(providerB.getEmail()).isEqualTo("provider.b@ecomotion.vn");
+        assertThat(providerB.getRole()).isEqualTo(Role.PROVIDER);
+
+        // No replacement character anywhere: this is what a broken source encoding produces.
+        assertThat(providerA.getFullName())
+                .isEqualTo("Nguy\u1ec5n V\u0103n A")
+                .doesNotContain("\ufffd");
+        assertThat(providerB.getFullName()).isEqualTo("Tr\u1ea7n Th\u1ecb B");
+
+        // Each provider owns the fleet under its own folder id. Provider ids are auto-generated
+        // (only *user* ids are pinned), so resolve them through the user rather than hard-coding.
+        Long providerAId = providerRepository.findByUser_Id(2L).orElseThrow().getId();
+        Long providerBId = providerRepository.findByUser_Id(4L).orElseThrow().getId();
+        List<Vehicle> byProviderA = vehicleRepository.findByProvider_IdOrderByIdAsc(providerAId);
+        List<Vehicle> byProviderB = vehicleRepository.findByProvider_IdOrderByIdAsc(providerBId);
+        assertThat(byProviderA).extracting(Vehicle::getId).containsExactly(1L, 2L, 3L, 4L);
+        assertThat(byProviderB).extracting(Vehicle::getId).containsExactly(5L, 6L, 7L, 8L);
+
+        // Colour text is the other field that got corrupted before.
+        assertThat(vehicleRepository.findById(1L).orElseThrow().getColor()).isEqualTo("Tr\u1eafng");
+    }
+
+    /**
+     * Reproduces the registration failure the pinned ids used to cause.
+     *
+     * <p>The seed writes user ids 1-5 with native INSERTs, and {@code users.id} is
+     * {@code GENERATED BY DEFAULT AS IDENTITY} - so those inserts never moved the identity counter.
+     * Without the realignment at the end of {@code DevDataSeeder.run}, this {@code save} asks the
+     * database for id 1 again and blows up on the primary key, which is exactly what happened to
+     * every new sign-up.
+     */
+    @Test
+    @DisplayName("a newly registered account gets a fresh id instead of colliding with a seeded one")
+    void newAccountGetsAnIdPastTheSeededOnes() {
+        User fresh = new User();
+        // NanoTime keeps the email unique if this test is ever re-run against a warm context.
+        fresh.setEmail("fresh-" + System.nanoTime() + "@ecomotion.vn");
+        fresh.setPasswordHash(passwordEncoder.encode("Fresh@12345"));
+        fresh.setFullName("Fresh Renter");
+        fresh.setRole(Role.RENTER);
+        fresh.setStatus(UserStatus.ACTIVE);
+        // Phone is left null on purpose: uk_users_phone is UNIQUE and this test has no interest in
+        // it, so inventing a number would only add a way for the suite to go flaky.
+
+        User saved = userRepository.saveAndFlush(fresh);
+
+        assertThat(saved.getId()).isGreaterThan(5L);
+    }
+
+    /**
+     * Locks in the variety the fleet is supposed to have.
+     *
+     * <p>Every car used to be seeded with the same 4.80 average over 12 reviews and the same three
+     * prices (180.000 / 1.200.000 / 18.000.000). That made the rating badge, the "sort by rating"
+     * option and the price slider indistinguishable across the list - the demo looked broken even
+     * though nothing was. Asserting the values differ keeps a future edit from flattening them back.
+     */
+    @Test
+    @DisplayName("the fleet is varied: no two cars share a rating or a price")
+    void seededFleetIsVaried() {
+        List<Vehicle> fleet = vehicleRepository.findAll();
+        assertThat(fleet).hasSize(8);
+
+        // Distinct averages, so "sort by rating" actually reorders the list. Compared as doubles
+        // because BigDecimal.equals is scale-sensitive (4.7 would not equal 4.70).
+        assertThat(fleet)
+                .extracting(vehicle -> vehicle.getRatingAvg().doubleValue())
+                .doesNotHaveDuplicates();
+
+        // Exactly one car has no reviews at all. Its average is 0 rather than NULL, because
+        // ck_vehicle_rating forbids a NULL average - which is why the card keys off the count.
+        assertThat(fleet).filteredOn(vehicle -> vehicle.getRatingCount() == 0).hasSize(1);
+
+        List<RentalPlan> plans = rentalPlanRepository.findAll();
+        for (PlanType planType : List.of(PlanType.HOURLY, PlanType.DAILY, PlanType.MONTHLY)) {
+            assertThat(plans)
+                    .filteredOn(plan -> plan.getPlanType() == planType)
+                    .extracting(plan -> plan.getSlotPrice().doubleValue())
+                    .hasSize(8)
+                    .doesNotHaveDuplicates();
+        }
     }
 
     private void assertSeed(String email, Role role) {

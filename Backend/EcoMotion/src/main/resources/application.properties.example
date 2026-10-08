@@ -197,6 +197,18 @@ spring.servlet.multipart.max-request-size=24MB
 
 
 # ===============================
+# Seeded vehicle images
+# ===============================
+# Photos live in the repo's Temp-data/ folder, structured as
+#   Temp-data/{providerUserId}/{vehicleId}/{file}.webp
+# The DB stores the matching URL path "/images/{providerUserId}/{vehicleId}/{file}.webp".
+# This value is resolved against Backend/EcoMotion/ (the module working directory), so the
+# relative path below resolves to <repo-root>/images on any clone. Override IMAGES_ROOT
+# only if the folder moves.
+app.images.root=${IMAGES_ROOT:../../images}
+
+
+# ===============================
 # Password policy
 # ===============================
 app.password.min-length=8
