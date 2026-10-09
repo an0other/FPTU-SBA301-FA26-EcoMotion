@@ -7,7 +7,7 @@ Nguồn: `docs/SBA301_FALL26.md` · `docs/GIAI_THICH_ENTITY_v10.1.md` · `AGENT_
 
 1. Tính tiền sau đặt → `BOOKING_POLICY_SNAPSHOT`
 2. API public dùng `booking_code`
-3. Chỉ gọi service module khác (không gọi repository)
+3. Chỉ gọi service của feature khác (không gọi repository)
 4. Auth `/api/auth/*` đã có — không viết lại
 5. Redirect: `RENTER`→R01 · `PROVIDER`→O01 · `DRIVER`→D01 · `ADMIN`→A01
 

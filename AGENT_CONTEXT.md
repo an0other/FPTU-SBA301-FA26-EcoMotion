@@ -4,7 +4,7 @@
 > Đọc file này **trước tiên** mỗi khi mở lại phiên làm việc để khôi phục hiểu biết về dự án.  
 > Cập nhật file này mỗi khi có thay đổi kiến trúc hoặc quyết định kỹ thuật mới.
 >
-> **Cập nhật lần cuối:** 2026-10-02 · **Phiên bản dự án:** Spec v8.0 / Data model v10.1 / Backend: auth module · **7 mục**
+> **Cập nhật lần cuối:** 2026-10-09 · **Phiên bản dự án:** Spec v8.0 / Data model v10.1 / Backend: auth feature · **7 mục**
 >
 > **File này KHÔNG chứa trạng thái code hay danh sách task.** Nó chứa **ý định** (luật, quyết định, thứ tự làm). Trạng thái thật đọc từ code / Swagger / git.
 
@@ -26,7 +26,7 @@
 
 > **1. `docs/SBA301_FALL26.md` là NGUỒN SỰ THẬT về nghiệp vụ.** Code phải theo spec, không ngược lại.  
 > **2. Mọi tính tiền đọc từ `BOOKING_POLICY_SNAPSHOT`, không từ `RENTAL_PLAN`/`PROVIDER`.**  
-> **3. Giữ module boundary — không truy cập repository của module khác.**  
+> **3. Ưu tiên feature sở hữu chức năng — gọi service của feature khác, không với vào repository của nó.**  
 > **4. Đơn giản hơn là tốt hơn — không tạo abstraction chỉ để "trông có kiến trúc".**  
 > **5. Cập nhật file này khi có quyết định kiến trúc mới.**
 
@@ -123,27 +123,31 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 │           ├── main\
 │           │   ├── java\com\fptufa26\ecomotion\
 │           │   │   ├── EcoMotionApplication.java
-│           │   │   ├── auth\           ← module đăng nhập / token / kích hoạt
-│           │   │   │     controller\ service\ dto\{request,response}\ ekyc\ otp\ storage\
-│           │   │   │     entity\ repository\ mapper\ exception\
-│           │   │   ├── user\           ← module người dùng
-│           │   │   ├── common\         ← config / exception / response / security
+│           │   │   ├── auth\           ← feature đăng nhập / token / kích hoạt
+│           │   │   │     controller\ service\{,implement}\ dto\{request,response}\
+│           │   │   │     captcha\ otp\ entity\ repository\ mapper\ exception\
+│           │   │   ├── verification\   ← eKYC provider và phép so khớp dùng chung
+│           │   │   ├── user\           ← feature người dùng
+│           │   │   ├── vehicle\        ← feature xe: duyệt, đăng bán, tìm kiếm (GET /api/vehicles)
+│           │   │   ├── common\         ← config / crypto / exception / response / security
 │           │   │   └── seed\           ← DevDataSeeder (gitignored)
 │           │   └── resources\
 │           │       ├── application.properties           ← CÓ credentials (gitignored)
 │           │       └── application.properties.example  ← template, an toàn commit
 │           └── test\
 │               ├── java\com\fptufa26\ecomotion\
-│               │   ├── auth\controller\  ← AuthApiIntegrationTest, RegistrationApiIntegrationTest,
-│               │   │                        ActivationApiIntegrationTest,
-│               │   │                        CaptchaEnforcementIntegrationTest
-│               │   ├── auth\service\     ← AuthServiceImplTest, RegistrationServiceImplTest,
-│               │   │                        CaptchaServiceTest
-│               │   ├── auth\otp\         ← SmtpOtpSenderTest
-│               │   ├── common\security\  ← JwtServiceTest
-│               │   ├── common\crypto\    ← DeterministicCipherTest
-│               │   ├── seed\             ← DevDataSeederTest
-│               │   ├── support\          ← TestRoleController
+│               │   ├── auth\controller\        ← AuthApiIntegrationTest, RegistrationApiIntegrationTest,
+│               │   │                             ActivationApiIntegrationTest,
+│               │   │                             CaptchaEnforcementIntegrationTest
+│               │   ├── auth\service\implement\ ← AuthServiceImplTest, RegistrationServiceImplTest,
+│               │   │                             ActivationServiceImplTest,
+│               │   │                             DocumentVerificationServiceImplTest
+│               │   ├── auth\captcha\           ← GoogleRecaptchaVerifierTest
+│               │   ├── auth\otp\               ← SmtpOtpSenderTest
+│               │   ├── common\security\        ← JwtServiceTest
+│               │   ├── common\crypto\          ← DeterministicCipherTest
+│               │   ├── seed\                   ← DevDataSeederTest
+│               │   ├── support\                ← TestRoleController
 │               │   └── EcoMotionApplicationTests.java
 │               └── resources\application.properties     ← H2 in-memory, secret giả (an toàn)
 └── Frontend\EcoMotion\                   ← React 19 + Vite; Tailwind v4 qua @tailwindcss/vite
@@ -176,14 +180,14 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 
 **Frontend:**
 
-| Thành phần       | Công nghệ                                                       | Trạng thái                                                                 |
-| ---------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Framework        | **ReactJS 19**                                                   | ✅ Đã khởi tạo tại `Frontend/EcoMotion/` (JSX, không TypeScript)           |
-| Build tool       | **Vite 8**                                                       | ✅ Dev proxy `/api` → `http://localhost:8080` (tránh CORS, cookie first-party) |
-| Routing          | **react-router-dom 7**                                           | ✅ `/login` public + route bảo vệ theo role                                |
-| UI               | **Tailwind CSS v4** (`@tailwindcss/vite`) + design tokens EcoMotion trong `src/index.css` (`@theme`) | ✅ Font Be Vietnam Pro; brand-*/ink/surface/shadow-card; không còn file `.css` riêng |
-| HTTP client      | **axios** (`services/apiClient.js`, `baseURL: '/api'`, `withCredentials`) | ✅ Interceptor gắn Bearer + chuẩn hoá lỗi                         |
-| State (auth)     | **Context API** (`contexts/AuthProvider.jsx` + `hooks/useAuth.js`) | ✅ Login / Logout / khôi phục phiên qua `/api/auth/me`                  |
+| Thành phần   | Công nghệ                                                                                            | Trạng thái                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Framework    | **ReactJS 19**                                                                                       | ✅ Đã khởi tạo tại `Frontend/EcoMotion/` (JSX, không TypeScript)                     |
+| Build tool   | **Vite 8**                                                                                           | ✅ Dev proxy `/api` → `http://localhost:8080` (tránh CORS, cookie first-party)       |
+| Routing      | **react-router-dom 7**                                                                               | ✅ `/login` public + route bảo vệ theo role                                          |
+| UI           | **Tailwind CSS v4** (`@tailwindcss/vite`) + design tokens EcoMotion trong `src/index.css` (`@theme`) | ✅ Font Be Vietnam Pro; brand-*/ink/surface/shadow-card; không còn file `.css` riêng |
+| HTTP client  | **axios** (`services/apiClient.js`, `baseURL: '/api'`, `withCredentials`)                            | ✅ Interceptor gắn Bearer + chuẩn hoá lỗi                                            |
+| State (auth) | **Context API** (`contexts/AuthProvider.jsx` + `hooks/useAuth.js`)                                   | ✅ Login / Logout / khôi phục phiên qua `/api/auth/me`                               |
 
 > **Ghi chú FE:** Đã hoàn thành **chức năng đăng nhập** (login-only): trang `pages/LoginPage.jsx` (port từ `Login-regis-template/code.html`, chỉ tab Đăng nhập), `AuthContext` + `ProtectedRoute`, dashboard placeholder 3 role. Lưu ý: `LoginRequest` của backend **chỉ nhận `email`** (không nhận SĐT) nên label ô nhập đã đổi thành "Email". Đăng ký / quên mật khẩu / auto-refresh 401 **chưa** làm (ngoài phạm vi). CORS backend vẫn mở cho cả 3000 và 5173.
 >
@@ -204,7 +208,7 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
 ┌──────────────────┐         ┌──────────────────────┐        ┌──────────────┐
 │  ReactJS (FE)    │  HTTPS  │  Spring Boot (BE)    │  JDBC  │  PostgreSQL  │
 │  localhost:5173  │ ──────► │  localhost:8080      │ ─────► │  :5432       │
-│  (chưa init)     │  REST   │  Modular Monolith    │        │  ecomotion   │
+│  (chưa init)     │  REST   │  Layered Architecture│        │  ecomotion   │
 └──────────────────┘         └──────────────────────┘        └──────────────┘
         │                              │
         │  JWT (Authorization header)  │  JWT sign/verify (HS256)
@@ -213,11 +217,11 @@ FPTU-SBA301-FA26-EcoMotion/               ← GIT REPO (origin: GitHub, public)
         └──────────────────────────────┘
 ```
 
-### 3.2. Kiến trúc backend — Modular Monolith + N-Layer
+### 3.2. Kiến trúc backend — Layered Architecture + Package by Feature
 
 **Quy ước cốt lõi** (chi tiết đầy đủ ở `Backend/EcoMotion/AGENT_CODE_STRUCTURE.md` — **BẮT BUỘC đọc trước khi tạo file Java**):
 
-Tổ chức theo **module nghiệp vụ trước, layer sau**:
+Tổ chức theo **feature trước, layer sau** — mỗi feature tự chứa luồng N-layer (controller → service → repository) của nó. Cách này tránh các thư mục layer toàn cục (`controller/`, `service/`, `repository/`) phình to, nhưng vẫn giữ luồng N-layer quen thuộc bên trong từng feature:
 
 ```
 com.fptufa26.ecomotion/
@@ -226,25 +230,42 @@ com.fptufa26.ecomotion/
 │   ├── config/                 ← CorsConfig, OpenApiConfig, SecurityConfig
 │   ├── exception/              ← ErrorResponse, GlobalExceptionHandler
 │   ├── response/               ← ApiResponse<T>
-│   └── security/               ← JwtService, JwtAuthenticationFilter, SecurityUser, ...
-├── auth/                       ← module: đăng nhập / token / kích hoạt
+│   ├── security/               ← JwtService, JwtAuthenticationFilter, SecurityUser, ...
+│   └── storage/                ← FileStorageService (port) + Local/Supabase adapters
+├── auth/                       ← feature: đăng nhập / token / kích hoạt
 │   ├── controller/             ← AuthController, ActivationController
-│   ├── service/                ← AuthService(+Impl), RegistrationService(+Impl),
-│   │                             ActivationService(+Impl), OtpService(+Impl),
-│   │                             CaptchaService, TokenService
+│   ├── service/                ← interface: AuthService, RegistrationService, ActivationService,
+│   │   │                         DocumentVerificationService, OtpService, TokenService
+│   │   └── implement/          ← *ServiceImpl cho tất cả các interface trên
 │   ├── dto/request/            ← *Request
 │   ├── dto/response/           ← *Response
-│   ├── ekyc/                   ← EkycService (interface) + Mock/FptAi impls
-│   ├── otp/                    ← OtpSender (interface) + Smtp/Logging impls, OtpEntry
-│   ├── storage/                ← FileStorageService
+│   ├── captcha/                ← CaptchaVerifier (port) + GoogleRecaptchaVerifier (adapter)
+│   ├── otp/                    ← OtpSender (port) + Smtp/Logging adapters, OtpEntry
 │   ├── entity/  repository/  mapper/  exception/
-└── user/                       ← module: người dùng
-    ├── entity/  repository/  service/
+├── verification/               ← tích hợp xác minh có thể dùng ngoài auth
+│   └── ekyc/                   ← EkycService (port) + Mock/FptAi/Vnpt adapters
+└── user/                       ← feature: người dùng
+    ├── entity/                 ← User (ekyc_status/status), Renter (cccd_no, ảnh, dob, ...)
+    ├── repository/             ← UserRepository, RenterRepository, ProviderRepository
+    ├── service/                ← interface: UserService
+    │   └── implement/          ← UserServiceImpl
+    ├── exception/              ← CccdAlreadyExistsException
     └── dto/response/           ← UserResponse
 ```
 
-**Quy ước `dto/`:** module nào có nhiều DTO thì tách `dto/request/` và `dto/response/`
-(xem `Backend/EcoMotion/AGENT_CODE_STRUCTURE.md` §5.1). DTO nào vừa gửi vừa nhận thì để thẳng
+**Phạm vi áp dụng:** đây là **một ứng dụng Spring Boot triển khai chung** (một deployable). Nhóm **chưa** áp dụng DDD, bounded context hay ranh giới nghiêm ngặt của modular monolith — tên feature chỉ là cách tổ chức code cho dễ tìm, dễ bảo trì.
+
+**Ranh giới CCCD/eKYC (refactor 2026-10-09):** `auth` sở hữu *quy trình* kích hoạt — token,  
+OTP điện thoại, `ActivationService` + `DocumentVerificationService`.  
+`verification/ekyc` sở hữu port và adapter eKYC dùng được cho luồng xác minh khác; hiện mới có thao tác OCR CCCD và so khớp mặt.  
+`common/storage` sở hữu port và adapter lưu file dùng chung. `user` sở hữu *dữ liệu* định danh đã lưu (`renter.cccd_no` mã hoá, ảnh,  
+`users.ekyc_status`, `users.status`) — `auth` đọc/ghi dữ liệu người dùng **qua interface  
+`UserService`** (không đụng repository của `user`), nhưng **vẫn dùng trực tiếp một số kiểu  
+entity/enum của `user`** (`User`, `Renter`, `Role`, `UserStatus`) trong chữ ký service, mapper và DTO.  
+Đây là hiện trạng được chấp nhận; **chưa** tạo thêm abstraction để bọc các kiểu này.
+
+**Quy ước `dto/`:** feature nào có nhiều DTO thì tách `dto/request/` và `dto/response/`
+(xem `Backend/EcoMotion/AGENT_CODE_STRUCTURE.md` §3). DTO nào vừa gửi vừa nhận thì để thẳng
 trong `dto/`.
 
 **Layer responsibilities:**
@@ -257,14 +278,14 @@ trong `dto/`.
 | `entity/`     | JPA mapping, trạng thái entity                       | ❌ HTTP concern, expose thẳng ra API |
 | `dto/`        | Truyền dữ liệu qua boundary                          | ❌ Tên mơ hồ kiểu `DataDTO`          |
 | `mapper/`     | Entity ↔ DTO khi phức tạp/tái sử dụng                | ❌ Tạo mapper cho phép gán 1 dòng    |
-| `exception/`  | Exception riêng của module                           |                                     |
+| `exception/`  | Exception riêng của feature                          |                                     |
 
-**Quy tắc phụ thuộc module (BẮT BUỘC):**
+**Quy tắc gọi giữa các feature** (hướng dẫn tổ chức code dễ bảo trì, không phải ràng buộc DDD):
 
 ```
-✅ Module A Service → Module B Service (public) → Module B Repository
-❌ Module A Service → Module B Repository          (vi phạm ownership)
-❌ A → B → A                                        (circular dependency)
+✅ Feature A Service → Feature B Service (public) → Feature B Repository
+❌ Feature A Service → Feature B Repository        (đi vòng qua ownership)
+❌ A → B → A                                       (vòng phụ thuộc)
 ```
 
 **Quy tắc khác:**
@@ -272,7 +293,7 @@ trong `dto/`.
 - Transaction đặt ở **service layer**, không ở controller.
 - **Không** dùng package layer toàn cục (`controller/ service/ repository/` ở cấp gốc).
 - **Không** biến `common/` thành bãi rác.
-- **Ưu tiên cấu trúc đơn giản nhất** giữ được module rõ ràng — không tạo abstraction chỉ để "trông có kiến trúc".
+- **Ưu tiên cấu trúc đơn giản nhất** giữ được feature rõ ràng — không tạo abstraction chỉ để "trông có kiến trúc".
 
 ### 3.3. Luồng dữ liệu — luồng chính của một đơn thuê
 
@@ -333,6 +354,7 @@ TẦNG 4 — SAU CHUYẾN          BOOKING ─┬─ REVIEW   (đánh giá xe / 
                                       └─ DISPUTE  (tranh chấp)
 ```
 
+
 **⭐ BA TẦNG TIỀN — không chồng nhau (điểm dễ hiểu sai nhất):**
 
 | Bảng                      | Vai trò     | Trả lời câu hỏi                      | Ai tạo                              |
@@ -383,8 +405,7 @@ TẦNG 4 — SAU CHUYẾN          BOOKING ─┬─ REVIEW   (đánh giá xe / 
 | Exception         | `<Reason>Exception`               | `InvalidCredentialsException`              |
 | Enum              | PascalCase, giá trị `UPPER_SNAKE` | `UserStatus.ACTIVE`, `Role.RENTER`         |
 
-
-**Package:** `com.fptufa26.ecomotion.<module>.<layer>`
+**Package:** `com.fptufa26.ecomotion.<feature>.<layer>`
 
 **Entity conventions (theo `User.java`):**
 
@@ -445,6 +466,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 - **JWT HS256**, secret **≥ 32 bytes** (nếu ngắn hơn → `WeakKeyException`).
 - Access token TTL **15 phút**; refresh token lưu **httpOnly cookie**, `path=/api/auth`.
 - Refresh token TTL: mặc định **1d**, "remember me" **7d**.
+- Mỗi lần `/api/auth/refresh` cấp refresh cookie mới và thu hồi token cũ. Các token trong cùng phiên có `family_id`; dùng lại token cũ sẽ thu hồi phiên đó. Hạn hết hạn ban đầu không được gia hạn khi xoay.
+- Với PostgreSQL đang dùng `ddl-auto=none`, chạy `Backend/EcoMotion/src/main/resources/db/refresh_token_rotation.sql` một lần trước khi triển khai bản backend có rotation. Script tạo bảng `refresh_tokens` nếu chưa có và bổ sung cột cho bảng đã tồn tại.
 - `JwtAuthenticationFilter` + `SecurityUser` + `CustomUserDetailsService`.
 - Handler lỗi REST riêng: `RestAuthenticationEntryPoint` (401), `RestAccessDeniedHandler` (403).
 
@@ -457,7 +480,8 @@ public record ApiResponse<T>(String code, String message, T data) {
 ### 4.2. Frontend (ReactJS)
 
 > Frontend đã khởi tạo tại `Frontend/EcoMotion/` — React 19 + Vite (rolldown) + react-router-dom 7
-> + Tailwind CSS v4. Lệnh kiểm chứng: `cd Frontend/EcoMotion && npm run lint && npm run build`.
+>
+> - Tailwind CSS v4. Lệnh kiểm chứng: `cd Frontend/EcoMotion && npm run lint && npm run build`.
 
 | Loại        | Quy ước đề xuất                                                               |
 | ----------- | ----------------------------------------------------------------------------- |
@@ -475,6 +499,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 - Base URL: `http://localhost:8080/api`.
 - Auth: gửi JWT ở header `Authorization: Bearer <token>`; refresh token **do browser tự gửi cookie** → phải set `withCredentials: true`.
 - Endpoint refresh: gọi để lấy access token mới khi gặp 401.
+- FE dùng chung một lời gọi refresh cho các request 401 đồng thời, lưu access token mới rồi thử lại request đúng một lần; khi tải lại trang cũng khôi phục phiên từ refresh cookie nếu thiếu access token.
 
 ### 4.3. Tài liệu & sơ đồ
 
@@ -518,25 +543,28 @@ public record ApiResponse<T>(String code, String message, T data) {
 
 ### 5.2. Quyết định kỹ thuật (code)
 
-| #   | Quyết định                                                            | Lý do                                                                                         |
-| --- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| T1  | **Modular Monolith + N-Layer**                                        | Đồ án vừa phải — microservice là over-engineering; nhưng cần module rõ ràng để chia việc nhóm |
-| T2  | **JWT stateless + refresh token cookie**                              | Access token ngắn (15m) giảm rủi ro lộ; refresh token httpOnly chống XSS đọc token            |
-| T3  | **Refresh token lưu DB (`RefreshToken` entity)**                      | Cho phép thu hồi (revoke) — JWT thuần không thu hồi được                                      |
-| T4  | **`@Enumerated(EnumType.STRING)`**                                    | `ORDINAL` sẽ vỡ dữ liệu khi thêm/đổi thứ tự enum                                              |
-| T5  | **`Instant` cho timestamp**                                           | Chuẩn UTC, không phụ thuộc timezone hệ thống                                                  |
-| T6  | **H2 cho test, PostgreSQL cho runtime**                               | Test độc lập, không cần PostgreSQL local                                                      |
-| T7  | **`ApiResponse<T>` wrapper thống nhất**                               | FE xử lý response đồng nhất; `code` cho FE phân nhánh lỗi                                     |
-| T8  | **`ddl-auto=create-drop` ở dev, `update` ở example**                  | Dev reset schema mỗi lần chạy; production chuyển sang migration tool                          |
-| T9  | **Hibernate `PostgreSQLDialect` khai báo tường minh**                 | Tránh auto-detect sai                                                                         |
-| T10 | **Lombok cho boilerplate** (chỉ `@Getter/@Setter/@NoArgsConstructor`) | Giảm code lặp; **không** dùng `@Data` trên entity                                             |
-| T11 | **SpringDoc OpenAPI**                                                 | Tài liệu API tự sinh cho FE tích hợp                                                          |
-| T12 | **CORS mở cho cả 3000 và 5173**                                       | Chừa cả CRA và Vite, chốt FE sau                                                              |
-| T13 | **Chrome headless + CDP để QC sơ đồ Mermaid**                         | jsdom **không chạy được** `mermaid.render()` — cần browser thật                               |
-| T14 | **Đo layout bằng `getBoundingClientRect()` + scale viewBox**          | `getBBox()` trả giá trị sai trong layout Mermaid                                              |
-| T15 | **Đưa tài liệu dự án vào `docs/` trong repo**                         | `git clone` về là có đủ ngữ cảnh; tài liệu có lịch sử thay đổi                                |
-| T16 | **`dto/` tách `request/` + `response/`**                             | Module có nhiều DTO thì chia 2 chiều cho rõ; DTO dùng cả 2 chiều để thẳng `dto/`              |
-| T17 | **Chỉ tạo service interface khi có ≥2 impl hoặc là boundary module** | Interface 1-1 với impl là boilerplate; class cụ thể gọn hơn (xem `AGENT_CODE_STRUCTURE.md` §9.1) |
+| #   | Quyết định                                                            | Lý do                                                                                            |
+| --- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| T1  | **Layered Architecture + Package by Feature**                         | Tránh thư mục layer toàn cục phình to, vẫn giữ luồng N-layer quen thuộc trong mỗi feature        |
+| T2  | **JWT stateless + refresh token cookie**                              | Access token ngắn (15m) giảm rủi ro lộ; refresh token httpOnly chống XSS đọc token               |
+| T3  | **Refresh token lưu DB (`RefreshToken` entity)**                      | Cho phép thu hồi (revoke) — JWT thuần không thu hồi được                                         |
+| T4  | **`@Enumerated(EnumType.STRING)`**                                    | `ORDINAL` sẽ vỡ dữ liệu khi thêm/đổi thứ tự enum                                                 |
+| T5  | **`Instant` cho timestamp**                                           | Chuẩn UTC, không phụ thuộc timezone hệ thống                                                     |
+| T6  | **H2 cho test, PostgreSQL cho runtime**                               | Test độc lập, không cần PostgreSQL local                                                         |
+| T7  | **`ApiResponse<T>` wrapper thống nhất**                               | FE xử lý response đồng nhất; `code` cho FE phân nhánh lỗi                                        |
+| T8  | **`ddl-auto=create-drop` ở dev, `update` ở example**                  | Dev reset schema mỗi lần chạy; production chuyển sang migration tool                             |
+| T9  | **Hibernate `PostgreSQLDialect` khai báo tường minh**                 | Tránh auto-detect sai                                                                            |
+| T10 | **Lombok cho boilerplate** (chỉ `@Getter/@Setter/@NoArgsConstructor`) | Giảm code lặp; **không** dùng `@Data` trên entity                                                |
+| T11 | **SpringDoc OpenAPI**                                                 | Tài liệu API tự sinh cho FE tích hợp                                                             |
+| T12 | **CORS mở cho cả 3000 và 5173**                                       | Chừa cả CRA và Vite, chốt FE sau                                                                 |
+| T13 | **Chrome headless + CDP để QC sơ đồ Mermaid**                         | jsdom **không chạy được** `mermaid.render()` — cần browser thật                                  |
+| T14 | **Đo layout bằng `getBoundingClientRect()` + scale viewBox**          | `getBBox()` trả giá trị sai trong layout Mermaid                                                 |
+| T15 | **Đưa tài liệu dự án vào `docs/` trong repo**                         | `git clone` về là có đủ ngữ cảnh; tài liệu có lịch sử thay đổi                                   |
+| T16 | **`dto/` tách `request/` + `response/`**                              | Feature có nhiều DTO thì chia 2 chiều cho rõ; DTO dùng cả 2 chiều để thẳng `dto/`                |
+| T17 | **Mọi application service đều có interface + `service/implement/`**   | Interface 1-1 không phải boilerplate ở đây; impl luôn nằm trong `service/implement/` (xem §4)    |
+| T18 | **Lưu ảnh qua `common/storage/FileStorageService` port**            | Chọn local hoặc Supabase bằng `app.upload.provider`; DB giữ object key chung; chuyển provider phải di chuyển ảnh cũ |
+| T19 | **eKYC provider nằm trong `verification/ekyc`**                     | `auth` giữ quy trình kích hoạt; tích hợp xác minh có thể phục vụ luồng GPLX của tài xế khi được triển khai |
+| T20 | **Refresh token rotation theo từng phiên**                           | Khóa bản ghi khi refresh, chỉ dùng token một lần; dùng lại token cũ thu hồi cả phiên; giữ hạn hết hạn gốc |
 
 ---
 
@@ -640,22 +668,22 @@ npm start        # port 3000 (CRA) hoặc npm run dev → 5173 (Vite)
 
 ### 6.5. Endpoint hiện có
 
-| Method | Path                                   | Mô tả                                             |
-| ------ | -------------------------------------- | ------------------------------------------------- |
-| `POST` | `/api/auth/login`                      | Đăng nhập → trả access token + set refresh cookie |
-| `POST` | `/api/auth/logout`                     | Đăng xuất (thu hồi refresh token)                 |
-| `POST` | `/api/auth/refresh`                    | Làm mới access token từ refresh cookie            |
-| `GET`  | `/api/auth/me`                         | Thông tin user hiện tại                           |
-| `POST` | `/api/auth/register/send-otp`          | Gửi OTP đăng ký (409 nếu email đã có tài khoản)   |
-| `POST` | `/api/auth/register/verify-otp`        | Xác thực OTP → registration token                 |
-| `POST` | `/api/auth/register`                   | Tạo tài khoản PENDING → activation token          |
-| `POST` | `/api/auth/activate/send-phone-otp`    | (B2) Gửi OTP xác thực số điện thoại               |
-| `POST` | `/api/auth/activate/verify-phone-otp`  | (B2) Xác thực số điện thoại                       |
-| `POST` | `/api/auth/activate/status`            | Tiến độ kích hoạt (dựng lại từ DB)                |
-| `POST` | `/api/auth/activate/scan-cccd`         | (B3) Upload 2 mặt CCCD → OCR + lưu hồ sơ          |
-| `POST` | `/api/auth/activate/face-match`        | (B4) Selfie vs ảnh CCCD; khớp → ACTIVE            |
-| `POST` | `/api/auth/activate/resume-otp`        | Gửi OTP để tiếp tục kích hoạt sau                   |
-| `POST` | `/api/auth/activate/resume`            | Xác thực OTP resume → activation token mới         |
+| Method | Path                                  | Mô tả                                             |
+| ------ | ------------------------------------- | ------------------------------------------------- |
+| `POST` | `/api/auth/login`                     | Đăng nhập → trả access token + set refresh cookie |
+| `POST` | `/api/auth/logout`                    | Đăng xuất (thu hồi refresh token)                 |
+| `POST` | `/api/auth/refresh`                   | Làm mới access token từ refresh cookie            |
+| `GET`  | `/api/auth/me`                        | Thông tin user hiện tại                           |
+| `POST` | `/api/auth/register/send-otp`         | Gửi OTP đăng ký (409 nếu email đã có tài khoản)   |
+| `POST` | `/api/auth/register/verify-otp`       | Xác thực OTP → registration token                 |
+| `POST` | `/api/auth/register`                  | Tạo tài khoản PENDING → activation token          |
+| `POST` | `/api/auth/activate/send-phone-otp`   | (B2) Gửi OTP xác thực số điện thoại               |
+| `POST` | `/api/auth/activate/verify-phone-otp` | (B2) Xác thực số điện thoại                       |
+| `POST` | `/api/auth/activate/status`           | Tiến độ kích hoạt (dựng lại từ DB)                |
+| `POST` | `/api/auth/activate/scan-cccd`        | (B3) Upload 2 mặt CCCD → OCR + lưu hồ sơ          |
+| `POST` | `/api/auth/activate/face-match`       | (B4) Selfie vs ảnh CCCD; khớp → ACTIVE            |
+| `POST` | `/api/auth/activate/resume-otp`       | Gửi OTP để tiếp tục kích hoạt sau                 |
+| `POST` | `/api/auth/activate/resume`           | Xác thực OTP resume → activation token mới        |
 
 ---
 
@@ -684,6 +712,7 @@ Phần này ghi lại các lỗi **đã thực sự gặp** để không lặp l
 | `updated_at` dùng thay `cancelled_at` | Sai — `updated_at` nhảy mỗi lần sửa bất kỳ field                                                                  |
 | JWT secret ngắn                       | `WeakKeyException` — secret **≥ 32 bytes**                                                                        |
 
+
 ### 7.3. Nghiệp vụ (dễ code sai)
 
 | Bẫy                                                    | Cách xử lý                                                                 |
@@ -703,6 +732,6 @@ Phần này ghi lại các lỗi **đã thực sự gặp** để không lặp l
 | **File `.md` tạo ngoài git repo rồi mới move vào** | File tạo ở thư mục cha (ngoài git) có thể **mất** khi có tiến trình khác tác động lên repo root. **Luôn tạo file trực tiếp trong repo**, không tạo ngoài rồi move |
 | Tài liệu quan trọng nằm ngoài git                  | `git clone` về không có spec → **đặt tài liệu trong `docs/`** ngay từ đầu                                                                                         |
 | Commit secret                                      | Kiểm tra `git log --all -- <path>` để biết file có **từng** bị commit không — xoá file ở commit mới **không xoá được** khỏi lịch sử                               |
-| **Commit `node_modules/` / `target/`**             | Rất khó gỡ (hàng chục nghìn file). Phải có `.gitignore` **ở root** trước khi tạo `Frontend/`                                                                       |
+| **Commit `node_modules/` / `target/`**             | Rất khó gỡ (hàng chục nghìn file). Phải có `.gitignore` **ở root** trước khi tạo `Frontend/`                                                                      |
 | **Ép commit file đã bị ignore**                    | `git add -f <file>` — chỉ dùng khi thật sự cần, và phải hiểu mình đang bỏ qua lớp bảo vệ nào                                                                      |
 | Sửa `.gitignore` cho file **đã lỡ track**          | Thêm vào `.gitignore` **không** tự bỏ track. Phải `git rm --cached <file>` rồi commit                                                                             |

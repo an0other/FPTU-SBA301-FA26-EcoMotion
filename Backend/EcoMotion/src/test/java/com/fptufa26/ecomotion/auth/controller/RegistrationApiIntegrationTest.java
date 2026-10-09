@@ -36,10 +36,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * End-to-end tests for the simplified registration API: email OTP + role/email/password only.
- * A successful register creates a PENDING account and returns an activation token — no session.
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
@@ -97,7 +93,6 @@ class RegistrationApiIntegrationTest {
         userRepository.save(existing);
     }
 
-    // ------------------------------------------------------------- happy path
 
     @Test
     @DisplayName("renter happy path: 201, PENDING account, renter row, activation token, no cookie")
@@ -115,7 +110,6 @@ class RegistrationApiIntegrationTest {
                 .andExpect(jsonPath("$.activationToken").isNotEmpty())
                 .andReturn();
 
-        // No session is issued at registration.
         assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).isNull();
 
         User saved = userRepository.findByEmailIgnoreCase(email).orElseThrow();
@@ -129,17 +123,13 @@ class RegistrationApiIntegrationTest {
         Renter renter = renterRepository.findByUser_Id(saved.getUserId()).orElseThrow();
         assertThat(renter.getCccdNo()).isNull();
         assertThat(renter.getCccdImageUrl()).isNull();
-        assertThat(renter.getCccdImageBackUrl()).isNull();
         assertThat(renter.getPortraitUrl()).isNull();
     }
 
-    // ------------------------------------------------------------- duplicates
 
     @Test
     @DisplayName("duplicate email yields 409")
     void duplicateEmailConflicts() throws Exception {
-        // send-otp itself now refuses a registered address, so the registration token has to be
-        // minted directly: this test covers the register() guard, not the send-otp guard.
         String token = tokenService.issueRegistration(EXISTING_EMAIL);
 
         mockMvc.perform(registerRequest(Map.of(
@@ -172,8 +162,6 @@ class RegistrationApiIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of("email", EXISTING_EMAIL))))
                 .andExpect(status().isConflict());
 
-        // No entry was stored: verification reports "expired", i.e. there is nothing to brute-force
-        // and the client cannot walk away with a registration token.
         mockMvc.perform(post(VERIFY_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("email", EXISTING_EMAIL, "otp", "123456"))))
@@ -181,7 +169,6 @@ class RegistrationApiIntegrationTest {
                 .andExpect(jsonPath("$.message").value("OTP has expired"));
     }
 
-    // ------------------------------------------------------------------- OTP
 
     @Test
     @DisplayName("invalid OTP yields 400")
@@ -240,7 +227,6 @@ class RegistrationApiIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Please wait before requesting a new OTP"));
     }
 
-    // -------------------------------------------------------------- validation
 
     @Test
     @DisplayName("send-otp rejects a malformed email with 400")
@@ -333,7 +319,6 @@ class RegistrationApiIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Registration token is invalid or expired"));
     }
 
-    // -------------------------------------------------------------- security
 
     @Test
     @DisplayName("the stored password is BCrypt-hashed and never echoed back")
@@ -375,7 +360,6 @@ class RegistrationApiIntegrationTest {
         assertThat(result.getResponse().getCookie(REFRESH_COOKIE)).isNull();
     }
 
-    // ------------------------------------------------------------------- docs
 
     @Test
     @DisplayName("Swagger exposes the registration + activation endpoints")
@@ -393,13 +377,11 @@ class RegistrationApiIntegrationTest {
         assertThat(paths.has("/api/auth/activate/status")).isTrue();
         assertThat(paths.has("/api/auth/activate/scan-cccd")).isTrue();
         assertThat(paths.has("/api/auth/activate/face-match")).isTrue();
-        // There is no standalone "complete" step: the face match activates the account in place.
         assertThat(paths.has("/api/auth/activate/complete")).isFalse();
         assertThat(paths.has("/api/auth/activate/resume-otp")).isTrue();
         assertThat(paths.has("/api/auth/activate/resume")).isTrue();
     }
 
-    // ------------------------------------------------------------------ helpers
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder registerRequest(
             Map<String, Object> payload) throws Exception {
@@ -408,7 +390,6 @@ class RegistrationApiIntegrationTest {
                 .content(objectMapper.writeValueAsString(new HashMap<>(payload)));
     }
 
-    /** Runs send-otp and returns the echoed code. */
     private String sendOtp(String email) throws Exception {
         MvcResult result = mockMvc.perform(post(SEND_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -420,7 +401,6 @@ class RegistrationApiIntegrationTest {
                 .get("otp").asText();
     }
 
-    /** Sends + verifies the OTP, returning a registration token. */
     private String verifiedToken(String email) throws Exception {
         String code = sendOtp(email);
         MvcResult result = mockMvc.perform(post(VERIFY_PATH)

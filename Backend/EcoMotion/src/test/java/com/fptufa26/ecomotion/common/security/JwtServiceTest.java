@@ -18,7 +18,6 @@ import java.util.Date;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Unit tests for {@link JwtService} (plan §11 Phase 5, §12 case 16). */
 class JwtServiceTest {
 
     private static final String SECRET = "test-secret-key-for-unit-and-integration-tests-32bytes";

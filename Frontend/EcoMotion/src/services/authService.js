@@ -1,4 +1,4 @@
-import apiClient from './apiClient'
+import apiClient, { refreshAccessToken } from './apiClient'
 
 export const authService = {
   async login(email, password, rememberMe = false, captchaToken = '') {
@@ -7,8 +7,7 @@ export const authService = {
   },
 
   async refresh() {
-    const { data } = await apiClient.post('/auth/refresh')
-    return data
+    return refreshAccessToken()
   },
 
   async fetchMe() {
@@ -20,7 +19,6 @@ export const authService = {
     await apiClient.post('/auth/logout')
   },
 
-  // ---------------------------------------------------------------- registration
 
   async sendRegisterOtp(email) {
     const { data } = await apiClient.post('/auth/register/send-otp', { email })
@@ -37,7 +35,6 @@ export const authService = {
     return data
   },
 
-  // ---------------------------------------------------------------- activation
 
   async activateStatus(activationToken) {
     const { data } = await apiClient.post('/auth/activate/status', { activationToken })
@@ -54,12 +51,10 @@ export const authService = {
     return data
   },
 
-  async activateScanCccd(activationToken, { cccdFront, cccdBack }) {
+  async activateScanCccd(activationToken, { cccdFront }) {
     const form = new FormData()
     form.append('activationToken', activationToken)
     form.append('cccdFront', cccdFront)
-    form.append('cccdBack', cccdBack)
-    // Content-Type is set by the browser (with the multipart boundary) — see apiClient.
     const { data } = await apiClient.post('/auth/activate/scan-cccd', form)
     return data
   },
@@ -72,7 +67,6 @@ export const authService = {
     return data
   },
 
-  // ---------------------------------------------------------------- resume activation
 
   async activateResumeOtp(email) {
     const { data } = await apiClient.post('/auth/activate/resume-otp', { email })

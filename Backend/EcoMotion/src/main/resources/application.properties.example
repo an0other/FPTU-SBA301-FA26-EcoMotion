@@ -135,7 +135,7 @@ app.otp.expose-in-response=false
 # ===============================
 # The secret key is read from the environment so it is never committed.
 # Set RECAPTCHA_SECRET_KEY before starting the app; if it is blank the protected endpoints
-# fail closed with 403 (see CaptchaService.verify).
+# fail closed with 403 (see GoogleRecaptchaVerifier).
 app.captcha.enabled=${CAPTCHA_ENABLED:true}
 app.captcha.secret-key=${RECAPTCHA_SECRET_KEY:}
 app.captcha.min-score=0.5
@@ -161,14 +161,39 @@ spring.mail.properties.mail.smtp.writetimeout=5000
 # ===============================
 # eKYC (identity verification on the activation page)
 # ===============================
-# provider=mock  -> no network, always succeeds (local dev / tests).
+# Every provider implements the EkycService port. The bean the application injects is
+# FallbackEkycService: it tries app.ekyc.provider first and, only when that provider is
+# UNAVAILABLE (network/timeout/HTTP error), retries with app.ekyc.fallback-provider.
+# Verification failures and configuration errors are reported as-is and never masked.
+#
+# provider=mock  -> no network, always succeeds. DEV/TEST ONLY: MockEkycService is registered
+#                   under the dev/test Spring profiles, so a deployment that leaves this default
+#                   in place fails fast at startup instead of silently auto-approving identities.
 # provider=fptai -> calls the FPT.AI sandbox: CCCD OCR + face match. Requires FPT_AI_API_KEY.
+# provider=vnpt  -> calls the VNPT eKYC (IDG) endpoints. Requires VNPT_EKYC_* credentials.
 app.ekyc.provider=${EKYC_PROVIDER:mock}
+# Optional second provider, used only when the primary is unavailable. Empty disables the fallback.
+# e.g. app.ekyc.provider=fptai + app.ekyc.fallback-provider=vnpt
+app.ekyc.fallback-provider=${EKYC_FALLBACK_PROVIDER:}
 app.ekyc.mock.force-fail=false
 app.ekyc.fptai.api-key=${FPT_AI_API_KEY:}
 app.ekyc.fptai.idr-url=https://api.fpt.ai/vision/idr/vnm
 app.ekyc.fptai.face-url=https://api.fpt.ai/dmp/checkface/v1
 app.ekyc.fptai.min-similarity=70
+app.ekyc.fptai.connect-timeout=5s
+app.ekyc.fptai.read-timeout=15s
+# VNPT eKYC (IDG). Base URL and paths are configurable so the sandbox contract can change
+# without a code edit. document-type 9 = CCCD gắn chip.
+app.ekyc.vnpt.base-url=${VNPT_EKYC_BASE_URL:https://api.idg.vnpt.vn}
+app.ekyc.vnpt.ocr-path=/ekyc/v1/ocr
+app.ekyc.vnpt.face-path=/ekyc/v1/face
+app.ekyc.vnpt.document-type=9
+app.ekyc.vnpt.access-token=${VNPT_EKYC_ACCESS_TOKEN:}
+app.ekyc.vnpt.token-id=${VNPT_EKYC_TOKEN_ID:}
+app.ekyc.vnpt.token-key=${VNPT_EKYC_TOKEN_KEY:}
+app.ekyc.vnpt.min-similarity=70
+app.ekyc.vnpt.connect-timeout=5s
+app.ekyc.vnpt.read-timeout=15s
 
 
 # ===============================
@@ -187,11 +212,18 @@ app.phone-otp.resend-cooldown=60s
 # ===============================
 # File upload
 # ===============================
-# Layout on disk: {app.upload.dir}/{entity}/{userId}/{filename}
-# e.g. D:/ecomotion/renter/42/cccd-front.jpg
-# Use an absolute path outside the repo so uploads are never committed.
+# Stored object keys have the same form for both providers: {entity}/{userId}/{filename}.
+# Changing providers does not move existing objects; migrate files before switching.
+app.upload.provider=${UPLOAD_PROVIDER:local}
+# Local provider: use an absolute path on persistent storage outside the repo.
 app.upload.dir=${UPLOAD_DIR:./uploads}
 app.upload.max-file-size-bytes=8388608
+# Supabase provider: create a private bucket and keep the service key server-side only.
+app.upload.supabase.url=${SUPABASE_URL:}
+app.upload.supabase.bucket=${SUPABASE_STORAGE_BUCKET:}
+app.upload.supabase.service-key=${SUPABASE_SERVICE_KEY:}
+app.upload.supabase.connect-timeout=5s
+app.upload.supabase.read-timeout=20s
 spring.servlet.multipart.max-file-size=8MB
 spring.servlet.multipart.max-request-size=24MB
 

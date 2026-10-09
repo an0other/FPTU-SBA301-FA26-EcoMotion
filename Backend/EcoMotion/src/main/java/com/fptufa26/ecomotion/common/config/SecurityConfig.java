@@ -44,15 +44,8 @@ public class SecurityConfig {
                                 "/api/auth/activate/**").permitAll()
                         .requestMatchers(
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        // Vehicle photos are static assets served by StaticResourceConfig. An <img>
-                        // request carries no Authorization header, so these paths must stay public -
-                        // otherwise every thumbnail fails with 401 and the list renders blank.
                         .requestMatchers("/images/**").permitAll()
                         .requestMatchers("/error").permitAll()
-                        // The renter home page is a public landing page: it lists the fleet to
-                        // visitors who have not signed in yet, so the read-only fleet endpoint has
-                        // to answer without a token. Scoped to GET on purpose - the day a provider
-                        // gains POST /api/vehicles, that write must stay behind its role gate.
                         .requestMatchers(HttpMethod.GET, "/api/vehicles", "/api/vehicles/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/provider/**").hasAnyRole("PROVIDER", "ADMIN")

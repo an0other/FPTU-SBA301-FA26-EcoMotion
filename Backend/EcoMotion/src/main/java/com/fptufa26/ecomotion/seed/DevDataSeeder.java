@@ -35,52 +35,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 
-/**
- * Dev-profile seed data.
- *
- * <p>Display strings are written as ASCII-safe Unicode escapes on purpose. The source file used to
- * carry literal Vietnamese text and got mangled to mojibake by a non-UTF-8 editor/pipeline, which
- * silently corrupted seeded names and addresses (javac accepts the replacement characters without
- * complaint, so tests stayed green). Escapes keep the file pure ASCII and immune to that class of
- * bug regardless of the reader's encoding.
- *
- * <p>The rentable fleet is driven by the photos in {@code images/}, whose layout is
- * {@code images/{providerUserId}/{vehicleId}/{file}}. That makes the ids part of the contract:
- * provider user ids must be 2 and 4, and vehicle ids 1-8, or the {@code vehicle_image.image_url}
- * rows point at folders that do not exist.
- *
- * <p>So both accounts and vehicles are inserted with fixed primary keys through native statements.
- * A JPA {@code save}/{@code persist} cannot pin an id here: {@code User.id} and {@code Vehicle.id}
- * are {@code GenerationType.IDENTITY}, so Hibernate either treats a pre-set id as a detached entity
- * (issuing an UPDATE that fails with {@code StaleObjectStateException}) or rejects it outright
- * ({@code Detached entity passed to persist}). Native INSERT always writes the row we asked for.
- *
- * <p>Account layout (fixed):
- * <ul>
- *   <li>1 - renter01@ecomotion.vn (RENTER)</li>
- *   <li>2 - provider.a@ecomotion.vn (PROVIDER) owns images/2/{1..4}</li>
- *   <li>3 - admin01@ecomotion.vn (ADMIN)</li>
- *   <li>4 - provider.b@ecomotion.vn (PROVIDER) owns images/4/{5..8}</li>
- *   <li>5 - renter.demo@ecomotion.vn (RENTER)</li>
- * </ul>
- *
- * <p>Ratings and prices are varied per vehicle on purpose (see the call sites in
- * {@link #run(ApplicationArguments)}): the fleet used to carry one flat 4.80 / 12 reviews and the
- * same three prices on every car, which left the rating badge, the "sort by rating" control and the
- * price slider with nothing to distinguish. One car is seeded unrated, and the schema forbids a NULL
- * rating, so "no reviews yet" means {@code rating_count = 0} together with {@code rating_avg = 0}.
- *
- * <p>Everything here is idempotent - each block is skipped when the row already exists, so
- * re-running is safe. This seeder is the single source of demo data: it does not rely on
- * {@code db/schema.sql} being executed, because Hibernate creates the schema from the entity
- * mappings ({@code ddl-auto=create-drop} in dev/test).
- *
- * <p>Because the ids are pinned by hand, the database's identity counters never move and have to be
- * realigned before the application inserts anything of its own - otherwise the first registration
- * collides with the seeded renter at id 1. {@link #realignPinnedIdentitySequences()} at the end of
- * {@link #run(ApplicationArguments)} takes care of it; read its Javadoc before adding a new pinned
- * entity.
- */
 @Component
 @Profile("dev")
 @RequiredArgsConstructor
@@ -88,11 +42,9 @@ public class DevDataSeeder implements ApplicationRunner {
 
     public static final String DEFAULT_PASSWORD = "EcoMotion@123";
 
-    /** Provider user ids are pinned to the folder names under {@code images/}. */
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
 
-    // Vietnamese display strings, escaped so this file stays pure ASCII.
     private static final String NAME_PROVIDER_A = "Nguy\u1ec5n V\u0103n A";
     private static final String NAME_PROVIDER_B = "Tr\u1ea7n Th\u1ecb B";
     private static final String NAME_RENTER = "Ph\u1ea1m Thu H\u00e0";
@@ -112,11 +64,6 @@ public class DevDataSeeder implements ApplicationRunner {
     private static final String DESC_CAMRY_XSE = "Sedan hybrid h\u1ea1ng D b\u1ea3n XSE, r\u1ed9ng r\u00e3i v\u00e0 ti\u1ebft ki\u1ec7m.";
     private static final String DESC_RANGE_ROVER = "SUV h\u1ea1ng sang, n\u1ed9i th\u1ea5t r\u1ed9ng r\u00e3i, ph\u00f9 h\u1ee3p h\u00e0nh tr\u00ecnh d\u00e0i.";
 
-    // Deposit taken up front. Still one value per plan, because nothing renders it yet - the renter
-    // card quotes slot_price only. NOTE: db/schema.sql's ck_rental_plan_upfront wants this column
-    // NULL for every plan except YEARLY, so these three values would be rejected by that file. The
-    // mismatch predates this seeder and is currently harmless: dev/test build the schema from the
-    // entity mappings (ddl-auto=create-drop) and Hibernate emits no CHECK constraints.
     private static final String UPFRONT_HOURLY = "500000.00";
     private static final String UPFRONT_DAILY = "2000000.00";
     private static final String UPFRONT_MONTHLY = "20000000.00";
@@ -131,39 +78,25 @@ public class DevDataSeeder implements ApplicationRunner {
     private final DeterministicCipher cipher;
     private final EntityManager entityManager;
 
-    /**
-     * The three active plan prices for one vehicle.
-     *
-     * <p>Grouped into a record so the {@code seedVehicle} call sites still read as
-     * identity -&gt; specs -&gt; rating -&gt; money -&gt; photos -&gt; description instead of becoming an
-     * eighteen-argument wall of bare strings, where a swapped hourly/daily price would compile
-     * happily and only show up as wrong numbers in the UI.
-     */
     private record PlanPrices(String hourly, String daily, String monthly) {
     }
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        // ---------------------------------------------------------------- accounts (ids pinned)
         seedUser(1L, "renter01@ecomotion.vn", "0901000001", "Renter 01", Role.RENTER);
-        // Provider A sits on user 2 so it owns images/2/*.
         seedUser(PROVIDER_A_USER_ID, "provider.a@ecomotion.vn", "0901000010", NAME_PROVIDER_A, Role.PROVIDER);
         seedUser(3L, "admin01@ecomotion.vn", "0901000003", "Admin 01", Role.ADMIN);
-        // Provider B sits on user 4 so it owns images/4/5.
         seedUser(PROVIDER_B_USER_ID, "provider.b@ecomotion.vn", "0901000011", NAME_PROVIDER_B, Role.PROVIDER);
         seedUser(5L, "renter.demo@ecomotion.vn", "0901000012", NAME_RENTER, Role.RENTER);
 
-        // ---------------------------------------------------------------- provider profiles
         User providerUserA = userRepository.findById(PROVIDER_A_USER_ID).orElseThrow();
         User providerUserB = userRepository.findById(PROVIDER_B_USER_ID).orElseThrow();
         Provider providerA = seedProvider(providerUserA, "EcoMotion Depot A", ADDRESS_A, "02873000010");
         Provider providerB = seedProvider(providerUserB, "EcoMotion Depot B", ADDRESS_B, "02873000011");
 
-        // ---------------------------------------------------------------- renter profile
         seedRenterProfile(userRepository.findById(5L).orElseThrow());
 
-        // ---------------------------------------------------------------- vehicles + images + plans
         seedVehicle(providerA.getId(), 1L, PROVIDER_A_USER_ID, "VinFast", "VF 6", 2024, 5, Transmission.AUTOMATIC,
                 COLOR_WHITE, FuelType.EV, "51A-11111",
                 "4.70", 24, new PlanPrices("180000.00", "1100000.00", "16500000.00"),
@@ -215,11 +148,6 @@ public class DevDataSeeder implements ApplicationRunner {
 
         seedVehicle(providerB.getId(), 6L, PROVIDER_B_USER_ID, "Porsche", "911 Carrera", 2024, 4, Transmission.AUTOMATIC,
                 COLOR_SILVER, FuelType.GASOLINE, "51A-66666",
-                // Dearest car by the hour, but only mid-pack by the month: the provider discounts
-                // long-term rentals hard to get an exotic off the lot. Kept deliberately
-                // non-proportional so the price sort has to read the SELECTED plan's price - with
-                // proportional prices every plan would rank the fleet identically and a sort that
-                // ignored the plan filter would still look correct.
                 "5.00", 6, new PlanPrices("700000.00", "4500000.00", "25000000.00"),
                 List.of(
                         "360_F_469231916_yBXAlwxLVTAvJ5JkyE2PdnjCOXUp2wwE.webp",
@@ -240,8 +168,6 @@ public class DevDataSeeder implements ApplicationRunner {
 
         seedVehicle(providerB.getId(), 8L, PROVIDER_B_USER_ID, "Land Rover", "Range Rover Sport", 2023, 5, Transmission.AUTOMATIC,
                 COLOR_GREY, FuelType.GASOLINE, "51A-88888",
-                // Deliberately unrated: ck_vehicle_rating forbids NULL, so "no reviews yet" is a
-                // zero average with a zero count. The card must render that as "Mới", not "0.0".
                 "0.00", 0, new PlanPrices("450000.00", "2800000.00", "38000000.00"),
                 List.of(
                         "2022-range-rover-se-lwb-150-1665593833.webp",
@@ -250,33 +176,10 @@ public class DevDataSeeder implements ApplicationRunner {
                         "range-rover-sport-in-monte-carlo-monaco.webp"),
                 DESC_RANGE_ROVER);
 
-        // Every id above was written by hand, so the database's identity counters are still at 1.
-        // Hand them back to the application before it inserts anything - see the method Javadoc.
         realignPinnedIdentitySequences();
     }
 
-    // ------------------------------------------------------------------ identity realignment
 
-    /**
-     * Pushes the identity counter of every hand-pinned table past the ids we just inserted.
-     *
-     * <p>{@code users.id} and {@code vehicle.id} are {@code bigint GENERATED BY DEFAULT AS IDENTITY}
-     * (see {@code db/schema.sql}; Hibernate emits the same DDL for {@code GenerationType.IDENTITY}).
-     * {@code BY DEFAULT} is exactly what lets {@code seedUser} and {@code seedVehicle} write an
-     * explicit id - and it is also why that insert does <em>not</em> advance the counter. So after
-     * seeding ids 1-5 the next Hibernate insert still asks the database for id 1 and dies on
-     * {@code users_pkey}. That was the registration bug: with {@code ddl-auto=create-drop} the
-     * schema (and therefore the counter) is recreated at every boot, so every new account collided
-     * with the seeded renter at id 1.
-     *
-     * <p>{@code ALTER TABLE ... ALTER COLUMN id RESTART WITH n} is used because it is the one form
-     * both PostgreSQL and H2 accept for an identity column, and an IDENTITY column keeps no state
-     * on the Hibernate side, so nothing else needs resetting. The max id is read first and
-     * interpolated as a literal because {@code RESTART WITH} only accepts a constant, not a
-     * subquery.
-     *
-     * <p>Add a table to this list whenever a new entity starts being inserted with a pinned id.
-     */
     private void realignPinnedIdentitySequences() {
         realignIdentitySequence("users");
         realignIdentitySequence("vehicle");
@@ -292,15 +195,7 @@ public class DevDataSeeder implements ApplicationRunner {
                 .executeUpdate();
     }
 
-    // ------------------------------------------------------------------ users & profiles
 
-    /**
-     * Inserts a user with a pinned id, or returns the existing row for that email.
-     *
-     * <p>Lookup is by email (the natural key), then the id is asserted to line up: if the email
-     * already exists under a different id the pinned layout is broken and we fail loudly rather
-     * than seed images that point at the wrong folder.
-     */
     private User seedUser(long id, String email, String phone, String fullName, Role role) {
         User existing = userRepository.findByEmailIgnoreCase(email).orElse(null);
         if (existing != null) {
@@ -312,10 +207,6 @@ public class DevDataSeeder implements ApplicationRunner {
         }
 
         if (userRepository.findById(id).isEmpty()) {
-            // users.phone is @Convert(EncryptedStringConverter.class). A native INSERT bypasses
-            // Hibernate's converter, so the ciphertext has to be produced here by hand - writing
-            // the plaintext would make every later read blow up in decrypt() ("Could not decrypt
-            // value"). The cipher is deterministic, so the uk_users_phone constraint still holds.
             String phoneCiphertext = cipher.encrypt(phone);
             entityManager.createNativeQuery("""
                             INSERT INTO users
@@ -339,13 +230,6 @@ public class DevDataSeeder implements ApplicationRunner {
         return userRepository.findById(id).orElseThrow();
     }
 
-    /**
-     * Creates the provider profile for {@code user}, or returns the existing one.
-     *
-     * <p>The depot address is what the renter list shows as the pickup point, so an existing row
-     * that predates the field (or was created blank by another flow) gets backfilled here instead
-     * of silently rendering cards without a location.
-     */
     private Provider seedProvider(User user, String displayName, String depotAddress, String hotline) {
         Provider existing = providerRepository.findByUser_Id(user.getId()).orElse(null);
         if (existing != null) {
@@ -382,25 +266,7 @@ public class DevDataSeeder implements ApplicationRunner {
         renterRepository.save(renter);
     }
 
-    // ------------------------------------------------------------------ fleet
 
-    /**
-     * Creates one vehicle with its images and active plans. {@code providerUserId} is the folder
-     * segment in {@code images/}, used to build each image URL as
-     * {@code /images/{providerUserId}/{vehicleId}/{file}}.
-     *
-     * <p>The vehicle row is inserted with a native statement so the primary key can be pinned to
-     * the folder name. A JPA {@code save}/{@code persist} cannot do that here: {@code Vehicle.id}
-     * is {@code GenerationType.IDENTITY}, so Hibernate rejects an entity that already carries an id
-     * (detached-entity / stale-row errors). Image {@code displayOrder} follows the order of
-     * {@code imageFiles}.
-     *
-     * @param ratingAvg   decimal string; {@code "0.00"} means "not rated yet". The schema's
-     *                    {@code ck_vehicle_rating} forbids a NULL rating, so an unrated car is
-     *                    {@code 0} with a zero count rather than NULL.
-     * @param ratingCount number of reviews behind {@code ratingAvg}; must be 0 when the average is 0.
-     * @param prices      the three plan prices, quoted on the renter card for this vehicle.
-     */
     private void seedVehicle(Long providerId, Long vehicleId, Long providerUserId,
                              String brand, String model, int year, int seats,
                              Transmission transmission, String color, FuelType fuelType,
@@ -431,14 +297,11 @@ public class DevDataSeeder implements ApplicationRunner {
                     .setParameter("color", color)
                     .setParameter("fuelType", fuelType.name())
                     .setParameter("status", VehicleStatus.APPROVED.name())
-                    // Bound as a BigDecimal, not the String: PostgreSQL will not coerce a varchar
-                    // bind into a numeric column the way H2 quietly does.
                     .setParameter("ratingAvg", new BigDecimal(ratingAvg))
                     .setParameter("ratingCount", ratingCount)
                     .executeUpdate();
         }
 
-        // Reload through the persistence context so images/plans attach to a managed instance.
         Vehicle vehicle = vehicleRepository.findById(vehicleId).orElseThrow();
 
         seedImages(vehicle, providerUserId, imageFiles, description);
@@ -461,14 +324,6 @@ public class DevDataSeeder implements ApplicationRunner {
         }
     }
 
-    /**
-     * Seeds three active plans per vehicle (hourly / daily / monthly) if none exist yet, so the
-     * renter list always shows a price range and the plan filter has something to match.
-     *
-     * <p>The prices come from the vehicle's own {@link PlanPrices}. They used to be the same three
-     * figures for the whole fleet, which made the price sort and the price-ceiling filter no-ops:
-     * every card printed the same number.
-     */
     private void seedPlans(Vehicle vehicle, PlanPrices prices) {
         if (!rentalPlanRepository.findByVehicle_IdOrderByIdAsc(vehicle.getId()).isEmpty()) {
             return;
@@ -490,7 +345,6 @@ public class DevDataSeeder implements ApplicationRunner {
         rentalPlanRepository.save(plan);
     }
 
-    /** Percent-encodes the characters that actually appear in the prepared filenames (spaces). */
     private static String encodePathSegment(String segment) {
         return segment.replace(" ", "%20");
     }

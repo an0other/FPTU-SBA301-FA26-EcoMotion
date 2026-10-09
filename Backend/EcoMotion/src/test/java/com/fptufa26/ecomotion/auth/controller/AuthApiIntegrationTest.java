@@ -37,12 +37,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * End-to-end tests for the auth API over the real filter chain, real JPA repositories and an
- * in-memory database.
- *
- * <p>Covers the 16 mandatory scenarios of plan §12.</p>
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 class AuthApiIntegrationTest {
@@ -57,10 +51,6 @@ class AuthApiIntegrationTest {
     private static final String PROVIDER_EMAIL = "provider01@ecomotion.vn";
     private static final String ADMIN_EMAIL = "admin01@ecomotion.vn";
 
-    /**
-     * Pre-computed once with a low BCrypt cost. The production encoder (strength 12) still
-     * verifies it, because BCrypt stores the cost inside the hash — this just keeps the suite fast.
-     */
     private static final String PASSWORD_HASH = new BCryptPasswordEncoder(4).encode(PASSWORD);
 
     @Autowired
@@ -103,7 +93,6 @@ class AuthApiIntegrationTest {
         userRepository.save(user);
     }
 
-    // ------------------------------------------------------------- test cases 1-3
 
     @Test
     @DisplayName("case 1: login by email with rememberMe=true sets Max-Age=604800")
@@ -125,7 +114,6 @@ class AuthApiIntegrationTest {
         assertThat(body.get("user").get("email").asText()).isEqualTo(RENTER_EMAIL);
         assertThat(body.get("user").get("role").asText()).isEqualTo("RENTER");
         assertThat(body.get("user").get("status").asText()).isEqualTo("ACTIVE");
-        // There is no username field anywhere in the API any more.
         assertThat(body.get("user").has("username")).isFalse();
         assertThat(body.has("refreshToken")).isFalse();
     }
@@ -148,7 +136,6 @@ class AuthApiIntegrationTest {
         assertThat(readJson(outcome.result()).get("user").get("email").asText()).isEqualTo(RENTER_EMAIL);
     }
 
-    // ------------------------------------------------------------- test cases 4-6
 
     @Test
     @DisplayName("case 4: wrong password yields 401 with the generic message")
@@ -189,10 +176,9 @@ class AuthApiIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Account is inactive"));
     }
 
-    // ------------------------------------------------------------ test cases 7-10
 
     @Test
-    @DisplayName("case 7: refresh with a valid cookie issues a new access token")
+    @DisplayName("case 7: refresh rotates the cookie and invalidates the old token")
     void case7_refreshWithValidCookie() throws Exception {
         LoginOutcome outcome = login(RENTER_EMAIL, PASSWORD, true);
 
@@ -204,8 +190,70 @@ class AuthApiIntegrationTest {
 
         String newToken = readJson(refreshed).get("accessToken").asText();
         assertThat(newToken).isNotBlank().isNotEqualTo(outcome.accessToken());
-        // No rotation: the cookie is deliberately not re-issued.
-        assertThat(refreshed.getResponse().getHeader(HttpHeaders.SET_COOKIE)).isNull();
+        Cookie rotatedCookie = refreshed.getResponse().getCookie(REFRESH_COOKIE);
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(rotatedCookie.getValue()).isNotEqualTo(outcome.refreshToken());
+        assertThat(rotatedCookie.isHttpOnly()).isTrue();
+        assertThat(rotatedCookie.getMaxAge()).isBetween(1, 604800);
+        assertThat(readJson(refreshed).has("refreshToken")).isFalse();
+
+        RefreshToken oldToken = refreshTokenRepository.findByTokenHash(sha256Hex(outcome.refreshToken()))
+                .orElseThrow();
+        RefreshToken replacement = refreshTokenRepository.findByTokenHash(sha256Hex(rotatedCookie.getValue()))
+                .orElseThrow();
+        assertThat(oldToken.getRevokedAt()).isNotNull();
+        assertThat(replacement.getRevokedAt()).isNull();
+        assertThat(replacement.getFamilyId()).isEqualTo(oldToken.getFamilyId());
+        assertThat(replacement.getExpiresAt()).isEqualTo(oldToken.getExpiresAt());
+
+        MvcResult rotatedAgain = mockMvc.perform(post("/api/auth/refresh").cookie(rotatedCookie))
+                .andExpect(status().isOk())
+                .andReturn();
+        Cookie latestCookie = rotatedAgain.getResponse().getCookie(REFRESH_COOKIE);
+        assertThat(latestCookie).isNotNull();
+
+        mockMvc.perform(post("/api/auth/refresh").cookie(refreshCookie(outcome)))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(refreshTokenRepository.findByTokenHash(sha256Hex(latestCookie.getValue()))
+                .orElseThrow().getRevokedAt()).isNotNull();
+        mockMvc.perform(post("/api/auth/refresh").cookie(latestCookie))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("refresh preserves the session cookie when rememberMe is false")
+    void refreshWithoutRememberMeKeepsSessionCookie() throws Exception {
+        LoginOutcome outcome = login(RENTER_EMAIL, PASSWORD, false);
+
+        MvcResult refreshed = mockMvc.perform(post("/api/auth/refresh").cookie(refreshCookie(outcome)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(refreshed.getResponse().getCookie(REFRESH_COOKIE).getMaxAge()).isEqualTo(-1);
+        assertThat(refreshed.getResponse().getHeader(HttpHeaders.SET_COOKIE)).doesNotContain("Max-Age");
+    }
+
+    @Test
+    @DisplayName("refresh does not extend the original session lifetime")
+    void refreshKeepsOriginalExpiration() throws Exception {
+        LoginOutcome outcome = login(RENTER_EMAIL, PASSWORD, true);
+        RefreshToken stored = refreshTokenRepository.findByTokenHash(sha256Hex(outcome.refreshToken()))
+                .orElseThrow();
+        Instant originalExpiry = Instant.now().plus(Duration.ofHours(1));
+        stored.setExpiresAt(originalExpiry);
+        refreshTokenRepository.saveAndFlush(stored);
+        Instant persistedExpiry = refreshTokenRepository.findByTokenHash(sha256Hex(outcome.refreshToken()))
+                .orElseThrow().getExpiresAt();
+
+        MvcResult refreshed = mockMvc.perform(post("/api/auth/refresh").cookie(refreshCookie(outcome)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Cookie newCookie = refreshed.getResponse().getCookie(REFRESH_COOKIE);
+        assertThat(newCookie.getMaxAge()).isBetween(1, 3600);
+        assertThat(refreshTokenRepository.findByTokenHash(sha256Hex(newCookie.getValue()))
+                .orElseThrow().getExpiresAt()).isEqualTo(persistedExpiry);
     }
 
     @Test
@@ -246,7 +294,6 @@ class AuthApiIntegrationTest {
                 .andExpect(jsonPath("$.status").value(401));
     }
 
-    // ---------------------------------------------------------------- test case 11
 
     @Test
     @DisplayName("case 11: logout clears the cookie and stamps revoked_at")
@@ -266,7 +313,6 @@ class AuthApiIntegrationTest {
         assertThat(stored.getRevokedAt()).isNotNull();
     }
 
-    // ------------------------------------------------------------ test cases 12-15
 
     @Test
     @DisplayName("case 12: /api/auth/me without a token yields a JSON 401, not HTML")
@@ -301,7 +347,6 @@ class AuthApiIntegrationTest {
         mockMvc.perform(get("/api/provider/ping").header(HttpHeaders.AUTHORIZATION, bearer(providerToken)))
                 .andExpect(status().isOk());
 
-        // ADMIN is allowed on provider endpoints too.
         mockMvc.perform(get("/api/provider/ping").header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
                 .andExpect(status().isOk());
 
@@ -335,13 +380,10 @@ class AuthApiIntegrationTest {
         user.setStatus(UserStatus.LOCKED);
         userRepository.saveAndFlush(user);
 
-        // The JWT is still well within its 15-minute lifetime — the filter reloading the user
-        // from the database is what makes this fail right away.
         mockMvc.perform(get("/api/auth/me").header(HttpHeaders.AUTHORIZATION, bearer(token)))
                 .andExpect(status().isUnauthorized());
     }
 
-    // ---------------------------------------------------------------- test case 16
 
     @Test
     @DisplayName("case 16: the access token payload contains the documented claims")
@@ -356,12 +398,10 @@ class AuthApiIntegrationTest {
         assertThat(claims.getIssuedAt()).isNotNull();
         assertThat(claims.getExpiration()).isAfter(claims.getIssuedAt());
         assertThat(claims.getId()).isNotBlank();
-        // The email is a sensitive field and must never travel inside the token.
         assertThat(claims.get("email")).isNull();
         assertThat(claims.get("username")).isNull();
     }
 
-    // -------------------------------------------------------------- /me happy path
 
     @Test
     @DisplayName("GET /api/auth/me returns the fresh user record")
@@ -373,7 +413,6 @@ class AuthApiIntegrationTest {
                 .andExpect(jsonPath("$.email").value(ADMIN_EMAIL))
                 .andExpect(jsonPath("$.role").value("ADMIN"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
-                // The phone is stored two-way encrypted; /me must return the decrypted plaintext.
                 .andExpect(jsonPath("$.phone").value("0900000003"))
                 .andExpect(jsonPath("$.username").doesNotExist());
     }
@@ -408,12 +447,10 @@ class AuthApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        // rememberMe omitted -> treated as false -> session cookie, i.e. no Max-Age.
         assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE)).doesNotContain("Max-Age");
         assertThat(readJson(result).get("accessToken").asText()).isNotBlank();
     }
 
-    // ------------------------------------------------------------- OpenAPI contract
 
     @Test
     @DisplayName("Swagger exposes all auth endpoints plus the bearerAuth scheme")
@@ -430,7 +467,6 @@ class AuthApiIntegrationTest {
         assertThat(document.at("/components/securitySchemes/bearerAuth/scheme").asText()).isEqualTo("bearer");
     }
 
-    // -------------------------------------------------------------------- helpers
 
     private record LoginOutcome(String accessToken, String refreshToken, MvcResult result) {
     }

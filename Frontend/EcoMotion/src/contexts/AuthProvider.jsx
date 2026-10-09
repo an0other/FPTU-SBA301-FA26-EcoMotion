@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AuthContext } from './authContext'
 import { authService } from '../services/authService'
-import { clearAccessToken, getAccessToken, setAccessToken } from '../utils/tokenStore'
+import { clearAccessToken, getAccessToken, setAccessToken, subscribeAccessToken } from '../utils/tokenStore'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -10,18 +10,21 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true
+    const unsubscribe = subscribeAccessToken((token) => {
+      if (!active) return
+      setTokenState(token)
+      if (!token) setUser(null)
+    })
 
     async function restoreSession() {
-      const token = getAccessToken()
-      if (!token) {
-        if (active) setLoading(false)
-        return
-      }
       try {
+        if (!getAccessToken()) {
+          await authService.refresh()
+        }
         const me = await authService.fetchMe()
         if (!active) return
         setUser(me)
-        setTokenState(token)
+        setTokenState(getAccessToken())
       } catch {
         if (!active) return
         clearAccessToken()
@@ -35,6 +38,7 @@ export function AuthProvider({ children }) {
     restoreSession()
     return () => {
       active = false
+      unsubscribe()
     }
   }, [])
 
