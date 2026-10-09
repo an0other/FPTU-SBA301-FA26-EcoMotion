@@ -217,7 +217,6 @@ export function IconX({ className }) {
   )
 }
 
-/** Solid star — ratings read better filled than outlined, so it does not use the shared stroke wrapper. */
 export function IconStar({ className }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

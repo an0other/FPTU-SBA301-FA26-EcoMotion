@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Unit tests for the two-way PII cipher used for the phone number and CCCD number. */
 class DeterministicCipherTest {
 
     private static final String SECRET = "unit-test-crypto-secret-0123456789-32bytes";

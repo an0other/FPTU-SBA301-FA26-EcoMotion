@@ -46,7 +46,6 @@ export default function LoginPage() {
       const from = location.state?.from?.pathname
       navigate(from || homeRouteForRole(user.role), { replace: true })
     } catch (err) {
-      // A PENDING account cannot log in yet — send the user to the activation page instead.
       const raw = err?.original?.response?.data?.message || ''
       if (err?.status === 403 && /pending/i.test(raw)) {
         navigate('/activate', {

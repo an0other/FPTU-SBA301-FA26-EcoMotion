@@ -1,4 +1,3 @@
-/** Formats a VND amount the Vietnamese way: 1250000 -> "1.250.000 đ". */
 export function formatCurrency(amount) {
   if (amount === null || amount === undefined || amount === '') {
     return '—'
@@ -10,7 +9,6 @@ export function formatCurrency(amount) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} đ`
 }
 
-/** Short plan label used on vehicle cards, e.g. HOURLY -> "Giờ". */
 export const PLAN_LABELS = {
   HOURLY: 'Giờ',
   DAILY: 'Ngày',

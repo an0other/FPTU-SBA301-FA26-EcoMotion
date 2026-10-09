@@ -17,13 +17,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Verifies the fail-closed behaviour of reCAPTCHA enforcement on the auth endpoints.
- *
- * <p>Captcha is explicitly enabled here (unlike the rest of the suite). A blank token is rejected
- * before any call to Google, so these cases exercise the guard deterministically without network
- * access. The full siteverify round-trip is covered by {@code CaptchaServiceTest}.</p>
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {

@@ -13,18 +13,6 @@ import java.net.http.HttpResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Guards the public landing page contract at the web layer.
- *
- * <p>The renter home page ({@code /} in the SPA) is the car list, and it is reachable before anyone
- * signs in. That only works if {@code GET /api/vehicles} answers anonymously - and because
- * {@code anyRequest().authenticated()} is the catch-all, forgetting the {@code permitAll} rule turns
- * the home page into a 401 with no cars on it.
- *
- * <p>These tests run against a real embedded Tomcat ({@code RANDOM_PORT}) rather than MockMvc so the
- * whole filter chain, including {@code JwtAuthenticationFilter}, participates exactly as it does in
- * a browser. No {@code Authorization} header is ever sent.
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("dev")
 class PublicVehicleListAccessTest {
@@ -46,7 +34,6 @@ class PublicVehicleListAccessTest {
         HttpResponse<String> response = get("/api/vehicles");
 
         assertThat(response.statusCode()).isEqualTo(200);
-        // Not just "a 200 with an empty envelope": the seeded fleet has to actually come through.
         assertThat(response.body()).contains("\"items\"").contains("\"hasMore\"").contains("BMW");
     }
 
@@ -62,8 +49,6 @@ class PublicVehicleListAccessTest {
     @Test
     @DisplayName("only the fleet read was opened - the account endpoint still rejects anonymous callers")
     void accountEndpointStaysProtected() throws Exception {
-        // Without this the previous test would still pass if someone widened the rule to
-        // permitAll("/**"), which is the failure mode worth catching.
         assertThat(get("/api/auth/me").statusCode()).isEqualTo(401);
     }
 }

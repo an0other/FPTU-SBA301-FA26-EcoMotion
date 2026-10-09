@@ -13,6 +13,7 @@ import com.fptufa26.ecomotion.auth.dto.response.SendOtpResponse;
 import com.fptufa26.ecomotion.auth.dto.response.SendPhoneOtpResponse;
 import com.fptufa26.ecomotion.auth.dto.response.VerifyPhoneOtpResponse;
 import com.fptufa26.ecomotion.auth.service.ActivationService;
+import com.fptufa26.ecomotion.auth.service.DocumentVerificationService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,24 +24,18 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-/**
- * Activation endpoints for a freshly registered PENDING account. They are public: the client holds
- * a short-lived activation token (returned by {@code POST /api/auth/register}) instead of a session,
- * because a PENDING account cannot log in yet.
- *
- * <p>The wizard walks three steps — verify the phone, scan the CCCD (OCR), then match the face —
- * and each step persists its own result, so the client can jump back to the first outstanding step
- * after a reload. The face step is the last one: a successful match activates the account in the
- * same call.</p>
- */
 @RestController
 @RequestMapping("/api/auth/activate")
 public class ActivationController {
 
     private final ActivationService activationService;
+    private final DocumentVerificationService documentVerificationService;
 
-    public ActivationController(ActivationService activationService) {
+    public ActivationController(
+            ActivationService activationService,
+            DocumentVerificationService documentVerificationService) {
         this.activationService = activationService;
+        this.documentVerificationService = documentVerificationService;
     }
 
     @PostMapping("/send-phone-otp")
@@ -61,22 +56,17 @@ public class ActivationController {
     @PostMapping(value = "/scan-cccd", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ScanCccdResponse> scanCccd(
             @RequestParam("activationToken") String activationToken,
-            @RequestParam("cccdFront") MultipartFile cccdFront,
-            @RequestParam("cccdBack") MultipartFile cccdBack) {
-        return ResponseEntity.ok(activationService.scanCccd(activationToken, cccdFront, cccdBack));
+            @RequestParam("cccdFront") MultipartFile cccdFront) {
+        return ResponseEntity.ok(documentVerificationService.scanCccd(activationToken, cccdFront));
     }
 
     @PostMapping(value = "/face-match", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<FaceMatchResponse> verifyFace(
             @RequestParam("activationToken") String activationToken,
             @RequestParam("portrait") MultipartFile portrait) {
-        return ResponseEntity.ok(activationService.verifyFace(activationToken, portrait));
+        return ResponseEntity.ok(documentVerificationService.verifyFace(activationToken, portrait));
     }
 
-    /**
-     * Resumes a PENDING activation from the standalone page: an OTP is emailed so the user can
-     * continue later without the short-lived token handed out at registration time.
-     */
     @PostMapping("/resume-otp")
     public ResponseEntity<SendOtpResponse> requestResumeOtp(@Valid @RequestBody SendOtpRequest request) {
         return ResponseEntity.ok(activationService.requestResumeOtp(request.email()));

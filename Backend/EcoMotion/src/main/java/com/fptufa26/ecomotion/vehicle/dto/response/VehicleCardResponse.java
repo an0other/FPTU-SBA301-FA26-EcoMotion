@@ -7,14 +7,6 @@ import com.fptufa26.ecomotion.vehicle.entity.Transmission;
 import java.math.BigDecimal;
 import java.util.List;
 
-/**
- * One row of the renter-facing vehicle list (the "vehicle card" of the design system).
- *
- * <p>Shape mirrors the card layout: visual zone (cover image + trust tags), identity zone
- * (name, transmission/fuel), technical zone (seats, plate, rating) and the commercial footer
- * (price per plan + provider). Prices are the CURRENT {@code rental_plan} figures — fine for
- * browsing; any real booking later re-reads the plan to build the policy snapshot.
- */
 public record VehicleCardResponse(
         Long id,
         String brand,
@@ -36,7 +28,6 @@ public record VehicleCardResponse(
         List<PlanPrice> plans
 ) {
 
-    /** Price of one rental plan, e.g. HOURLY 200.000 đ / 60 phút. */
     public record PlanPrice(
             PlanType planType,
             Integer slotLengthMinutes,

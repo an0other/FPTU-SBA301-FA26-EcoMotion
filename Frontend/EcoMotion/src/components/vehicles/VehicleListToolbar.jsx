@@ -1,6 +1,5 @@
 import { IconChevronRight } from '../icons/Icons'
 
-/** How the active plan reads in the breadcrumb — same wording the template uses. */
 const PLAN_PHRASES = {
   HOURLY: 'theo giờ',
   DAILY: 'theo ngày',
@@ -8,15 +7,6 @@ const PLAN_PHRASES = {
   YEARLY: 'dài hạn trọn gói theo năm',
 }
 
-/**
- * Result bar sitting between the header and the grid: breadcrumb on the left (where the renter is
- * and what is currently filtered), page range on the right. It replaces the old
- * "Tìm thấy N xe phù hợp" line, which said less than the range does.
- *
- * <p>The sort control used to live here. It now sits in the filter sidebar so it is sent to the API
- * with the other filters — ordering server-side reorders the whole fleet, whereas reordering in the
- * browser only reshuffled the six cards already on screen.
- */
 export default function VehicleListToolbar({
   planType,
   location,

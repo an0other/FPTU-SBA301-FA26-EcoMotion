@@ -8,12 +8,6 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Bridges Spring Security to the {@code user} module's public {@link UserService}.
- *
- * <p>{@code common/security} is cross-cutting and is therefore allowed to depend on
- * {@code UserService} (plan §4).</p>
- */
 @Service
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
