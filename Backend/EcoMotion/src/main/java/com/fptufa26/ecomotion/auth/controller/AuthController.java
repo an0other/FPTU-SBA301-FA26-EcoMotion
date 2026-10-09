@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -91,13 +92,16 @@ public class AuthController {
                 request,
                 resolveClientIp(httpRequest),
                 httpRequest.getHeader(HttpHeaders.USER_AGENT));
-        // The account is created PENDING; no session is issued until activation completes.
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<RefreshResponse> refresh(HttpServletRequest httpRequest) {
-        return ResponseEntity.ok(authService.refresh(readRefreshTokenCookie(httpRequest)));
+        AuthService.RefreshResult result = authService.refresh(readRefreshTokenCookie(httpRequest));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE,
+                        buildRefreshCookie(result.refreshToken(), result.rememberMe(), result.expiresAt()).toString())
+                .body(result.response());
     }
 
     @PostMapping("/logout")
@@ -118,16 +122,27 @@ public class AuthController {
     }
 
     private ResponseCookie buildRefreshCookie(String token, boolean rememberMe) {
-        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(cookieName, token)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path(cookiePath)
-                .sameSite(cookieSameSite);
-
+        ResponseCookie.ResponseCookieBuilder builder = refreshCookieBuilder(token);
         if (rememberMe) {
             builder.maxAge(rememberMeCookieMaxAge);
         }
         return builder.build();
+    }
+
+    private ResponseCookie buildRefreshCookie(String token, boolean rememberMe, Instant expiresAt) {
+        ResponseCookie.ResponseCookieBuilder builder = refreshCookieBuilder(token);
+        if (rememberMe) {
+            builder.maxAge(Duration.between(Instant.now(), expiresAt));
+        }
+        return builder.build();
+    }
+
+    private ResponseCookie.ResponseCookieBuilder refreshCookieBuilder(String token) {
+        return ResponseCookie.from(cookieName, token)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path(cookiePath)
+                .sameSite(cookieSameSite);
     }
 
     private ResponseCookie clearRefreshCookie() {

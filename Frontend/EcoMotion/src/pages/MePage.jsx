@@ -64,7 +64,6 @@ export default function MePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Always read the fresh record: the profile carries the decrypted phone and the eKYC status.
   useEffect(() => {
     let active = true
     async function load() {

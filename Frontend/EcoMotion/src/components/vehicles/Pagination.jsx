@@ -1,9 +1,3 @@
-/**
- * Offset/limit pager. Renders nothing when everything fits on one page, so a small fleet looks
- * exactly like it did before pagination existed.
- *
- * Props are the raw paging envelope plus the navigation callback; the parent owns the offset state.
- */
 export default function Pagination({ total, offset, limit, hasMore, onPageChange }) {
   const pageSize = limit > 0 ? limit : 1
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
@@ -19,8 +13,6 @@ export default function Pagination({ total, offset, limit, hasMore, onPageChange
     onPageChange((clamped - 1) * pageSize)
   }
 
-  // Windowed page numbers: at most 5 chips centred on the current page, so a long fleet does not
-  // stretch the control across the row.
   const windowSize = 5
   let start = Math.max(1, currentPage - Math.floor(windowSize / 2))
   const end = Math.min(pageCount, start + windowSize - 1)

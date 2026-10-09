@@ -5,11 +5,10 @@ import com.fptufa26.ecomotion.auth.exception.AccountInactiveException;
 import com.fptufa26.ecomotion.auth.exception.AccountPendingException;
 import com.fptufa26.ecomotion.auth.exception.ActivationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.CaptchaInvalidException;
-import com.fptufa26.ecomotion.auth.exception.CccdAlreadyExistsException;
 import com.fptufa26.ecomotion.auth.exception.DuplicateEmailException;
-import com.fptufa26.ecomotion.auth.exception.EkycFailedException;
+import com.fptufa26.ecomotion.verification.ekyc.exception.EkycFailedException;
 import com.fptufa26.ecomotion.auth.exception.EmailDeliveryException;
-import com.fptufa26.ecomotion.auth.exception.FileStorageException;
+import com.fptufa26.ecomotion.common.storage.FileStorageException;
 import com.fptufa26.ecomotion.auth.exception.InvalidCredentialsException;
 import com.fptufa26.ecomotion.auth.exception.InvalidRefreshTokenException;
 import com.fptufa26.ecomotion.auth.exception.NoPendingActivationException;
@@ -21,6 +20,7 @@ import com.fptufa26.ecomotion.auth.exception.PhoneAlreadyExistsException;
 import com.fptufa26.ecomotion.auth.exception.PhoneNotVerifiedException;
 import com.fptufa26.ecomotion.auth.exception.RegistrationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.UnsupportedRoleException;
+import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -194,10 +194,6 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_GATEWAY, ex.getMessage(), request);
     }
 
-    /**
-     * Safety net so business-rule violations (e.g. duplicate email from the user service) surface
-     * as 400 instead of a 500. More specific handlers above still take precedence.
-     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex,
                                                                HttpServletRequest request) {
@@ -205,7 +201,6 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
-    /** Race-condition safety net for unique-constraint violations (email/phone). */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex,
                                                              HttpServletRequest request) {

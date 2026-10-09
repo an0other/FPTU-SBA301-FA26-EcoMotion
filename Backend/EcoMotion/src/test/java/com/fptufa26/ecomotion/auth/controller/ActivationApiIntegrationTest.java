@@ -37,11 +37,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * End-to-end tests for the three-step activation wizard: phone OTP (mock) → CCCD scan (OCR) → face
- * match. Each step persists its own result, and the last step activates the account, so there is no
- * separate "complete" call any more. Uses the mock eKYC provider, so no network is involved.
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
@@ -109,7 +104,6 @@ class ActivationApiIntegrationTest {
         userRepository.save(existing);
     }
 
-    // ------------------------------------------------------------- happy path
 
     @Test
     @DisplayName("full activation: phone OTP → CCCD scan → face match activates the account in place")
@@ -122,7 +116,6 @@ class ActivationApiIntegrationTest {
         verifyPhone(activationToken, otp);
 
         scanCccd(activationToken);
-        // The face step is the last one: a match flips the account to ACTIVE in the same request.
         faceMatch(activationToken);
 
         User saved = userRepository.findByEmailIgnoreCase(email).orElseThrow();
@@ -137,17 +130,13 @@ class ActivationApiIntegrationTest {
         assertThat(renter.getGender()).isEqualTo("Nam");
         assertThat(renter.getAddress()).isNotBlank();
         assertThat(renter.getCccdImageUrl()).isNotBlank();
-        assertThat(renter.getCccdImageBackUrl()).isNotBlank();
         assertThat(renter.getPortraitUrl()).isNotBlank();
 
-        // Files were written under {app.upload.dir}/renter/{userId}/.
         Path front = Paths.get(uploadDir, renter.getCccdImageUrl());
         Path portrait = Paths.get(uploadDir, renter.getPortraitUrl());
         assertThat(Files.exists(front)).isTrue();
         assertThat(Files.exists(portrait)).isTrue();
 
-        // Phone and CCCD number are stored two-way ENCRYPTED: the raw columns must not hold the
-        // plaintext, yet the entity reads them back decrypted.
         String rawPhone = jdbcTemplate.queryForObject(
                 "select phone from users where email = ?", String.class, email);
         String rawCccd = jdbcTemplate.queryForObject(
@@ -171,7 +160,6 @@ class ActivationApiIntegrationTest {
         assertThat(saved.getEkycStatus()).isEqualTo(EkycStatus.UNVERIFIED);
     }
 
-    // ------------------------------------------------------------- scan
 
     @Test
     @DisplayName("stored names are fixed per role, so colliding upload names cannot overwrite each other")
@@ -182,15 +170,11 @@ class ActivationApiIntegrationTest {
         String phone = "0901234777";
         verifyPhone(activationToken, sendPhoneOtp(activationToken, phone));
 
-        // Both photos share the same original name — the exact real-world case (a phone camera
-        // sending IMG_2024.jpg for everything) that used to make the selfie overwrite the CCCD.
         mockMvc.perform(multipart(SCAN_CCCD)
                         .file(image("cccdFront", "IMG_2024.jpg"))
-                        .file(image("cccdBack", "IMG_2024.jpg"))
                         .param("activationToken", activationToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cccdFrontUrl").value(org.hamcrest.Matchers.endsWith("cccd-front.jpg")))
-                .andExpect(jsonPath("$.cccdBackUrl").value(org.hamcrest.Matchers.endsWith("cccd-back.jpg")));
+                .andExpect(jsonPath("$.cccdFrontUrl").value(org.hamcrest.Matchers.endsWith("cccd-front.jpg")));
 
         mockMvc.perform(multipart(FACE_MATCH)
                         .file(image("portrait", "IMG_2024.jpg"))
@@ -201,14 +185,11 @@ class ActivationApiIntegrationTest {
         User saved = userRepository.findByEmailIgnoreCase(email).orElseThrow();
         Renter renter = renterRepository.findByUser_Id(saved.getUserId()).orElseThrow();
 
-        // Three distinct files, not one file written three times.
         assertThat(renter.getCccdImageUrl()).startsWith("renter/").endsWith("/cccd-front.jpg");
-        assertThat(renter.getCccdImageBackUrl()).startsWith("renter/").endsWith("/cccd-back.jpg");
         assertThat(renter.getPortraitUrl()).startsWith("renter/").endsWith("/portrait.jpg");
         assertThat(renter.getCccdImageUrl()).isNotEqualTo(renter.getPortraitUrl());
 
         assertThat(Files.exists(Paths.get(uploadDir, renter.getCccdImageUrl()))).isTrue();
-        assertThat(Files.exists(Paths.get(uploadDir, renter.getCccdImageBackUrl()))).isTrue();
         assertThat(Files.exists(Paths.get(uploadDir, renter.getPortraitUrl()))).isTrue();
     }
 
@@ -220,7 +201,6 @@ class ActivationApiIntegrationTest {
 
         MvcResult result = mockMvc.perform(multipart(SCAN_CCCD)
                         .file(image("cccdFront", "front.jpg"))
-                        .file(image("cccdBack", "back.jpg"))
                         .param("activationToken", activationToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.scanned").value(true))
@@ -230,15 +210,12 @@ class ActivationApiIntegrationTest {
                 .andExpect(jsonPath("$.gender").value("Nam"))
                 .andExpect(jsonPath("$.address").value(MOCK_ADDRESS))
                 .andExpect(jsonPath("$.cccdFrontUrl").isNotEmpty())
-                .andExpect(jsonPath("$.cccdBackUrl").isNotEmpty())
                 .andReturn();
 
         assertThat(json(result).get("message").asText()).isNotBlank();
 
-        // The step wrote straight to the database — no draft is kept anywhere.
         User saved = userRepository.findByEmailIgnoreCase(email).orElseThrow();
         assertThat(saved.getFullName()).isEqualTo(MOCK_FULL_NAME);
-        // PENDING, not VERIFIED: the face step is what verifies the identity.
         assertThat(saved.getEkycStatus()).isEqualTo(EkycStatus.PENDING);
         assertThat(saved.getStatus()).isEqualTo(UserStatus.PENDING);
 
@@ -266,15 +243,12 @@ class ActivationApiIntegrationTest {
     @Test
     @DisplayName("a CCCD already bound to another account yields 409")
     void duplicateCccdConflicts() throws Exception {
-        // First account claims the identity the mock OCR always returns.
         String firstToken = registerRenter("cccd-owner@ecomotion.vn");
         scanCccd(firstToken);
 
-        // A second account trying to scan the same CCCD must be rejected.
         String secondToken = registerRenter("cccd-thief@ecomotion.vn");
         mockMvc.perform(multipart(SCAN_CCCD)
                         .file(image("cccdFront", "front.jpg"))
-                        .file(image("cccdBack", "back.jpg"))
                         .param("activationToken", secondToken))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
@@ -282,8 +256,6 @@ class ActivationApiIntegrationTest {
                         .value("This CCCD number is already registered to another account"));
 
         User second = userRepository.findByEmailIgnoreCase("cccd-thief@ecomotion.vn").orElseThrow();
-        // Registration already created an empty renter profile; the rejected scan must not have
-        // written any identity onto it.
         assertThat(second.getFullName()).isNull();
         assertThat(second.getEkycStatus()).isEqualTo(EkycStatus.UNVERIFIED);
         Renter secondRenter = renterRepository.findByUser_Id(second.getUserId()).orElseThrow();
@@ -291,13 +263,11 @@ class ActivationApiIntegrationTest {
         assertThat(secondRenter.getCccdImageUrl()).isNull();
     }
 
-    // ------------------------------------------------------------- guards
 
     @Test
     @DisplayName("face match before scanning the CCCD yields 422")
     void faceMatchBeforeScan() throws Exception {
         String activationToken = registerRenter("face-early@ecomotion.vn");
-        // Phone first, so the 422 really comes from the missing CCCD and not the phone guard.
         String otp = sendPhoneOtp(activationToken, "0901234603");
         verifyPhone(activationToken, otp);
 
@@ -393,13 +363,11 @@ class ActivationApiIntegrationTest {
 
         mockMvc.perform(multipart(SCAN_CCCD)
                         .file(pdf)
-                        .file(image("cccdBack", "back.jpg"))
                         .param("activationToken", activationToken))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
     }
 
-    // ------------------------------------------------------------- status
 
     @Test
     @DisplayName("status reports the current activation progress and drives which step is shown")
@@ -415,7 +383,6 @@ class ActivationApiIntegrationTest {
         scanCccd(activationToken);
         assertStatus(activationToken, "PENDING", "PENDING", true, true);
 
-        // The face step activates, so "face matched" is simply status == ACTIVE.
         faceMatch(activationToken);
         assertStatus(activationToken, "ACTIVE", "VERIFIED", true, true);
     }
@@ -425,7 +392,6 @@ class ActivationApiIntegrationTest {
     void statusEchoesScannedIdentityFields() throws Exception {
         String activationToken = registerRenter("status-echo@ecomotion.vn");
 
-        // Nothing scanned yet: no identity data to hand back.
         mockMvc.perform(post(STATUS)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("activationToken", activationToken))))
@@ -434,8 +400,6 @@ class ActivationApiIntegrationTest {
 
         scanCccd(activationToken);
 
-        // After the scan the fields come back from the persisted profile, which is what lets the
-        // read-only CCCD inputs be re-filled without caching any identity data in the browser.
         mockMvc.perform(post(STATUS)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("activationToken", activationToken))))
@@ -448,13 +412,11 @@ class ActivationApiIntegrationTest {
                 .andExpect(jsonPath("$.address").value(MOCK_ADDRESS));
     }
 
-    // ------------------------------------------------------------- resume later
 
     @Test
     @DisplayName("resume: a PENDING account can be activated later via email OTP")
     void resumeActivationLater() throws Exception {
         String email = "resume-later@ecomotion.vn";
-        // Register now, but discard the activation token as if the user closed the browser.
         registerRenter(email);
 
         String otp = resumeOtp(email);
@@ -467,7 +429,6 @@ class ActivationApiIntegrationTest {
                 .andReturn();
         String activationToken = json(resume).get("activationToken").asText();
 
-        // Continue the normal activation flow with the freshly issued token.
         String phoneOtp = sendPhoneOtp(activationToken, "0901234611");
         verifyPhone(activationToken, phoneOtp);
         scanCccd(activationToken);
@@ -487,7 +448,6 @@ class ActivationApiIntegrationTest {
         String otp = sendPhoneOtp(firstToken, "0901234612");
         verifyPhone(firstToken, otp);
 
-        // Drop the token as if the tab was closed after step 1, then resume.
         String resumeCode = resumeOtp(email);
         MvcResult resume = mockMvc.perform(post(RESUME)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -496,7 +456,6 @@ class ActivationApiIntegrationTest {
                 .andReturn();
         String secondToken = json(resume).get("activationToken").asText();
 
-        // The phone step is already done, so only the CCCD and face steps remain.
         assertStatus(secondToken, "PENDING", "UNVERIFIED", true, false);
 
         scanCccd(secondToken);
@@ -538,7 +497,6 @@ class ActivationApiIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Invalid OTP"));
     }
 
-    // ------------------------------------------------------------------ helpers
 
     private String resumeOtp(String email) throws Exception {
         MvcResult result = mockMvc.perform(post(RESUME_OTP)
@@ -564,13 +522,11 @@ class ActivationApiIntegrationTest {
     private void scanCccd(String activationToken) throws Exception {
         mockMvc.perform(multipart(SCAN_CCCD)
                         .file(image("cccdFront", "front.jpg"))
-                        .file(image("cccdBack", "back.jpg"))
                         .param("activationToken", activationToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.scanned").value(true));
     }
 
-    /** Runs the final step and asserts it both matched the face and activated the account. */
     private void faceMatch(String activationToken) throws Exception {
         mockMvc.perform(multipart(FACE_MATCH)
                         .file(image("portrait", "portrait.jpg"))

@@ -18,7 +18,6 @@ const ROLE_LABELS = {
   ADMIN: 'Quản trị',
 }
 
-/** Two letters for the avatar fallback: first + last word of the name, or the email initial. */
 function initialsOf(user) {
   const source = user?.fullName?.trim() || user?.email || ''
   if (!source) return 'EM'
@@ -27,19 +26,6 @@ function initialsOf(user) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-/**
- * Shared top bar. Layout follows the EcoMotion design template: brand tile on the left, a unified
- * search pod in the middle and the account cluster on the right.
- *
- * <p>The search pod is optional — it only renders when the host page hands over `filters` +
- * `onSearchSubmit`, because the pod is a *draft* of two filter fields: typing stays local and the
- * page (and therefore the API) is only touched on submit. That keeps a 2-field search from firing
- * a request per keystroke.
- *
- * <p>The account cluster has three states: restoring the session (skeleton), signed in (bell +
- * avatar + logout) and guest (login/register). The guest state matters because this header also
- * renders on the public home page, which anyone can reach without an account.
- */
 export default function AppHeader({ filters, onSearchSubmit }) {
   const { user, loading, logout } = useAuth()
   const navigate = useNavigate()
@@ -47,8 +33,6 @@ export default function AppHeader({ filters, onSearchSubmit }) {
 
   const initialDraft = { keyword: filters?.keyword ?? '', location: filters?.location ?? '' }
   const [draft, setDraft] = useState(initialDraft)
-  // Re-seed the draft when the committed values change underneath us (sidebar "Đặt lại"), but only
-  // then: unrelated filter edits must not wipe what the user is still typing.
   const [synced, setSynced] = useState(initialDraft)
   if (filters && (filters.keyword !== synced.keyword || filters.location !== synced.location)) {
     const next = { keyword: filters.keyword ?? '', location: filters.location ?? '' }
@@ -165,9 +149,6 @@ export default function AppHeader({ filters, onSearchSubmit }) {
             </button>
           </div>
 
-          {/* The header sits on the public home page, so it has to render for a visitor who has no
-              account. `loading` is the session being restored on an F5 - showing the guest buttons
-              there would flash "Đăng nhập" at somebody who is already signed in. */}
           {loading ? (
             <span className="h-10 w-28 animate-pulse rounded-lg bg-slate-100" />
           ) : user ? (

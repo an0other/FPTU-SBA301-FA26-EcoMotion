@@ -124,8 +124,6 @@ export default function RegisterPage() {
         captchaToken,
       })
 
-      // Account is PENDING: no session yet. Hand the activation token to the activation page in
-      // memory only — it is never written to web storage.
       setPendingActivation({ token: data.activationToken, email: form.email.trim() })
       navigate('/activate', { replace: true })
     } catch (err) {

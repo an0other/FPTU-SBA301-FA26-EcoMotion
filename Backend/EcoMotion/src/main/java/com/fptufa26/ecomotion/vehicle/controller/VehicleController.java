@@ -21,9 +21,7 @@ import java.math.BigDecimal;
 @Tag(name = "Vehicles", description = "Rentable vehicle fleet")
 public class VehicleController {
 
-    /** Rows per page when the caller does not ask for a specific size. */
     private static final int DEFAULT_LIMIT = 6;
-    /** Hard ceiling so a single request cannot drag the whole table back. */
     private static final int MAX_LIMIT = 100;
 
     private final VehicleService vehicleService;

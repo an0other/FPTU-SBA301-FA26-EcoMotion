@@ -3,10 +3,6 @@ package com.fptufa26.ecomotion.auth.otp;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * A transient OTP challenge. Never persisted — per the spec, OTP must not be stored in the DB.
- * Mutable because attempts are incremented as the user retries.
- */
 public class OtpEntry {
 
     private final String code;

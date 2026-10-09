@@ -22,7 +22,6 @@ const PLAN_SUFFIX = {
   YEARLY: '/năm',
 }
 
-// Values must stay in sync with VehicleSort.from() on the backend.
 const SORT_OPTIONS = [
   { value: 'default', label: 'Mặc định' },
   { value: 'price-asc', label: 'Giá thấp → cao' },
@@ -30,12 +29,6 @@ const SORT_OPTIONS = [
   { value: 'rating', label: 'Đánh giá cao' },
 ]
 
-/**
- * The price ceiling is read on the same scale as the plan it filters (see `VehicleServiceImpl`), so
- * the slider has to switch scale with the plan as well: an hourly slot lives in the hundreds of
- * thousands, a monthly one in the tens of millions. The `''` entry is now only a fallback for a
- * missing or unrecognised planType, since "Mọi gói" was dropped from the plan options.
- */
 const PLAN_PRICE_RANGES = {
   '': { min: 50000, max: 20000000, step: 100000 },
   HOURLY: { min: 50000, max: 1000000, step: 25000 },
@@ -97,9 +90,6 @@ export default function FilterSidebar({ filters, onChange, onReset }) {
         </button>
       </div>
 
-      {/* Ordering lives in the filter box so it is sent to the API with the rest of the criteria.
-          The backend sorts the whole fleet before slicing the page, so "giá thấp → cao" gives the
-          cheapest cars on page 1 instead of just reshuffling the current six. */}
       <div>
         <SectionTitle>Sắp xếp</SectionTitle>
         <select
@@ -129,8 +119,6 @@ export default function FilterSidebar({ filters, onChange, onReset }) {
         <PillGroup
           options={PLAN_OPTIONS}
           value={filters.planType}
-          // Switching plan changes the scale the ceiling is read on, so the old value would silently
-          // filter the new plan out. Clear it and let the renter pick again.
           onChange={(planType) => set({ planType, maxPrice: '' })}
         />
       </div>

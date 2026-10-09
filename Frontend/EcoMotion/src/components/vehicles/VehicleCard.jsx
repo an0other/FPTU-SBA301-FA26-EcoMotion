@@ -3,7 +3,6 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { IconMapPin, IconStar } from '../icons/Icons'
 
-// Text-only accents: the fuel now lives in the specs grid, so it no longer needs a pill background.
 const FUEL_STYLES = {
   EV: { label: 'Điện', className: 'text-brand-700' },
   GASOLINE: { label: 'Xăng', className: 'text-amber-700' },
@@ -23,16 +22,6 @@ const PLAN_META = {
   YEARLY: { label: 'Năm', suffix: '/năm' },
 }
 
-/**
- * One vehicle in the renter fleet.
- *
- * @param selectedPlanType the plan currently chosen in the filter. When set, the card quotes that
- *   plan's price; with no plan filter it falls back to the cheapest plan (label "Từ").
- *
- * <p>This card renders on the public home page, so "Đặt xe" has to cope with an anonymous visitor:
- * a guest is routed to the login form with `state.from`, while a signed-in renter hits a no-op
- * until the booking flow exists.
- */
 export default function VehicleCard({ vehicle, selectedPlanType }) {
   const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
@@ -46,8 +35,6 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
   const cheapest = plans.length
     ? plans.reduce((min, p) => (Number(p.slotPrice) < Number(min.slotPrice) ? p : min))
     : null
-  // Filtering by a plan means the renter asked for that plan's price, so quote it instead of the
-  // cheapest one. The backend already dropped vehicles without the plan, so the lookup hits.
   const featured = selectedPlanType
     ? plans.find((plan) => plan.planType === selectedPlanType) ?? cheapest
     : cheapest
@@ -55,26 +42,18 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
     ? `Gói ${(PLAN_META[selectedPlanType]?.label ?? selectedPlanType).toLowerCase()}`
     : 'Từ'
   const transmission = TRANSMISSION_LABELS[vehicle.transmission] ?? vehicle.transmission ?? '—'
-  // "No reviews yet" reaches the client as rating_avg = 0 with rating_count = 0, because the
-  // schema's ck_vehicle_rating forbids a NULL average. Testing the average alone would print a
-  // damning "0.0" on a brand-new car, so the review count is what decides.
   const reviewCount = Number(vehicle.ratingCount ?? 0)
   const hasRating = reviewCount > 0
 
-  // The home page is public, so this button is reachable without an account. Booking needs an
-  // identity, so a guest is sent to the login form carrying the current location - the same
-  // `state.from` shape <ProtectedRoute /> uses - so LoginPage can send them straight back here.
   const handleBook = () => {
     if (!isAuthenticated) {
       navigate('/login', { state: { from: location } })
       return
     }
-    // TODO (chưa làm): chưa có flow đặt xe - nhánh này hiện chỉ chặn khách vãng lai.
   }
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition-all hover:shadow-lg">
-      {/* Visual zone */}
       <div className="relative aspect-[16/10] overflow-hidden bg-slate-100">
         {vehicle.coverImageUrl ? (
           <img
@@ -102,11 +81,9 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
         </span>
       </div>
 
-      {/* Identity zone */}
       <div className="flex flex-1 flex-col gap-3 p-4">
         <h3 className="truncate text-[15px] font-semibold text-slate-900">{carName}</h3>
 
-        {/* Technical specs bar */}
         <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-50 p-2 text-center">
           <div>
             <p className="text-[10px] font-medium text-slate-500">Số chỗ</p>
@@ -122,7 +99,6 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
           </div>
         </div>
 
-        {/* Pickup point */}
         {vehicle.providerDepotAddress && (
           <p className="flex items-center gap-1.5 text-[12px] text-slate-500">
             <IconMapPin className="h-3.5 w-3.5 shrink-0 text-brand-600" />
@@ -132,7 +108,6 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
           </p>
         )}
 
-        {/* Commercial footer */}
         <div className="mt-auto flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
           <div className="min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">

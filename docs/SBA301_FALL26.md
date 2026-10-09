@@ -84,8 +84,9 @@ Nền tảng xoay quanh 4 thực thể dữ liệu chính: **Xe, Đơn thuê, L�
 | **Phân công tài xế cho chuyến** (gán lúc có chuyến, không gán trước vào xe) | Provider                             |
 | **Duyệt tài khoản tài xế** (bắt buộc mới hoạt động)                         | Admin                                |
 | **Nhận xe & bàn giao xe cho tài xế** trước chuyến                           | Provider, cùng tài xế được phân công |
-| Đã đến điểm đón → bắt đầu chuyến                                            | Driver                               |
 
+
+| Đã đến điểm đón → bắt đầu chuyến                                            | Driver                               |
 
 | **Kết thúc chuyến**                                                         | Driver, cùng Provider xác nhận       |
 
