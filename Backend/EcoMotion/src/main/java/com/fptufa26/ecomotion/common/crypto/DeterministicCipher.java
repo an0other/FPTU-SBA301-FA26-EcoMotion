@@ -12,21 +12,6 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Base64;
 
-/**
- * Reversible (two-way) AES-256-GCM cipher for short PII values — the phone number and the CCCD
- * number. Values are encrypted at rest and decrypted on read, so they stay usable for display and
- * for the activation flow.
- *
- * <p><b>Deterministic on purpose.</b> The same plaintext always produces the same ciphertext, which
- * is what keeps the database UNIQUE constraints ({@code users.phone}, {@code renter.cccd_no}) and
- * equality lookups working on the encrypted column. To stay safe despite the determinism, the GCM
- * nonce is derived from the plaintext with a separate key, so two different values can never share
- * a nonce. The trade-off is that equal values are detectable in the database — acceptable for these
- * fields, whose uniqueness is already exposed by the unique indexes.</p>
- *
- * <p>The key comes from {@code app.crypto.secret}. Rotating it makes every previously stored value
- * unreadable, so treat it like any other production secret.</p>
- */
 @Component
 public class DeterministicCipher {
 
@@ -41,7 +26,6 @@ public class DeterministicCipher {
         this.nonceKey = new SecretKeySpec(sha256(secret + "|iv"), "HmacSHA256");
     }
 
-    /** Encrypts a value; null/empty values are passed through untouched. */
     public String encrypt(String plaintext) {
         if (plaintext == null || plaintext.isEmpty()) {
             return plaintext;
@@ -61,7 +45,6 @@ public class DeterministicCipher {
         }
     }
 
-    /** Decrypts a value previously produced by {@link #encrypt}; null/empty values pass through. */
     public String decrypt(String ciphertext) {
         if (ciphertext == null || ciphertext.isEmpty()) {
             return ciphertext;

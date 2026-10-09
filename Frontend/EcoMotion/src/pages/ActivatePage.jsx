@@ -203,19 +203,15 @@ export default function ActivatePage() {
   const [resumeMockOtp, setResumeMockOtp] = useState('')
   const [resumeCooldown, setResumeCooldown] = useState(0)
 
-  // Step 1 — phone
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
   const [mockOtp, setMockOtp] = useState('')
   const [cooldown, setCooldown] = useState(0)
 
-  // Step 2 — CCCD
   const [cccdFront, setCccdFront] = useState(null)
-  const [cccdBack, setCccdBack] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
 
-  // Step 3 — face
   const [portrait, setPortrait] = useState(null)
   const [faceResult, setFaceResult] = useState(null)
 
@@ -260,7 +256,6 @@ export default function ActivatePage() {
           setStep(2)
         }
       } catch {
-        // A stale/expired token: the resume gate below takes over.
       } finally {
         if (active) setLoadingStatus(false)
       }
@@ -269,7 +264,6 @@ export default function ActivatePage() {
     return () => {
       active = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token])
 
   function startCooldown(seconds, setter = setCooldown) {
@@ -334,14 +328,14 @@ export default function ActivatePage() {
 
   async function handleScanCccd() {
     setError('')
-    if (!cccdFront || !cccdBack) {
-      setError('Vui lòng chọn ảnh cả 2 mặt CCCD.')
+    if (!cccdFront) {
+      setError('Vui lòng chọn ảnh mặt trước CCCD.')
       return
     }
 
     setBusy('scan')
     try {
-      const data = await activateScanCccd(session.token, { cccdFront, cccdBack })
+      const data = await activateScanCccd(session.token, { cccdFront })
       setForm({
         fullName: data.fullName || '',
         cccdNo: data.cccdNo || '',
@@ -364,7 +358,6 @@ export default function ActivatePage() {
     setCccdScanned(false)
     setCccdConfirmed(false)
     setCccdFront(null)
-    setCccdBack(null)
     setForm(EMPTY_FORM)
     setFaceResult(null)
   }
@@ -676,7 +669,7 @@ export default function ActivatePage() {
           <StepCard
             step={2}
             title="Thông tin CCCD"
-            hint="Tải lên 2 mặt CCCD rồi bấm quét. Hệ thống đọc thông tin và lưu ngay vào hồ sơ — hãy kiểm tra lại rồi xác nhận để sang bước tiếp theo."
+            hint="Tải lên ảnh mặt trước CCCD rồi bấm quét. Hệ thống đọc thông tin và lưu ngay vào hồ sơ — hãy kiểm tra lại rồi xác nhận để sang bước tiếp theo."
           >
             {cccdScanned ? (
               <SuccessNote>
@@ -693,19 +686,11 @@ export default function ActivatePage() {
                   onChange={setCccdFront}
                   disabled={busy === 'scan'}
                 />
-                <FilePicker
-                  id="cccd-back"
-                  label="CCCD — mặt sau"
-                  hint="Chọn ảnh mặt sau CCCD"
-                  file={cccdBack}
-                  onChange={setCccdBack}
-                  disabled={busy === 'scan'}
-                />
 
                 <button
                   type="button"
                   onClick={handleScanCccd}
-                  disabled={busy === 'scan' || !cccdFront || !cccdBack}
+                  disabled={busy === 'scan' || !cccdFront}
                   className={OUTLINE_BUTTON}
                 >
                   <IconIdCard className="h-4 w-4" />

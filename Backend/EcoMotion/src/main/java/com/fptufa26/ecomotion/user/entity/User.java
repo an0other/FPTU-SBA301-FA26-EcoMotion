@@ -40,11 +40,6 @@ public class User {
     @Column(nullable = false, length = 255)
     private String email;
 
-    /**
-     * Phone number, stored two-way encrypted (AES-256-GCM) at rest. The column is wider than the
-     * plaintext because it holds the Base64 ciphertext. Kept deterministic so the
-     * {@code uk_users_phone} UNIQUE constraint still rejects duplicates.
-     */
     @Convert(converter = EncryptedStringConverter.class)
     @Column(length = 255)
     private String phone;

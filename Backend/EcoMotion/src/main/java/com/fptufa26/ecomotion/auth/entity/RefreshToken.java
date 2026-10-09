@@ -42,6 +42,12 @@ public class RefreshToken {
     @Column(name = "token_hash", nullable = false, length = 64)
     private String tokenHash;
 
+    @Column(name = "family_id", length = 36)
+    private String familyId;
+
+    @Column(name = "remember_me")
+    private Boolean rememberMe;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 

@@ -35,16 +35,10 @@ public class Renter {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    /**
-     * CCCD (citizen ID) number, stored two-way encrypted (AES-256-GCM) at rest. Wider than the
-     * plaintext because it holds Base64 ciphertext; kept deterministic so the partial UNIQUE index
-     * {@code uk_renter_cccd_no} still works.
-     */
     @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "cccd_no", length = 255)
     private String cccdNo;
 
-    /** Identity fields auto-filled from the CCCD OCR during activation. */
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
@@ -60,7 +54,6 @@ public class Renter {
     @Column(name = "cccd_image_back_url", length = 500)
     private String cccdImageBackUrl;
 
-    /** Selfie uploaded for the CCCD face-match check. */
     @Column(name = "portrait_url", length = 500)
     private String portraitUrl;
 

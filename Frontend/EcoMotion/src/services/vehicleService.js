@@ -1,13 +1,6 @@
 import apiClient from './apiClient'
 
 export const vehicleService = {
-  /**
-   * GET /api/vehicles — one offset/limit page of the approved fleet, optionally filtered.
-   *
-   * The backend wraps the payload in ApiResponse<T>: { code, message, data }, and `data` is the
-   * paging envelope { items, total, offset, limit, hasMore }. We unwrap to that envelope so the
-   * caller gets both the page items and the counters needed to render pagination.
-   */
   async listVehicles({
     keyword,
     location,
@@ -24,8 +17,6 @@ export const vehicleService = {
     if (fuelType) params.fuelType = fuelType
     if (planType) params.planType = planType
     if (maxPrice) params.maxPrice = maxPrice
-    // 'default' is the natural fleet order, which is what the backend does when the param is
-    // absent - so leaving it off keeps the request (and the URL) clean.
     if (sortBy && sortBy !== 'default') params.sortBy = sortBy
 
     const { data } = await apiClient.get('/vehicles', { params })

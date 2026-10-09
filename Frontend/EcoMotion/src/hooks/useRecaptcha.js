@@ -3,14 +3,6 @@ import { useCallback, useEffect, useState } from 'react'
 const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || ''
 const SCRIPT_ID = 'recaptcha-v3-script'
 
-/**
- * Feature flag for reCAPTCHA v3.
- *
- * The whole client flow degrades gracefully: as long as `VITE_RECAPTCHA_SITE_KEY` is empty the
- * hook reports `enabled === false`, `execute()` resolves to an empty string, and the auth payloads
- * simply omit `captchaToken`. That keeps local development working with the backend's
- * `app.captcha.enabled=false`, without any conditional sprinkled through the pages.
- */
 export const isRecaptchaConfigured = () => SITE_KEY.length > 0
 
 function loadScript() {
@@ -32,7 +24,6 @@ function loadScript() {
     script.async = true
     script.defer = true
     script.onload = () => {
-      // grecaptcha may still be initialising when `onload` fires; wait for `.ready`.
       if (window.grecaptcha?.ready) {
         window.grecaptcha.ready(() => resolve(Boolean(window.grecaptcha?.execute)))
       } else {
@@ -46,10 +37,6 @@ function loadScript() {
   return window.__recaptchaLoading
 }
 
-/**
- * Loads the reCAPTCHA v3 script once per page and exposes an `execute(action)` helper that
- * returns a fresh token for the given action name ("login" or "register").
- */
 export default function useRecaptcha() {
   const enabled = isRecaptchaConfigured()
   const [ready, setReady] = useState(false)

@@ -13,9 +13,5 @@ public interface RenterRepository extends JpaRepository<Renter, Long> {
 
     boolean existsByUser_Id(Long userId);
 
-    /**
-     * The {@code cccd_no} column is two-way encrypted by an {@code AttributeConverter}, so the
-     * plaintext is converted before the comparison — same behaviour as {@code existsByPhone}.
-     */
     boolean existsByCccdNo(String cccdNo);
 }

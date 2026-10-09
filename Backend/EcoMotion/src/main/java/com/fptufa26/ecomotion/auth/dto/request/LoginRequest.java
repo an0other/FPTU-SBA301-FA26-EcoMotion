@@ -23,7 +23,6 @@ public record LoginRequest(
         }
     }
 
-    /** Convenience for internal callers (e.g. auto-login right after registration). */
     public LoginRequest(String email, String password, Boolean rememberMe) {
         this(email, password, null, rememberMe);
     }

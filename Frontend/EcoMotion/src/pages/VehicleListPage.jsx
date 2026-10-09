@@ -6,11 +6,6 @@ import VehicleCard from '../components/vehicles/VehicleCard'
 import Pagination from '../components/vehicles/Pagination'
 import { useVehicles } from '../hooks/useVehicles'
 
-// "Mọi gói" was dropped from the plan filter, so the list always opens on the hourly plan — the
-// shortest one, which is what most renters want and what the card price is quoted against.
-// `sortBy` sits in here rather than in its own state because it travels with the other filters: the
-// backend orders the whole fleet before cutting the page. Ordering in the browser only reshuffled
-// the six cards already on screen, which left page 2 unrelated to page 1.
 const EMPTY_FILTERS = {
   keyword: '',
   location: '',
@@ -40,8 +35,6 @@ export default function VehicleListPage() {
 
   const { vehicles, total, limit, hasMore, loading, error } = useVehicles({ ...filters, offset })
 
-  // Any filter change invalidates the current page, so jump back to the first one. Changing the
-  // sort counts as one: the whole fleet gets reordered, so staying on page 3 would be meaningless.
   const handleFiltersChange = (next) => {
     setFilters(next)
     setOffset(0)
@@ -52,8 +45,6 @@ export default function VehicleListPage() {
     setOffset(0)
   }
 
-  // The header search pod is a draft: it hands its two fields over on submit (button or Enter), so
-  // typing never hits the API. The sidebar filters, by contrast, apply immediately.
   const handleSearchSubmit = ({ keyword, location }) => {
     setFilters((prev) => ({ ...prev, keyword, location }))
     setOffset(0)
