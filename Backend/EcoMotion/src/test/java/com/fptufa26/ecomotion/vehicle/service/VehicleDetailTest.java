@@ -1,15 +1,15 @@
 package com.fptufa26.ecomotion.vehicle.service;
 
-import com.fptufa26.ecomotion.user.entity.ProviderType;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
-import com.fptufa26.ecomotion.vehicle.entity.FuelType;
-import com.fptufa26.ecomotion.vehicle.entity.PlanStatus;
-import com.fptufa26.ecomotion.vehicle.entity.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.FuelType;
+import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
-import com.fptufa26.ecomotion.vehicle.entity.Transmission;
+import com.fptufa26.ecomotion.vehicle.enums.Transmission;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import com.fptufa26.ecomotion.vehicle.entity.VehicleStatus;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;

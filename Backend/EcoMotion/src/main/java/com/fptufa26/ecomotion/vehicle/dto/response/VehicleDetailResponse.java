@@ -1,9 +1,9 @@
 package com.fptufa26.ecomotion.vehicle.dto.response;
 
-import com.fptufa26.ecomotion.user.entity.ProviderType;
-import com.fptufa26.ecomotion.vehicle.entity.FuelType;
-import com.fptufa26.ecomotion.vehicle.entity.PlanType;
-import com.fptufa26.ecomotion.vehicle.entity.Transmission;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
+import com.fptufa26.ecomotion.vehicle.enums.FuelType;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.Transmission;
 
 import java.math.BigDecimal;
 import java.util.List;
