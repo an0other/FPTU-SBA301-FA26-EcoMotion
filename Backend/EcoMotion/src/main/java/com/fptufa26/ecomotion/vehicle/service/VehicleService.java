@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.vehicle.service;
 
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 
 public interface VehicleService {
 
@@ -10,4 +11,6 @@ public interface VehicleService {
                                                            java.math.BigDecimal maxPrice,
                                                            VehicleSort sort,
                                                            int offset, int limit);
+
+    VehicleDetailResponse getVehicleDetail(Long id);
 }
