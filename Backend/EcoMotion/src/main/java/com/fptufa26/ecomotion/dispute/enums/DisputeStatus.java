@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.dispute.entity;
+package com.fptufa26.ecomotion.dispute.enums;
 
 public enum DisputeStatus {
     OPEN,

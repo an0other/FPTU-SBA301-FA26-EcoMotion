@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.verification.ekyc.implement;
 
+import com.fptufa26.ecomotion.vehicle.enums.DocumentType;
 import com.fptufa26.ecomotion.verification.ekyc.EkycHttpClient;
 import com.fptufa26.ecomotion.verification.ekyc.EkycProvider;
 import com.fptufa26.ecomotion.verification.ekyc.EkycService;
@@ -16,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;

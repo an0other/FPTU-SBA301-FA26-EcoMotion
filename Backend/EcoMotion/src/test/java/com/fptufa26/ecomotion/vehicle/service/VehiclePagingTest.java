@@ -1,19 +1,19 @@
 package com.fptufa26.ecomotion.vehicle.service;
 
+import com.fptufa26.ecomotion.vehicle.enums.FuelType;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
-import com.fptufa26.ecomotion.vehicle.entity.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest

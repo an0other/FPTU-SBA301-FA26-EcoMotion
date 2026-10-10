@@ -1,10 +1,9 @@
 package com.fptufa26.ecomotion.vehicle.repository;
 
-import com.fptufa26.ecomotion.vehicle.entity.PlanStatus;
+import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
-
 import java.util.Collection;
 import java.util.List;
 

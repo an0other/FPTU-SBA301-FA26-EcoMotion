@@ -1,11 +1,11 @@
 package com.fptufa26.ecomotion.auth.controller;
 
 import com.fptufa26.ecomotion.auth.repository.RefreshTokenRepository;
-import com.fptufa26.ecomotion.user.entity.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.entity.Renter;
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,14 +23,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.util.Map;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
