@@ -1,25 +1,25 @@
 package com.fptufa26.ecomotion.seed;
 
 import com.fptufa26.ecomotion.common.crypto.DeterministicCipher;
-import com.fptufa26.ecomotion.user.entity.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.entity.Provider;
-import com.fptufa26.ecomotion.user.entity.ProviderStatus;
-import com.fptufa26.ecomotion.user.entity.ProviderType;
+import com.fptufa26.ecomotion.user.enums.ProviderStatus;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
-import com.fptufa26.ecomotion.vehicle.entity.FuelType;
-import com.fptufa26.ecomotion.vehicle.entity.PlanStatus;
-import com.fptufa26.ecomotion.vehicle.entity.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.FuelType;
+import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
-import com.fptufa26.ecomotion.vehicle.entity.Transmission;
+import com.fptufa26.ecomotion.vehicle.enums.Transmission;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
-import com.fptufa26.ecomotion.vehicle.entity.VehicleStatus;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
@@ -31,7 +31,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.util.List;
 

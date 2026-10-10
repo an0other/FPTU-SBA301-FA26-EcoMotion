@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.schedule.entity;
 
+import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
+import com.fptufa26.ecomotion.schedule.enums.ScheduleType;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import jakarta.persistence.Column;
@@ -18,7 +20,6 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
 import java.time.Instant;
 
 @Entity

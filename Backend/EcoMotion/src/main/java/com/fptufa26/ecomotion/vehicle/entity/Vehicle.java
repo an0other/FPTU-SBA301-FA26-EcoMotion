@@ -1,5 +1,8 @@
 package com.fptufa26.ecomotion.vehicle.entity;
 
+import com.fptufa26.ecomotion.vehicle.enums.FuelType;
+import com.fptufa26.ecomotion.vehicle.enums.Transmission;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,7 +21,6 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 

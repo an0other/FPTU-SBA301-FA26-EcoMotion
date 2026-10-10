@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.vehicle.service;
+package com.fptufa26.ecomotion.vehicle.enums;
 
 import java.util.Locale;
 
