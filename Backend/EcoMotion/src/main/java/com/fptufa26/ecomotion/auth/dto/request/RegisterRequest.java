@@ -1,6 +1,6 @@
 package com.fptufa26.ecomotion.auth.dto.request;
 
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.Role;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;

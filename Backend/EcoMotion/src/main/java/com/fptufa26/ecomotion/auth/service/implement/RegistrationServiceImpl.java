@@ -10,14 +10,13 @@ import com.fptufa26.ecomotion.auth.exception.UnsupportedRoleException;
 import com.fptufa26.ecomotion.auth.service.OtpService;
 import com.fptufa26.ecomotion.auth.service.RegistrationService;
 import com.fptufa26.ecomotion.auth.service.TokenService;
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.Locale;
 
 @Service

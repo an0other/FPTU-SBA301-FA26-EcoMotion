@@ -1,5 +1,8 @@
 package com.fptufa26.ecomotion.user.entity;
 
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.Role;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -16,7 +19,6 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
 import java.time.Instant;
 import java.util.Locale;
 

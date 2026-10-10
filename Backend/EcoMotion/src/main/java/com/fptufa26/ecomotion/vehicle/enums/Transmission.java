@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.vehicle.entity;
+package com.fptufa26.ecomotion.vehicle.enums;
 
 public enum Transmission {
     MANUAL,

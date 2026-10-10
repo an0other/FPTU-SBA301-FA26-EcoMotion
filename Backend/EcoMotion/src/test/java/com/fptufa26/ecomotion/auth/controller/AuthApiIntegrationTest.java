@@ -3,10 +3,10 @@ package com.fptufa26.ecomotion.auth.controller;
 import com.fptufa26.ecomotion.auth.entity.RefreshToken;
 import com.fptufa26.ecomotion.auth.repository.RefreshTokenRepository;
 import com.fptufa26.ecomotion.common.security.JwtService;
-import com.fptufa26.ecomotion.user.entity.EkycStatus;
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.Cookie;
@@ -23,13 +23,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;

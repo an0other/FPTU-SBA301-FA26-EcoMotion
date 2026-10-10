@@ -7,11 +7,11 @@ import com.fptufa26.ecomotion.auth.exception.ActivationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.PhoneAlreadyExistsException;
 import com.fptufa26.ecomotion.auth.service.OtpService;
 import com.fptufa26.ecomotion.auth.service.TokenService;
-import com.fptufa26.ecomotion.user.entity.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.entity.Renter;
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.service.UserService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,10 +19,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
-
 import java.time.LocalDate;
 import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
