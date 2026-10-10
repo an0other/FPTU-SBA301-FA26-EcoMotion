@@ -12,7 +12,6 @@ public record VehicleCardResponse(
         String brand,
         String model,
         Integer manufactureYear,
-        String licensePlate,
         Integer seatCount,
         Transmission transmission,
         FuelType fuelType,

@@ -5,6 +5,7 @@ import ActivatePage from './pages/ActivatePage'
 import MePage from './pages/MePage'
 import ProtectedRoute from './components/ProtectedRoute'
 import VehicleListPage from './pages/VehicleListPage'
+import VehicleDetailPage from './pages/VehicleDetailPage'
 import ProviderDashboard from './pages/ProviderDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 
@@ -12,6 +13,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<VehicleListPage />} />
+      <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
       <Route path="/renter" element={<Navigate to="/" replace />} />
 
       <Route path="/login" element={<LoginPage />} />
