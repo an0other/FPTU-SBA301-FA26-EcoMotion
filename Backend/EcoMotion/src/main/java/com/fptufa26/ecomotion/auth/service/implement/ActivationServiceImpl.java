@@ -16,7 +16,7 @@ import com.fptufa26.ecomotion.auth.service.OtpService;
 import com.fptufa26.ecomotion.auth.service.TokenService;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;

@@ -1,6 +1,6 @@
 package com.fptufa26.ecomotion.auth.service;
 
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.Role;
 
 public interface TokenService {
 

@@ -1,8 +1,8 @@
 package com.fptufa26.ecomotion.auth.dto.response;
 
-import com.fptufa26.ecomotion.user.entity.EkycStatus;
-import com.fptufa26.ecomotion.user.entity.Role;
-import com.fptufa26.ecomotion.user.entity.UserStatus;
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.Role;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 
 public record CurrentUserResponse(
         Long userId,

@@ -1,12 +1,11 @@
 package com.fptufa26.ecomotion.user.service;
 
 import com.fptufa26.ecomotion.user.entity.Provider;
-import com.fptufa26.ecomotion.user.entity.ProviderType;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
-import com.fptufa26.ecomotion.user.entity.Role;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.entity.UserStatus;
-
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;

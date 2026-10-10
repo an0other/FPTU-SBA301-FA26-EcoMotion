@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.booking.entity;
+package com.fptufa26.ecomotion.booking.enums;
 
 public enum PaymentType {
     DEPOSIT_PAY,
