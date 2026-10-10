@@ -1,7 +1,9 @@
 package com.fptufa26.ecomotion.vehicle.service.implement;
 
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.entity.FuelType;
 import com.fptufa26.ecomotion.vehicle.entity.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.entity.PlanType;
@@ -9,6 +11,7 @@ import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleStatus;
+import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
@@ -62,20 +65,56 @@ public class VehicleServiceImpl implements VehicleService {
         PlanType planFilter = parsePlanType(planType);
 
         List<VehicleCardResponse> matching = vehicles.stream()
+                .filter(vehicle -> matchesKeyword(vehicle, normalizedKeyword))
+                .filter(vehicle -> matchesLocation(vehicle, normalizedLocation))
+                .filter(vehicle -> fuelFilter == null || vehicle.getFuelType() == fuelFilter)
+                .filter(vehicle -> planFilter == null || plansFor(plansByVehicle, vehicle).stream()
+                        .anyMatch(plan -> plan.getPlanType() == planFilter))
+                .filter(vehicle -> maxPrice == null
+                        || cheapestSlotPrice(plansFor(plansByVehicle, vehicle), planFilter)
+                        .compareTo(maxPrice) <= 0)
                 .map(vehicle -> toCard(vehicle,
                         imagesByVehicle.getOrDefault(vehicle.getId(), List.of()),
-                        plansByVehicle.getOrDefault(vehicle.getId(), List.of())))
-                .filter(card -> matchesKeyword(card, normalizedKeyword))
-                .filter(card -> matchesLocation(card, normalizedLocation))
-                .filter(card -> fuelFilter == null || card.fuelType() == fuelFilter)
-                .filter(card -> planFilter == null
-                        || card.plans().stream().anyMatch(p -> p.planType() == planFilter))
-                .filter(card -> maxPrice == null
-                        || planScopedPrice(card, planFilter).compareTo(maxPrice) <= 0)
+                        plansFor(plansByVehicle, vehicle)))
                 .sorted(comparatorFor(sort, planFilter))
                 .toList();
 
         return PageResponse.of(matching, offset, limit);
+    }
+
+    @Override
+    public VehicleDetailResponse getVehicleDetail(Long id) {
+        Vehicle vehicle = vehicleRepository.findByIdAndStatus(id, VehicleStatus.APPROVED)
+                .orElseThrow(() -> new VehicleNotFoundException(id));
+
+        List<String> imageUrls = vehicleImageRepository
+                .findByVehicle_IdOrderByDisplayOrderAsc(vehicle.getId()).stream()
+                .map(VehicleImage::getImageUrl)
+                .toList();
+
+        List<VehicleDetailResponse.PlanDetail> plans = rentalPlanRepository
+                .findByVehicle_IdAndStatusOrderByIdAsc(vehicle.getId(), PlanStatus.ACTIVE).stream()
+                .map(this::toPlanDetail)
+                .toList();
+
+        return new VehicleDetailResponse(
+                vehicle.getId(),
+                vehicle.getBrand(),
+                vehicle.getModel(),
+                vehicle.getManufactureYear(),
+                vehicle.getSeatCount(),
+                vehicle.getTransmission(),
+                vehicle.getFuelType(),
+                vehicle.getColor(),
+                vehicle.getRatingAvg(),
+                vehicle.getRatingCount(),
+                imageUrls,
+                toProviderInfo(vehicle.getProvider()),
+                plans);
+    }
+
+    private List<RentalPlan> plansFor(Map<Long, List<RentalPlan>> plansByVehicle, Vehicle vehicle) {
+        return plansByVehicle.getOrDefault(vehicle.getId(), List.of());
     }
 
     private VehicleCardResponse toCard(Vehicle vehicle, List<VehicleImage> images, List<RentalPlan> plans) {
@@ -98,7 +137,6 @@ public class VehicleServiceImpl implements VehicleService {
                 vehicle.getBrand(),
                 vehicle.getModel(),
                 vehicle.getManufactureYear(),
-                vehicle.getLicensePlate(),
                 vehicle.getSeatCount(),
                 vehicle.getTransmission(),
                 vehicle.getFuelType(),
@@ -112,6 +150,45 @@ public class VehicleServiceImpl implements VehicleService {
                 provider == null ? null : provider.getHotline(),
                 provider == null ? null : provider.getDepotAddress(),
                 planPrices);
+    }
+
+    private VehicleDetailResponse.ProviderInfo toProviderInfo(Provider provider) {
+        if (provider == null) {
+            return null;
+        }
+        return new VehicleDetailResponse.ProviderInfo(
+                provider.getId(),
+                provider.getDisplayName(),
+                provider.getProviderType(),
+                provider.getHotline(),
+                provider.getDepotAddress(),
+                provider.getRatingAvg(),
+                provider.getRatingCount());
+    }
+
+    private VehicleDetailResponse.PlanDetail toPlanDetail(RentalPlan plan) {
+        return new VehicleDetailResponse.PlanDetail(
+                plan.getPlanType(),
+                plan.getSlotLengthMinutes(),
+                plan.getSlotPrice(),
+                plan.getUpfrontAmount(),
+                plan.getAllowedOvertimeMinutes(),
+                plan.getOvertimeSurchargeRatio(),
+                plan.getFreeRadiusKm(),
+                plan.getOutOfRadiusRate(),
+                plan.getWaitingFreeMinutes(),
+                plan.getWaitingRate(),
+                plan.getWeekendSurchargeRatio(),
+                plan.getHourlyToDailyThresholdMinutes());
+    }
+
+    private BigDecimal cheapestSlotPrice(List<RentalPlan> plans, PlanType planFilter) {
+        return plans.stream()
+                .filter(plan -> planFilter == null || plan.getPlanType() == planFilter)
+                .map(RentalPlan::getSlotPrice)
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(BigDecimal.valueOf(Long.MAX_VALUE));
     }
 
     private BigDecimal cheapestPrice(VehicleCardResponse card) {
@@ -154,21 +231,23 @@ public class VehicleServiceImpl implements VehicleService {
         };
     }
 
-    private boolean matchesKeyword(VehicleCardResponse card, String keyword) {
+    private boolean matchesKeyword(Vehicle vehicle, String keyword) {
         if (keyword == null || keyword.isEmpty()) {
             return true;
         }
-        return contains(card.brand(), keyword)
-                || contains(card.model(), keyword)
-                || contains(card.licensePlate(), keyword)
-                || contains(card.providerName(), keyword);
+        Provider provider = vehicle.getProvider();
+        return contains(vehicle.getBrand(), keyword)
+                || contains(vehicle.getModel(), keyword)
+                || contains(vehicle.getLicensePlate(), keyword)
+                || contains(provider == null ? null : provider.getDisplayName(), keyword);
     }
 
-    private boolean matchesLocation(VehicleCardResponse card, String location) {
+    private boolean matchesLocation(Vehicle vehicle, String location) {
         if (location == null || location.isEmpty()) {
             return true;
         }
-        return contains(card.providerDepotAddress(), location);
+        Provider provider = vehicle.getProvider();
+        return contains(provider == null ? null : provider.getDepotAddress(), location);
     }
 
     private boolean contains(String value, String keyword) {

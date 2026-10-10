@@ -56,13 +56,9 @@ export default function VehicleListPage() {
       <AppHeader filters={filters} onSearchSubmit={handleSearchSubmit} />
 
       <VehicleListToolbar
-        planType={filters.planType}
-        location={filters.location}
-        keyword={filters.keyword}
         total={total}
         offset={offset}
         shown={vehicles.length}
-        onHome={handleReset}
       />
 
       <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6">
