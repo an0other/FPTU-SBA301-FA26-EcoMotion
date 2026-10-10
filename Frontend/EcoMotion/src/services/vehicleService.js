@@ -29,4 +29,10 @@ export const vehicleService = {
       hasMore: page?.hasMore ?? false,
     }
   },
+
+  async getVehicle(id) {
+    const { data } = await apiClient.get(`/vehicles/${id}`)
+    return data?.data ?? null
+  },
+
 }

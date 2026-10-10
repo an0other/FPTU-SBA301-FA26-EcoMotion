@@ -1,5 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
+import { Link, useNavigate } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { IconMapPin, IconStar } from '../icons/Icons'
 
@@ -23,9 +22,7 @@ const PLAN_META = {
 }
 
 export default function VehicleCard({ vehicle, selectedPlanType }) {
-  const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
   const fuel = FUEL_STYLES[vehicle.fuelType] ?? {
     label: vehicle.fuelType ?? 'Khác',
     className: 'bg-slate-200 text-slate-700',
@@ -46,10 +43,7 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
   const hasRating = reviewCount > 0
 
   const handleBook = () => {
-    if (!isAuthenticated) {
-      navigate('/login', { state: { from: location } })
-      return
-    }
+    navigate(`/vehicles/${vehicle.id}`)
   }
 
   return (
@@ -82,7 +76,14 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
       </div>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <h3 className="truncate text-[15px] font-semibold text-slate-900">{carName}</h3>
+        <h3 className="truncate text-[15px] font-semibold text-slate-900">
+          <Link
+            to={`/vehicles/${vehicle.id}`}
+            className="transition-colors hover:text-brand-700"
+          >
+            {carName}
+          </Link>
+        </h3>
 
         <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-50 p-2 text-center">
           <div>
