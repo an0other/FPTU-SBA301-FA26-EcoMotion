@@ -5,12 +5,14 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -52,5 +54,15 @@ public class VehicleController {
             return DEFAULT_LIMIT;
         }
         return Math.min(limit, MAX_LIMIT);
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get a rentable vehicle's detail",
+            description = "Public detail of a single APPROVED vehicle with its images in display "
+                    + "order and its ACTIVE plans. Responds 404 when the vehicle does not exist or "
+                    + "is not approved. Never exposes the license plate, chassis number, engine "
+                    + "number or vehicle documents.")
+    public ApiResponse<VehicleDetailResponse> getVehicle(@PathVariable Long id) {
+        return ApiResponse.success(vehicleService.getVehicleDetail(id));
     }
 }

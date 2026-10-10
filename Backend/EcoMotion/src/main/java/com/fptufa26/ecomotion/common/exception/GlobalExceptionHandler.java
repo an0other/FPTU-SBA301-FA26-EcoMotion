@@ -21,6 +21,7 @@ import com.fptufa26.ecomotion.auth.exception.PhoneNotVerifiedException;
 import com.fptufa26.ecomotion.auth.exception.RegistrationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.UnsupportedRoleException;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
+import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -152,6 +153,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoPendingActivationException.class)
     public ResponseEntity<ErrorResponse> handleNoPendingActivation(NoPendingActivationException ex,
                                                                    HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(VehicleNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleVehicleNotFound(VehicleNotFoundException ex,
+                                                               HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
