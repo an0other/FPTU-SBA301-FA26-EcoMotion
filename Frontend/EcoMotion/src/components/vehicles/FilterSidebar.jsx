@@ -69,7 +69,7 @@ function PillGroup({ options, value, onChange }) {
   )
 }
 
-export default function FilterSidebar({ filters, onChange, onReset }) {
+export default function FilterSidebar({ filters, onChange, onReset, onApply }) {
   const set = (patch) => onChange({ ...filters, ...patch })
 
   const range = PLAN_PRICE_RANGES[filters.planType] ?? PLAN_PRICE_RANGES['']
@@ -144,6 +144,14 @@ export default function FilterSidebar({ filters, onChange, onReset }) {
           {`Thang ${formatPrice(range.min)} – ${formatPrice(range.max)} đ${suffix}`}
         </p>
       </div>
+
+      <button
+        type="button"
+        onClick={onApply}
+        className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      >
+        Áp dụng bộ lọc
+      </button>
 
       <div className="flex items-start gap-2.5 rounded-lg bg-brand-50 p-3">
         <IconShield className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
