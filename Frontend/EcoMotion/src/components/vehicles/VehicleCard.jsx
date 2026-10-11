@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { IconMapPin, IconStar } from '../icons/Icons'
 
@@ -22,7 +22,6 @@ const PLAN_META = {
 }
 
 export default function VehicleCard({ vehicle, selectedPlanType }) {
-  const navigate = useNavigate()
   const fuel = FUEL_STYLES[vehicle.fuelType] ?? {
     label: vehicle.fuelType ?? 'Khác',
     className: 'bg-slate-200 text-slate-700',
@@ -41,10 +40,6 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
   const transmission = TRANSMISSION_LABELS[vehicle.transmission] ?? vehicle.transmission ?? '—'
   const reviewCount = Number(vehicle.ratingCount ?? 0)
   const hasRating = reviewCount > 0
-
-  const handleBook = () => {
-    navigate(`/vehicles/${vehicle.id}`)
-  }
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card transition-all hover:shadow-lg">
@@ -123,13 +118,12 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
               )}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleBook}
-            className="shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700"
+          <Link
+            to={`/vehicles/${vehicle.id}`}
+            className="shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
           >
-            Đặt xe
-          </button>
+            Xem chi tiết
+          </Link>
         </div>
       </div>
     </article>

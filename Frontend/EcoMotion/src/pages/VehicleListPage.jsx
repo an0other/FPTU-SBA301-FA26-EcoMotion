@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import AppHeader from '../components/AppHeader'
 import FilterSidebar from '../components/vehicles/FilterSidebar'
-import VehicleListToolbar from '../components/vehicles/VehicleListToolbar'
 import VehicleCard from '../components/vehicles/VehicleCard'
 import Pagination from '../components/vehicles/Pagination'
 import { useVehicles } from '../hooks/useVehicles'
@@ -53,21 +52,16 @@ export default function VehicleListPage() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <AppHeader filters={filters} onSearchSubmit={handleSearchSubmit} />
+      <AppHeader filters={filters} onSearchSubmit={handleSearchSubmit} showViewSwitch />
 
-      <VehicleListToolbar
-        total={total}
-        offset={offset}
-        shown={vehicles.length}
-      />
+      <nav aria-label="Đường dẫn trang" className="border-b border-slate-200 bg-white py-3">
+        <div className="mx-auto max-w-[1400px] px-4 text-xs sm:px-6">
+          <span className="font-semibold text-slate-800" aria-current="page">Trang chủ</span>
+        </div>
+      </nav>
 
       <main className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6">
-        <div className="mb-5">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Thuê xe có tài xế</h1>
-          <p className="mt-1 text-[14px] text-slate-500">
-            Chọn đúng chiếc xe bạn muốn — thuê theo giờ, ngày hoặc tháng.
-          </p>
-        </div>
+        <h1 className="sr-only">Danh sách xe</h1>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-3">
