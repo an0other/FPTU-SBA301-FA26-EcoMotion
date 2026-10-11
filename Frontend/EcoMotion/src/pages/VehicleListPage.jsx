@@ -29,30 +29,40 @@ function SkeletonCard() {
 }
 
 export default function VehicleListPage() {
-  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS)
+  const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS)
   const [offset, setOffset] = useState(0)
 
-  const { vehicles, total, limit, hasMore, loading, error } = useVehicles({ ...filters, offset })
+  const { vehicles, total, limit, hasMore, loading, error } = useVehicles({ ...appliedFilters, offset })
 
   const handleFiltersChange = (next) => {
-    setFilters(next)
-    setOffset(0)
+    setDraftFilters(next)
   }
 
   const handleReset = () => {
-    setFilters(EMPTY_FILTERS)
+    setDraftFilters(EMPTY_FILTERS)
+  }
+
+  const handleApplyFilters = () => {
+    setAppliedFilters((prev) => ({
+      ...prev,
+      fuelType: draftFilters.fuelType,
+      planType: draftFilters.planType,
+      maxPrice: draftFilters.maxPrice,
+      sortBy: draftFilters.sortBy,
+    }))
     setOffset(0)
   }
 
   const handleSearchSubmit = ({ keyword, location }) => {
-    setFilters((prev) => ({ ...prev, keyword, location }))
+    setAppliedFilters((prev) => ({ ...prev, keyword, location }))
     setOffset(0)
     document.getElementById('vehicle-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   return (
     <div className="min-h-screen bg-surface">
-      <AppHeader filters={filters} onSearchSubmit={handleSearchSubmit} showViewSwitch />
+      <AppHeader filters={appliedFilters} onSearchSubmit={handleSearchSubmit} showViewSwitch />
 
       <nav aria-label="Đường dẫn trang" className="border-b border-slate-200 bg-white py-3">
         <div className="mx-auto max-w-[1400px] px-4 text-xs sm:px-6">
@@ -66,9 +76,10 @@ export default function VehicleListPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-3">
             <FilterSidebar
-              filters={filters}
+              filters={draftFilters}
               onChange={handleFiltersChange}
               onReset={handleReset}
+              onApply={handleApplyFilters}
             />
           </div>
 
@@ -105,7 +116,7 @@ export default function VehicleListPage() {
                     <VehicleCard
                       key={vehicle.id}
                       vehicle={vehicle}
-                      selectedPlanType={filters.planType}
+                      selectedPlanType={appliedFilters.planType}
                     />
                   ))}
                 </div>
