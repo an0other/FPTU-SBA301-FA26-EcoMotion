@@ -26,7 +26,7 @@ function initialsOf(user) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-export default function AppHeader({ filters, onSearchSubmit }) {
+export default function AppHeader({ filters, onSearchSubmit, showViewSwitch = false }) {
   const { user, loading, logout } = useAuth()
   const navigate = useNavigate()
   const searchable = Boolean(filters && onSearchSubmit)
@@ -133,21 +133,23 @@ export default function AppHeader({ filters, onSearchSubmit }) {
         )}
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <div className="hidden items-center rounded-xl border border-slate-200/80 bg-slate-100 p-1 xl:flex">
-            <span className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-xs">
-              <IconList className="h-4 w-4" />
-              Danh sách
-            </span>
-            <button
-              type="button"
-              disabled
-              title="Chế độ bản đồ đang được phát triển"
-              className="flex cursor-not-allowed items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-400"
-            >
-              <IconMap className="h-4 w-4" />
-              Bản đồ
-            </button>
-          </div>
+          {showViewSwitch && (
+            <div className="hidden items-center rounded-xl border border-slate-200/80 bg-slate-100 p-1 xl:flex">
+              <span className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-xs">
+                <IconList className="h-4 w-4" />
+                Danh sách
+              </span>
+              <button
+                type="button"
+                disabled
+                title="Chế độ bản đồ đang được phát triển"
+                className="flex cursor-not-allowed items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-400"
+              >
+                <IconMap className="h-4 w-4" />
+                Bản đồ
+              </button>
+            </div>
+          )}
 
           {loading ? (
             <span className="h-10 w-28 animate-pulse rounded-lg bg-slate-100" />

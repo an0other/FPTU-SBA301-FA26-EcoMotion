@@ -5,9 +5,6 @@ export default function Pagination({ total, offset, limit, hasMore, onPageChange
 
   if (total <= pageSize) return null
 
-  const firstOnPage = total === 0 ? 0 : offset + 1
-  const lastOnPage = Math.min(offset + pageSize, total)
-
   const goTo = (page) => {
     const clamped = Math.min(Math.max(1, page), pageCount)
     onPageChange((clamped - 1) * pageSize)
@@ -26,14 +23,8 @@ export default function Pagination({ total, offset, limit, hasMore, onPageChange
   return (
     <nav
       aria-label="Phân trang"
-      className="mt-8 flex flex-col items-center justify-between gap-4 sm:flex-row"
+      className="mt-8 flex justify-end"
     >
-      <p className="text-[13px] text-slate-500">
-        Hiển thị <span className="font-semibold text-slate-700">{firstOnPage}</span>–
-        <span className="font-semibold text-slate-700">{lastOnPage}</span> trong{' '}
-        <span className="font-semibold text-slate-700">{total}</span> xe
-      </p>
-
       <div className="flex items-center gap-1.5">
         <button
           type="button"
