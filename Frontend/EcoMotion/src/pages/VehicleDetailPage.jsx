@@ -170,8 +170,8 @@ export default function VehicleDetailPage() {
     <div className="min-h-screen bg-surface">
       <AppHeader />
 
-      <div className="border-b border-slate-200 bg-white py-3">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 text-xs sm:px-6">
+      <nav aria-label="Đường dẫn trang" className="border-b border-slate-200 bg-white py-3">
+        <div className="mx-auto flex max-w-[1400px] items-center px-4 text-xs sm:px-6">
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-slate-500">
             <Link to="/" className="transition-colors hover:text-brand-600">
               Trang chủ
@@ -181,15 +181,8 @@ export default function VehicleDetailPage() {
               {vehicle ? carName : 'Chi tiết xe'}
             </span>
           </div>
-          <Link
-            to="/"
-            className="flex items-center gap-1.5 font-semibold text-brand-700 transition-colors hover:text-brand-800"
-          >
-            <IconArrowLeft className="h-3.5 w-3.5" />
-            Quay lại danh sách
-          </Link>
         </div>
-      </div>
+      </nav>
 
       <main className="mx-auto w-full max-w-[1280px] px-4 py-7 sm:px-6 lg:py-10">
         {loading && <DetailSkeleton />}
