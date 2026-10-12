@@ -25,6 +25,25 @@
   --color-error-container: #ffdad6;
   --color-on-error-container: #93000a;
 
+  --color-primary: #006948;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #00855d;
+  --color-on-primary-container: #f5fff7;
+  --color-primary-fixed: #85f8c4;
+  --color-secondary: #006a63;
+  --color-secondary-fixed: #9cf2e8;
+  --color-tertiary: #0051d5;
+  --color-tertiary-fixed: #dbe1ff;
+  --color-on-surface: #121e18;
+  --color-on-surface-variant: #3d4a42;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #e9f7ed;
+  --color-surface-container: #e4f1e7;
+  --color-surface-container-high: #deece2;
+  --color-surface-container-highest: #d8e6dc;
+
+  --font-mono-badge: 'JetBrains Mono', ui-monospace, monospace;
+
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 

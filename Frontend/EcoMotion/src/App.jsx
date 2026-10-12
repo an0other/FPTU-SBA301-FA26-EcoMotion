@@ -8,6 +8,7 @@ import VehicleListPage from './pages/VehicleListPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import ProviderDashboard from './pages/ProviderDashboard'
 import AdminDashboard from './pages/AdminDashboard'
+import ProviderBookingQueuePage from './pages/ProviderBookingQueuePage'
 
 export default function App() {
   return (
@@ -24,6 +25,10 @@ export default function App() {
         <Route path="/me" element={<MePage />} />
         <Route path="/provider" element={<ProviderDashboard />} />
         <Route path="/admin" element={<AdminDashboard />} />
+      </Route>
+
+      <Route element={<ProtectedRoute allowedRoles={['PROVIDER']} />}>
+        <Route path="/provider/bookings" element={<ProviderBookingQueuePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
