@@ -48,7 +48,7 @@ public class DevDataSeeder implements ApplicationRunner {
     private static final String NAME_PROVIDER_B = "Tr\u1ea7n Th\u1ecb B";
     private static final String NAME_RENTER = "Ph\u1ea1m Thu H\u00e0";
     private static final String ADDRESS_A = "12 Nguy\u1ec5n Hu\u1ec7, Qu\u1eadn 1, TP. H\u1ed3 Ch\u00ed Minh";
-    private static final String ADDRESS_B = "45 L\u00ea L\u1ee3i, Qu\u1eadn 3, TP. H\u1ed3 Ch\u00ed Minh";
+    private static final String ADDRESS_B = "45 L\u00ea L\u1ee3i, Qu\u1eadn 1, TP. H\u1ed3 Ch\u00ed Minh";
     private static final String COLOR_WHITE = "Tr\u1eafng";
     private static final String COLOR_RED = "\u0110\u1ecf";
     private static final String COLOR_BLACK = "\u0110en";
@@ -91,8 +91,10 @@ public class DevDataSeeder implements ApplicationRunner {
 
         User providerUserA = userRepository.findById(PROVIDER_A_USER_ID).orElseThrow();
         User providerUserB = userRepository.findById(PROVIDER_B_USER_ID).orElseThrow();
-        Provider providerA = seedProvider(providerUserA, "EcoMotion Depot A", ADDRESS_A, "02873000010");
-        Provider providerB = seedProvider(providerUserB, "EcoMotion Depot B", ADDRESS_B, "02873000011");
+        Provider providerA = seedProvider(providerUserA, "EcoMotion Depot A", ADDRESS_A, "02873000010",
+                new BigDecimal("10.773300"), new BigDecimal("106.703600"));
+        Provider providerB = seedProvider(providerUserB, "EcoMotion Depot B", ADDRESS_B, "02873000011",
+                new BigDecimal("10.774900"), new BigDecimal("106.698500"));
 
         seedRenterProfile(userRepository.findById(5L).orElseThrow());
 
@@ -229,17 +231,30 @@ public class DevDataSeeder implements ApplicationRunner {
         return userRepository.findById(id).orElseThrow();
     }
 
-    private Provider seedProvider(User user, String displayName, String depotAddress, String hotline) {
+    private Provider seedProvider(User user, String displayName, String depotAddress, String hotline,
+                                  BigDecimal latitude, BigDecimal longitude) {
         Provider existing = providerRepository.findByUser_Id(user.getId()).orElse(null);
         if (existing != null) {
+            boolean changed = false;
+            if ("EcoMotion Depot B".equals(existing.getDisplayName())
+                    && "45 L\u00ea L\u1ee3i, Qu\u1eadn 3, TP. H\u1ed3 Ch\u00ed Minh".equals(existing.getDepotAddress())) {
+                existing.setDepotAddress(ADDRESS_B);
+                changed = true;
+            }
             if (existing.getDepotAddress() == null || existing.getDepotAddress().isBlank()) {
                 existing.setDepotAddress(depotAddress);
+                changed = true;
                 if (existing.getHotline() == null || existing.getHotline().isBlank()) {
                     existing.setHotline(hotline);
                 }
-                return providerRepository.save(existing);
             }
-            return existing;
+            if (existing.getDepotLatitude() == null && existing.getDepotLongitude() == null
+                    && depotAddress.equals(existing.getDepotAddress())) {
+                existing.setDepotLatitude(latitude);
+                existing.setDepotLongitude(longitude);
+                changed = true;
+            }
+            return changed ? providerRepository.save(existing) : existing;
         }
 
         Provider provider = new Provider();
@@ -248,6 +263,8 @@ public class DevDataSeeder implements ApplicationRunner {
         provider.setDisplayName(displayName);
         provider.setHotline(hotline);
         provider.setDepotAddress(depotAddress);
+        provider.setDepotLatitude(latitude);
+        provider.setDepotLongitude(longitude);
         provider.setCommissionRate(new BigDecimal("0.1000"));
         provider.setDepositRatio(new BigDecimal("0.3000"));
         provider.setStatus(ProviderStatus.APPROVED);

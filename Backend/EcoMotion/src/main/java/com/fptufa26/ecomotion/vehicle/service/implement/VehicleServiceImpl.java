@@ -4,6 +4,7 @@ import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleMapResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
@@ -34,6 +35,8 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class VehicleServiceImpl implements VehicleService {
 
+    private static final double EARTH_RADIUS_KM = 6371.0088;
+
     private final VehicleRepository vehicleRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final RentalPlanRepository rentalPlanRepository;
@@ -44,9 +47,50 @@ public class VehicleServiceImpl implements VehicleService {
                                                                   BigDecimal maxPrice,
                                                                   VehicleSort sort,
                                                                   int offset, int limit) {
+        return PageResponse.of(matchingCards(keyword, location, fuelType, planType, maxPrice, sort),
+                offset, limit);
+    }
+
+    @Override
+    public List<VehicleMapResponse> findNearbyVehicles(BigDecimal latitude, BigDecimal longitude,
+                                                        int radiusKm, String keyword, String location,
+                                                        String fuelType, String planType,
+                                                        BigDecimal maxPrice, VehicleSort sort) {
+        validateCoordinates(latitude, longitude);
+        if (radiusKm != 10 && radiusKm != 15) {
+            throw new IllegalArgumentException("radiusKm must be 10 or 15");
+        }
+
+        double userLatitude = Math.toRadians(latitude.doubleValue());
+        double userLongitude = Math.toRadians(longitude.doubleValue());
+        Map<Long, Provider> providersByVehicle = vehicleRepository
+                .findByStatusOrderByIdAsc(VehicleStatus.APPROVED).stream()
+                .collect(Collectors.toMap(Vehicle::getId, Vehicle::getProvider));
+        return matchingCards(keyword, location, fuelType, planType, maxPrice, sort).stream()
+                .map(card -> {
+                    Provider provider = providersByVehicle.get(card.id());
+                    if (provider == null || provider.getDepotLatitude() == null
+                            || provider.getDepotLongitude() == null) {
+                        return null;
+                    }
+                    double distance = distanceKm(userLatitude, userLongitude,
+                            provider.getDepotLatitude().doubleValue(),
+                            provider.getDepotLongitude().doubleValue());
+                    return distance <= radiusKm
+                            ? new VehicleMapResponse(card, provider.getDepotLatitude(),
+                            provider.getDepotLongitude(), distance)
+                            : null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private List<VehicleCardResponse> matchingCards(String keyword, String location,
+                                                     String fuelType, String planType,
+                                                     BigDecimal maxPrice, VehicleSort sort) {
         List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
         if (vehicles.isEmpty()) {
-            return PageResponse.of(List.of(), offset, limit);
+            return List.of();
         }
 
         List<Long> vehicleIds = vehicles.stream().map(Vehicle::getId).toList();
@@ -67,6 +111,7 @@ public class VehicleServiceImpl implements VehicleService {
         List<VehicleCardResponse> matching = vehicles.stream()
                 .filter(vehicle -> matchesKeyword(vehicle, normalizedKeyword))
                 .filter(vehicle -> matchesLocation(vehicle, normalizedLocation))
+                .filter(vehicle -> !plansFor(plansByVehicle, vehicle).isEmpty())
                 .filter(vehicle -> fuelFilter == null || vehicle.getFuelType() == fuelFilter)
                 .filter(vehicle -> planFilter == null || plansFor(plansByVehicle, vehicle).stream()
                         .anyMatch(plan -> plan.getPlanType() == planFilter))
@@ -79,7 +124,27 @@ public class VehicleServiceImpl implements VehicleService {
                 .sorted(comparatorFor(sort, planFilter))
                 .toList();
 
-        return PageResponse.of(matching, offset, limit);
+        return matching;
+    }
+
+    private void validateCoordinates(BigDecimal latitude, BigDecimal longitude) {
+        if (latitude == null || longitude == null
+                || latitude.compareTo(BigDecimal.valueOf(-90)) < 0
+                || latitude.compareTo(BigDecimal.valueOf(90)) > 0
+                || longitude.compareTo(BigDecimal.valueOf(-180)) < 0
+                || longitude.compareTo(BigDecimal.valueOf(180)) > 0) {
+            throw new IllegalArgumentException("Invalid latitude or longitude");
+        }
+    }
+
+    private double distanceKm(double userLatitude, double userLongitude,
+                              double depotLatitude, double depotLongitude) {
+        double deltaLatitude = Math.toRadians(depotLatitude) - userLatitude;
+        double deltaLongitude = Math.toRadians(depotLongitude) - userLongitude;
+        double haversine = Math.pow(Math.sin(deltaLatitude / 2), 2)
+                + Math.cos(userLatitude) * Math.cos(Math.toRadians(depotLatitude))
+                * Math.pow(Math.sin(deltaLongitude / 2), 2);
+        return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(haversine)));
     }
 
     @Override
