@@ -46,6 +46,19 @@ class PublicVehicleListAccessTest {
     }
 
     @Test
+    void anonymousCallerCanSearchMapAndInvalidRadiusReturnsBadRequest() throws Exception {
+        HttpResponse<String> response = get(
+                "/api/vehicles/map?latitude=10.7733&longitude=106.7036&radiusKm=10");
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"distanceKm\"").contains("\"depotLatitude\"");
+
+        assertThat(get("/api/vehicles/map?latitude=10.7733&longitude=106.7036&radiusKm=12")
+                .statusCode()).isEqualTo(400);
+        assertThat(get("/api/vehicles/map/reverse?latitude=91&longitude=106.7036")
+                .statusCode()).isEqualTo(400);
+    }
+
+    @Test
     @DisplayName("only the fleet read was opened - the account endpoint still rejects anonymous callers")
     void accountEndpointStaysProtected() throws Exception {
         assertThat(get("/api/auth/me").statusCode()).isEqualTo(401);

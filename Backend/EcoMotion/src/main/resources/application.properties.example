@@ -258,3 +258,13 @@ springdoc.swagger-ui.try-it-out-enabled=true
 springdoc.swagger-ui.operations-sorter=method
 springdoc.swagger-ui.tags-sorter=alpha
 springdoc.packages-to-scan=com.fptufa26.ecomotion
+
+
+# ===============================
+# Map address lookup (OpenStreetMap Nominatim)
+# ===============================
+app.map.reverse-url=https://nominatim.openstreetmap.org/reverse
+app.map.search-url=https://nominatim.openstreetmap.org/search
+app.map.user-agent=EcoMotion-localhost/1.0 (https://github.com/an0other/FPTU-SBA301-FA26-EcoMotion)
+app.map.connect-timeout=5s
+app.map.request-timeout=8s
