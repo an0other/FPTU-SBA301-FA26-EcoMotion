@@ -49,6 +49,12 @@ public class Provider {
     @Column(name = "depot_address", nullable = false, length = 500)
     private String depotAddress;
 
+    @Column(name = "depot_latitude", precision = 9, scale = 6)
+    private BigDecimal depotLatitude;
+
+    @Column(name = "depot_longitude", precision = 9, scale = 6)
+    private BigDecimal depotLongitude;
+
     @Column(name = "commission_rate", nullable = false, precision = 6, scale = 4)
     private BigDecimal commissionRate;
 

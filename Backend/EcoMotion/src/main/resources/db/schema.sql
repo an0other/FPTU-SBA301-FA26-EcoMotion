@@ -129,6 +129,8 @@ CREATE TABLE provider (
     display_name          varchar(150)  NOT NULL,
     hotline               varchar(20)   NOT NULL,
     depot_address         varchar(500)  NOT NULL,
+    depot_latitude        numeric(9,6),
+    depot_longitude       numeric(9,6),
     commission_rate       numeric(6,4)  NOT NULL,
     deposit_ratio         numeric(6,4)  NOT NULL,
     bank_name             varchar(150),
@@ -159,6 +161,11 @@ CREATE TABLE provider (
     ),
     CONSTRAINT ck_provider_commission CHECK (commission_rate >= 0 AND commission_rate <= 1),
     CONSTRAINT ck_provider_deposit_ratio CHECK (deposit_ratio >= 0 AND deposit_ratio <= 1),
+    CONSTRAINT ck_provider_depot_coordinates CHECK (
+        (depot_latitude IS NULL AND depot_longitude IS NULL)
+        OR (depot_latitude IS NOT NULL AND depot_longitude IS NOT NULL
+            AND depot_latitude BETWEEN -90 AND 90 AND depot_longitude BETWEEN -180 AND 180)
+    ),
     CONSTRAINT ck_provider_rating CHECK (
         rating_count >= 0
         AND rating_avg >= 0
@@ -712,12 +719,12 @@ INSERT INTO users (
      '2026-09-04 08:00:00+07', '2026-09-04 08:00:00+07');
 
 INSERT INTO provider (
-    id, user_id, provider_type, display_name, hotline, depot_address,
+    id, user_id, provider_type, display_name, hotline, depot_address, depot_latitude, depot_longitude,
     commission_rate, deposit_ratio, bank_name, bank_account_no, bank_account_holder,
     business_license_no, tax_code, status, rating_avg, rating_count, created_at, updated_at
 ) VALUES (
     1, 2, 'BUSINESS', 'Eco Motion Fleet', '02873000002',
-    '15 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh',
+    '15 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh', 10.773300, 106.703600,
     0.1000, 0.3000, 'Vietcombank', '0123456789', 'TRAN MINH KHOA',
     'GP-HCM-001234', '0312345678', 'APPROVED', 5.00, 2,
     '2026-09-02 09:00:00+07', '2026-10-03 13:00:00+07'
