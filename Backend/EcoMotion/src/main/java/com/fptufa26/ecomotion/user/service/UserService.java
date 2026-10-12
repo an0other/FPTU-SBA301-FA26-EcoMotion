@@ -30,6 +30,8 @@ public interface UserService {
 
     Optional<Renter> findRenterProfile(Long userId);
 
+    Optional<Provider> findProviderProfile(Long userId);
+
     User saveCccdIdentity(Long userId, CccdIdentity identity);
 
     User activateWithPortrait(Long userId, String portraitUrl);

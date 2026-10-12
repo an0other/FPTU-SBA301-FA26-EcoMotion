@@ -275,4 +275,13 @@ public class VehicleServiceImpl implements VehicleService {
             return null;
         }
     }
+
+    @Override
+    public String getCoverImageUrl(Long vehicleId) {
+        if (vehicleId == null) {
+            return null;
+        }
+        List<VehicleImage> images = vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(vehicleId);
+        return images.isEmpty() ? null : images.get(0).getImageUrl();
+    }
 }
