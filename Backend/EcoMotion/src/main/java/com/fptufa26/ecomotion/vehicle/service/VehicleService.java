@@ -16,4 +16,6 @@ public interface VehicleService {
                                                            int offset, int limit);
 
     VehicleDetailResponse getVehicleDetail(Long id);
+
+    String getCoverImageUrl(Long vehicleId);
 }

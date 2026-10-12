@@ -151,6 +151,12 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<Provider> findProviderProfile(Long userId) {
+        return userId == null ? Optional.empty() : providerRepository.findByUser_Id(userId);
+    }
+
+    @Override
     public User saveCccdIdentity(Long userId, CccdIdentity identity) {
         User user = loadUser(userId);
         Renter renter = loadOrCreateRenter(user);
