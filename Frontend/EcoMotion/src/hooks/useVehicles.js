@@ -13,11 +13,12 @@ const INITIAL_STATE = {
   error: null,
 }
 
-export function useVehicles(filters = {}) {
+export function useVehicles(filters = {}, enabled = true) {
   const { keyword, location, fuelType, planType, maxPrice, sortBy, offset = 0 } = filters
   const [state, setState] = useState(INITIAL_STATE)
 
   useEffect(() => {
+    if (!enabled) return undefined
     let active = true
 
     async function load() {
@@ -59,7 +60,7 @@ export function useVehicles(filters = {}) {
     return () => {
       active = false
     }
-  }, [keyword, location, fuelType, planType, maxPrice, sortBy, offset])
+  }, [keyword, location, fuelType, planType, maxPrice, sortBy, offset, enabled])
 
   return state
 }

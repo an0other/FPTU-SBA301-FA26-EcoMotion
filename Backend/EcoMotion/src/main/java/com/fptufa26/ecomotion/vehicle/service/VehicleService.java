@@ -6,6 +6,9 @@ import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleMapResponse;
+import java.math.BigDecimal;
+import java.util.List;
 
 public interface VehicleService {
 
@@ -16,4 +19,9 @@ public interface VehicleService {
                                                            int offset, int limit);
 
     VehicleDetailResponse getVehicleDetail(Long id);
+
+    List<VehicleMapResponse> findNearbyVehicles(BigDecimal latitude, BigDecimal longitude,
+                                                int radiusKm, String keyword, String location,
+                                                String fuelType, String planType, BigDecimal maxPrice,
+                                                VehicleSort sort);
 }

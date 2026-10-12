@@ -22,6 +22,7 @@ import com.fptufa26.ecomotion.auth.exception.RegistrationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.UnsupportedRoleException;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
 import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
+import com.fptufa26.ecomotion.vehicle.exception.MapLocationUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -206,6 +207,14 @@ public class GlobalExceptionHandler {
                                                                HttpServletRequest request) {
         log.warn("Rejected request on {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MapLocationUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleMapLocationUnavailable(MapLocationUnavailableException ex,
+                                                                        HttpServletRequest request) {
+        log.warn("Map location service unavailable on {} {}: {}", request.getMethod(),
+                request.getRequestURI(), ex.toString());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "Address lookup service unavailable", request);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

@@ -76,6 +76,7 @@ TẦNG 4 — SAU CHUYẾN          BOOKING ─┬─ REVIEW      (đánh giá xe
 | `user_id` (FK, UK)                | 1-1 với `USER.role=PROVIDER`                                        |
 | `provider_type`                   | `INDIVIDUAL` (chủ xe cá nhân) | `BUSINESS` (doanh nghiệp thuê xe)   |
 | `depot_address`                   | **Gốc để tính bán kính phục vụ** — không phải địa chỉ hành chính    |
+| `depot_latitude`, `depot_longitude` | Tọa độ depot để tìm xe trên bản đồ; cùng có giá trị hoặc cùng null. Provider chưa có tọa độ vẫn có xe trong danh sách nhưng không xuất hiện trên bản đồ. |
 | `commission_rate`                 | Hoa hồng nền tảng giữ lại                                           |
 | `deposit_ratio`                   | **% cọc do nhà xe tự đặt** — CHỈ áp cho gói giờ/ngày/tháng          |
 | `bank_*`                          | Thông tin nhận chi trả (đối soát payout)                            |
@@ -84,6 +85,8 @@ TẦNG 4 — SAU CHUYẾN          BOOKING ─┬─ REVIEW      (đánh giá xe
 | `rating_avg`, `rating_count`      | **Cache** — xem bẫy bên dưới                                        |
 
 **Quan hệ:** `1-n` tới `VEHICLE`, `DRIVER`.
+
+**DB hiện có:** chạy `Backend/EcoMotion/src/main/resources/db/migrations/20261011_provider_depot_coordinates.sql` một lần trước khi khởi động backend với entity mới. `schema.sql` chỉ dùng khi tạo lại DB từ đầu vì file đó xóa và tạo lại bảng. Tọa độ seed là vị trí demo gần depot; provider khác cần bổ sung tọa độ thực trước khi xuất hiện trên bản đồ.
 
 **Luật nghiệp vụ:**
 
