@@ -27,7 +27,7 @@ export const Footer = () => {
             </h4>
             <ul className="space-y-2 text-xs sm:text-sm text-[#14221A]/70">
               <li>
-                <Link to="/renter/bookings/new" className="hover:text-[#15803D] transition-colors">
+                <Link to="/" className="hover:text-[#15803D] transition-colors">
                   Khám phá xe
                 </Link>
               </li>

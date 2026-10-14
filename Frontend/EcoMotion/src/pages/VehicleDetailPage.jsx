@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
 import {
   IconAlertTriangle,
@@ -26,6 +26,12 @@ import {
 } from '../components/icons/Icons'
 import { useVehicle } from '../hooks/useVehicle'
 import { formatCurrency, FUEL_LABELS, PLAN_LABELS, TRANSMISSION_LABELS } from '../utils/formatCurrency'
+
+function bookingRequestPath(vehicleId, planId) {
+  const params = new URLSearchParams({ vehicleId: String(vehicleId) })
+  if (planId != null && planId !== '') params.set('planId', String(planId))
+  return `/renter/bookings/new?${params}`
+}
 
 const PLAN_SUFFIX = {
   HOURLY: '/giờ',
@@ -128,6 +134,7 @@ function PolicyRow({ label, value, Icon }) {
 
 export default function VehicleDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { vehicle, loading, error, notFound, reload } = useVehicle(id)
   const [activeImage, setActiveImage] = useState(0)
   const [selectedPlanType, setSelectedPlanType] = useState(null)
@@ -403,37 +410,39 @@ export default function VehicleDetailPage() {
                     )}
 
                     <div className="mt-5 border-t border-slate-100 pt-5">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700"><IconCalendar className="h-5 w-5" /></span>
-                  <div>
-                    <h2 className="text-lg font-bold text-ink">Thông tin đặt xe</h2>
-                    <p className="mt-1 text-sm text-slate-500">Điền thông tin dự kiến. Chức năng gửi yêu cầu đặt xe sẽ được bổ sung sau.</p>
-                  </div>
-                </div>
-                <div className="mt-5 grid gap-4">
-                  <label className="text-sm font-semibold text-slate-700">Ngày và giờ nhận xe
-                    <input type="datetime-local" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-normal outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">Ngày và giờ trả xe
-                    <input type="datetime-local" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-normal outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">Số hành khách
-                    <input type="number" min="1" max={vehicle.seatCount || undefined} defaultValue="1" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-normal outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">Địa điểm nhận xe
-                    <input type="text" className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-normal outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" placeholder={provider?.depotAddress || 'Nhập địa điểm nhận xe'} />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">Ghi chú
-                    <textarea rows="3" className="mt-1.5 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-normal outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100" placeholder="Số khách, hành lý hoặc yêu cầu khác" />
-                  </label>
-                </div>
-                <div className="mt-5 border-t border-slate-100 pt-4">
-                  <button type="button" disabled className="w-full cursor-not-allowed rounded-xl bg-slate-200 px-5 py-3 text-sm font-bold text-slate-500">Gửi yêu cầu đặt xe</button>
-                </div>
-              </div>
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                          <IconCalendar className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <h2 className="text-lg font-bold text-ink">Đặt xe</h2>
+                          <p className="mt-1 text-sm text-slate-500">
+                            Chọn gói bên trên rồi gửi yêu cầu. Bạn sẽ chọn lịch và điểm đón ở bước tiếp theo.
+                            {!selectedPlan ? ' Xe này chưa có gói đang mở bán.' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-5">
+                        <button
+                          type="button"
+                          disabled={!selectedPlan}
+                          onClick={() => {
+                            if (!vehicle || !selectedPlan) return
+                            navigate(bookingRequestPath(vehicle.id, selectedPlan.id))
+                          }}
+                          className={`w-full rounded-xl px-5 py-3 text-sm font-bold transition-colors ${
+                            selectedPlan
+                              ? 'bg-brand-600 text-white hover:bg-brand-700'
+                              : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                          }`}
+                        >
+                          Gửi yêu cầu đặt xe
+                        </button>
+                      </div>
+                    </div>
                     <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500">
                       <IconInfo className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      Liên hệ nhà cung cấp để xác nhận thời gian nhận xe và chi phí trước khi thuê.
+                      Chưa đăng nhập sẽ được chuyển sang trang đăng nhập, rồi quay lại wizard đặt xe.
                     </p>
                   </div>
                 </div>

@@ -233,6 +233,7 @@ public class VehicleServiceImpl implements VehicleService {
 
     private VehicleDetailResponse.PlanDetail toPlanDetail(RentalPlan plan) {
         return new VehicleDetailResponse.PlanDetail(
+                plan.getId(),
                 plan.getPlanType(),
                 plan.getSlotLengthMinutes(),
                 plan.getSlotPrice(),

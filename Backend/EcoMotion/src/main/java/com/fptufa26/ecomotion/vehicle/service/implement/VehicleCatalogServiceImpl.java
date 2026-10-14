@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.vehicle.service.impl;
+package com.fptufa26.ecomotion.vehicle.service.implement;
 
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.vehicle.dto.response.BookableVehicleResponse;

@@ -4,31 +4,20 @@ import com.fptufa26.ecomotion.vehicle.dto.response.BookableVehicleResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.RentalPlanResponse;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingConstants;
 
 import java.util.List;
 
-@Component
-public class VehicleCatalogMapper {
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
+public interface VehicleCatalogMapper {
 
-    public BookableVehicleResponse toBookableVehicle(Vehicle vehicle, String imageUrl, List<RentalPlan> plans) {
-        return new BookableVehicleResponse(
-                vehicle.getId(),
-                vehicle.getBrand() + " " + vehicle.getModel(),
-                vehicle.getManufactureYear(),
-                vehicle.getLicensePlate(),
-                vehicle.getSeatCount(),
-                imageUrl,
-                vehicle.getProvider().getDepositRatio(),
-                plans.stream().map(this::toPlanResponse).toList());
-    }
+    @Mapping(target = "name", expression = "java(vehicle.getBrand() + \" \" + vehicle.getModel())")
+    @Mapping(target = "imageUrl", source = "imageUrl")
+    @Mapping(target = "depositRatio", source = "vehicle.provider.depositRatio")
+    @Mapping(target = "plans", source = "plans")
+    BookableVehicleResponse toBookableVehicle(Vehicle vehicle, String imageUrl, List<RentalPlan> plans);
 
-    public RentalPlanResponse toPlanResponse(RentalPlan plan) {
-        return new RentalPlanResponse(
-                plan.getId(),
-                plan.getPlanType(),
-                plan.getSlotLengthMinutes(),
-                plan.getSlotPrice(),
-                plan.getUpfrontAmount());
-    }
+    RentalPlanResponse toPlanResponse(RentalPlan plan);
 }

@@ -15,7 +15,7 @@ export const Header = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between">
         {/* Brand logo & title */}
         <div className="flex items-center gap-6 sm:gap-8">
-          <NavLink to="/renter/bookings/new" className="flex items-center gap-2.5 text-left group cursor-pointer">
+          <NavLink to="/" end className="flex items-center gap-2.5 text-left group cursor-pointer">
             <div className="w-9 h-9 rounded-xl bg-[#E8F6EE] flex items-center justify-center text-[#15803D] group-hover:bg-[#15803D] group-hover:text-white transition-colors duration-180">
               <span className="material-symbols-outlined text-[22px]">electric_car</span>
             </div>
@@ -31,7 +31,7 @@ export const Header = () => {
 
           {/* Navigation links */}
           <nav className="hidden md:flex items-center gap-1.5 bg-[#F7F8F6] p-1 rounded-xl border border-[#E6EBE8]">
-            <NavLink to="/renter/bookings/new" className={linkClass}>Khám phá xe</NavLink>
+            <NavLink to="/" end className={linkClass}>Khám phá xe</NavLink>
             <NavLink to="/policy" className={linkClass}>Chính sách & Cọc</NavLink>
             <NavLink to="/renter/bookings" end className={linkClass}>Đơn của tôi</NavLink>
           </nav>
