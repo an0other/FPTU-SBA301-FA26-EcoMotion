@@ -33,8 +33,10 @@ export function BookingRequestPage() {
         const match = rows.find((row) => row.id === requested) ?? rows[0]
         if (!match) return
         setVehicleId(match.id)
+        const requestedPlanId = Number(searchParams.get('planId'))
+        const byId = match.plans.find((plan) => plan.id === requestedPlanId)
         const daily = match.plans.find((plan) => plan.planType === 'DAILY') ?? match.plans[0]
-        setSelectedPlanId(daily?.id ?? null)
+        setSelectedPlanId(byId?.id ?? daily?.id ?? null)
       })
       .catch((err) => {
         if (!cancelled) setError(readErrorMessage(err))

@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.booking.service.impl;
+package com.fptufa26.ecomotion.booking.service.implement;
 
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;

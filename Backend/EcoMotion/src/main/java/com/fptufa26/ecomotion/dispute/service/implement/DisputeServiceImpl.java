@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.dispute.service.impl;
+package com.fptufa26.ecomotion.dispute.service.implement;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;

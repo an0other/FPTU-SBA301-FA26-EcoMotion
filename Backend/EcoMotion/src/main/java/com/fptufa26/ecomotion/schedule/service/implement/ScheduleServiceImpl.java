@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.schedule.service.impl;
+package com.fptufa26.ecomotion.schedule.service.implement;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
