@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import AppHeader from './components/AppHeader'
+import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
-import { Footer } from './components/layout/Footer'
-import { Header } from './components/layout/Header'
 import ActivatePage from './pages/ActivatePage'
 import AdminDashboard from './pages/AdminDashboard'
 import LoginPage from './pages/LoginPage'
@@ -19,10 +19,10 @@ import { PolicyPage } from './pages/PolicyPage'
 
 function BookingShell({ children }) {
   return (
-    <div className="min-h-screen flex flex-col bg-[#F7F8F6] text-[#14221A] font-sans antialiased">
-      <Header />
-      <main className="flex-1 w-full">{children}</main>
-      <Footer />
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
+      <BookingSubnav />
+      <main className="w-full flex-1">{children}</main>
     </div>
   )
 }
@@ -70,7 +70,7 @@ export default function App() {
         path="/policy"
         element={(
           <BookingShell>
-            <PolicyPage onBookNow={() => navigate('/renter/bookings/new')} />
+            <PolicyPage onBookNow={() => navigate('/')} />
           </BookingShell>
         )}
       />
