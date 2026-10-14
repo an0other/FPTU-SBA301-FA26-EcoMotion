@@ -60,7 +60,7 @@ export function MyBookingsPage() {
       bookings={bookings}
       onSelectBooking={(booking) => navigate(`/renter/bookings/${booking.id}`)}
       onPayDeposit={(booking) => navigate(`/renter/bookings/${booking.id}/checkout`)}
-      onBookCar={() => navigate('/renter/bookings/new')}
+      onBookCar={() => navigate('/')}
     />
   )
 }
