@@ -1,6 +1,6 @@
 package com.fptufa26.ecomotion.booking.controller;
 
-import com.fptufa26.ecomotion.booking.entity.ChargeType;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;

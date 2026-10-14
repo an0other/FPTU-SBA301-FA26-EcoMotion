@@ -1,6 +1,6 @@
 package com.fptufa26.ecomotion.booking.dto.response;
 
-import com.fptufa26.ecomotion.booking.entity.ChargeType;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
 
 import java.math.BigDecimal;
 

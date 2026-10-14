@@ -2,11 +2,11 @@ package com.fptufa26.ecomotion.vehicle.service.impl;
 
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.vehicle.dto.response.BookableVehicleResponse;
-import com.fptufa26.ecomotion.vehicle.entity.PlanStatus;
+import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
-import com.fptufa26.ecomotion.vehicle.entity.VehicleStatus;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.mapper.VehicleCatalogMapper;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;

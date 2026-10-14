@@ -10,7 +10,7 @@ import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
-import com.fptufa26.ecomotion.booking.entity.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.booking.service.BookingService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;

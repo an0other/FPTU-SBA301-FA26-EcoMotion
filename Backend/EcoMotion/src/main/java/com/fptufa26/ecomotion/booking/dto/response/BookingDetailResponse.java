@@ -1,9 +1,9 @@
 package com.fptufa26.ecomotion.booking.dto.response;
 
-import com.fptufa26.ecomotion.booking.entity.BookingStatus;
-import com.fptufa26.ecomotion.booking.entity.CancelReason;
-import com.fptufa26.ecomotion.dispute.entity.DisputeCategory;
-import com.fptufa26.ecomotion.vehicle.entity.PlanType;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.CancelReason;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 
 import java.math.BigDecimal;
 import java.time.Instant;

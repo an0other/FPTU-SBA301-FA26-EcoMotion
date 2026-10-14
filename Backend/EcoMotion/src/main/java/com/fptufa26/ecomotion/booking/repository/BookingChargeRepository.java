@@ -1,7 +1,7 @@
 package com.fptufa26.ecomotion.booking.repository;
 
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
-import com.fptufa26.ecomotion.booking.entity.ChargeType;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

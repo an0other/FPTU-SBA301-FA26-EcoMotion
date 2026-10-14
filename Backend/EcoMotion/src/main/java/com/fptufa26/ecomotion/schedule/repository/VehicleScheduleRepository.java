@@ -15,7 +15,7 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
     @Query("""
             select count(s) > 0 from VehicleSchedule s
             where s.vehicle.id = :vehicleId
-              and s.status = com.fptufa26.ecomotion.schedule.entity.ScheduleStatus.ACTIVE
+              and s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
               and s.startAt < :endAt
               and s.endAt > :startAt
             """)

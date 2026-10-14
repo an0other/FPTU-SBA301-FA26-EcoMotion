@@ -1,13 +1,34 @@
+# ===========================================================================
+# EcoMotion Backend — mẫu cấu hình môi trường
+#
+# CÁCH DÙNG:
+#   cp application.properties.example application.properties
+# rồi điền các giá trị thật.
+#
+# `application.properties` KHÔNG được commit (đã có trong
+# Backend/EcoMotion/.gitignore) — file này mới là bản an toàn để commit.
+#
+# QUY TẮC: KHÔNG ghi secret thật vào file này. Mọi giá trị nhạy cảm dùng cú
+# pháp ${ENV_VAR:default} và phải được set qua biến môi trường khi deploy.
+# ===========================================================================
+
+
 spring.application.name=EcoMotion
 spring.profiles.active=dev
+
+
+# ===============================
+# Profile
+# ===============================
+spring.profiles.active=${SPRING_PROFILES_ACTIVE:dev}
 
 
 # ===============================
 # Database configuration
 # ===============================
 spring.datasource.url=jdbc:postgresql://localhost:5432/ecomotion
-spring.datasource.username=your_username
-spring.datasource.password=your_password
+spring.datasource.username=${DB_USERNAME:postgres}
+spring.datasource.password=${DB_PASSWORD:your_password}
 spring.datasource.driver-class-name=org.postgresql.Driver
 
 
@@ -34,6 +55,7 @@ server.port=8080
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.show-sql=true
 # Schema is created by src/main/resources/db/schema.sql. Do not let Hibernate alter it.
+# Dev may use `create-drop`; production MUST stay `none`.
 spring.jpa.hibernate.ddl-auto=none
 spring.data.jpa.repositories.enabled=true
 
@@ -42,9 +64,20 @@ spring.data.jpa.repositories.enabled=true
 # JWT
 # ===============================
 # app.jwt.secret MUST be at least 32 bytes (256 bit) or HS256 signing fails with WeakKeyException.
-app.jwt.secret=your-256-bit-secret-at-least-32-chars
+# Generated with: openssl rand -base64 48
+# There is deliberately NO default: a committed fallback would let anyone forge tokens.
+app.jwt.secret=${JWT_SECRET:}
 app.jwt.access-token-ttl=15m
 app.jwt.issuer=ecomotion
+
+
+# ===============================
+# PII encryption (two-way, reversible)
+# ===============================
+# Encrypts short PII at rest: users.phone and renter.cccd_no.
+# MUST be at least 32 bytes. Override DATA_CRYPTO_SECRET in every real environment.
+# WARNING: rotating this key makes previously stored values unreadable — treat it like the JWT secret.
+app.crypto.secret=${DATA_CRYPTO_SECRET:}
 
 
 # ===============================
@@ -58,15 +91,160 @@ app.refresh-token.ttl-default=1d
 # Cookie
 # ===============================
 app.cookie.name=refresh_token
+# Scoping the cookie to /api/auth keeps it off every other endpoint.
 app.cookie.path=/api/auth
-app.cookie.secure=false
+# MUST be true behind HTTPS. Leaving it false in production lets the refresh token travel in clear.
+app.cookie.secure=${COOKIE_SECURE:false}
+# Lax is what blocks cross-site POSTs (CSRF) to /api/auth/refresh and /logout.
+# Never set this to None without adding an explicit CSRF token.
 app.cookie.same-site=Lax
 
 
 # ===============================
 # CORS
 # ===============================
-app.cors.allowed-origins=http://localhost:3000,http://localhost:5173
+# Exact origins only — never "*", because allowCredentials(true) is set in CorsConfig.
+# Add the deployed frontend origin (e.g. https://ecomotion.vn) before going live.
+app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+
+
+# ===============================
+# Registration token
+# ===============================
+# Binds a verified OTP to the final register call. Stateless — nothing is stored server-side.
+app.registration-token.ttl=30m
+
+
+# ===============================
+# Email OTP
+# ===============================
+# OTP is transient (never persisted in the DB).
+# provider=smtp    -> sends a real email; an SMTP rejection fails the request with 502,
+#                     which doubles as the "does this mailbox exist" gate.
+# provider=logging -> writes the code to the app log (local dev / tests).
+app.otp.provider=smtp
+app.otp.length=6
+app.otp.ttl=5m
+app.otp.max-attempts=5
+app.otp.resend-cooldown=60s
+# Never echo the OTP back to the client in a real environment: it must arrive only via email.
+app.otp.expose-in-response=false
+
+
+# ===============================
+# reCAPTCHA v3
+# ===============================
+# The secret key is read from the environment so it is never committed.
+# Set RECAPTCHA_SECRET_KEY before starting the app; if it is blank the protected endpoints
+# fail closed with 403 (see GoogleRecaptchaVerifier).
+app.captcha.enabled=${CAPTCHA_ENABLED:true}
+app.captcha.secret-key=${RECAPTCHA_SECRET_KEY:}
+app.captcha.min-score=0.5
+
+
+# ===============================
+# SMTP (real email delivery for OTP)
+# ===============================
+# Credentials come from env vars so no secret is committed. With Gmail use an app password.
+# If credentials are absent the app still boots; POST /api/auth/register/send-otp returns 502.
+app.mail.from=${MAIL_FROM:no-reply@ecomotion.vn}
+spring.mail.host=${MAIL_HOST:smtp.gmail.com}
+spring.mail.port=${MAIL_PORT:587}
+spring.mail.username=${MAIL_USERNAME:}
+spring.mail.password=${MAIL_PASSWORD:}
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.connectiontimeout=5000
+spring.mail.properties.mail.smtp.timeout=5000
+spring.mail.properties.mail.smtp.writetimeout=5000
+
+
+# ===============================
+# eKYC (identity verification on the activation page)
+# ===============================
+# Every provider implements the EkycService port. The bean the application injects is
+# FallbackEkycService: it tries app.ekyc.provider first and, only when that provider is
+# UNAVAILABLE (network/timeout/HTTP error), retries with app.ekyc.fallback-provider.
+# Verification failures and configuration errors are reported as-is and never masked.
+#
+# provider=mock  -> no network, always succeeds. DEV/TEST ONLY: MockEkycService is registered
+#                   under the dev/test Spring profiles, so a deployment that leaves this default
+#                   in place fails fast at startup instead of silently auto-approving identities.
+# provider=fptai -> calls the FPT.AI sandbox: CCCD OCR + face match. Requires FPT_AI_API_KEY.
+# provider=vnpt  -> calls the VNPT eKYC (IDG) endpoints. Requires VNPT_EKYC_* credentials.
+app.ekyc.provider=${EKYC_PROVIDER:mock}
+# Optional second provider, used only when the primary is unavailable. Empty disables the fallback.
+# e.g. app.ekyc.provider=fptai + app.ekyc.fallback-provider=vnpt
+app.ekyc.fallback-provider=${EKYC_FALLBACK_PROVIDER:}
+app.ekyc.mock.force-fail=false
+app.ekyc.fptai.api-key=${FPT_AI_API_KEY:}
+app.ekyc.fptai.idr-url=https://api.fpt.ai/vision/idr/vnm
+app.ekyc.fptai.face-url=https://api.fpt.ai/dmp/checkface/v1
+app.ekyc.fptai.min-similarity=70
+app.ekyc.fptai.connect-timeout=5s
+app.ekyc.fptai.read-timeout=15s
+# VNPT eKYC (IDG). Base URL and paths are configurable so the sandbox contract can change
+# without a code edit. document-type 9 = CCCD gắn chip.
+app.ekyc.vnpt.base-url=${VNPT_EKYC_BASE_URL:https://api.idg.vnpt.vn}
+app.ekyc.vnpt.ocr-path=/ekyc/v1/ocr
+app.ekyc.vnpt.face-path=/ekyc/v1/face
+app.ekyc.vnpt.document-type=9
+app.ekyc.vnpt.access-token=${VNPT_EKYC_ACCESS_TOKEN:}
+app.ekyc.vnpt.token-id=${VNPT_EKYC_TOKEN_ID:}
+app.ekyc.vnpt.token-key=${VNPT_EKYC_TOKEN_KEY:}
+app.ekyc.vnpt.min-similarity=70
+app.ekyc.vnpt.connect-timeout=5s
+app.ekyc.vnpt.read-timeout=15s
+
+
+# ===============================
+# Account activation (post-registration)
+# ===============================
+# After register the account is PENDING; the client gets a short-lived activation token instead
+# of a session and completes the profile on the activation page.
+app.activation-token.ttl=60m
+# Mock phone OTP: no SMS gateway, so the code is returned to the caller.
+app.phone-otp.length=6
+app.phone-otp.ttl=5m
+app.phone-otp.max-attempts=5
+app.phone-otp.resend-cooldown=60s
+
+
+# ===============================
+# File upload
+# ===============================
+# Stored object keys have the same form for both providers: {entity}/{userId}/{filename}.
+# Changing providers does not move existing objects; migrate files before switching.
+app.upload.provider=${UPLOAD_PROVIDER:local}
+# Local provider: use an absolute path on persistent storage outside the repo.
+app.upload.dir=${UPLOAD_DIR:./uploads}
+app.upload.max-file-size-bytes=8388608
+# Supabase provider: create a private bucket and keep the service key server-side only.
+app.upload.supabase.url=${SUPABASE_URL:}
+app.upload.supabase.bucket=${SUPABASE_STORAGE_BUCKET:}
+app.upload.supabase.service-key=${SUPABASE_SERVICE_KEY:}
+app.upload.supabase.connect-timeout=5s
+app.upload.supabase.read-timeout=20s
+spring.servlet.multipart.max-file-size=8MB
+spring.servlet.multipart.max-request-size=24MB
+
+
+# ===============================
+# Seeded vehicle images
+# ===============================
+# Photos live in the repo's Temp-data/ folder, structured as
+#   Temp-data/{providerUserId}/{vehicleId}/{file}.webp
+# The DB stores the matching URL path "/images/{providerUserId}/{vehicleId}/{file}.webp".
+# This value is resolved against Backend/EcoMotion/ (the module working directory), so the
+# relative path below resolves to <repo-root>/images on any clone. Override IMAGES_ROOT
+# only if the folder moves.
+app.images.root=${IMAGES_ROOT:../../images}
+
+
+# ===============================
+# Password policy
+# ===============================
+app.password.min-length=8
 
 
 # ===============================
@@ -81,3 +259,13 @@ springdoc.swagger-ui.try-it-out-enabled=true
 springdoc.swagger-ui.operations-sorter=method
 springdoc.swagger-ui.tags-sorter=alpha
 springdoc.packages-to-scan=com.fptufa26.ecomotion
+
+
+# ===============================
+# Map address lookup (OpenStreetMap Nominatim)
+# ===============================
+app.map.reverse-url=https://nominatim.openstreetmap.org/reverse
+app.map.search-url=https://nominatim.openstreetmap.org/search
+app.map.user-agent=EcoMotion-localhost/1.0 (https://github.com/an0other/FPTU-SBA301-FA26-EcoMotion)
+app.map.connect-timeout=5s
+app.map.request-timeout=8s
