@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.user.entity;
 
+import com.fptufa26.ecomotion.user.enums.ProviderStatus;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -16,7 +18,6 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 
@@ -47,6 +48,12 @@ public class Provider {
 
     @Column(name = "depot_address", nullable = false, length = 500)
     private String depotAddress;
+
+    @Column(name = "depot_latitude", precision = 9, scale = 6)
+    private BigDecimal depotLatitude;
+
+    @Column(name = "depot_longitude", precision = 9, scale = 6)
+    private BigDecimal depotLongitude;
 
     @Column(name = "commission_rate", nullable = false, precision = 6, scale = 4)
     private BigDecimal commissionRate;

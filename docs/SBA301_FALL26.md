@@ -84,8 +84,9 @@ Nền tảng xoay quanh 4 thực thể dữ liệu chính: **Xe, Đơn thuê, L�
 | **Phân công tài xế cho chuyến** (gán lúc có chuyến, không gán trước vào xe) | Provider                             |
 | **Duyệt tài khoản tài xế** (bắt buộc mới hoạt động)                         | Admin                                |
 | **Nhận xe & bàn giao xe cho tài xế** trước chuyến                           | Provider, cùng tài xế được phân công |
-| Đã đến điểm đón → bắt đầu chuyến                                            | Driver                               |
 
+
+| Đã đến điểm đón → bắt đầu chuyến                                            | Driver                               |
 
 | **Kết thúc chuyến**                                                         | Driver, cùng Provider xác nhận       |
 
@@ -109,6 +110,7 @@ Nền tảng xoay quanh 4 thực thể dữ liệu chính: **Xe, Đơn thuê, L�
 **b. Tìm & đặt xe**
 
 - Tìm xe theo khu vực/bản đồ, lọc theo loại xe (điện/xăng/dầu/hybrid), số chỗ, hình thức thuê, khoảng giá.
+- Chế độ bản đồ tìm xe theo khoảng cách đường thẳng 10 hoặc 15 km từ vị trí khách chọn đến tọa độ depot của provider; giữ các bộ lọc danh sách. Bán kính tìm kiếm độc lập với `free_radius_km` của gói thuê.
 - Xem chi tiết xe: hình ảnh, hãng/dòng/năm sản xuất, số chỗ, đánh giá và số chuyến đã chạy, giá theo từng gói, **lịch còn trống** của xe.
 - Mỗi tin đăng tương ứng đúng 1 xe thật, hiển thị đúng biển số (không có "xe ảo").
 - Gọi trực tiếp cho nhà cung cấp qua hotline hiển thị trên tin đăng để hỏi trước khi đặt.

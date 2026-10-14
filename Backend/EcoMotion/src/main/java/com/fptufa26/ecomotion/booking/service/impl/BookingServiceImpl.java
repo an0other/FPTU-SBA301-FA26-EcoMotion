@@ -16,13 +16,13 @@ import com.fptufa26.ecomotion.booking.dto.response.TimelineStepResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
-import com.fptufa26.ecomotion.booking.entity.BookingStatus;
-import com.fptufa26.ecomotion.booking.entity.CancelReason;
-import com.fptufa26.ecomotion.booking.entity.ChargeType;
-import com.fptufa26.ecomotion.booking.entity.PaymentDirection;
-import com.fptufa26.ecomotion.booking.entity.PaymentStatus;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.CancelReason;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
+import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
+import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
-import com.fptufa26.ecomotion.booking.entity.PaymentType;
+import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.mapper.BookingMapper;
 import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
 import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
@@ -34,13 +34,13 @@ import com.fptufa26.ecomotion.common.exception.BadRequestException;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
-import com.fptufa26.ecomotion.dispute.entity.DisputeCategory;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.service.UserService;
-import com.fptufa26.ecomotion.vehicle.entity.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
@@ -150,7 +150,7 @@ public class BookingServiceImpl implements BookingService {
         BookingCharge charge = new BookingCharge();
         charge.setBooking(booking);
         charge.setChargeType(ChargeType.BASE_RENTAL);
-        charge.setDescription("Thuê " + request.slotCount() + " slot");
+        charge.setDescription("ThuÃª " + request.slotCount() + " slot");
         charge.setQuantity(request.slotCount());
         charge.setUnitPrice(plan.getSlotPrice());
         charge.setAmount(total);
@@ -214,7 +214,7 @@ public class BookingServiceImpl implements BookingService {
             BookingCharge deposit = new BookingCharge();
             deposit.setBooking(booking);
             deposit.setChargeType(ChargeType.DEPOSIT);
-            deposit.setDescription("Cọc giữ chỗ");
+            deposit.setDescription("Cá»c giá»¯ chá»—");
             deposit.setQuantity(null);
             deposit.setUnitPrice(booking.getTotalAmount());
             deposit.setAppliedRate(snapshot.getDepositRatio());
@@ -363,20 +363,20 @@ public class BookingServiceImpl implements BookingService {
                                                 List<PaymentTransaction> payments,
                                                 Instant at) {
         if (!CANCELLABLE.contains(booking.getStatus())) {
-            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "Đơn này không huỷ được");
+            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "ÄÆ¡n nÃ y khÃ´ng huá»· Ä‘Æ°á»£c");
         }
         if (snapshot.getPlanType() == PlanType.YEARLY) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Trả trước không hoàn theo chính sách gói năm");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Tráº£ trÆ°á»›c khÃ´ng hoÃ n theo chÃ­nh sÃ¡ch gÃ³i nÄƒm");
         }
         BigDecimal paidDeposit = paidDeposit(charges, payments);
         if (paidDeposit == null) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Chưa thu cọc, số hoàn là 0");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "ChÆ°a thu cá»c, sá»‘ hoÃ n lÃ  0");
         }
         BigDecimal ratio = DepositRefundRules.ratio(snapshot.getPlanType(), at, booking.getPickupTime());
         BigDecimal amount = paidDeposit.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
         String explanation = ratio.compareTo(DepositRefundRules.FULL) == 0
-                ? "Huỷ trước mốc, hoàn 100% cọc"
-                : "Huỷ sau mốc, hoàn 50% cọc. Phần còn lại thuộc nhà cung cấp";
+                ? "Huá»· trÆ°á»›c má»‘c, hoÃ n 100% cá»c"
+                : "Huá»· sau má»‘c, hoÃ n 50% cá»c. Pháº§n cÃ²n láº¡i thuá»™c nhÃ  cung cáº¥p";
         return new RefundPreviewResponse(true, ratio, amount, explanation);
     }
 
@@ -428,49 +428,49 @@ public class BookingServiceImpl implements BookingService {
 
     private List<TimelineStepResponse> timeline(Booking booking, List<PaymentTransaction> payments) {
         List<TimelineStepResponse> steps = new ArrayList<>();
-        steps.add(new TimelineStepResponse("Đã gửi yêu cầu", booking.getCreatedAt(), null, true, false));
+        steps.add(new TimelineStepResponse("ÄÃ£ gá»­i yÃªu cáº§u", booking.getCreatedAt(), null, true, false));
         if (booking.getStatus() == BookingStatus.REJECTED) {
-            steps.add(new TimelineStepResponse("Chủ xe từ chối", null, "Không có lý do", true, true));
+            steps.add(new TimelineStepResponse("Chá»§ xe tá»« chá»‘i", null, "KhÃ´ng cÃ³ lÃ½ do", true, true));
         } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
-            steps.add(new TimelineStepResponse("Chủ xe đã chấp nhận", null, null, true, false));
+            steps.add(new TimelineStepResponse("Chá»§ xe Ä‘Ã£ cháº¥p nháº­n", null, null, true, false));
         }
         payments.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID
                         && (payment.getType() == PaymentType.DEPOSIT_PAY || payment.getType() == PaymentType.UPFRONT_PAY))
                 .findFirst()
                 .ifPresent(payment -> steps.add(new TimelineStepResponse(
-                        payment.getType() == PaymentType.UPFRONT_PAY ? "Đã thanh toán trả trước" : "Đã thanh toán cọc",
+                        payment.getType() == PaymentType.UPFRONT_PAY ? "ÄÃ£ thanh toÃ¡n tráº£ trÆ°á»›c" : "ÄÃ£ thanh toÃ¡n cá»c",
                         payment.getPaidAt(),
                         null,
                         true,
                         false)));
         if (booking.getActualStartAt() != null) {
-            steps.add(new TimelineStepResponse("Đang chạy", booking.getActualStartAt(), null, true, false));
+            steps.add(new TimelineStepResponse("Äang cháº¡y", booking.getActualStartAt(), null, true, false));
         }
         if (booking.getActualEndAt() != null) {
-            steps.add(new TimelineStepResponse("Kết thúc thực tế", booking.getActualEndAt(), null, true, false));
+            steps.add(new TimelineStepResponse("Káº¿t thÃºc thá»±c táº¿", booking.getActualEndAt(), null, true, false));
         }
         if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.COMPLETED
                 || booking.getRenterConfirmedAt() != null) {
             steps.add(new TimelineStepResponse(
-                    "Bạn đã xác nhận kết thúc",
+                    "Báº¡n Ä‘Ã£ xÃ¡c nháº­n káº¿t thÃºc",
                     booking.getRenterConfirmedAt(),
                     null,
                     booking.getRenterConfirmedAt() != null,
                     false));
             steps.add(new TimelineStepResponse(
-                    "Phía nhà cung cấp đã xác nhận",
+                    "PhÃ­a nhÃ  cung cáº¥p Ä‘Ã£ xÃ¡c nháº­n",
                     booking.getProviderConfirmedAt(),
                     null,
                     booking.getProviderConfirmedAt() != null,
                     false));
         }
         if (booking.getStatus() == BookingStatus.COMPLETED) {
-            steps.add(new TimelineStepResponse("Hoàn thành", null, null, true, false));
+            steps.add(new TimelineStepResponse("HoÃ n thÃ nh", null, null, true, false));
         }
         if (booking.getCancelledAt() != null) {
             steps.add(new TimelineStepResponse(
-                    "Đã huỷ",
+                    "ÄÃ£ huá»·",
                     booking.getCancelledAt(),
                     cancelLabel(booking.getCancelReason()),
                     true,
@@ -484,12 +484,12 @@ public class BookingServiceImpl implements BookingService {
             return null;
         }
         return switch (reason) {
-            case RENTER_REQUEST -> "Khách tự huỷ";
-            case PROVIDER_NO_VEHICLE -> "Nhà cung cấp hết xe";
-            case PROVIDER_NO_DRIVER -> "Nhà cung cấp hết tài xế";
-            case PREVIOUS_RENTER_OVERDUE -> "Khách của chuyến trước chưa trả xe";
-            case FORCE_MAJEURE -> "Bất khả kháng";
-            case SYSTEM -> "Hệ thống huỷ";
+            case RENTER_REQUEST -> "KhÃ¡ch tá»± huá»·";
+            case PROVIDER_NO_VEHICLE -> "NhÃ  cung cáº¥p háº¿t xe";
+            case PROVIDER_NO_DRIVER -> "NhÃ  cung cáº¥p háº¿t tÃ i xáº¿";
+            case PREVIOUS_RENTER_OVERDUE -> "KhÃ¡ch cá»§a chuyáº¿n trÆ°á»›c chÆ°a tráº£ xe";
+            case FORCE_MAJEURE -> "Báº¥t kháº£ khÃ¡ng";
+            case SYSTEM -> "Há»‡ thá»‘ng huá»·";
         };
     }
 

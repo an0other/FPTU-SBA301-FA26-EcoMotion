@@ -1,8 +1,8 @@
 package com.fptufa26.ecomotion.dispute.repository;
 
 import com.fptufa26.ecomotion.dispute.entity.Dispute;
-import com.fptufa26.ecomotion.dispute.entity.DisputeCategory;
-import com.fptufa26.ecomotion.dispute.entity.DisputeStatus;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
+import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DisputeRepository extends JpaRepository<Dispute, Long> {

@@ -1,7 +1,7 @@
 package com.fptufa26.ecomotion.booking.repository;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.booking.entity.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;

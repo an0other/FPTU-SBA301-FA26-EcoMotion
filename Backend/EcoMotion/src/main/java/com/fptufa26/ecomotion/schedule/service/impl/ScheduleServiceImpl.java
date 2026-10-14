@@ -1,8 +1,8 @@
 package com.fptufa26.ecomotion.schedule.service.impl;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.schedule.entity.ScheduleStatus;
-import com.fptufa26.ecomotion.schedule.entity.ScheduleType;
+import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
+import com.fptufa26.ecomotion.schedule.enums.ScheduleType;
 import com.fptufa26.ecomotion.schedule.entity.VehicleSchedule;
 import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;

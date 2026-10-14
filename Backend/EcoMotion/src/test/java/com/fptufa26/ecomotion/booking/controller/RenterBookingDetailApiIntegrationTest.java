@@ -1,12 +1,12 @@
 package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.booking.entity.BookingStatus;
-import com.fptufa26.ecomotion.booking.entity.CancelReason;
-import com.fptufa26.ecomotion.booking.entity.PaymentType;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.CancelReason;
+import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
-import com.fptufa26.ecomotion.schedule.entity.ScheduleStatus;
+import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
 import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.seed.DevDataSeeder;
 import org.junit.jupiter.api.DisplayName;

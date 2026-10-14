@@ -1,924 +1,131 @@
 # AGENT_CODE_STRUCTURE.md
 
-## 1. Purpose
+## 1. Purpose and Priority
 
-This document defines the code organization rules for AI coding agents working on this Spring Boot project.
+These rules guide AI coding agents working on this Spring Boot project. Organize the application as **Layered Architecture + Package by Feature**: keep the familiar N-layer flow (controller → service → repository) *inside each feature* instead of global `controller/`, `service/`, `repository/` packages, so those global layer directories do not grow unbounded. This is one deployable application. A feature package is an organizational boundary for finding and maintaining related code; creating one does not require DDD, bounded contexts, separate builds, messaging, or formal Modular Monolith rules.
 
-The project follows:
+Apply these rules when creating or modifying code. In case of conflict, prioritize: (1) explicit user instructions, (2) these rules, (3) existing project conventions where compatible. Preserve working behavior and avoid unrelated refactoring. Use the project's actual root package, Java/Spring versions, naming, and build tools. The feature names below are examples, not required features.
 
-> **Modular Monolith + N-Layer Architecture**
+## 2. Feature First, Then Layer
 
-The agent MUST follow these rules when creating, editing, moving, or refactoring code unless the user explicitly requests a different structure.
-
-This document is intentionally domain-agnostic. Do not assume business modules, entities, workflows, or conventions from another project.
-
----
-
-## 2. Architecture Overview
-
-The application is:
-
-- One Spring Boot application.
-- One deployable application.
-- Divided into business modules.
-- Each module uses N-Layer structure.
-- Modules should have clear ownership and boundaries.
-
-Primary organization rule:
+Place code by the use case or business feature it serves, then by its technical responsibility inside that feature:
 
 ```text
-Business Module
-    └── Layer
-```
-
-Do NOT organize the whole project like this:
-
-```text
-controller/
-service/
-repository/
-entity/
-dto/
-```
-
-Instead, organize by module:
-
-```text
-module-a/
-    ├── controller/
-    ├── service/
-    ├── repository/
-    ├── entity/
-    └── dto/
-
-module-b/
-    ├── controller/
-    ├── service/
-    ├── repository/
-    ├── entity/
-    └── dto/
-```
-
----
-
-## 3. Base Package
-
-Use the project's existing root package.
-
-Example:
-
-```text
-com.example.project
-```
-
-The main Spring Boot application class should remain in the root package:
-
-```text
-com.example.project.Application
-```
-
-Business modules should be direct descendants of the root package.
-
-Example:
-
-```text
-com.example.project/
+<root-package>/
 ├── Application.java
-├── common/
-├── modulea/
-├── moduleb/
-└── modulec/
-```
-
-Do not create another unrelated root package unless explicitly required.
-
----
-
-## 4. Business Modules
-
-A module represents a meaningful business capability or bounded responsibility.
-
-Examples are only illustrative:
-
-```text
-auth/
-user/
-order/
-product/
-payment/
-notification/
-```
-
-These are NOT mandatory module names.
-
-The agent MUST determine module ownership from the current project's requirements and existing code.
-
-Do not import a module structure from another project.
-
----
-
-## 5. Standard Module Structure
-
-A module may use:
-
-```text
-<module>/
-├── controller/
-├── service/
-├── repository/
-├── entity/
-├── dto/
-├── mapper/
-└── exception/
-```
-
-Example:
-
-```text
-<module>/
-├── controller/
-│   └── ExampleController.java
-├── service/
-│   ├── ExampleService.java
-│   └── ExampleServiceImpl.java
-├── repository/
-│   └── ExampleRepository.java
-├── entity/
-│   └── Example.java
-├── dto/
-│   ├── CreateExampleRequest.java
-│   └── ExampleResponse.java
-├── mapper/
-│   └── ExampleMapper.java
-└── exception/
-    └── ExampleNotFoundException.java
-```
-
-Not every module must contain every layer.
-
-Do NOT create empty packages only for symmetry.
-
----
-
-# 6. Layer Responsibilities
-
-## 6.1 Controller Layer
-
-Location:
-
-```text
-<module>/controller/
-```
-
-Responsibilities:
-
-- Receive HTTP requests.
-- Validate request input.
-- Read path variables, query parameters, and request bodies.
-- Call application/service logic.
-- Return HTTP responses.
-- Handle HTTP-specific concerns.
-
-Controllers MUST NOT contain core business rules.
-
-Bad:
-
-```java
-@PostMapping
-public ResponseEntity<?> create(@RequestBody CreateRequest request) {
-    if (request.getAmount() <= 0) {
-        // business rule
-    }
-
-    // complex business workflow
-}
-```
-
-Good:
-
-```java
-@PostMapping
-public ResponseEntity<Response> create(
-        @Valid @RequestBody CreateRequest request) {
-
-    return ResponseEntity.ok(service.create(request));
-}
-```
-
----
-
-## 6.2 Service Layer
-
-Location:
-
-```text
-<module>/service/
-```
-
-Responsibilities:
-
-- Business logic.
-- Use-case orchestration.
-- Business validation.
-- Transaction boundaries.
-- Calling repositories owned by the same module.
-- Calling public services/interfaces of other modules.
-
-The service layer is the main application/business orchestration layer.
-
-Do not move database queries directly into controllers.
-
----
-
-## 6.3 Repository Layer
-
-Location:
-
-```text
-<module>/repository/
-```
-
-Responsibilities:
-
-- Persistence.
-- Database queries.
-- Spring Data JPA repository definitions.
-- Query-specific persistence operations.
-
-Repositories MUST NOT own application workflows or business processes.
-
-Good:
-
-```java
-public interface ExampleRepository
-        extends JpaRepository<Example, Long> {
-
-    Optional<Example> findById(Long id);
-}
-```
-
-Bad:
-
-```java
-public Example processBusinessWorkflow(...) {
-    // business logic
-}
-```
-
----
-
-## 6.4 Entity Layer
-
-Location:
-
-```text
-<module>/entity/
-```
-
-Responsibilities:
-
-- Persistence model.
-- JPA mappings.
-- Entity state.
-- Entity behavior when appropriate.
-
-Entities MUST NOT handle:
-
-- HTTP concerns.
-- Controller behavior.
-- REST response formatting.
-- Repository queries.
-- Entire application workflows.
-
-Do not expose JPA entities directly as REST API responses unless the project explicitly chooses that design.
-
----
-
-## 6.5 DTO Layer
-
-Location:
-
-```text
-<module>/dto/
-```
-
-DTOs are used to transfer data between API/application boundaries.
-
-Prefer specific names:
-
-```text
-CreateExampleRequest
-UpdateExampleRequest
-ExampleResponse
-ExampleSummaryResponse
-```
-
-Avoid vague names when a meaningful name is available:
-
-```text
-DataDTO
-RequestDTO
-ResponseDTO
-ExampleDTO
-```
-
-Separate request and response models when their responsibilities differ.
-
----
-
-## 6.6 Mapper Layer
-
-Location:
-
-```text
-<module>/mapper/
-```
-
-Use mappers when entity/DTO conversion is reused or non-trivial.
-
-Example:
-
-```java
-@Mapper(componentModel = "spring")
-public interface ExampleMapper {
-
-    ExampleResponse toResponse(Example entity);
-
-    Example toEntity(CreateExampleRequest request);
-}
-```
-
-Do not create a mapper for every trivial conversion purely to increase abstraction.
-
-Follow the simplest design that keeps the code readable.
-
----
-
-## 6.7 Exception Layer
-
-Location:
-
-```text
-<module>/exception/
-```
-
-Use this package for exceptions specific to the module.
-
-Example:
-
-```text
-<module>/exception/
-├── ExampleNotFoundException.java
-└── InvalidExampleStateException.java
-```
-
-Cross-cutting/global exception handling may be placed under:
-
-```text
-common/exception/
-```
-
----
-
-# 7. Common Package
-
-Location:
-
-```text
-common/
-```
-
-`common` is only for genuinely shared or cross-cutting functionality.
-
-Examples:
-
-```text
-common/
-├── config/
-├── exception/
-├── security/
-├── response/
-└── util/
-```
-
-Possible examples:
-
-```text
-common/config/
-common/security/
-common/exception/
-common/response/
-```
-
-Do NOT use `common` as a dumping ground.
-
-Bad:
-
-```text
-common/
-├── SomeModuleService.java
-├── SomeModuleRepository.java
-├── ModuleSpecificUtils.java
-└── BusinessLogic.java
-```
-
-Decision rule:
-
-> If the code belongs to one business module, keep it inside that module.
-
-Only move code to `common` when it has a clear, legitimate cross-module purpose.
-
----
-
-# 8. Module Dependency Rules
-
-## 8.1 Ownership
-
-Every business concept and its persistence logic should have a clear owning module.
-
-A module owns:
-
-```text
-its controller
-its service
-its repository
-its entity
-its DTOs
-its module-specific exceptions
-```
-
-Other modules should not bypass that ownership.
-
----
-
-## 8.2 Cross-Module Access
-
-Do NOT directly access another module's repository.
-
-Bad:
-
-```text
-Module A Service
-    ↓
-Module B Repository
-```
-
-Preferred:
-
-```text
-Module A Service
-    ↓
-Module B Public Service/API
-    ↓
-Module B Repository
-```
-
-For example:
-
-```java
-moduleBService.findSomething(...);
-```
-
-instead of:
-
-```java
-moduleBRepository.findSomething(...);
-```
-
-This keeps module boundaries explicit.
-
----
-
-## 8.3 Avoid Circular Dependencies
-
-Avoid:
-
-```text
-Module A → Module B → Module A
-```
-
-If a circular dependency appears:
-
-1. Identify who owns the use case.
-2. Move the workflow to the appropriate owner.
-3. Expose a smaller public API if necessary.
-4. Extract shared functionality only when it is genuinely shared.
-5. Use events only when the project's requirements justify them.
-
-Do NOT solve circular dependencies by randomly moving code into `common`.
-
----
-
-# 9. Service Interface Rules
-
-Use service interfaces when they provide meaningful abstraction, multiple implementations, or are part of a deliberate module boundary.
-
-Example:
-
-```text
-ExampleService.java
-ExampleServiceImpl.java
-```
-
-Do NOT create interfaces mechanically for every class.
-
-If a concrete service is sufficient for the existing project design, a concrete service is acceptable.
-
-When modifying existing code, follow the project's established convention unless there is a concrete reason to change it.
-
----
-
-# 10. Transaction Rules
-
-Transactions should normally be defined at the service/use-case boundary.
-
-Example:
-
-```java
-@Service
-@Transactional
-public class ExampleServiceImpl {
-}
-```
-
-Do not place application-level transaction boundaries in controllers.
-
-Keep one business operation's transactional behavior understandable and cohesive.
-
----
-
-# 11. Naming Rules
-
-## Controllers
-
-```text
-<Domain>Controller
-```
-
-Examples:
-
-```text
-ExampleController
-AccountController
-OrderController
-```
-
-## Services
-
-```text
-<Domain>Service
-<Domain>ServiceImpl
-```
-
-Examples:
-
-```text
-ExampleService
-ExampleServiceImpl
-```
-
-## Repositories
-
-```text
-<Domain>Repository
-```
-
-Examples:
-
-```text
-ExampleRepository
-AccountRepository
-```
-
-## Entities
-
-Use the domain concept name.
-
-Examples:
-
-```text
-Example
-Account
-Order
-```
-
-## Request DTOs
-
-Prefer action-specific names:
-
-```text
-CreateExampleRequest
-UpdateExampleRequest
-SearchExampleRequest
-```
-
-## Response DTOs
-
-Prefer resource-specific names:
-
-```text
-ExampleResponse
-ExampleDetailResponse
-ExampleSummaryResponse
-```
-
----
-
-# 12. REST API Rules
-
-Prefer resource-oriented REST endpoints.
-
-Example:
-
-```text
-GET    /api/examples
-GET    /api/examples/{id}
-POST   /api/examples
-PUT    /api/examples/{id}
-DELETE /api/examples/{id}
-```
-
-Prefer HTTP methods to express CRUD operations.
-
-Avoid unnecessary action-style paths such as:
-
-```text
-POST /api/createExample
-POST /api/getExample
-POST /api/deleteExample
-```
-
-Exception: explicit domain actions may use action endpoints when they represent a meaningful business operation that is not ordinary CRUD.
-
----
-
-# 13. Configuration Rules
-
-Shared configuration:
-
-```text
-common/config/
-```
-
-Module-specific configuration stays inside its module when appropriate.
-
-Do not create configuration classes without a concrete purpose.
-
-Examples:
-
-```text
-common/config/
-├── SecurityConfig.java
-└── WebConfig.java
-```
-
-These names are illustrative, not mandatory.
-
----
-
-# 14. Properties and Secrets
-
-Do not commit sensitive credentials.
-
-Recommended structure:
-
-```text
-src/main/resources/
-├── application.properties
-└── application.properties.example
-```
-
-The example file may contain placeholders:
-
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/exampledb
-spring.datasource.username=your_username
-spring.datasource.password=your_password
-```
-
-The real local configuration should not contain credentials that are accidentally committed.
-
-Follow the project's actual environment/configuration strategy when one already exists.
-
----
-
-# 15. File Placement Rules
-
-Before creating a class, the agent MUST determine:
-
-### Step 1: Module ownership
-
-Which business module owns this responsibility?
-
-### Step 2: Layer responsibility
-
-Is it a:
-
-```text
-controller
-service
-repository
-entity
-dto
-mapper
-exception
-```
-
-or another clearly justified component?
-
-### Step 3: Shared or module-specific?
-
-If it is only used by one module:
-
-```text
-<module>/...
-```
-
-If it is truly shared:
-
-```text
-common/...
-```
-
-### Step 4: Dependency direction
-
-Does the new class introduce an unwanted dependency?
-
-Check for:
-
-```text
-A → B
-B → A
-```
-
-before finalizing the design.
-
----
-
-# 16. Refactoring Rules
-
-When changing existing code, the agent MUST:
-
-1. Preserve the existing architecture unless the user asks for architectural changes.
-2. Avoid unrelated file moves.
-3. Keep module boundaries clear.
-4. Avoid introducing unnecessary abstractions.
-5. Reuse existing project conventions.
-6. Minimize the scope of the change.
-7. Preserve existing public behavior unless the task requires behavior changes.
-8. Check imports and package declarations after moving classes.
-9. Check module dependencies after refactoring.
-
-Do not refactor the entire project simply because another structure might be cleaner.
-
----
-
-# 17. Forbidden Patterns
-
-Unless explicitly requested, do NOT introduce:
-
-## 17.1 Global Layer Architecture
-
-```text
-controller/
-service/
-repository/
-entity/
-```
-
-as the primary whole-project organization.
-
-## 17.2 Cross-Module Repository Access
-
-```text
-Module A → Module B Repository
-```
-
-## 17.3 Business Logic in Controllers
-
-```text
-Controller → complex business workflow
-```
-
-## 17.4 Business Workflow in Repositories
-
-```text
-Repository → business process
-```
-
-## 17.5 Common Package as a Dumping Ground
-
-```text
-common/
-    everything/
-```
-
-## 17.6 Direct Entity Exposure
-
-Do not automatically expose JPA entities as public API models.
-
-## 17.7 Circular Module Dependencies
-
-```text
-A → B → A
-```
-
-## 17.8 Unnecessary Boilerplate
-
-Do not create abstractions merely for architectural appearance.
-
-Examples:
-
-- interfaces with no meaningful abstraction
-- mappers for one trivial assignment
-- utility classes for module-specific business logic
-- extra layers with no clear responsibility
-
----
-
-# 18. Example Project Structure
-
-The following is a generic example only.
-
-```text
-src/main/java/com/example/project/
-│
-├── Application.java
-│
-├── common/
-│   ├── config/
-│   ├── exception/
-│   ├── security/
-│   ├── response/
-│   └── util/
-│
-├── modulea/
+├── common/                    shared technical concerns only
+│   └── storage/               file storage port and provider adapters
+├── auth/
 │   ├── controller/
 │   ├── service/
-│   ├── repository/
-│   ├── entity/
-│   ├── dto/
-│   ├── mapper/
-│   └── exception/
-│
-├── moduleb/
-│   ├── controller/
-│   ├── service/
-│   ├── repository/
-│   ├── entity/
-│   ├── dto/
-│   └── exception/
-│
-└── modulec/
-    ├── controller/
-    ├── service/
-    ├── repository/
-    ├── entity/
-    └── dto/
+│   │   ├── AuthService.java
+│   │   └── implement/
+│   │       └── AuthServiceImpl.java
+│   ├── dto/{request,response}/
+│   ├── captcha/  otp/           support packages used by auth
+│   └── entity/  repository/  mapper/  exception/
+├── verification/
+│   └── ekyc/                   shared identity verification provider port and adapters
+├── user/
+│   ├── entity/  repository/  dto/
+│   └── service/
+└── vehicle/
+    ├── controller/  dto/  entity/  repository/
+    └── service/
 ```
 
-The actual module names MUST come from the current project requirements.
+Before placing a class, answer:
 
----
+1. Which existing feature owns its behavior and data? Prefer that package.
+2. What layer does it belong to within that feature?
+3. Is a new feature package actually useful for finding and maintaining related code?
 
-# 19. Agent Pre-Change Checklist
+Start with reasonably broad features such as `auth`, `user`, `vehicle`, and `booking`. Split an oversized feature into subfeatures only when the code and workflows make that useful; a subfeature can have its own `controller/`, `service/`, `service/implement/`, `repository/`, `entity/`, and `dto/` where needed. Helper packages inside a feature (for example `auth/otp/`, `auth/captcha/`) are support components of that feature, not automatically standalone features. Shared identity verification provider integration belongs in `verification/ekyc/`; the provider-neutral file storage port and adapters belong in `common/storage/`. Do not duplicate the same ownership in two places.
 
-Before creating or moving code, verify:
+Do not create empty layers for symmetry. Do not organize the whole application into global `controller/`, `service/`, `repository/`, and `entity/` packages. `common/` is reserved for genuinely shared technical concerns, not misplaced business logic. Do not move files solely to make the tree look uniform.
 
-- [ ] I identified the correct business module.
-- [ ] I identified the correct layer.
-- [ ] I am not creating a global layer package.
-- [ ] I am not accessing another module's repository directly.
-- [ ] I am not moving module-specific code into `common`.
-- [ ] I am not putting business logic in a controller.
-- [ ] I am not putting business workflows in a repository.
-- [ ] I am not exposing an entity as an API response without a deliberate reason.
-- [ ] I am not creating a circular module dependency.
-- [ ] I am not adding unnecessary abstraction or boilerplate.
-- [ ] I am following the existing project's naming conventions.
-- [ ] I am not assuming conventions from another project.
+## 3. Layer Responsibilities
 
----
+- `controller/`: HTTP routing, request validation, response mapping. Delegate business work to service interfaces.
+- `service/`: application/business service **interfaces** defining cohesive operations.
+- `service/implement/`: **all concrete implementations of application/business services**, regardless of whether a service is high-level or low-level, public or internal, and regardless of the number of implementations. Business rules, use-case orchestration, and transaction boundaries live here.
+- `repository/`: persistence and queries for the feature. Repositories do not own use-case workflows.
+- `entity/`: persistence state and focused entity behavior; do not put HTTP handling or full use-case workflows here.
+- `dto/`: request, response, and service-boundary data. Split into `request/` and `response/` when the volume and direction justify it.
+- `mapper/`, `exception/`, `config/`: create only if the feature needs them.
+- Provider client/SDK code: keep it in a descriptive package within the owning feature, such as `verification/ekyc/` or `auth/captcha/`. Add a port interface and adapter package if isolating a real external dependency improves clarity or testing; do not create them mechanically.
 
-# 20. Rule Priority
+Do not expose JPA entities as REST responses by default. Keep credentials, provider-specific types, and persistence details out of request/response DTOs and service contracts.
 
-When rules conflict, use this priority:
+## 4. Mandatory Service Interface and Implementation Rule
 
-1. Explicit user instruction.
-2. Existing project architecture and conventions.
-3. This document.
-4. Agent preference.
+Every application/business service MUST have an interface in the nearest owning feature's `service/` and its implementation in that same service package's **`implement/`** child package. This applies to lower-level services and services with only one implementation.
 
-The agent MUST NOT change architecture because it personally prefers another architecture.
+```text
+<feature>/service/<Name>Service.java
+<feature>/service/implement/<Name>ServiceImpl.java
+```
 
----
+When a feature has subfeatures, use the subfeature as `<feature>`. Do not place concrete service classes directly in `service/`, in a global implementation directory, or in `impl/`. The directory name for this project is exactly `implement`.
 
-# 21. Core Principle
+- `<Name>Service` is an interface. `<Name>ServiceImpl` implements it and carries `@Service` when registered as a Spring bean.
+- Controllers and other services declare constructor dependencies using service interfaces, not implementation classes. Keep service dependencies final; do not use field injection or instantiate Spring services manually.
+- Put `@Transactional` on appropriate implementation methods/classes. Check proxy behavior and self-invocation when changing transaction boundaries.
+- Keep interfaces cohesive. Do not expose private implementation helpers as public methods merely to satisfy this rule.
+- When multiple beans implement one service interface, make Spring selection explicit.
+- Tests may instantiate implementations directly as subjects under test; production consumers inject interfaces.
+- This policy concerns application/business services. It does not require interface/implementation pairs for entities, DTOs, controllers, mapper classes, configuration, exceptions, or ordinary private helpers. A technical client may implement a provider port inside its integration package without being renamed `*ServiceImpl`.
 
-The goal is not to maximize the number of packages or abstractions.
+When modifying an existing service still using `impl/` or a concrete class in `service/`, migrate that service and affected imports/consumers together. Do not rewrite every unrelated feature just to standardize the repository unless the user requests that migration. Report remaining inconsistencies accurately.
 
-The goal is:
+## 5. Feature Collaboration and Ownership
 
-> **Clear module ownership + clear layer responsibilities + low unnecessary coupling + maintainable code.**
+A feature may call another feature's service interface when a use case needs it. These are maintainability guidelines for a single deployable application, not strict module boundaries: keep calls clear and avoid dependency cycles. Prefer a small DTO or result specific to the caller's needs; do not make one feature reach into another feature's repository, implementation, or mutable entity. If a cycle appears, inspect which feature owns the workflow before adding a shared abstraction.
 
-Use the simplest structure that preserves these properties.
+A third-party provider is an integration used by a feature, not automatically a new feature. OTP creation and validation belong to `auth`; an email sender delivers the message. `auth` owns the account activation workflow and calls the shared eKYC provider port in `verification/ekyc/`. Future driver license workflows should own their own approval rules and use verification capabilities as needed. Base placement on the actual code and requirements, not a generic example.
+
+Only introduce events, queues, retry infrastructure, or a new architectural boundary when current requirements justify them. Preserve transaction and failure behavior during refactoring.
+
+## 6. No Hard-Coded Values
+
+Do not hard-code environment-dependent, secret, provider-specific, or changeable business values in Java source. Examples include URLs, credentials, API keys, file paths, OTP length/expiry/attempt limits, thresholds, fees, timeouts, email sender addresses, and provider identifiers when they are configurable.
+
+- Use the project's configuration mechanism for deployable values: application properties/YAML, environment variables, and typed `@ConfigurationProperties` where appropriate. Never commit real secrets; supply safe placeholders/examples as needed.
+- Use well-named constants or enums for stable code-level values such as protocol-defined codes, fixed labels, and domain states. If business staff must change a value without a code release, put it in configuration or the existing database-driven settings mechanism instead.
+- Avoid unexplained magic numbers and repeated string literals. Use named values with one clear source of truth.
+- Framework-required literals, mapping paths, format tokens, and simple self-explanatory values may remain inline when extracting them would reduce clarity. This rule is about configurable or meaningful values, not banning every literal in Java.
+- Do not invent new properties or database settings merely to remove a literal; inspect existing configuration and actual variability first.
+
+## 7. No Comments in Code
+
+Do not add inline comments, block comments, JavaDoc, TODO/FIXME notes, or commented-out code to Java and other source code you create or modify. Express intent with clear names, small methods, and cohesive structure. Document public behavior in the project's existing documentation when necessary. Keep license headers or comments required by generated code or external tooling if the project legally or technically requires them; do not remove unrelated existing comments as part of a focused edit.
+
+This restriction applies to source code, not this Markdown rules document or other requested documentation.
+
+## 8. SOLID and Simplicity
+
+- **SRP:** A class should have a cohesive reason to change; separate HTTP, business, persistence, and provider concerns.
+- **OCP:** Add a variation point when there is actual variation; avoid speculative factories and strategies.
+- **LSP:** Implementations honor the service/port contract, including errors and behavior.
+- **ISP:** Keep interfaces focused on operations their consumers use.
+- **DIP:** Consumers depend on service interfaces; business services use ports for external providers where that boundary is useful. A feature's Spring Data repository interface remains an appropriate dependency for its service implementation.
+
+
+An interface alone does not prove SOLID compliance. Prefer readable code and the smallest change that satisfies the task.
+
+## 9. Workflow and Verification
+
+Before editing:
+
+1. Inspect the relevant feature packages, callers, persistence, configuration, and tests.
+2. Identify the correct feature, layer, existing patterns, and behavior to preserve.
+3. For a substantial feature move, check affected transactions, dependencies, persisted data, and API compatibility. Explain the planned moves briefly, then carry out the authorized work.
+
+After editing:
+
+1. Check package declarations, imports, Spring bean resolution, constructor injection, and service interface/`service/implement/` pairs.
+2. Check changed code for hard-coded values, new source comments, cross-feature repository/implementation access, and dependency cycles.
+3. Run the relevant build and tests when application code changes. Add focused tests for changed behavior when needed. Do not claim checks passed unless actually run.
+4. Report changed files, behavior, checks, and any remaining limits. Documentation-only changes need a content review; they do not require an application build.
+
+Do not make broad file moves or speculative infrastructure changes during a focused task.

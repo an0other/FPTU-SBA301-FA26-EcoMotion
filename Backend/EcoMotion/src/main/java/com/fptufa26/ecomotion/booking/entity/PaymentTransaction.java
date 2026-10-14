@@ -1,5 +1,9 @@
 package com.fptufa26.ecomotion.booking.entity;
 
+import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
+import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
+import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
+import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -16,7 +20,6 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 

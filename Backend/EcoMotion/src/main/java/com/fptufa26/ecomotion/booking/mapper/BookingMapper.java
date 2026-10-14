@@ -13,14 +13,14 @@ import com.fptufa26.ecomotion.booking.dto.response.DriverSnippetResponse;
 import com.fptufa26.ecomotion.booking.dto.response.RefundPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TimelineStepResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.booking.entity.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
-import com.fptufa26.ecomotion.dispute.entity.DisputeCategory;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.vehicle.entity.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import org.springframework.stereotype.Component;
 
