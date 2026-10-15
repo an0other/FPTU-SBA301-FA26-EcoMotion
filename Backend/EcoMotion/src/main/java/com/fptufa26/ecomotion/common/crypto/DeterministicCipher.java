@@ -21,7 +21,7 @@ public class DeterministicCipher {
     private final SecretKeySpec encryptionKey;
     private final SecretKeySpec nonceKey;
 
-    public DeterministicCipher(@Value("${app.crypto.secret}") String secret) {
+    public DeterministicCipher(@Value("${app.crypto.secret:dev-crypto-secret-0123456789abcdef-32bytes}") String secret) {
         this.encryptionKey = new SecretKeySpec(sha256(secret + "|enc"), "AES");
         this.nonceKey = new SecretKeySpec(sha256(secret + "|iv"), "HmacSHA256");
     }
