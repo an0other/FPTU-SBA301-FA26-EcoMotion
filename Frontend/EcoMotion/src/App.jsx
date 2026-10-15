@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import VehicleListPage from './pages/VehicleListPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import ProviderDashboard from './pages/ProviderDashboard'
+import ProviderBookingQueuePage from './pages/ProviderBookingQueuePage'
 import AdminDashboard from './pages/AdminDashboard'
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/me" element={<MePage />} />
         <Route path="/provider" element={<ProviderDashboard />} />
+        <Route path="/provider/bookings" element={<ProviderBookingQueuePage />} />
         <Route path="/admin" element={<AdminDashboard />} />
       </Route>
 
