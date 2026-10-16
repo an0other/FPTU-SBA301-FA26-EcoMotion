@@ -75,6 +75,8 @@ public class DevDataSeeder implements ApplicationRunner {
 
         private static final long PROVIDER_A_USER_ID = 2L;
         private static final long PROVIDER_B_USER_ID = 4L;
+    private final RenterPaymentDataSeeder renterPaymentDataSeeder;
+
 
         private static final String NAME_PROVIDER_A = "Nguy\u1ec5n V\u0103n A";
         private static final String NAME_PROVIDER_B = "Tr\u1ea7n Th\u1ecb B";
@@ -270,7 +272,11 @@ public class DevDataSeeder implements ApplicationRunner {
                 seedBookings(driverNam, driverCuong, driverKiet);
 
                 realignPinnedIdentitySequences();
-        }
+
+        realignPinnedIdentitySequences();
+        realignPinnedIdentitySequences();
+        renterPaymentDataSeeder.seed();
+    }
 
         private void seedBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
                 Instant now = Instant.now();
