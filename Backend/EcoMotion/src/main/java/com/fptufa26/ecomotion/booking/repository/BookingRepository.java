@@ -42,6 +42,9 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     })
     Page<Booking> findAll(@Nullable Specification<Booking> spec, Pageable pageable);
 
+    Optional<Booking> findByBookingCodeAndRenter_User_Id(
+            String bookingCode,
+            Long userId);
     // Existing renter and booking-code queries.
     long countByBookingCodeStartingWith(String prefix);
 

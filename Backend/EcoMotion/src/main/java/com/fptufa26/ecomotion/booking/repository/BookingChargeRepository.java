@@ -28,4 +28,6 @@ public interface BookingChargeRepository extends JpaRepository<BookingCharge, Lo
     List<BookingCharge> findByBookingIdWithUser(@Param("bookingId") Long bookingId);
 
     Optional<BookingCharge> findByIdAndBooking_Id(Long id, Long bookingId);
+    List<BookingCharge> findByBooking_IdOrderByCreatedAtAscIdAsc(
+            Long bookingId);
 }

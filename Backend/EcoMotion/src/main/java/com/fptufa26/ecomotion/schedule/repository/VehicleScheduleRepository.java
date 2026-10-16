@@ -51,6 +51,16 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             @Param("endAt") Instant endAt,
             @Param("excludeBookingId") Long excludeBookingId
     );
+    boolean existsByVehicle_IdAndStatusAndStartAtLessThanAndEndAtGreaterThan(
+            Long vehicleId,
+            ScheduleStatus status,
+            Instant endAt,
+            Instant startAt);
 
     List<VehicleSchedule> findByVehicle_IdAndStatus(Long vehicleId, ScheduleStatus status);
+    boolean existsByBooking_Renter_IdAndStatusAndStartAtLessThanAndEndAtGreaterThan(
+            Long renterId,
+            ScheduleStatus status,
+            Instant endAt,
+            Instant startAt);
 }

@@ -13,7 +13,8 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Long> {
+public interface PaymentTransactionRepository
+        extends JpaRepository<PaymentTransaction, Long> {
 
     List<PaymentTransaction> findByBooking_IdOrderByCreatedAtAsc(Long bookingId);
 
@@ -49,4 +50,10 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     boolean existsByGatewayRef(String gatewayRef);
 
     boolean existsByCharge_IdAndStatus(Long chargeId, PaymentStatus status);
+    @EntityGraph(attributePaths = "booking")
+    Page<PaymentTransaction>
+    findByBooking_Renter_User_IdAndTypeNotOrderByCreatedAtDescIdDesc(
+            Long userId,
+            PaymentType excludedType,
+            Pageable pageable);
 }
