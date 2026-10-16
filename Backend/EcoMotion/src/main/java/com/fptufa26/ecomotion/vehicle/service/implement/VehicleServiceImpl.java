@@ -1,6 +1,8 @@
 package com.fptufa26.ecomotion.vehicle.service.implement;
 
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleAvailabilityResponse;
+import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
@@ -23,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -40,6 +43,7 @@ public class VehicleServiceImpl implements VehicleService {
     private final VehicleRepository vehicleRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final RentalPlanRepository rentalPlanRepository;
+    private final VehicleScheduleRepository vehicleScheduleRepository;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -329,6 +333,22 @@ public class VehicleServiceImpl implements VehicleService {
         } catch (IllegalArgumentException ex) {
             return null;
         }
+    }
+
+    @Override
+    public VehicleAvailabilityResponse getAvailability(Long vehicleId, Instant from, Instant to) {
+        // Verify vehicle exists and is approved
+        vehicleRepository.findByIdAndStatus(vehicleId, VehicleStatus.APPROVED)
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+
+        var schedules = vehicleScheduleRepository.findActiveInRange(vehicleId, from, to);
+
+        var slots = schedules.stream()
+                .map(s -> new VehicleAvailabilityResponse.OccupiedSlot(
+                        s.getStartAt(), s.getEndAt(), s.getType().name()))
+                .toList();
+
+        return new VehicleAvailabilityResponse(vehicleId, slots);
     }
 
     private PlanType parsePlanType(String planType) {

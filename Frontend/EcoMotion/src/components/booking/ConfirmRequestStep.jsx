@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 
 export const ConfirmRequestStep = ({
+  vehicleId,
   vehicleName,
   plateNumber,
   vehicleImage,
@@ -16,6 +18,7 @@ export const ConfirmRequestStep = ({
   vehicleYear,
   totalAmount,
   depositAmount,
+  planType,
   onBack,
   onSubmit,
 }) => {
@@ -30,20 +33,14 @@ export const ConfirmRequestStep = ({
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs sm:text-sm text-[#64748B]">
-        <span onClick={onBack} className="hover:text-[#15803D] cursor-pointer transition-colors">
-          Trang chủ
-        </span>
+        <Link to="/" className="hover:text-[#15803D] transition-colors">Trang chủ</Link>
         <span className="text-xs">&gt;</span>
-        <span onClick={onBack} className="hover:text-[#15803D] cursor-pointer transition-colors">
-          Khám phá xe
-        </span>
+        <Link to={`/vehicles/${vehicleId}`} className="hover:text-[#15803D] transition-colors">{vehicleName}</Link>
         <span className="text-xs">&gt;</span>
-        <span className="hover:text-[#15803D] transition-colors">{vehicleName}</span>
-        <span className="text-xs">&gt;</span>
-        <span className="font-semibold text-[#14221A]">Gửi yêu cầu thuê</span>
+        <span className="font-semibold text-[#14221A]">Gửi yêu cầu đặt xe</span>
       </nav>
 
       {/* Stepper 3 Bước */}
@@ -93,7 +90,7 @@ export const ConfirmRequestStep = ({
       </div>
 
       {/* Card Tóm Tắt & Chi Tiết Lịch Trình */}
-      <div className="bg-white rounded-[16px] p-6 shadow-[0_8px_24px_rgba(20,34,26,0.06)] border border-[#E6EBE8] space-y-6">
+      <div className="bg-white rounded-[16px] p-6 shadow-[0_8px_24px_rgba(20,34,26,0.06)] border border-[#E6EBE8] space-y-4">
         {/* Card Header: Car Profile */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 bg-[#F7F8F6] p-4 rounded-[12px] border border-[#E6EBE8]">
           <div className="flex items-center gap-4">
@@ -236,13 +233,15 @@ export const ConfirmRequestStep = ({
             </div>
           </div>
 
-          {/* Yearly package note */}
+          {/* Yearly package note - only show for YEARLY plan */}
+          {planType === 'YEARLY' && (
           <div className="p-3 bg-gray-50 rounded-[12px] border border-[#E6EBE8] flex items-start gap-2 text-xs text-gray-600">
             <span className="material-symbols-outlined text-gray-400 text-[18px] shrink-0 mt-0.5">description</span>
             <p>
-              Nếu là Gói năm: Trả trước theo hợp đồng và liên kết Khai GPLX và hợp đồng (không mở form upload tại đây).
+              Gói năm: Trả trước theo hợp đồng và liên kết Khai GPLX và hợp đồng (không mở form upload tại đây).
             </p>
           </div>
+          )}
         </div>
       </div>
 
@@ -270,7 +269,7 @@ export const ConfirmRequestStep = ({
             </>
           ) : (
             <>
-              <span>Gửi yêu cầu thuê</span>
+              <span>Gửi yêu cầu đặt xe</span>
               <span className="material-symbols-outlined text-[18px]">send</span>
             </>
           )}

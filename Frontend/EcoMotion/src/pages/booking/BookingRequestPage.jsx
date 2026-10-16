@@ -16,11 +16,12 @@ export function BookingRequestPage() {
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [step, setStep] = useState(1)
   const [slots, setSlots] = useState(3)
-  const [startDate, setStartDate] = useState('2026-10-25')
-  const [startTime, setStartTime] = useState('08:00')
+  const [startDate, setStartDate] = useState('')
+  const [startTime, setStartTime] = useState('')
   const [pickupAddress, setPickupAddress] = useState('18 Hoàng Hoa Thám, Phường 13, Quận Tân Bình, TP. Hồ Chí Minh')
   const [passengerCount, setPassengerCount] = useState(3)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -127,6 +128,7 @@ export function BookingRequestPage() {
       {error ? <p className="max-w-7xl mx-auto px-6 pt-4 text-sm text-[#B42318]">{error}</p> : null}
       {step === 1 ? (
         <ChoosePlanStep
+          vehicleId={vehicle.id}
           vehicleName={vehicle.name}
           plateNumber={vehicle.licensePlate}
           vehicleType={`${vehicle.seatCount} chỗ`}
@@ -141,11 +143,29 @@ export function BookingRequestPage() {
           startTime={startTime}
           setStartTime={setStartTime}
           projectedEnd={projectedEnd}
-          onNext={() => setStep(2)}
+          fieldErrors={fieldErrors}
+          setFieldErrors={setFieldErrors}
+          totalAmount={totalAmount}
+          depositAmount={depositAmount}
+          depositRatio={Number(vehicle?.depositRatio ?? 0)}
+          onNext={() => {
+            const errs = {}
+            if (!startDate) errs.startDate = 'Vui lòng chọn ngày nhận xe'
+            if (!startTime) errs.startTime = 'Vui lòng chọn giờ nhận xe'
+            if (startDate && startTime) {
+              const picked = new Date(`${startDate}T${startTime}:00+07:00`)
+              if (picked <= new Date()) {
+                errs.startTime = 'Giờ nhận xe đã qua, vui lòng chọn thời gian trong tương lai'
+              }
+            }
+            setFieldErrors(errs)
+            if (Object.keys(errs).length === 0) setStep(2)
+          }}
         />
       ) : null}
       {step === 2 ? (
         <PickupStep
+          vehicleId={vehicle.id}
           vehicleName={vehicle.name}
           plateNumber={vehicle.licensePlate}
           vehicleImage={vehicle.imageUrl}
@@ -165,6 +185,7 @@ export function BookingRequestPage() {
       ) : null}
       {step === 3 ? (
         <ConfirmRequestStep
+          vehicleId={vehicle.id}
           vehicleName={vehicle.name}
           plateNumber={vehicle.licensePlate}
           vehicleType={planLabel(plan?.planType).title}
@@ -182,6 +203,7 @@ export function BookingRequestPage() {
           passengerCount={passengerCount}
           totalAmount={totalAmount}
           depositAmount={depositAmount}
+          planType={plan?.planType}
           onBack={() => setStep(2)}
           onSubmit={submitting ? () => {} : handleSubmit}
         />

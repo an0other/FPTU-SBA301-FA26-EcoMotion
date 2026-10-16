@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 
 export const PickupStep = ({
+  vehicleId,
   vehicleName,
   plateNumber,
   vehicleImage,
@@ -30,20 +32,14 @@ export const PickupStep = ({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs sm:text-sm text-[#64748B]">
-        <span onClick={onBack} className="hover:text-[#15803D] cursor-pointer transition-colors">
-          Trang chủ
-        </span>
+        <Link to="/" className="hover:text-[#15803D] transition-colors">Trang chủ</Link>
         <span className="text-xs">&gt;</span>
-        <span onClick={onBack} className="hover:text-[#15803D] cursor-pointer transition-colors">
-          Khám phá xe
-        </span>
+        <Link to={`/vehicles/${vehicleId}`} className="hover:text-[#15803D] transition-colors">{vehicleName}</Link>
         <span className="text-xs">&gt;</span>
-        <span className="hover:text-[#15803D] transition-colors">{vehicleName}</span>
-        <span className="text-xs">&gt;</span>
-        <span className="font-semibold text-[#14221A]">Gửi yêu cầu thuê</span>
+        <span className="font-semibold text-[#14221A]">Gửi yêu cầu đặt xe</span>
       </nav>
 
       {/* Vehicle Summary Header Card */}
@@ -86,7 +82,7 @@ export const PickupStep = ({
       </section>
 
       {/* Stepper 3 Bước */}
-      <section className="w-full max-w-3xl mx-auto my-6">
+      <section className="w-full max-w-3xl mx-auto my-3">
         <div className="relative flex items-center justify-between">
           <div className="absolute left-8 right-8 top-1/2 -translate-y-1/2 h-[3px] bg-[#BEC9C1] -z-0"></div>
           <div className="absolute left-8 w-1/2 top-1/2 -translate-y-1/2 h-[3px] bg-[#004F35] -z-0"></div>
@@ -124,7 +120,7 @@ export const PickupStep = ({
           <p className="text-sm text-gray-600 mt-1">Cung cấp vị trí đón thuận tiện để tài xế chuyên trách phục vụ chu đáo</p>
         </div>
 
-        <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] p-6 sm:p-8 space-y-6 border border-[#E6EBE8]">
+        <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] p-4 sm:p-6 space-y-4 border border-[#E6EBE8]">
           {/* Field 1: Điểm đón */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -222,7 +218,7 @@ export const PickupStep = ({
         </div>
 
         {/* Bottom Navigation Buttons */}
-        <div className="mt-6 flex items-center justify-between gap-4">
+        <div className="mt-4 flex items-center justify-between gap-4">
           <button
             onClick={onBack}
             className="inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-[12px] bg-white text-[#14221A] font-semibold border border-[#E6EBE8] hover:bg-gray-50 active:scale-[0.98] transition-all duration-180 cursor-pointer"

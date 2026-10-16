@@ -27,6 +27,16 @@ function BookingShell({ children }) {
   )
 }
 
+
+function WizardShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
+      <main className="w-full flex-1">{children}</main>
+    </div>
+  )
+}
+
 export default function App() {
   const navigate = useNavigate()
 

@@ -5,6 +5,7 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleAvailabilityResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleMapResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ReverseGeocodeResponse;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -101,5 +103,17 @@ public class VehicleController {
                     + "number or vehicle documents.")
     public ApiResponse<VehicleDetailResponse> getVehicle(@PathVariable Long id) {
         return ApiResponse.success(vehicleService.getVehicleDetail(id));
+    }
+
+    @GetMapping("/{id}/availability")
+    @Operation(summary = "Get occupied time slots for a vehicle",
+            description = "Returns all active schedule entries (booked, maintenance, blocked) "
+                    + "that overlap the requested time range. Use this to grey-out unavailable "
+                    + "dates/times in the booking wizard.")
+    public ApiResponse<VehicleAvailabilityResponse> getAvailability(
+            @PathVariable Long id,
+            @RequestParam Instant from,
+            @RequestParam Instant to) {
+        return ApiResponse.success(vehicleService.getAvailability(id, from, to));
     }
 }
