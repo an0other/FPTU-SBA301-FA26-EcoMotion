@@ -2,6 +2,9 @@ package com.fptufa26.ecomotion.auth.service.implement;
 
 import com.fptufa26.ecomotion.auth.captcha.CaptchaVerifier;
 import com.fptufa26.ecomotion.auth.dto.request.LoginRequest;
+import com.fptufa26.ecomotion.auth.dto.response.CurrentUserResponse;
+import com.fptufa26.ecomotion.auth.dto.response.LoginResponse;
+import com.fptufa26.ecomotion.auth.dto.response.RefreshResponse;
 import com.fptufa26.ecomotion.auth.entity.RefreshToken;
 import com.fptufa26.ecomotion.auth.exception.AccountInactiveException;
 import com.fptufa26.ecomotion.auth.exception.AccountPendingException;
@@ -11,6 +14,7 @@ import com.fptufa26.ecomotion.auth.mapper.AuthMapper;
 import com.fptufa26.ecomotion.auth.repository.RefreshTokenRepository;
 import com.fptufa26.ecomotion.auth.service.AuthService;
 import com.fptufa26.ecomotion.common.security.JwtService;
+import com.fptufa26.ecomotion.user.dto.response.UserResponse;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
@@ -67,7 +71,27 @@ class AuthServiceImplTest {
                 refreshTokenRepository,
                 passwordEncoder,
                 jwtService,
-                new AuthMapper(),
+                new AuthMapper() {
+                    @Override
+                    public LoginResponse toLoginResponse(User user, String accessToken, long expiresIn) {
+                        return null;
+                    }
+
+                    @Override
+                    public RefreshResponse toRefreshResponse(String accessToken, long expiresIn) {
+                        return null;
+                    }
+
+                    @Override
+                    public CurrentUserResponse toCurrentUserResponse(User user) {
+                        return null;
+                    }
+
+                    @Override
+                    public UserResponse toUserResponse(User user) {
+                        return null;
+                    }
+                },
                 captchaVerifier,
                 TTL_REMEMBER_ME,
                 TTL_DEFAULT);
