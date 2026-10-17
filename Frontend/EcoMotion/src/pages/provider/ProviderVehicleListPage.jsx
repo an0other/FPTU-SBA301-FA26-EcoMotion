@@ -165,29 +165,29 @@ export default function ProviderVehicleListPage() {
     switch (status) {
       case 'APPROVED':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-emerald-100/95 backdrop-blur-xs text-emerald-800 text-xs font-semibold shadow-xs flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-            Đã duyệt
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Đang hoạt động
           </span>
         )
       case 'PENDING':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-amber-100/95 backdrop-blur-xs text-amber-800 text-xs font-semibold shadow-xs flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
             Chờ duyệt
           </span>
         )
       case 'HIDDEN':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-slate-200/95 backdrop-blur-xs text-slate-700 text-xs font-semibold shadow-xs flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
             Tạm ẩn
           </span>
         )
       case 'REJECTED':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-rose-100/95 backdrop-blur-xs text-rose-800 text-xs font-semibold shadow-xs flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             Cần bổ sung
           </span>
         )
@@ -200,45 +200,30 @@ export default function ProviderVehicleListPage() {
     switch (fuelType) {
       case 'EV':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold shadow-xs flex items-center gap-1">
-            ⚡ EV Thuần điện
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+            ⚡ Thuần điện
           </span>
         )
       case 'HYBRID':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-teal-100 text-teal-800 text-xs font-semibold shadow-xs flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
             🔋 Xăng điện (Hybrid)
           </span>
         )
       case 'DIESEL':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 text-xs font-semibold shadow-xs flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
             🛢️ Dầu Diesel
           </span>
         )
       case 'GASOLINE':
         return (
-          <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-semibold shadow-xs flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-blue-50 text-blue-900 border border-blue-200">
             ⛽ Xăng
           </span>
         )
       default:
         return null
-    }
-  }
-
-  function renderFuelLabel(fuelType) {
-    switch (fuelType) {
-      case 'EV':
-        return 'EV Thuần điện'
-      case 'HYBRID':
-        return 'Lai điện (Hybrid)'
-      case 'DIESEL':
-        return 'Dầu Diesel'
-      case 'GASOLINE':
-        return 'Xăng'
-      default:
-        return fuelType || 'Xăng'
     }
   }
 
@@ -260,147 +245,121 @@ export default function ProviderVehicleListPage() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-6 lg:px-12 py-8 space-y-6">
-        {/* Header Section with Title & Actions */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-2">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase text-emerald-700 tracking-wider font-semibold">Cổng vận hành xe</span>
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-600" />
-              <span className="text-xs text-slate-500">{depotAddress}</span>
-            </div>
+      <main className="max-w-7xl mx-auto px-6 lg:px-12 py-8 space-y-8">
+        {/* Title and Top Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0b1c30] tracking-tight">
-              Đội xe của tôi
+              Quản lý Đội xe
             </h1>
-            <p className="text-sm text-slate-500">
-              Danh sách xe thuộc quyền sở hữu của bạn · Quản lý trạng thái, hiển thị nhận chuyến và bảo dưỡng
+            <p className="text-sm text-slate-500 mt-1">
+              Theo dõi tình trạng hoạt động, kiểm duyệt và bật/tắt nhận khách trực tiếp.
             </p>
           </div>
-
-          {/* Action Button Group */}
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => setToast({ message: 'Tính năng xuất dữ liệu báo cáo đang được phát triển.', type: 'info' })}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition-all shadow-xs"
-            >
-              <span className="material-symbols-outlined text-[20px] text-slate-500">cloud_download</span>
-              Xuất dữ liệu
-            </button>
+          <div className="flex items-center gap-3">
             <Link
               to="/provider/vehicles/new"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/25 transition-all group"
-              title="Dẫn sang màn hình O03 - Đăng ký thông tin xe 3 tầng"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-sm transition-colors"
             >
-              <span className="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-90">add</span>
+              <span className="material-symbols-outlined text-[20px]">add</span>
               <span>Đăng ký xe mới</span>
             </Link>
           </div>
         </div>
 
-        {/* Stats & KPI Overview Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-          {/* Card 1: Tổng phương tiện */}
+        {/* 5 Mosaic KPI Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          {/* All */}
           <button
             type="button"
             onClick={() => handleFilterStatus('')}
-            className={`bg-white p-4 rounded-xl shadow-xs border transition-all flex items-center justify-between text-left ${
+            className={`p-4 rounded-2xl border text-left transition-all ${
               statusFilter === ''
-                ? 'border-emerald-600 ring-2 ring-emerald-500/20'
-                : 'border-slate-200/70 hover:border-slate-300'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900/20'
+                : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
             }`}
           >
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Tổng phương tiện</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{stats.total}</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Tất cả xe</span>
+              <span className="material-symbols-outlined text-[20px] opacity-70">directions_car</span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">
-              <span className="material-symbols-outlined text-[22px]">directions_car</span>
-            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold mt-2 leading-none">{stats.total}</p>
           </button>
 
-          {/* Card 2: Đang hoạt động */}
+          {/* Approved */}
           <button
             type="button"
             onClick={() => handleFilterStatus('APPROVED')}
-            className={`bg-white p-4 rounded-xl shadow-xs border transition-all flex items-center justify-between text-left ${
+            className={`p-4 rounded-2xl border text-left transition-all ${
               statusFilter === 'APPROVED'
-                ? 'bg-emerald-50/50 border-emerald-600 ring-2 ring-emerald-500/20'
-                : 'border-slate-200/70 hover:border-emerald-300'
+                ? 'bg-emerald-700 text-white border-emerald-700 shadow-md ring-2 ring-emerald-600/30'
+                : 'bg-white text-slate-700 border-slate-200/80 hover:border-emerald-300 hover:shadow-xs'
             }`}
           >
-            <div>
-              <p className="text-xs text-emerald-700 font-semibold">Đang hoạt động</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{stats.approved}</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">Đang nhận khách</span>
+              <span className="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[22px]">verified</span>
-            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 mt-2 leading-none">{stats.approved}</p>
           </button>
 
-          {/* Card 3: Chờ kiểm duyệt */}
+          {/* Pending */}
           <button
             type="button"
             onClick={() => handleFilterStatus('PENDING')}
-            className={`bg-white p-4 rounded-xl shadow-xs border transition-all flex items-center justify-between text-left ${
+            className={`p-4 rounded-2xl border text-left transition-all ${
               statusFilter === 'PENDING'
-                ? 'bg-amber-50/50 border-amber-600 ring-2 ring-amber-500/20'
-                : 'border-slate-200/70 hover:border-amber-300'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-500/30'
+                : 'bg-white text-slate-700 border-slate-200/80 hover:border-amber-300 hover:shadow-xs'
             }`}
           >
-            <div>
-              <p className="text-xs text-amber-700 font-semibold">Chờ kiểm duyệt</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{stats.pending}</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">Chờ duyệt hồ sơ</span>
+              <span className="material-symbols-outlined text-[20px] text-amber-600">hourglass_top</span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[22px]">pending_actions</span>
-            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-amber-700 mt-2 leading-none">{stats.pending}</p>
           </button>
 
-          {/* Card 4: Tạm ẩn nhận khách */}
+          {/* Hidden */}
           <button
             type="button"
             onClick={() => handleFilterStatus('HIDDEN')}
-            className={`bg-white p-4 rounded-xl shadow-xs border transition-all flex items-center justify-between text-left ${
+            className={`p-4 rounded-2xl border text-left transition-all ${
               statusFilter === 'HIDDEN'
-                ? 'bg-slate-100 border-slate-600 ring-2 ring-slate-400/20'
-                : 'border-slate-200/70 hover:border-slate-400'
+                ? 'bg-slate-700 text-white border-slate-700 shadow-md ring-2 ring-slate-500/30'
+                : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:shadow-xs'
             }`}
           >
-            <div>
-              <p className="text-xs text-slate-600 font-semibold">Tạm ẩn nhận khách</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{stats.hidden}</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tạm ẩn</span>
+              <span className="material-symbols-outlined text-[20px] text-slate-500">visibility_off</span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[22px]">visibility_off</span>
-            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-700 mt-2 leading-none">{stats.hidden}</p>
           </button>
 
-          {/* Card 5: Cần bổ sung hồ sơ */}
+          {/* Rejected */}
           <button
             type="button"
             onClick={() => handleFilterStatus('REJECTED')}
-            className={`bg-white p-4 rounded-xl shadow-xs border transition-all flex items-center justify-between text-left col-span-2 sm:col-span-1 ${
+            className={`p-4 rounded-2xl border text-left transition-all col-span-2 sm:col-span-1 ${
               statusFilter === 'REJECTED'
-                ? 'bg-rose-50/50 border-rose-600 ring-2 ring-rose-500/20'
-                : 'border-slate-200/70 hover:border-rose-300'
+                ? 'bg-rose-700 text-white border-rose-700 shadow-md ring-2 ring-rose-500/30'
+                : 'bg-white text-slate-700 border-slate-200/80 hover:border-rose-300 hover:shadow-xs'
             }`}
           >
-            <div>
-              <p className="text-xs text-rose-600 font-semibold">Cần bổ sung hồ sơ</p>
-              <p className="text-2xl font-bold text-slate-900 mt-0.5">{stats.rejected}</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-rose-600">Cần bổ sung</span>
+              <span className="material-symbols-outlined text-[20px] text-rose-600">error</span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[22px]">error</span>
-            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-rose-700 mt-2 leading-none">{stats.rejected}</p>
           </button>
         </div>
 
-        {/* Interactive Filters & Toolbelt Panel */}
-        <div className="bg-white rounded-xl p-4 shadow-xs border border-slate-200/70 space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        {/* Control Toolbar */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-[0_1px_6px_rgba(11,28,48,0.03)] space-y-4">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
             {/* Search Input */}
-            <div className="relative flex-1 max-w-xl">
+            <div className="relative flex-1">
               <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
                 search
               </span>
@@ -408,156 +367,117 @@ export default function ProviderVehicleListPage() {
                 type="text"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                placeholder="Tìm kiếm theo biển số (51G-992.14), tên dòng xe, số khung..."
-                className="w-full h-11 pl-10 pr-10 bg-slate-100/70 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 transition-all border border-transparent focus:border-emerald-600/30"
+                placeholder="Tìm kiếm theo biển số, hãng xe, dòng xe..."
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 placeholder:text-slate-400"
               />
               {keyword && (
                 <button
                   type="button"
                   onClick={() => setKeyword('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   ✕
                 </button>
               )}
             </div>
 
-            {/* Filter Selects & View Toggle */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Fuel Dropdown */}
-              <div className="relative min-w-[160px]">
-                <select
-                  aria-label="Lọc theo loại nhiên liệu"
-                  value={fuelFilter}
-                  onChange={(e) => {
-                    setFuelFilter(e.target.value)
-                    setPage(0)
-                  }}
-                  className="w-full h-11 px-3.5 pr-8 bg-slate-100/70 rounded-xl text-xs sm:text-sm font-medium text-slate-800 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600/20 border border-transparent"
-                >
-                  <option value="">Nhiên liệu: Tất cả</option>
-                  <option value="EV">⚡ EV (Thuần điện)</option>
-                  <option value="GASOLINE">⛽ GASOLINE (Xăng)</option>
-                  <option value="DIESEL">🛢️ DIESEL (Dầu)</option>
-                  <option value="HYBRID">🔋 HYBRID (Lai điện)</option>
-                </select>
-                <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[18px]">
-                  expand_more
-                </span>
-              </div>
+            {/* Filter & Sort Controls */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Fuel Filter */}
+              <select
+                value={fuelFilter}
+                onChange={(e) => {
+                  setFuelFilter(e.target.value)
+                  setPage(0)
+                }}
+                className="px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-hidden focus:border-emerald-600"
+              >
+                <option value="">Tất cả nhiên liệu</option>
+                <option value="EV">⚡ Thuần điện (EV)</option>
+                <option value="HYBRID">🔋 Xăng điện (Hybrid)</option>
+                <option value="DIESEL">🛢️ Dầu Diesel</option>
+                <option value="GASOLINE">⛽ Xăng</option>
+              </select>
 
-              {/* Sort Dropdown */}
-              <div className="relative min-w-[170px]">
-                <select
-                  aria-label="Sắp xếp danh sách xe"
-                  value={sortBy}
-                  onChange={(e) => {
-                    setSortBy(e.target.value)
-                    setPage(0)
-                  }}
-                  className="w-full h-11 px-3.5 pr-8 bg-slate-100/70 rounded-xl text-xs sm:text-sm font-medium text-slate-800 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600/20 border border-transparent"
-                >
-                  <option value="newest">Mới cập nhật nhất</option>
-                  <option value="license_asc">Biển số (A - Z)</option>
-                  <option value="license_desc">Biển số (Z - A)</option>
-                  <option value="oldest">Đời xe (Cũ → Mới)</option>
-                  <option value="price-desc">Đơn giá thuê cao nhất</option>
-                  <option value="price-asc">Đơn giá thuê thấp nhất</option>
-                </select>
-                <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[18px]">
-                  sort
-                </span>
-              </div>
+              {/* Sort By */}
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value)
+                  setPage(0)
+                }}
+                className="px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-hidden focus:border-emerald-600"
+              >
+                <option value="newest">Mới nhất</option>
+                <option value="price-asc">Giá: Thấp đến cao</option>
+                <option value="price-desc">Giá: Cao đến thấp</option>
+                <option value="rating">Đánh giá cao nhất</option>
+                <option value="name-asc">Tên xe: A → Z</option>
+              </select>
 
-              {/* Grid/Table Switcher */}
-              <div className="flex items-center bg-slate-100/70 p-1 rounded-xl">
+              {/* Grid / Table Switch */}
+              <div className="inline-flex rounded-xl border border-slate-200 p-0.5 bg-slate-100">
                 <button
                   type="button"
+                  title="Chế độ lưới"
                   onClick={() => setViewMode('grid')}
-                  title="Chế độ xem Thẻ (Grid)"
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    viewMode === 'grid'
-                      ? 'bg-white text-emerald-700 shadow-xs'
-                      : 'text-slate-400 hover:text-slate-700'
+                  className={`p-2 rounded-lg transition-colors ${
+                    viewMode === 'grid' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[20px]">grid_view</span>
+                  <span className="material-symbols-outlined text-[18px]">grid_view</span>
                 </button>
                 <button
                   type="button"
+                  title="Chế độ bảng"
                   onClick={() => setViewMode('table')}
-                  title="Chế độ xem Bảng (Table)"
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    viewMode === 'table'
-                      ? 'bg-white text-emerald-700 shadow-xs'
-                      : 'text-slate-400 hover:text-slate-700'
+                  className={`p-2 rounded-lg transition-colors ${
+                    viewMode === 'table' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[20px]">table_rows</span>
+                  <span className="material-symbols-outlined text-[18px]">table_rows</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Quick Status Filter Pills */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
-            <span className="text-xs text-slate-400 mr-1 font-medium">Bộ lọc nhanh:</span>
-            <button
-              type="button"
-              onClick={() => handleFilterStatus('')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-                statusFilter === ''
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Tất cả ({stats.total})
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFilterStatus('APPROVED')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-                statusFilter === 'APPROVED'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-              }`}
-            >
-              ● Đã duyệt ({stats.approved})
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFilterStatus('PENDING')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-                statusFilter === 'PENDING'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-              }`}
-            >
-              ▲ Chờ duyệt ({stats.pending})
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFilterStatus('HIDDEN')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-                statusFilter === 'HIDDEN'
-                  ? 'bg-slate-700 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              ○ Tạm ẩn ({stats.hidden})
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFilterStatus('REJECTED')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-                statusFilter === 'REJECTED'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-              }`}
-            >
-              ✕ Bị từ chối ({stats.rejected})
-            </button>
-          </div>
+          {/* Active Filter Chips */}
+          {(statusFilter || fuelFilter || debouncedKeyword) && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+              <span className="text-slate-400">Đang lọc theo:</span>
+              {statusFilter && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-medium">
+                  Trạng thái: {statusFilter}
+                  <button type="button" onClick={() => handleFilterStatus('')} className="hover:text-emerald-900">
+                    ✕
+                  </button>
+                </span>
+              )}
+              {fuelFilter && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-medium">
+                  Nhiên liệu: {fuelFilter}
+                  <button type="button" onClick={() => setFuelFilter('')} className="hover:text-blue-900">
+                    ✕
+                  </button>
+                </span>
+              )}
+              {debouncedKeyword && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium">
+                  Từ khóa: &quot;{debouncedKeyword}&quot;
+                  <button type="button" onClick={() => setKeyword('')} className="hover:text-slate-900">
+                    ✕
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="text-xs text-rose-600 hover:underline font-semibold ml-auto"
+              >
+                Xóa tất cả bộ lọc
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Loading / Error States */}
@@ -586,7 +506,7 @@ export default function ProviderVehicleListPage() {
 
         {/* Empty State */}
         {!loading && !error && vehicles.length === 0 && (
-          <div className="bg-white p-12 rounded-2xl border border-slate-200/70 text-center shadow-xs">
+          <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center shadow-xs">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
               <span className="material-symbols-outlined text-[36px]">no_crash</span>
             </div>
@@ -604,9 +524,9 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Vehicles List (Grid View - Matching Stitch AI 1:1) */}
+        {/* Vehicles List (Grid View) */}
         {!loading && !error && vehicles.length > 0 && viewMode === 'grid' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="fleet-grid-container">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {vehicles.map((vehicle) => {
               const isApproved = vehicle.status === 'APPROVED'
               const isPendingOrRejected = vehicle.status === 'PENDING' || vehicle.status === 'REJECTED'
@@ -615,134 +535,138 @@ export default function ProviderVehicleListPage() {
               return (
                 <div
                   key={vehicle.id}
-                  className="group bg-white rounded-2xl shadow-xs hover:shadow-md transition-all duration-300 flex flex-col overflow-hidden border border-slate-200/70"
+                  className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-[0_2px_12px_rgba(11,28,48,0.04)] hover:shadow-[0_8px_24px_rgba(11,28,48,0.08)] transition-all flex flex-col"
                 >
-                  {/* Visual Cover */}
-                  <div className="relative h-48 w-full overflow-hidden bg-slate-100">
+                  {/* Vehicle Image Cover */}
+                  <div className="relative aspect-16/10 bg-slate-100 overflow-hidden group">
                     <img
                       src={vehicle.coverImageUrl || '/placeholder-car.jpg'}
                       alt={`${vehicle.brand} ${vehicle.model}`}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       onError={(e) => {
                         e.target.onerror = null
                         e.target.src = 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80'
                       }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
 
-                    {/* Top Badges */}
-                    <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                      {renderStatusBadge(vehicle.status)}
+                    {/* Top Overlay Badges */}
+                    <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+                      <div className="pointer-events-auto">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md border border-slate-300 bg-white/95 backdrop-blur-xs font-mono text-xs font-bold text-slate-900 shadow-sm">
+                          {vehicle.licensePlate}
+                        </span>
+                      </div>
+                      <div className="pointer-events-auto">
+                        {renderStatusBadge(vehicle.status)}
+                      </div>
                     </div>
 
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                      {renderFuelBadge(vehicle.fuelType)}
-                    </div>
-
-                    {/* Embossed License Plate (VN Standard) */}
-                    <div className="absolute bottom-3 left-3 bg-white px-3 py-1 rounded-md shadow-md flex items-center gap-1.5 font-bold tracking-widest text-slate-900 text-xs">
-                      <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-                      {vehicle.licensePlate}
+                    {/* Bottom Fuel Chip */}
+                    <div className="absolute bottom-3 left-3 pointer-events-none">
+                      <div className="pointer-events-auto">
+                        {renderFuelBadge(vehicle.fuelType)}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Vehicle Info Body */}
+                  {/* Vehicle Details */}
                   <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h2 className="font-bold text-base text-slate-900 group-hover:text-emerald-700 transition-colors">
+                          <h3 className="text-lg font-bold text-[#0b1c30] leading-snug">
                             {vehicle.brand} {vehicle.model}
-                          </h2>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {vehicle.seatCount} Chỗ · {renderFuelLabel(vehicle.fuelType)} · {TRANSMISSION_LABELS[vehicle.transmission] || vehicle.transmission}
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Năm SX: {vehicle.manufactureYear} • {vehicle.color || 'Tiêu chuẩn'}
                           </p>
                         </div>
-                        <div className="text-right shrink-0">
-                          {vehicle.dailyPrice ? (
-                            <>
-                              <span className="font-bold text-base text-emerald-700">{formatCurrency(vehicle.dailyPrice)}</span>
-                              <span className="block text-[11px] text-slate-400">/ ngày</span>
-                            </>
-                          ) : vehicle.hourlyPrice ? (
-                            <>
-                              <span className="font-bold text-base text-emerald-700">{formatCurrency(vehicle.hourlyPrice)}</span>
-                              <span className="block text-[11px] text-slate-400">/ giờ</span>
-                            </>
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">Chưa đặt giá</span>
-                          )}
-                        </div>
+
+                        {vehicle.ratingCount > 0 ? (
+                          <div className="flex items-center gap-1 text-xs font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded-md">
+                            <span>★</span>
+                            <span>{Number(vehicle.ratingAvg).toFixed(1)}</span>
+                            <span className="text-slate-400 font-normal text-[10px]">({vehicle.ratingCount})</span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
+                            Chưa có đánh giá
+                          </span>
+                        )}
                       </div>
 
-                      {/* Specs Grid */}
-                      <div className="grid grid-cols-2 gap-2 mt-4 pt-3 bg-slate-100/70 rounded-xl p-3 text-xs text-slate-600 font-medium">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">calendar_today</span>
-                          <span>Năm SX: <strong className="text-slate-900">{vehicle.manufactureYear || '—'}</strong></span>
-                        </div>
-                        <div className="flex items-center gap-2">
+                      {/* Specs Row */}
+                      <div className="flex items-center gap-4 text-xs text-slate-600 mt-3 pt-3 border-t border-slate-100">
+                        <span className="inline-flex items-center gap-1">
                           <span className="material-symbols-outlined text-[16px] text-slate-400">airline_seat_recline_normal</span>
-                          <span>Số chỗ: <strong className="text-slate-900">{vehicle.seatCount} Chỗ</strong></span>
-                        </div>
-                        <div className="flex items-center gap-2">
+                          {vehicle.seatCount} chỗ
+                        </span>
+                        <span className="inline-flex items-center gap-1">
                           <span className="material-symbols-outlined text-[16px] text-slate-400">settings</span>
-                          <span>Hộp số: <strong className="text-slate-900">{TRANSMISSION_LABELS[vehicle.transmission] || vehicle.transmission}</strong></span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">palette</span>
-                          <span>Màu: <strong className="text-slate-900">{vehicle.color || '—'}</strong></span>
-                        </div>
+                          {TRANSMISSION_LABELS[vehicle.transmission] || vehicle.transmission}
+                        </span>
+                      </div>
+
+                      {/* Price Row */}
+                      <div className="mt-3">
+                        {vehicle.dailyPrice ? (
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-base font-extrabold text-emerald-700">
+                              {formatCurrency(vehicle.dailyPrice)}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">/ ngày</span>
+                          </div>
+                        ) : vehicle.hourlyPrice ? (
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-base font-extrabold text-emerald-700">
+                              {formatCurrency(vehicle.hourlyPrice)}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">/ giờ</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Chưa cài đặt giá</span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Availability Toggle */}
-                    <div className="flex items-center justify-between pt-2">
+                    {/* Bottom Controls: Direct Visibility Toggle Switch */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${isApproved ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                        <span className="text-xs font-semibold text-slate-800">Hiển thị nhận khách</span>
-                      </div>
-                      {/* Interactive Switch */}
-                      <label className={`relative inline-flex items-center ${isPendingOrRejected || isToggling ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                        <input
-                          type="checkbox"
-                          checked={isApproved}
+                        <button
+                          type="button"
                           disabled={isPendingOrRejected || isToggling}
-                          onChange={() => handleToggleVisibility(vehicle)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600" />
-                      </label>
-                    </div>
+                          onClick={() => handleToggleVisibility(vehicle)}
+                          title={
+                            isPendingOrRejected
+                              ? (vehicle.status === 'PENDING' ? 'Xe đang chờ kiểm duyệt' : 'Xe bị từ chối hồ sơ')
+                              : (isApproved ? 'Nhấn để tạm ẩn xe' : 'Nhấn để bật nhận khách')
+                          }
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                            isPendingOrRejected
+                              ? 'opacity-40 cursor-not-allowed bg-slate-200'
+                              : isApproved
+                              ? 'bg-emerald-600'
+                              : 'bg-slate-300'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                              isApproved ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                        <span className="text-xs font-semibold text-slate-700">
+                          {isApproved ? 'Nhận khách' : isPendingOrRejected ? 'Chưa khả dụng' : 'Tạm ẩn'}
+                        </span>
+                      </div>
 
-                    {/* Bottom Action Buttons Group */}
-                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => setToast({ message: `Hồ sơ xe & đăng kiểm cho xe ${vehicle.licensePlate} (Màn O04) đang được kết nối.`, type: 'info' })}
-                        className="flex flex-col items-center justify-center py-2 px-1 rounded-lg bg-slate-100/70 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 transition-colors"
-                        title="Mở O04 - Quản lý giấy tờ, đăng kiểm & bảng giá thuê"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">description</span>
-                        <span className="text-[11px] font-medium mt-0.5">Hồ sơ xe</span>
-                      </button>
                       <Link
-                        to={`/provider/vehicles/${vehicle.id}/edit`}
-                        className="flex flex-col items-center justify-center py-2 px-1 rounded-lg bg-slate-100/70 hover:bg-slate-200 text-slate-600 transition-colors"
-                        title="Mở O03 - Chỉnh sửa thông tin phương tiện"
+                        to={`/vehicles/${vehicle.id}`}
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5"
                       >
-                        <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                        <span className="text-[11px] font-medium mt-0.5">Sửa thông tin</span>
+                        Chi tiết
+                        <span className="material-symbols-outlined text-[16px]">chevron_right</span>
                       </Link>
-                      <button
-                        type="button"
-                        onClick={() => setToast({ message: `Chức năng khóa lịch, bảo dưỡng xe ${vehicle.licensePlate} (Màn O05) đang được kết nối.`, type: 'info' })}
-                        className="flex flex-col items-center justify-center py-2 px-1 rounded-lg bg-slate-100/70 hover:bg-amber-50 hover:text-amber-700 text-slate-600 transition-colors"
-                        title="Mở O05 - Lập lịch khóa xe, bảo dưỡng định kỳ"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">event_busy</span>
-                        <span className="text-[11px] font-medium mt-0.5">Khóa lịch</span>
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -753,7 +677,7 @@ export default function ProviderVehicleListPage() {
 
         {/* Vehicles List (Table View) */}
         {!loading && !error && vehicles.length > 0 && viewMode === 'table' && (
-          <div className="bg-white rounded-2xl border border-slate-200/70 overflow-hidden shadow-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#f0f4f9] text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
@@ -813,27 +737,33 @@ export default function ProviderVehicleListPage() {
                           {renderStatusBadge(vehicle.status)}
                         </td>
                         <td className="py-3.5 px-4">
-                          <label className={`relative inline-flex items-center ${isPendingOrRejected || isToggling ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                            <input
-                              type="checkbox"
-                              checked={isApproved}
-                              disabled={isPendingOrRejected || isToggling}
-                              onChange={() => handleToggleVisibility(vehicle)}
-                              className="sr-only peer"
+                          <button
+                            type="button"
+                            disabled={isPendingOrRejected || isToggling}
+                            onClick={() => handleToggleVisibility(vehicle)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                              isPendingOrRejected
+                                ? 'opacity-40 cursor-not-allowed bg-slate-200'
+                                : isApproved
+                                ? 'bg-emerald-600'
+                                : 'bg-slate-300'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                isApproved ? 'translate-x-5' : 'translate-x-0'
+                              }`}
                             />
-                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600" />
-                          </label>
+                          </button>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <div className="inline-flex items-center gap-2">
-                            <Link
-                              to={`/provider/vehicles/${vehicle.id}/edit`}
-                              className="p-1 rounded-md text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
-                              title="Sửa thông tin"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">edit</span>
-                            </Link>
-                          </div>
+                          <Link
+                            to={`/vehicles/${vehicle.id}`}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                          >
+                            Chi tiết
+                            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                          </Link>
                         </td>
                       </tr>
                     )
@@ -844,70 +774,63 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Operational Notice Banner (From Stitch AI) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-amber-50/80 border border-amber-200/80">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[20px]">info</span>
+        {/* Pagination Controls */}
+        {!loading && !error && totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200">
+            <span className="text-xs text-slate-500 font-medium">
+              Hiển thị {page * 9 + 1} - {Math.min((page + 1) * 9, totalItems)} trong tổng số {totalItems} xe
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={page <= 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Trước
+              </button>
+
+              {Array.from({ length: totalPages }).map((_, idx) => {
+                if (
+                  idx === 0 ||
+                  idx === totalPages - 1 ||
+                  Math.abs(idx - page) <= 1
+                ) {
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setPage(idx)}
+                      className={`w-8 h-8 rounded-xl text-xs font-bold transition-colors ${
+                        page === idx
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  )
+                }
+                if (Math.abs(idx - page) === 2) {
+                  return (
+                    <span key={idx} className="px-1 text-slate-400 text-xs">
+                      ...
+                    </span>
+                  )
+                }
+                return null
+              })}
+
+              <button
+                type="button"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Sau
+              </button>
             </div>
-            <p className="text-xs text-amber-900 leading-relaxed">
-              Phương tiện ở trạng thái <strong>&quot;Đã duyệt&quot;</strong> mới có thể gạt công tắc nhận khách. Hãy luôn kiểm tra hạn bảo hiểm TNDS &amp; đăng kiểm tại <span className="text-emerald-700 font-medium cursor-pointer hover:underline">Hồ sơ xe (O04)</span> để tránh bị gián đoạn đơn thuê.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setToast({ message: 'Quy chuẩn: Xe phải có đầy đủ Đăng ký xe, Đăng kiểm tối thiểu 30 ngày và Bảo hiểm TNDS bắt buộc.', type: 'info' })}
-            className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold shrink-0 transition-colors shadow-xs"
-          >
-            Xem quy chuẩn kiểm duyệt
-          </button>
-        </div>
-
-        {/* Pagination & Results Footprint (Matching Stitch AI) */}
-        {!loading && !error && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100 pb-8">
-            <p className="text-xs text-slate-500">
-              Hiển thị <strong className="text-slate-900 font-semibold">{totalItems > 0 ? page * 9 + 1 : 0} – {Math.min((page + 1) * 9, totalItems)}</strong> trong tổng số <strong className="text-slate-900 font-semibold">{totalItems}</strong> phương tiện
-            </p>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={page <= 0}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="Trang trước"
-                >
-                  <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-                </button>
-
-                {Array.from({ length: totalPages }).map((_, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setPage(idx)}
-                    className={`w-9 h-9 rounded-lg text-xs font-semibold transition-colors ${
-                      page === idx
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="Trang kế tiếp"
-                >
-                  <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-                </button>
-              </div>
-            )}
           </div>
         )}
       </main>
