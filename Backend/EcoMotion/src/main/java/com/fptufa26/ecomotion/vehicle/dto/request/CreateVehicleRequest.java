@@ -23,3 +23,4 @@ public record CreateVehicleRequest(
         @Size(max = 500) String coverImageUrl
 ) {
 }
+
