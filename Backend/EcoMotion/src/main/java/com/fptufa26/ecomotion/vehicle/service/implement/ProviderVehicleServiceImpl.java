@@ -22,7 +22,6 @@ import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import com.fptufa26.ecomotion.vehicle.service.ProviderVehicleService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +33,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class ProviderVehicleServiceImpl implements ProviderVehicleService {
 
     private final UserService userService;
@@ -42,6 +40,20 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
     private final RentalPlanRepository rentalPlanRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final ProviderScheduleService providerScheduleService;
+
+    public ProviderVehicleServiceImpl(
+            UserService userService,
+            VehicleRepository vehicleRepository,
+            RentalPlanRepository rentalPlanRepository,
+            VehicleImageRepository vehicleImageRepository,
+            ProviderScheduleService providerScheduleService
+    ) {
+        this.userService = userService;
+        this.vehicleRepository = vehicleRepository;
+        this.rentalPlanRepository = rentalPlanRepository;
+        this.vehicleImageRepository = vehicleImageRepository;
+        this.providerScheduleService = providerScheduleService;
+    }
 
     @Override
     @Transactional(readOnly = true)

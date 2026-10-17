@@ -14,7 +14,6 @@ import com.fptufa26.ecomotion.vehicle.service.ProviderVehicleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,12 +27,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/provider")
-@RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
 @Tag(name = "Provider Vehicle Management", description = "Provider fleet management and controls (O01, O02)")
 public class ProviderVehicleController {
 
     private final ProviderVehicleService providerVehicleService;
+
+    public ProviderVehicleController(ProviderVehicleService providerVehicleService) {
+        this.providerVehicleService = providerVehicleService;
+    }
 
     @GetMapping("/dashboard/summary")
     @Operation(summary = "Get provider overview summary numbers (O01)")
