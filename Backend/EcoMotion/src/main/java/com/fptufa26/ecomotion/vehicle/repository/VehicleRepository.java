@@ -15,4 +15,14 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
     Optional<Vehicle> findByIdAndStatus(Long id, VehicleStatus status);
 
     List<Vehicle> findByProvider_IdOrderByIdAsc(Long providerId);
+
+    long countByProvider_Id(Long providerId);
+
+    long countByProvider_IdAndStatus(Long providerId, VehicleStatus status);
+
+    boolean existsByLicensePlateIgnoreCase(String licensePlate);
+
+    boolean existsByChassisNoIgnoreCase(String chassisNo);
+
+    boolean existsByEngineNoIgnoreCase(String engineNo);
 }

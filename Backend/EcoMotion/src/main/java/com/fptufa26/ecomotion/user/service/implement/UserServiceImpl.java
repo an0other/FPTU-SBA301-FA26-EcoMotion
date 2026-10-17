@@ -9,6 +9,7 @@ import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
+import com.fptufa26.ecomotion.user.repository.DriverRepository;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
@@ -31,6 +32,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RenterRepository renterRepository;
     private final ProviderRepository providerRepository;
+    private final DriverRepository driverRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -274,5 +276,23 @@ public class UserServiceImpl implements UserService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Provider> findProviderByUserId(Long userId) {
+        if (userId == null) {
+            return Optional.empty();
+        }
+        return providerRepository.findByUser_Id(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countDriversByProviderId(Long providerId) {
+        if (providerId == null) {
+            return 0;
+        }
+        return driverRepository.countByProvider_Id(providerId);
     }
 }
