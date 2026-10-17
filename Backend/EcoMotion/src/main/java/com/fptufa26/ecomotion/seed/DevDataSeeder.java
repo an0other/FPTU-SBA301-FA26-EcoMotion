@@ -63,10 +63,6 @@ public class DevDataSeeder implements ApplicationRunner {
     private static final String DESC_CAMRY_XSE = "Sedan hybrid h\u1ea1ng D b\u1ea3n XSE, r\u1ed9ng r\u00e3i v\u00e0 ti\u1ebft ki\u1ec7m.";
     private static final String DESC_RANGE_ROVER = "SUV h\u1ea1ng sang, n\u1ed9i th\u1ea5t r\u1ed9ng r\u00e3i, ph\u00f9 h\u1ee3p h\u00e0nh tr\u00ecnh d\u00e0i.";
 
-    private static final String UPFRONT_HOURLY = "500000.00";
-    private static final String UPFRONT_DAILY = "2000000.00";
-    private static final String UPFRONT_MONTHLY = "20000000.00";
-
     private final UserRepository userRepository;
     private final ProviderRepository providerRepository;
     private final RenterRepository renterRepository;
@@ -83,6 +79,17 @@ public class DevDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        User user4 = userRepository.findById(4L).orElse(null);
+        if (user4 != null && user4.getRole() == Role.DRIVER) {
+            entityManager.createNativeQuery("""
+                    TRUNCATE TABLE dispute, review, payment_transaction, booking_charge,
+                    booking_policy_snapshot, vehicle_schedule, booking, rental_plan,
+                    vehicle_document, vehicle_image, vehicle, driver, renter, provider, users
+                    RESTART IDENTITY CASCADE
+                    """).executeUpdate();
+            entityManager.clear();
+        }
+
         seedUser(1L, "renter01@ecomotion.vn", "0901000001", "Renter 01", Role.RENTER);
         seedUser(PROVIDER_A_USER_ID, "provider.a@ecomotion.vn", "0901000010", NAME_PROVIDER_A, Role.PROVIDER);
         seedUser(3L, "admin01@ecomotion.vn", "0901000003", "Admin 01", Role.ADMIN);
@@ -180,7 +187,6 @@ public class DevDataSeeder implements ApplicationRunner {
         realignPinnedIdentitySequences();
     }
 
-
     private void realignPinnedIdentitySequences() {
         realignIdentitySequence("users");
         realignIdentitySequence("vehicle");
@@ -195,7 +201,6 @@ public class DevDataSeeder implements ApplicationRunner {
                         + (maxId.longValue() + 1L))
                 .executeUpdate();
     }
-
 
     private User seedUser(long id, String email, String phone, String fullName, Role role) {
         User existing = userRepository.findByEmailIgnoreCase(email).orElse(null);
@@ -267,6 +272,8 @@ public class DevDataSeeder implements ApplicationRunner {
         provider.setDepotLongitude(longitude);
         provider.setCommissionRate(new BigDecimal("0.1000"));
         provider.setDepositRatio(new BigDecimal("0.3000"));
+        provider.setBusinessLicenseNo("GP-HCM-00000" + user.getId());
+        provider.setTaxCode("031000000" + user.getId());
         provider.setStatus(ProviderStatus.APPROVED);
         provider.setRatingAvg(new BigDecimal("5.00"));
         provider.setRatingCount(2);
@@ -282,7 +289,6 @@ public class DevDataSeeder implements ApplicationRunner {
         renterRepository.save(renter);
     }
 
-
     private void seedVehicle(Long providerId, Long vehicleId, Long providerUserId,
                              String brand, String model, int year, int seats,
                              Transmission transmission, String color, FuelType fuelType,
@@ -296,7 +302,7 @@ public class DevDataSeeder implements ApplicationRunner {
                                  manufacture_year, seat_count, transmission, color, fuel_type, status,
                                  maintenance_buffer_minutes, rating_avg, rating_count, created_at, updated_at)
                             VALUES
-                                (                                 :id, :providerId, :licensePlate, :chassisNo, :engineNo, :brand, :model,
+                                (:id, :providerId, :licensePlate, :chassisNo, :engineNo, :brand, :model,
                                  :year, :seats, :transmission, :color, :fuelType, :status,
                                  60, :ratingAvg, :ratingCount, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """)
@@ -344,9 +350,9 @@ public class DevDataSeeder implements ApplicationRunner {
         if (!rentalPlanRepository.findByVehicle_IdOrderByIdAsc(vehicle.getId()).isEmpty()) {
             return;
         }
-        createPlan(vehicle, PlanType.HOURLY, 240, prices.hourly(), UPFRONT_HOURLY);
-        createPlan(vehicle, PlanType.DAILY, 1440, prices.daily(), UPFRONT_DAILY);
-        createPlan(vehicle, PlanType.MONTHLY, 43200, prices.monthly(), UPFRONT_MONTHLY);
+        createPlan(vehicle, PlanType.HOURLY, 240, prices.hourly(), null);
+        createPlan(vehicle, PlanType.DAILY, 1440, prices.daily(), null);
+        createPlan(vehicle, PlanType.MONTHLY, 43200, prices.monthly(), null);
     }
 
     private void createPlan(Vehicle vehicle, PlanType planType, int slotLengthMinutes,
@@ -356,7 +362,7 @@ public class DevDataSeeder implements ApplicationRunner {
         plan.setPlanType(planType);
         plan.setSlotLengthMinutes(slotLengthMinutes);
         plan.setSlotPrice(new BigDecimal(slotPrice));
-        plan.setUpfrontAmount(new BigDecimal(upfrontAmount));
+        plan.setUpfrontAmount(upfrontAmount != null ? new BigDecimal(upfrontAmount) : null);
         plan.setStatus(PlanStatus.ACTIVE);
         rentalPlanRepository.save(plan);
     }

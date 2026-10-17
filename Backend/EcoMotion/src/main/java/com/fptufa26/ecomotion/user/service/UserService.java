@@ -59,4 +59,8 @@ public interface UserService {
             String bankAccountHolder,
             String businessLicenseNo,
             String taxCode);
+
+    Optional<Provider> findProviderByUserId(Long userId);
+
+    long countDriversByProviderId(Long providerId);
 }
