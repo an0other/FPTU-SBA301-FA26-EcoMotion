@@ -1,28 +1,32 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../hooks/useAuth";
 
-export default function ProviderHeader({ activeTab = 'home', providerName, depotAddress }) {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
+export default function ProviderHeader({
+  activeTab = "home",
+  providerName,
+  depotAddress,
+}) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   async function handleLogout() {
-    await logout()
-    navigate('/login', { replace: true })
+    await logout();
+    navigate("/login", { replace: true });
   }
 
-  const displayName = providerName || user?.fullName || 'EcoMotion Depot'
-  const displayAddress = depotAddress || 'Hệ thống Depot EcoMotion'
+  const displayName = providerName || user?.fullName || "EcoMotion Depot";
+  const displayAddress = depotAddress || "Hệ thống Depot EcoMotion";
   const initials = user?.fullName
     ? user.fullName
         .trim()
         .split(/\s+/)
         .map((p) => p[0])
         .slice(-2)
-        .join('')
+        .join("")
         .toUpperCase()
-    : 'PV'
+    : "PV";
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-[0_1px_8px_rgba(11,28,48,0.04)] border-b border-slate-200">
@@ -31,11 +35,17 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
         <div className="flex items-center gap-4 shrink-0">
           <Link to="/provider" className="flex items-center gap-3 shrink-0">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25">
-              <span className="material-symbols-outlined text-[24px]">electric_car</span>
+              <span className="material-symbols-outlined text-[24px]">
+                electric_car
+              </span>
             </span>
             <div className="flex flex-col">
-              <span className="text-[19px] font-bold text-[#0b1c30] leading-tight">EcoMotion VN</span>
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Provider Portal</span>
+              <span className="text-[19px] font-bold text-[#0b1c30] leading-tight">
+                EcoMotion VN
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                Provider Portal
+              </span>
             </div>
           </Link>
 
@@ -43,11 +53,16 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
             className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/60 max-w-[360px]"
             title={`${displayName} - ${displayAddress}`}
           >
-            <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0">storefront</span>
-            <div className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-left leading-snug truncate">
-              <span className="font-bold text-slate-900 shrink-0">{displayName}</span>
-              <span className="text-slate-400 shrink-0">-</span>
-              <span className="text-slate-600 font-normal truncate">{displayAddress}</span>
+            <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0">
+              storefront
+            </span>
+            <div className="flex flex-col text-left leading-tight truncate">
+              <span className="font-bold text-slate-900 text-xs truncate">
+                {displayName}
+              </span>
+              <span className="text-[11px] text-slate-500 font-normal truncate">
+                {displayAddress}
+              </span>
             </div>
           </div>
         </div>
@@ -57,9 +72,9 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
           <Link
             to="/provider"
             className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
-              activeTab === 'home'
-                ? 'bg-emerald-50 text-emerald-700 font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium'
+              activeTab === "home"
+                ? "bg-emerald-50 text-emerald-700 font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
             Tổng quan
@@ -67,9 +82,9 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
           <Link
             to="/provider/vehicles"
             className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
-              activeTab === 'vehicles'
-                ? 'bg-emerald-50 text-emerald-700 font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium'
+              activeTab === "vehicles"
+                ? "bg-emerald-50 text-emerald-700 font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
             Đội xe của tôi
@@ -77,9 +92,9 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
           <Link
             to="/provider/drivers"
             className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
-              activeTab === 'drivers'
-                ? 'bg-emerald-50 text-emerald-700 font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium'
+              activeTab === "drivers"
+                ? "bg-emerald-50 text-emerald-700 font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
             Quản lý tài xế
@@ -87,9 +102,9 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
           <Link
             to="/provider/vehicles"
             className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
-              activeTab === 'schedules'
-                ? 'bg-emerald-50 text-emerald-700 font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium'
+              activeTab === "schedules"
+                ? "bg-emerald-50 text-emerald-700 font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
             Lịch xe &amp; Bảo dưỡng
@@ -103,7 +118,9 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
             title="Thông báo"
             className="relative p-2 rounded-full text-slate-500 hover:text-[#0b1c30] hover:bg-slate-100 transition-colors"
           >
-            <span className="material-symbols-outlined text-[22px]">notifications</span>
+            <span className="material-symbols-outlined text-[22px]">
+              notifications
+            </span>
             <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white" />
           </button>
 
@@ -118,11 +135,15 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
               </span>
               <div className="hidden sm:flex flex-col text-left leading-tight">
                 <span className="text-[13px] font-bold text-slate-800 max-w-[120px] truncate">
-                  {user?.fullName || 'Chủ xe'}
+                  {user?.fullName || "Chủ xe"}
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium">Quản lý</span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Quản lý
+                </span>
               </div>
-              <span className="material-symbols-outlined text-slate-400 text-[18px]">expand_more</span>
+              <span className="material-symbols-outlined text-slate-400 text-[18px]">
+                expand_more
+              </span>
             </button>
 
             {userMenuOpen && (
@@ -135,7 +156,9 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
                   to="/me"
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[16px] text-slate-400">account_circle</span>
+                  <span className="material-symbols-outlined text-[16px] text-slate-400">
+                    account_circle
+                  </span>
                   Hồ sơ cá nhân
                 </Link>
                 <button
@@ -143,7 +166,9 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
                   onClick={handleLogout}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[16px]">logout</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    logout
+                  </span>
                   Đăng xuất
                 </button>
               </div>
@@ -152,5 +177,5 @@ export default function ProviderHeader({ activeTab = 'home', providerName, depot
         </div>
       </div>
     </header>
-  )
+  );
 }
