@@ -32,6 +32,7 @@ export default function ProviderVehicleCreatePage() {
   const [toast, setToast] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [showTierModal, setShowTierModal] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const [form, setForm] = useState({
     chassisNo: "",
@@ -71,7 +72,15 @@ export default function ProviderVehicleCreatePage() {
       ...prev,
       [field]: value,
     }));
+    if (errors[field]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
   }
+
 
   function adjustBuffer(delta) {
     setForm((prev) => {
@@ -119,52 +128,71 @@ export default function ProviderVehicleCreatePage() {
     const cleanBrand = form.brand.trim();
     const cleanModel = form.model.trim();
     const cleanColor = form.color.trim();
+    const yr = Number(form.manufactureYear);
+
+    const newErrors = {};
+
+    if (!cleanChassis) {
+      newErrors.chassisNo = "Vui lòng nhập Số khung (VIN).";
+    } else if (!VIN_REGEX.test(cleanChassis)) {
+      newErrors.chassisNo =
+        "Số khung (VIN) không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối).";
+    }
+
+    if (!cleanEngine) {
+      newErrors.engineNo = "Vui lòng nhập Số máy / Mã mô tơ điện.";
+    } else if (!ENGINE_REGEX.test(cleanEngine)) {
+      newErrors.engineNo =
+        "Số máy không hợp lệ (tối thiểu 4 ký tự chữ, số hoặc gạch nối).";
+    }
 
     if (!cleanPlate) {
-      setToast({
-        message: "Vui lòng nhập Biển số xe kiểm soát.",
-        type: "error",
-      });
-      return;
+      newErrors.licensePlate = "Vui lòng nhập Biển số xe kiểm soát.";
+    } else if (!VIETNAM_PLATE_REGEX.test(cleanPlate)) {
+      newErrors.licensePlate =
+        "Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111).";
     }
-    if (!VIETNAM_PLATE_REGEX.test(cleanPlate)) {
+
+    if (!cleanBrand) {
+      newErrors.brand = "Vui lòng chọn Hãng xe.";
+    }
+
+    if (!cleanModel) {
+      newErrors.model = "Vui lòng nhập Dòng xe / Model.";
+    }
+
+    if (!yr || yr < 2015 || yr > 2026) {
+      newErrors.manufactureYear = "Năm sản xuất hợp lệ từ 2015 đến 2026.";
+    }
+
+    if (!cleanColor) {
+      newErrors.color = "Vui lòng nhập Màu sắc ngoại thất.";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      const firstField = Object.keys(newErrors)[0];
+      const elementIdMap = {
+        chassisNo: "chassis_no",
+        engineNo: "engine_no",
+        licensePlate: "license_plate",
+        brand: "brand",
+        model: "model",
+        manufactureYear: "manufacture_year",
+        color: "color",
+      };
+      const targetId = elementIdMap[firstField];
+      if (targetId) {
+        const el = document.getElementById(targetId);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+      }
       setToast({
         message:
-          "Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111).",
-        type: "error",
-      });
-      return;
-    }
-    if (!cleanChassis) {
-      setToast({ message: "Vui lòng nhập Số khung (VIN).", type: "error" });
-      return;
-    }
-    if (!VIN_REGEX.test(cleanChassis)) {
-      setToast({
-        message:
-          "Số khung (VIN) không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối).",
-        type: "error",
-      });
-      return;
-    }
-    if (!cleanEngine) {
-      setToast({
-        message: "Vui lòng nhập Số máy / Mã mô tơ điện.",
-        type: "error",
-      });
-      return;
-    }
-    if (!ENGINE_REGEX.test(cleanEngine)) {
-      setToast({
-        message:
-          "Số máy không hợp lệ (tối thiểu 4 ký tự chữ, số hoặc gạch nối).",
-        type: "error",
-      });
-      return;
-    }
-    if (!cleanBrand || !cleanModel) {
-      setToast({
-        message: "Vui lòng chọn Hãng và nhập Dòng xe.",
+          Object.values(newErrors)[0] ||
+          "Vui lòng kiểm tra lại các trường được đánh dấu đỏ.",
         type: "error",
       });
       return;
@@ -178,7 +206,7 @@ export default function ProviderVehicleCreatePage() {
         licensePlate: cleanPlate,
         brand: cleanBrand,
         model: cleanModel,
-        manufactureYear: Number(form.manufactureYear),
+        manufactureYear: yr,
         seatCount: Number(form.seatCount),
         transmission: form.transmission,
         fuelType: form.fuelType,
@@ -198,11 +226,65 @@ export default function ProviderVehicleCreatePage() {
       }, 1500);
     } catch (err) {
       console.error("Create vehicle failed:", err);
-      const errorMsg =
+      const serverMsg =
+        err.original?.response?.data?.message ||
         err.response?.data?.message ||
-        err.response?.data?.error ||
+        err.message ||
         "Không thể đăng ký xe. Vui lòng kiểm tra lại thông tin.";
-      setToast({ message: errorMsg, type: "error" });
+
+      const serverErrors = {};
+      const lower = serverMsg.toLowerCase();
+      if (
+        lower.includes("biển số") ||
+        lower.includes("licenseplate") ||
+        lower.includes("license")
+      ) {
+        serverErrors.licensePlate = serverMsg;
+        document
+          .getElementById("license_plate")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("license_plate")?.focus();
+      } else if (
+        lower.includes("khung") ||
+        lower.includes("vin") ||
+        lower.includes("chassis")
+      ) {
+        serverErrors.chassisNo = serverMsg;
+        document
+          .getElementById("chassis_no")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("chassis_no")?.focus();
+      } else if (
+        lower.includes("máy") ||
+        lower.includes("mô tơ") ||
+        lower.includes("engine")
+      ) {
+        serverErrors.engineNo = serverMsg;
+        document
+          .getElementById("engine_no")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("engine_no")?.focus();
+      } else if (lower.includes("hãng") || lower.includes("brand")) {
+        serverErrors.brand = serverMsg;
+        document
+          .getElementById("brand")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (lower.includes("dòng") || lower.includes("model")) {
+        serverErrors.model = serverMsg;
+        document
+          .getElementById("model")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (lower.includes("màu") || lower.includes("color")) {
+        serverErrors.color = serverMsg;
+        document
+          .getElementById("color")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      if (Object.keys(serverErrors).length > 0) {
+        setErrors((prev) => ({ ...prev, ...serverErrors }));
+      }
+      setToast({ message: serverMsg, type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -389,16 +471,29 @@ export default function ProviderVehicleCreatePage() {
                             )
                           }
                           placeholder="Nhập 17 ký tự chuẩn VIN (VD: VF8E24XXXXXXXXX)..."
-                          className="w-full h-11 px-3.5 pr-10 bg-white font-mono text-sm text-[#0b1c30] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-xs uppercase tracking-wider"
+                          className={`w-full h-11 px-3.5 pr-10 bg-white font-mono text-sm text-[#0b1c30] rounded-xl border ${
+                            errors.chassisNo
+                              ? "border-red-500 focus:ring-2 focus:ring-red-500 bg-red-50/20"
+                              : "border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                          } shadow-xs uppercase tracking-wider transition-colors`}
                         />
                         <span className="absolute right-3.5 top-3 material-symbols-outlined text-[20px] text-slate-400 pointer-events-none">
                           fingerprint
                         </span>
                       </div>
-                      <span className="text-xs text-slate-500">
-                        Mã định danh khung xe chuẩn quốc tế do nhà sản xuất dập
-                        chìm trên thân xe.
-                      </span>
+                      {errors.chassisNo ? (
+                        <span className="text-xs text-red-600 font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[15px]">
+                            error
+                          </span>
+                          {errors.chassisNo}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-500">
+                          Mã định danh khung xe chuẩn quốc tế do nhà sản xuất dập
+                          chìm trên thân xe.
+                        </span>
+                      )}
                     </div>
 
                     {/* Field 2: engine_no */}
@@ -424,16 +519,29 @@ export default function ProviderVehicleCreatePage() {
                             )
                           }
                           placeholder="VD: EM57-8941029K hoặc số seri động cơ..."
-                          className="w-full h-11 px-3.5 pr-10 bg-white font-mono text-sm text-[#0b1c30] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-xs uppercase tracking-wider"
+                          className={`w-full h-11 px-3.5 pr-10 bg-white font-mono text-sm text-[#0b1c30] rounded-xl border ${
+                            errors.engineNo
+                              ? "border-red-500 focus:ring-2 focus:ring-red-500 bg-red-50/20"
+                              : "border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                          } shadow-xs uppercase tracking-wider transition-colors`}
                         />
                         <span className="absolute right-3.5 top-3 material-symbols-outlined text-[20px] text-slate-400 pointer-events-none">
                           electric_bolt
                         </span>
                       </div>
-                      <span className="text-xs text-slate-500">
-                        Mã định danh cụm động cơ hoặc mô tơ điện dẫn động in
-                        trên giấy kiểm định.
-                      </span>
+                      {errors.engineNo ? (
+                        <span className="text-xs text-red-600 font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[15px]">
+                            error
+                          </span>
+                          {errors.engineNo}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-500">
+                          Mã định danh cụm động cơ hoặc mô tơ điện dẫn động in
+                          trên giấy kiểm định.
+                        </span>
+                      )}
                     </div>
                   </div>
                 </section>
@@ -661,7 +769,11 @@ export default function ProviderVehicleCreatePage() {
                           onChange={(e) =>
                             handleChange("brand", e.target.value)
                           }
-                          className="w-full h-11 px-3.5 pr-10 bg-white text-sm text-[#0b1c30] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-xs appearance-none cursor-pointer"
+                          className={`w-full h-11 px-3.5 pr-10 bg-white text-sm text-[#0b1c30] rounded-xl border ${
+                            errors.brand
+                              ? "border-red-500 focus:ring-2 focus:ring-red-500 bg-red-50/20"
+                              : "border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                          } shadow-xs appearance-none cursor-pointer transition-colors`}
                         >
                           {BRAND_OPTIONS.map((b) => (
                             <option key={b} value={b}>
@@ -673,6 +785,14 @@ export default function ProviderVehicleCreatePage() {
                           expand_more
                         </span>
                       </div>
+                      {errors.brand && (
+                        <span className="text-xs text-red-600 font-medium flex items-center gap-1 mt-0.5">
+                          <span className="material-symbols-outlined text-[15px]">
+                            error
+                          </span>
+                          {errors.brand}
+                        </span>
+                      )}
                     </div>
 
                     {/* model */}
@@ -692,8 +812,20 @@ export default function ProviderVehicleCreatePage() {
                         value={form.model}
                         onChange={(e) => handleChange("model", e.target.value)}
                         placeholder="VD: VF 8, Ioniq 5, Camry, VF 3..."
-                        className="w-full h-11 px-3.5 bg-white text-sm text-[#0b1c30] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-xs"
+                        className={`w-full h-11 px-3.5 bg-white text-sm text-[#0b1c30] rounded-xl border ${
+                          errors.model
+                            ? "border-red-500 focus:ring-2 focus:ring-red-500 bg-red-50/20"
+                            : "border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        } shadow-xs transition-colors`}
                       />
+                      {errors.model && (
+                        <span className="text-xs text-red-600 font-medium flex items-center gap-1 mt-0.5">
+                          <span className="material-symbols-outlined text-[15px]">
+                            error
+                          </span>
+                          {errors.model}
+                        </span>
+                      )}
                     </div>
 
                     {/* manufacture_year */}
@@ -715,8 +847,20 @@ export default function ProviderVehicleCreatePage() {
                         onChange={(e) =>
                           handleChange("manufactureYear", e.target.value)
                         }
-                        className="w-full h-11 px-3.5 bg-white text-sm text-[#0b1c30] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-xs"
+                        className={`w-full h-11 px-3.5 bg-white text-sm text-[#0b1c30] rounded-xl border ${
+                          errors.manufactureYear
+                            ? "border-red-500 focus:ring-2 focus:ring-red-500 bg-red-50/20"
+                            : "border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        } shadow-xs transition-colors`}
                       />
+                      {errors.manufactureYear && (
+                        <span className="text-xs text-red-600 font-medium flex items-center gap-1 mt-0.5">
+                          <span className="material-symbols-outlined text-[15px]">
+                            error
+                          </span>
+                          {errors.manufactureYear}
+                        </span>
+                      )}
                     </div>
 
                     {/* seat_count */}
@@ -842,9 +986,21 @@ export default function ProviderVehicleCreatePage() {
                             handleChange("color", e.target.value)
                           }
                           placeholder="VD: Trắng ngọc trai, Xám titan..."
-                          className="w-full h-11 pl-10 pr-3.5 bg-white text-sm text-[#0b1c30] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-xs"
+                          className={`w-full h-11 pl-10 pr-3.5 bg-white text-sm text-[#0b1c30] rounded-xl border ${
+                            errors.color
+                              ? "border-red-500 focus:ring-2 focus:ring-red-500 bg-red-50/20"
+                              : "border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                          } shadow-xs transition-colors`}
                         />
                       </div>
+                      {errors.color && (
+                        <span className="text-xs text-red-600 font-medium flex items-center gap-1 mt-0.5">
+                          <span className="material-symbols-outlined text-[15px]">
+                            error
+                          </span>
+                          {errors.color}
+                        </span>
+                      )}
                     </div>
                   </div>
 
