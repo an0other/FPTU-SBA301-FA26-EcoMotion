@@ -6,7 +6,8 @@ import MePage from './pages/MePage'
 import ProtectedRoute from './components/ProtectedRoute'
 import VehicleListPage from './pages/VehicleListPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
-import OwnerHomePage from './pages/provider/OwnerHomePage'
+import ProviderHomePage from './pages/provider/ProviderHomePage'
+import ProviderVehicleListPage from './pages/provider/ProviderVehicleListPage'
 import AdminDashboard from './pages/AdminDashboard'
 
 export default function App() {
@@ -22,7 +23,8 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/me" element={<MePage />} />
-        <Route path="/provider" element={<OwnerHomePage />} />
+        <Route path="/provider" element={<ProviderHomePage />} />
+        <Route path="/provider/vehicles" element={<ProviderVehicleListPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
       </Route>
 

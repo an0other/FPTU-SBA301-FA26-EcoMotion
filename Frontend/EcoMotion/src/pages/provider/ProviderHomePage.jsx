@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { providerService } from '../../services/providerService'
 
-export default function OwnerHomePage() {
+export default function ProviderHomePage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [summary, setSummary] = useState(null)
