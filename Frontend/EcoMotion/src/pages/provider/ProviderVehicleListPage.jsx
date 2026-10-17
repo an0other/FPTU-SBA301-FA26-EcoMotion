@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { providerService } from '../../services/providerService'
 import { formatCurrency, TRANSMISSION_LABELS } from '../../utils/formatCurrency'
 import Toast from '../../components/Toast'
+import ProviderHeader from '../../components/provider/ProviderHeader'
 
 export default function ProviderVehicleListPage() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [summary, setSummary] = useState(null)
   const [vehicles, setVehicles] = useState([])
@@ -18,7 +18,6 @@ export default function ProviderVehicleListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
@@ -82,11 +81,6 @@ export default function ProviderVehicleListPage() {
       ignore = true
     }
   }, [debouncedKeyword, fuelFilter, statusFilter, sortBy, page])
-
-  async function handleLogout() {
-    await logout()
-    navigate('/login', { replace: true })
-  }
 
   async function handleToggleVisibility(vehicle) {
     if (vehicle.status === 'PENDING' || vehicle.status === 'REJECTED') {
@@ -166,7 +160,6 @@ export default function ProviderVehicleListPage() {
 
   const providerName = summary?.providerName || user?.fullName || 'Nhà xe đối tác'
   const depotAddress = summary?.depotAddress || '120 Phổ Quang, Q. Tân Bình, TP.HCM'
-  const hotline = summary?.hotline || '1900 6868'
 
   function renderStatusBadge(status) {
     switch (status) {
@@ -245,112 +238,11 @@ export default function ProviderVehicleListPage() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white shadow-[0_1px_8px_rgba(11,28,48,0.04)] border-b border-slate-200">
-        <div className="h-20 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 shrink-0">
-            <Link to="/provider" className="flex items-center gap-3 shrink-0">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25">
-                <span className="material-symbols-outlined text-[24px]">electric_car</span>
-              </span>
-              <div className="flex flex-col">
-                <span className="text-[19px] font-bold text-[#0b1c30] leading-tight">EcoMotion VN</span>
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Provider Portal</span>
-              </div>
-            </Link>
-
-            <div
-              className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/60 max-w-[340px]"
-              title={`${providerName} - ${depotAddress}`}
-            >
-              <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0">storefront</span>
-              <div className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-left leading-snug">
-                <span className="font-bold text-slate-900 shrink-0">{providerName}</span>
-                <span className="text-slate-400 shrink-0">-</span>
-                <span className="text-slate-600 font-normal">{depotAddress}</span>
-              </div>
-            </div>
-          </div>
-
-          <nav className="hidden lg:flex items-center gap-1.5">
-            <Link
-              to="/provider"
-              className="px-4 py-2 rounded-xl text-[14px] text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors"
-            >
-              Tổng quan
-            </Link>
-            <Link
-              to="/provider/vehicles"
-              className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[14px] font-bold transition-colors"
-            >
-              Đội xe của tôi
-            </Link>
-            <Link
-              to="/provider/drivers"
-              className="px-4 py-2 rounded-xl text-[14px] text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors"
-            >
-              Quản lý tài xế
-            </Link>
-            <Link
-              to="/provider/vehicles"
-              className="px-4 py-2 rounded-xl text-[14px] text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium transition-colors"
-            >
-              Lịch xe &amp; Bảo dưỡng
-            </Link>
-          </nav>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              title="Hotline hỗ trợ"
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 text-xs font-semibold text-slate-700 transition-colors"
-            >
-              <span className="material-symbols-outlined text-emerald-600 text-[18px]">phone_in_talk</span>
-              <span>{hotline}</span>
-            </button>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setUserMenuOpen((v) => !v)}
-                className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl hover:bg-slate-100 transition-colors border border-transparent hover:border-slate-200"
-              >
-                <div className="w-9 h-9 rounded-full bg-emerald-600/10 text-emerald-800 flex items-center justify-center font-bold text-sm">
-                  {user?.fullName?.charAt(0) || 'P'}
-                </div>
-                <div className="hidden md:flex flex-col text-left leading-tight">
-                  <span className="text-xs font-bold text-[#0b1c30]">{user?.fullName || 'Chủ xe'}</span>
-                  <span className="text-[10px] text-slate-400">Đã kích hoạt</span>
-                </div>
-                <span className="material-symbols-outlined text-slate-400 text-[18px]">expand_more</span>
-              </button>
-
-              {userMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200/80 py-2 z-50">
-                  <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="text-xs font-bold text-[#0b1c30]">{user?.fullName}</p>
-                    <p className="text-[11px] text-slate-400">{user?.email}</p>
-                  </div>
-                  <Link
-                    to="/me"
-                    className="flex items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[18px] text-slate-500">account_circle</span>
-                    Hồ sơ cá nhân
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">logout</span>
-                    Đăng xuất
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <ProviderHeader
+        activeTab="vehicles"
+        providerName={providerName}
+        depotAddress={depotAddress}
+      />
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-6 lg:px-12 py-8 space-y-8">
