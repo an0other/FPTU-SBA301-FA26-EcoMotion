@@ -192,6 +192,9 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
             case "rating", "rating-desc" -> Comparator.comparing(Vehicle::getRatingAvg, Comparator.nullsLast(BigDecimal::compareTo)).reversed();
             case "name-asc", "alphabetical" -> Comparator.comparing(Vehicle::getBrand, String.CASE_INSENSITIVE_ORDER)
                     .thenComparing(Vehicle::getModel, String.CASE_INSENSITIVE_ORDER);
+            case "license_asc", "plate-asc" -> Comparator.comparing(Vehicle::getLicensePlate, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "license_desc", "plate-desc" -> Comparator.comparing(Vehicle::getLicensePlate, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)).reversed();
+            case "year-desc" -> Comparator.comparing(Vehicle::getManufactureYear, Comparator.nullsLast(Comparator.reverseOrder()));
             default -> Comparator.comparing(Vehicle::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
                     .thenComparing(Vehicle::getId, Comparator.reverseOrder());
         };
