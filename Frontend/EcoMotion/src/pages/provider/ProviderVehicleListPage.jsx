@@ -661,11 +661,12 @@ export default function ProviderVehicleListPage() {
                       </div>
 
                       <Link
-                        to={`/vehicles/${vehicle.id}`}
-                        className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5"
+                        to={`/provider/vehicles/${vehicle.id}/edit`}
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                        title="Chỉnh sửa thông tin xe (Màn O03)"
                       >
-                        Chi tiết
-                        <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                        <span className="material-symbols-outlined text-[16px]">edit</span>
+                        Sửa thông tin
                       </Link>
                     </div>
                   </div>
@@ -758,11 +759,12 @@ export default function ProviderVehicleListPage() {
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <Link
-                            to={`/vehicles/${vehicle.id}`}
+                            to={`/provider/vehicles/${vehicle.id}/edit`}
                             className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                            title="Chỉnh sửa thông tin xe (Màn O03)"
                           >
-                            Chi tiết
-                            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                            <span className="material-symbols-outlined text-[16px]">edit</span>
+                            Sửa
                           </Link>
                         </td>
                       </tr>
