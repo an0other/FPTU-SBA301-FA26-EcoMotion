@@ -189,6 +189,16 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         String chassisNo = request.chassisNo().trim().toUpperCase(Locale.ROOT);
         String engineNo = request.engineNo().trim().toUpperCase(Locale.ROOT);
 
+        if (!licensePlate.matches("^[0-9]{2}[A-Z]{1,2}-([0-9]{3}\\.[0-9]{2}|[0-9]{4,5})$")) {
+            throw new IllegalArgumentException("Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111)");
+        }
+        if (!chassisNo.matches("^[A-Z0-9-]{6,50}$")) {
+            throw new IllegalArgumentException("Số khung (VIN) không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối)");
+        }
+        if (!engineNo.matches("^[A-Z0-9-]{4,50}$")) {
+            throw new IllegalArgumentException("Số máy không hợp lệ (tối thiểu 4 ký tự chữ, số hoặc gạch nối)");
+        }
+
         if (vehicleRepository.existsByLicensePlateIgnoreCase(licensePlate)) {
             throw new IllegalArgumentException("Biển số xe " + licensePlate + " đã tồn tại trên hệ thống");
         }
