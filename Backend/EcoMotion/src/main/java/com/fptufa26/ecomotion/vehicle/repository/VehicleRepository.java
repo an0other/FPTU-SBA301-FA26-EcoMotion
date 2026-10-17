@@ -16,6 +16,8 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
     List<Vehicle> findByProvider_IdOrderByIdAsc(Long providerId);
 
+    Optional<Vehicle> findByIdAndProvider_Id(Long id, Long providerId);
+
     long countByProvider_Id(Long providerId);
 
     long countByProvider_IdAndStatus(Long providerId, VehicleStatus status);

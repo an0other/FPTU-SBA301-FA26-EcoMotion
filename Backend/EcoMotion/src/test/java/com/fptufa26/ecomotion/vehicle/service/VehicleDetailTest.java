@@ -102,7 +102,7 @@ class VehicleDetailTest {
 
         assertThat(hourly.slotLengthMinutes()).isEqualTo(240);
         assertThat(hourly.slotPrice()).isEqualByComparingTo(new BigDecimal("180000.00"));
-        assertThat(hourly.upfrontAmount()).isEqualByComparingTo(new BigDecimal("500000.00"));
+        assertThat(hourly.upfrontAmount()).isNull();
     }
 
     @Test
