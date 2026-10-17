@@ -27,3 +27,4 @@ public record ProviderVehicleDetailResponse(
         Instant updatedAt
 ) {
 }
+
