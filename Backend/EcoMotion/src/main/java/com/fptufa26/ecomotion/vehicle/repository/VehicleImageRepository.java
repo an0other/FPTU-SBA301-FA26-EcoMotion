@@ -13,4 +13,6 @@ public interface VehicleImageRepository extends JpaRepository<VehicleImage, Long
     List<VehicleImage> findByVehicle_IdOrderByDisplayOrderAsc(Long vehicleId);
 
     List<VehicleImage> findByVehicle_IdInOrderByDisplayOrderAsc(Collection<Long> vehicleIds);
+
+    java.util.Optional<VehicleImage> findByVehicle_IdAndDisplayOrder(Long vehicleId, Integer displayOrder);
 }

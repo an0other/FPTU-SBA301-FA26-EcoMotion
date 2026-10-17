@@ -15,4 +15,9 @@ export const providerService = {
     const { data } = await apiClient.patch(`/provider/vehicles/${id}/visibility`, { visible })
     return data?.data
   },
+
+  async createVehicle(payload) {
+    const { data } = await apiClient.post('/provider/vehicles', payload)
+    return data?.data
+  },
 }

@@ -2,8 +2,10 @@ package com.fptufa26.ecomotion.vehicle.controller;
 
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
+import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
@@ -18,6 +20,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -74,5 +77,14 @@ public class ProviderVehicleController {
                 id,
                 request
         ));
+    }
+
+    @PostMapping("/vehicles")
+    @Operation(summary = "Register a new vehicle into fleet (O03)")
+    public ApiResponse<ProviderVehicleDetailResponse> createVehicle(
+            @AuthenticationPrincipal SecurityUser user,
+            @Valid @RequestBody CreateVehicleRequest request
+    ) {
+        return ApiResponse.success(providerVehicleService.createVehicle(user.getUserId(), request));
     }
 }
