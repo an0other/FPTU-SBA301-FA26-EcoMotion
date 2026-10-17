@@ -113,12 +113,14 @@ class ProviderVehicleApiTest {
         User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
         String token = jwtService.generateAccessToken(providerUser);
         String uniqueSuffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+        int randomDigits = 10000 + new java.util.Random().nextInt(90000);
+        String validPlate = "51K-" + randomDigits;
 
         String payload = """
                 {
                     "chassisNo": "VIN-%s",
                     "engineNo": "ENG-%s",
-                    "licensePlate": "51K-%s",
+                    "licensePlate": "%s",
                     "brand": "VinFast",
                     "model": "VF 8 Plus",
                     "manufactureYear": 2024,
@@ -129,7 +131,7 @@ class ProviderVehicleApiTest {
                     "maintenanceBufferMinutes": 60,
                     "coverImageUrl": "https://example.com/vf8.jpg"
                 }
-                """.formatted(uniqueSuffix, uniqueSuffix, uniqueSuffix.substring(0, 5));
+                """.formatted(uniqueSuffix, uniqueSuffix, validPlate);
 
         mockMvc.perform(post("/api/provider/vehicles")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -142,5 +144,36 @@ class ProviderVehicleApiTest {
                 .andExpect(jsonPath("$.data.brand").value("VinFast"))
                 .andExpect(jsonPath("$.data.model").value("VF 8 Plus"))
                 .andExpect(jsonPath("$.data.coverImageUrl").value("https://example.com/vf8.jpg"));
+    }
+
+    @Test
+    @DisplayName("provider registration is rejected with 400 Bad Request when license plate pattern is invalid like 77AAAAAAA")
+    void providerCannotRegisterVehicleWithInvalidLicensePlate() throws Exception {
+        User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        String token = jwtService.generateAccessToken(providerUser);
+        String uniqueSuffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+
+        String payload = """
+                {
+                    "chassisNo": "VIN-%s",
+                    "engineNo": "ENG-%s",
+                    "licensePlate": "77AAAAAAA",
+                    "brand": "VinFast",
+                    "model": "VF 8 Plus",
+                    "manufactureYear": 2024,
+                    "seatCount": 5,
+                    "transmission": "AUTOMATIC",
+                    "fuelType": "EV",
+                    "color": "Xanh Lục Bảo",
+                    "maintenanceBufferMinutes": 60,
+                    "coverImageUrl": "https://example.com/vf8.jpg"
+                }
+                """.formatted(uniqueSuffix, uniqueSuffix);
+
+        mockMvc.perform(post("/api/provider/vehicles")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest());
     }
 }

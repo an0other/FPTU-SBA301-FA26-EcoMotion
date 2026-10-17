@@ -178,12 +178,13 @@ class ProviderVehicleServiceTest {
     void createVehicleCreatesPendingVehicle() {
         User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
         String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+        int randPlate = 10000 + new java.util.Random().nextInt(90000);
 
         com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request =
                 new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
                         "CHASSIS-" + uniqueSuffix,
                         "ENGINE-" + uniqueSuffix,
-                        "51K-" + uniqueSuffix.substring(0, 5),
+                        "51K-" + randPlate,
                         "VinFast",
                         "VF 8 Plus",
                         2024,
@@ -211,12 +212,13 @@ class ProviderVehicleServiceTest {
     void createVehicleRejectsDuplicateLicensePlate() {
         User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
         String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+        int randPlate = 10000 + new java.util.Random().nextInt(90000);
 
         com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request1 =
                 new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
                         "CHASSIS1-" + uniqueSuffix,
                         "ENGINE1-" + uniqueSuffix,
-                        "51A-DUP" + uniqueSuffix.substring(0, 3),
+                        "51A-" + randPlate,
                         "VinFast",
                         "VF 8",
                         2024,
@@ -249,5 +251,30 @@ class ProviderVehicleServiceTest {
         assertThatThrownBy(() -> providerVehicleService.createVehicle(user.getUserId(), duplicateRequest))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Biển số xe");
+    }
+
+    @Test
+    @DisplayName("createVehicle throws IllegalArgumentException on invalid license plate pattern like 77AAAAAAA")
+    void createVehicleRejectsInvalidLicensePlatePattern() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request =
+                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+                        "CHASSIS-INVALID",
+                        "ENGINE-INVALID",
+                        "77AAAAAAA",
+                        "VinFast",
+                        "VF 8 Plus",
+                        2024,
+                        5,
+                        Transmission.AUTOMATIC,
+                        FuelType.EV,
+                        "Xanh Lục Bảo",
+                        60,
+                        null
+                );
+
+        assertThatThrownBy(() -> providerVehicleService.createVehicle(user.getUserId(), request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Biển số xe không đúng định dạng quy chuẩn Việt Nam");
     }
 }
