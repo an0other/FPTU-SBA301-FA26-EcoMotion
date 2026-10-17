@@ -75,14 +75,14 @@ export default function ProviderHomePage() {
                   className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-[#0b1c30] border border-slate-200 px-4 py-2.5 rounded-xl text-[14px] font-semibold shadow-xs transition-all duration-200"
                 >
                   <span className="material-symbols-outlined text-slate-600 text-[20px]">person_add</span>
-                  <span>+ Tạo tài xế hộ</span>
+                  <span>Tạo tài xế hộ</span>
                 </Link>
                 <Link
                   to="/provider/vehicles/new"
                   className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-[14px] font-semibold shadow-md shadow-emerald-600/20 transition-all duration-200"
                 >
                   <span className="material-symbols-outlined text-[20px]">add_circle</span>
-                  <span>+ Thêm xe mới</span>
+                  <span>Thêm xe mới</span>
                 </Link>
               </div>
             </section>
