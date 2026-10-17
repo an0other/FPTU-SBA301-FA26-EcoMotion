@@ -3,8 +3,10 @@ package com.fptufa26.ecomotion.vehicle.service.implement;
 import com.fptufa26.ecomotion.schedule.service.ProviderScheduleService;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleStatsResponse;
@@ -176,6 +178,77 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         String coverImage = images.isEmpty() ? null : images.get(0).getImageUrl();
 
         return mapToItemResponse(vehicle, plans, coverImage);
+    }
+
+    @Override
+    @Transactional
+    public ProviderVehicleDetailResponse createVehicle(Long userId, CreateVehicleRequest request) {
+        Provider provider = findProviderByUserId(userId);
+
+        String licensePlate = request.licensePlate().trim().toUpperCase(Locale.ROOT);
+        String chassisNo = request.chassisNo().trim().toUpperCase(Locale.ROOT);
+        String engineNo = request.engineNo().trim().toUpperCase(Locale.ROOT);
+
+        if (vehicleRepository.existsByLicensePlateIgnoreCase(licensePlate)) {
+            throw new IllegalArgumentException("Biển số xe " + licensePlate + " đã tồn tại trên hệ thống");
+        }
+        if (vehicleRepository.existsByChassisNoIgnoreCase(chassisNo)) {
+            throw new IllegalArgumentException("Số khung (VIN) " + chassisNo + " đã tồn tại trên hệ thống");
+        }
+        if (vehicleRepository.existsByEngineNoIgnoreCase(engineNo)) {
+            throw new IllegalArgumentException("Số máy " + engineNo + " đã tồn tại trên hệ thống");
+        }
+
+        Vehicle vehicle = new Vehicle();
+        vehicle.setProvider(provider);
+        vehicle.setLicensePlate(licensePlate);
+        vehicle.setChassisNo(chassisNo);
+        vehicle.setEngineNo(engineNo);
+        vehicle.setBrand(request.brand().trim());
+        vehicle.setModel(request.model().trim());
+        vehicle.setManufactureYear(request.manufactureYear());
+        vehicle.setSeatCount(request.seatCount());
+        vehicle.setTransmission(request.transmission());
+        vehicle.setFuelType(request.fuelType());
+        vehicle.setColor(request.color().trim());
+        vehicle.setStatus(VehicleStatus.PENDING);
+        vehicle.setMaintenanceBufferMinutes(request.maintenanceBufferMinutes());
+        vehicle.setRatingAvg(BigDecimal.ZERO);
+        vehicle.setRatingCount(0);
+
+        Vehicle saved = vehicleRepository.save(vehicle);
+
+        String coverImageUrl = null;
+        if (request.coverImageUrl() != null && !request.coverImageUrl().isBlank()) {
+            VehicleImage image = new VehicleImage();
+            image.setVehicle(saved);
+            image.setImageUrl(request.coverImageUrl().trim());
+            image.setDisplayOrder(0);
+            image.setCaption("Ảnh bìa chính thức");
+            vehicleImageRepository.save(image);
+            coverImageUrl = image.getImageUrl();
+        }
+
+        return new ProviderVehicleDetailResponse(
+                saved.getId(),
+                saved.getLicensePlate(),
+                saved.getChassisNo(),
+                saved.getEngineNo(),
+                saved.getBrand(),
+                saved.getModel(),
+                saved.getManufactureYear(),
+                saved.getSeatCount(),
+                saved.getTransmission(),
+                saved.getFuelType(),
+                saved.getColor(),
+                saved.getStatus(),
+                saved.getMaintenanceBufferMinutes(),
+                coverImageUrl,
+                saved.getRatingAvg(),
+                saved.getRatingCount(),
+                saved.getCreatedAt(),
+                saved.getUpdatedAt()
+        );
     }
 
     private Provider findProviderByUserId(Long userId) {

@@ -26,4 +26,9 @@ public interface ProviderVehicleService {
             Long vehicleId,
             VehicleVisibilityRequest request
     );
+
+    com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse createVehicle(
+            Long userId,
+            com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request
+    );
 }

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -104,5 +105,42 @@ class ProviderVehicleApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.status").value("APPROVED"));
+    }
+
+    @Test
+    @DisplayName("provider can register new vehicle with 200 SUCCESS and PENDING status")
+    void providerCanRegisterNewVehicle() throws Exception {
+        User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        String token = jwtService.generateAccessToken(providerUser);
+        String uniqueSuffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+
+        String payload = """
+                {
+                    "chassisNo": "VIN-%s",
+                    "engineNo": "ENG-%s",
+                    "licensePlate": "51K-%s",
+                    "brand": "VinFast",
+                    "model": "VF 8 Plus",
+                    "manufactureYear": 2024,
+                    "seatCount": 5,
+                    "transmission": "AUTOMATIC",
+                    "fuelType": "EV",
+                    "color": "Xanh Lục Bảo",
+                    "maintenanceBufferMinutes": 60,
+                    "coverImageUrl": "https://example.com/vf8.jpg"
+                }
+                """.formatted(uniqueSuffix, uniqueSuffix, uniqueSuffix.substring(0, 5));
+
+        mockMvc.perform(post("/api/provider/vehicles")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.id").isNumber())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.brand").value("VinFast"))
+                .andExpect(jsonPath("$.data.model").value("VF 8 Plus"))
+                .andExpect(jsonPath("$.data.coverImageUrl").value("https://example.com/vf8.jpg"));
     }
 }

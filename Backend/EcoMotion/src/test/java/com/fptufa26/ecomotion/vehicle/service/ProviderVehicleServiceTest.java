@@ -172,4 +172,82 @@ class ProviderVehicleServiceTest {
                 new VehicleVisibilityRequest(true)
         )).isInstanceOf(VehicleNotFoundException.class);
     }
+
+    @Test
+    @DisplayName("createVehicle creates a new vehicle in PENDING status with zero rating and cover image")
+    void createVehicleCreatesPendingVehicle() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+
+        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request =
+                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+                        "CHASSIS-" + uniqueSuffix,
+                        "ENGINE-" + uniqueSuffix,
+                        "51K-" + uniqueSuffix.substring(0, 5),
+                        "VinFast",
+                        "VF 8 Plus",
+                        2024,
+                        5,
+                        Transmission.AUTOMATIC,
+                        FuelType.EV,
+                        "Xanh Lục Bảo",
+                        60,
+                        "https://example.com/cover.png"
+                );
+
+        com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse response =
+                providerVehicleService.createVehicle(user.getUserId(), request);
+
+        assertThat(response.id()).isNotNull();
+        assertThat(response.licensePlate()).isEqualTo(request.licensePlate().toUpperCase());
+        assertThat(response.status()).isEqualTo(VehicleStatus.PENDING);
+        assertThat(response.ratingAvg()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(response.ratingCount()).isEqualTo(0);
+        assertThat(response.coverImageUrl()).isEqualTo("https://example.com/cover.png");
+    }
+
+    @Test
+    @DisplayName("createVehicle throws IllegalArgumentException on duplicate license plate")
+    void createVehicleRejectsDuplicateLicensePlate() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+
+        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request1 =
+                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+                        "CHASSIS1-" + uniqueSuffix,
+                        "ENGINE1-" + uniqueSuffix,
+                        "51A-DUP" + uniqueSuffix.substring(0, 3),
+                        "VinFast",
+                        "VF 8",
+                        2024,
+                        5,
+                        Transmission.AUTOMATIC,
+                        FuelType.EV,
+                        "Trắng",
+                        60,
+                        null
+                );
+
+        providerVehicleService.createVehicle(user.getUserId(), request1);
+
+        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest duplicateRequest =
+                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+                        "CHASSIS2-" + uniqueSuffix,
+                        "ENGINE2-" + uniqueSuffix,
+                        request1.licensePlate(),
+                        "VinFast",
+                        "VF 8",
+                        2024,
+                        5,
+                        Transmission.AUTOMATIC,
+                        FuelType.EV,
+                        "Đen",
+                        60,
+                        null
+                );
+
+        assertThatThrownBy(() -> providerVehicleService.createVehicle(user.getUserId(), duplicateRequest))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Biển số xe");
+    }
 }
