@@ -36,6 +36,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
+import com.fptufa26.ecomotion.review.exception.ReviewAlreadyExistsException;
+import com.fptufa26.ecomotion.review.exception.ReviewNotAllowedException;
 
 import java.util.stream.Collectors;
 
@@ -251,6 +253,16 @@ public class GlobalExceptionHandler {
             BookingNotFoundException ex,
             HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler({
+            ReviewAlreadyExistsException.class,
+            ReviewNotAllowedException.class
+    })
+    public ResponseEntity<ErrorResponse> handleReviewConflict(
+            RuntimeException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
 }

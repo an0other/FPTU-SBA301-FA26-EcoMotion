@@ -24,4 +24,7 @@ public interface VehicleService {
                                                 int radiusKm, String keyword, String location,
                                                 String fuelType, String planType, BigDecimal maxPrice,
                                                 VehicleSort sort);
+
+    void updateRating(Long vehicleId, BigDecimal ratingAvg, int ratingCount);
+
 }

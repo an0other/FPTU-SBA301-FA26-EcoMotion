@@ -42,6 +42,7 @@ public class DevDataSeeder implements ApplicationRunner {
     public static final String DEFAULT_PASSWORD = "EcoMotion@123";
 
     private final RenterPaymentDataSeeder renterPaymentDataSeeder;
+    private final RenterReviewDataSeeder renterReviewDataSeeder;
 
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
@@ -180,8 +181,10 @@ public class DevDataSeeder implements ApplicationRunner {
                 DESC_RANGE_ROVER);
 
         realignPinnedIdentitySequences();
+        renterPaymentDataSeeder.seed();
         realignPinnedIdentitySequences();
         renterPaymentDataSeeder.seed();
+        renterReviewDataSeeder.seed();
     }
 
 
