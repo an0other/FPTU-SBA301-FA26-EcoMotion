@@ -340,4 +340,32 @@ public class VehicleServiceImpl implements VehicleService {
             return null;
         }
     }
+
+    @Override
+    @Transactional
+    public void updateRating(
+            Long vehicleId,
+            BigDecimal ratingAvg,
+            int ratingCount) {
+        if (vehicleId == null) {
+            throw new IllegalArgumentException("Vehicle id is required");
+        }
+
+        if (ratingAvg == null
+                || ratingAvg.signum() < 0
+                || ratingAvg.compareTo(BigDecimal.valueOf(5)) > 0
+                || ratingCount < 0
+                || (ratingCount == 0 && ratingAvg.signum() != 0)
+                || (ratingCount > 0
+                && ratingAvg.compareTo(BigDecimal.ONE) < 0)) {
+            throw new IllegalArgumentException("Invalid vehicle rating summary");
+        }
+
+        Vehicle vehicle = vehicleRepository.findById(vehicleId)
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+
+        vehicle.setRatingAvg(ratingAvg);
+        vehicle.setRatingCount(ratingCount);
+    }
+
 }
