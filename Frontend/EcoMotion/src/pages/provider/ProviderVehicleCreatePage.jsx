@@ -944,21 +944,24 @@ export default function ProviderVehicleCreatePage() {
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                         {[
-                          { id: "EV", label: "⚡ Điện EV" },
-                          { id: "GASOLINE", label: "⛽ Xăng" },
-                          { id: "DIESEL", label: "🛢️ Dầu" },
-                          { id: "HYBRID", label: "🔋 Hybrid" },
+                          { id: "EV", label: "Điện EV", icon: "electric_bolt" },
+                          { id: "GASOLINE", label: "Xăng", icon: "local_gas_station" },
+                          { id: "DIESEL", label: "Dầu", icon: "oil_barrel" },
+                          { id: "HYBRID", label: "Hybrid", icon: "battery_charging_full" },
                         ].map((fuel) => (
                           <button
                             key={fuel.id}
                             type="button"
                             onClick={() => handleChange("fuelType", fuel.id)}
-                            className={`h-11 rounded-xl text-xs font-semibold flex items-center justify-center text-center p-1 transition-all cursor-pointer ${
+                            className={`h-11 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 text-center p-1 transition-all cursor-pointer ${
                               form.fuelType === fuel.id
                                 ? "bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs"
                                 : "bg-slate-100 text-slate-600 hover:text-[#0b1c30] border border-transparent"
                             }`}
                           >
+                            <span className="material-symbols-outlined text-[16px] leading-none">
+                              {fuel.icon}
+                            </span>
                             <span>{fuel.label}</span>
                           </button>
                         ))}

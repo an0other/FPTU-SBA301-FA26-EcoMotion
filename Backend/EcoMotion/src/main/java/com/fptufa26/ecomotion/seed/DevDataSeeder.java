@@ -18,9 +18,13 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.enums.Transmission;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
+import com.fptufa26.ecomotion.vehicle.entity.VehicleDocument;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentStatus;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import jakarta.persistence.EntityManager;
@@ -32,6 +36,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 @Component
@@ -69,6 +74,7 @@ public class DevDataSeeder implements ApplicationRunner {
     private final VehicleRepository vehicleRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final RentalPlanRepository rentalPlanRepository;
+    private final VehicleDocumentRepository vehicleDocumentRepository;
     private final PasswordEncoder passwordEncoder;
     private final DeterministicCipher cipher;
     private final EntityManager entityManager;
@@ -328,6 +334,53 @@ public class DevDataSeeder implements ApplicationRunner {
 
         seedImages(vehicle, providerUserId, imageFiles, description);
         seedPlans(vehicle, prices);
+        seedDocuments(vehicle);
+    }
+
+    private void seedDocuments(Vehicle vehicle) {
+        if (!vehicleDocumentRepository.findByVehicle_Id(vehicle.getId()).isEmpty()) {
+            return;
+        }
+
+        // 1. REGISTRATION (Đăng ký xe / Cà vẹt - không thời hạn)
+        VehicleDocument registration = new VehicleDocument();
+        registration.setVehicle(vehicle);
+        registration.setDocType(DocumentType.REGISTRATION);
+        registration.setDocNumber("049" + vehicle.getId() + "82/ĐKX");
+        registration.setExpiryDate(null);
+        registration.setFileUrl("/documents/" + vehicle.getId() + "/cavet_goc.pdf");
+        registration.setStatus(DocumentStatus.VERIFIED);
+        vehicleDocumentRepository.save(registration);
+
+        // 2. INSPECTION (Kiểm định)
+        VehicleDocument inspection = new VehicleDocument();
+        inspection.setVehicle(vehicle);
+        inspection.setDocType(DocumentType.INSPECTION);
+        inspection.setDocNumber("KD-883" + vehicle.getId() + "102-TPHCM");
+        inspection.setExpiryDate(LocalDate.of(2027, 4, 15));
+        inspection.setFileUrl("/documents/" + vehicle.getId() + "/so_dangkiem.pdf");
+        inspection.setStatus(DocumentStatus.VERIFIED);
+        vehicleDocumentRepository.save(inspection);
+
+        // 3. INSURANCE (Bảo hiểm TNDS)
+        VehicleDocument insurance = new VehicleDocument();
+        insurance.setVehicle(vehicle);
+        insurance.setDocType(DocumentType.INSURANCE);
+        insurance.setDocNumber("PVI-AUT-2025-" + (9910 + vehicle.getId()));
+        insurance.setExpiryDate(LocalDate.of(2027, 1, 18));
+        insurance.setFileUrl("/documents/" + vehicle.getId() + "/baohiem_tnds.pdf");
+        insurance.setStatus(DocumentStatus.VERIFIED);
+        vehicleDocumentRepository.save(insurance);
+
+        // 4. BUSINESS_BADGE (Phù hiệu vận tải)
+        VehicleDocument badge = new VehicleDocument();
+        badge.setVehicle(vehicle);
+        badge.setDocType(DocumentType.BUSINESS_BADGE);
+        badge.setDocNumber("PH-HCM-2025-" + (88420 + vehicle.getId()));
+        badge.setExpiryDate(LocalDate.of(2028, 12, 31));
+        badge.setFileUrl("/documents/" + vehicle.getId() + "/phuhieu_sgtvt.pdf");
+        badge.setStatus(DocumentStatus.VERIFIED);
+        vehicleDocumentRepository.save(badge);
     }
 
     private void seedImages(Vehicle vehicle, Long providerUserId, List<String> imageFiles, String description) {

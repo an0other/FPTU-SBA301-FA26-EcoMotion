@@ -4,11 +4,13 @@ import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderRentalPlanResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
@@ -131,5 +133,24 @@ public class ProviderVehicleController {
             @Valid @RequestBody UpdateRentalPlansRequest request
     ) {
         return ApiResponse.success(providerVehicleService.updateVehicleRentalPlans(user.getUserId(), id, request));
+    }
+
+    @GetMapping("/vehicles/{id}/documents")
+    @Operation(summary = "Get provider vehicle legal documents (O04)")
+    public ApiResponse<List<ProviderVehicleDocumentResponse>> getVehicleDocuments(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.success(providerVehicleService.getVehicleDocuments(user.getUserId(), id));
+    }
+
+    @PutMapping("/vehicles/{id}/documents")
+    @Operation(summary = "Upload or renew provider vehicle legal document (O04)")
+    public ApiResponse<ProviderVehicleDocumentResponse> updateVehicleDocument(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateVehicleDocumentRequest request
+    ) {
+        return ApiResponse.success(providerVehicleService.updateVehicleDocument(user.getUserId(), id, request));
     }
 }
