@@ -43,6 +43,7 @@ public class DevDataSeeder implements ApplicationRunner {
 
     private final RenterPaymentDataSeeder renterPaymentDataSeeder;
     private final RenterReviewDataSeeder renterReviewDataSeeder;
+    private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
 
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
@@ -185,6 +186,11 @@ public class DevDataSeeder implements ApplicationRunner {
         realignPinnedIdentitySequences();
         renterPaymentDataSeeder.seed();
         renterReviewDataSeeder.seed();
+
+        realignPinnedIdentitySequences();
+        renterPaymentDataSeeder.seed();
+        renterReviewDataSeeder.seed();
+        renterYearlyBookingDataSeeder.seed();
     }
 
 
