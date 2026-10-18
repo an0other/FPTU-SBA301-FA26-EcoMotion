@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { providerService } from '../../services/providerService'
 import { formatCurrency, TRANSMISSION_LABELS } from '../../utils/formatCurrency'
@@ -8,6 +8,7 @@ import ProviderHeader from '../../components/provider/ProviderHeader'
 
 export default function ProviderVehicleListPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
 
   const [summary, setSummary] = useState(null)
   const [vehicles, setVehicles] = useState([])
@@ -21,11 +22,19 @@ export default function ProviderVehicleListPage() {
 
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || '')
   const [fuelFilter, setFuelFilter] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [viewMode, setViewMode] = useState('grid')
   const [togglingIds, setTogglingIds] = useState(new Set())
+
+  useEffect(() => {
+    const urlStatus = searchParams.get('status')
+    if (urlStatus !== null && urlStatus !== undefined) {
+      setStatusFilter(urlStatus)
+      setPage(0)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -165,29 +174,29 @@ export default function ProviderVehicleListPage() {
     switch (status) {
       case 'APPROVED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Đang hoạt động
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50/95 backdrop-blur-xs text-emerald-800 border border-emerald-200 shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Đã duyệt
           </span>
         )
       case 'PENDING':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50/95 backdrop-blur-xs text-amber-800 border border-amber-200 shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
             Chờ duyệt
           </span>
         )
       case 'HIDDEN':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100/95 backdrop-blur-xs text-slate-700 border border-slate-300 shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
             Tạm ẩn
           </span>
         )
       case 'REJECTED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50/95 backdrop-blur-xs text-rose-700 border border-rose-200 shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
             Cần bổ sung
           </span>
         )
@@ -196,35 +205,90 @@ export default function ProviderVehicleListPage() {
     }
   }
 
-  function renderFuelBadge(fuelType) {
-    switch (fuelType) {
-      case 'EV':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-            ⚡ Thuần điện
-          </span>
-        )
-      case 'HYBRID':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
-            🔋 Xăng điện (Hybrid)
-          </span>
-        )
-      case 'DIESEL':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
-            🛢️ Dầu Diesel
-          </span>
-        )
-      case 'GASOLINE':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11.5px] font-bold bg-blue-50 text-blue-900 border border-blue-200">
-            ⛽ Xăng
-          </span>
-        )
-      default:
-        return null
+  const FUEL_CONFIG = {
+    EV: {
+      label: 'Điện EV',
+      icon: 'electric_bolt',
+      cardClass: 'bg-emerald-700 text-white border-transparent shadow-xs',
+      tableClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    },
+    GASOLINE: {
+      label: 'Xăng',
+      icon: 'local_gas_station',
+      cardClass: 'bg-blue-700 text-white border-transparent shadow-xs',
+      tableClass: 'bg-blue-50 text-blue-900 border-blue-200',
+    },
+    DIESEL: {
+      label: 'Dầu',
+      icon: 'oil_barrel',
+      cardClass: 'bg-amber-600 text-white border-transparent shadow-xs',
+      tableClass: 'bg-amber-50 text-amber-900 border-amber-200',
+    },
+    HYBRID: {
+      label: 'Hybrid',
+      icon: 'battery_charging_full',
+      cardClass: 'bg-teal-700 text-white border-transparent shadow-xs',
+      tableClass: 'bg-teal-50 text-teal-800 border-teal-200',
+    },
+  }
+
+  function renderFuelBadge(fuelType, isCard = false) {
+    const config = FUEL_CONFIG[fuelType?.toUpperCase()]
+    if (!config) return null
+
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border ${
+          isCard ? config.cardClass : `${config.tableClass} shadow-xs`
+        }`}
+      >
+        <span className="material-symbols-outlined text-[15px] leading-none">
+          {config.icon}
+        </span>
+        <span>{config.label}</span>
+      </span>
+    )
+  }
+
+  function getActivePlans(vehicle) {
+    const plans = []
+    if (vehicle.dailyPrice) {
+      plans.push({
+        price: vehicle.dailyPrice,
+        name: 'Theo Ngày (VNĐ/ngày)',
+        shortName: 'Theo Ngày',
+        unit: 'VNĐ/ngày',
+        icon: 'calendar_today',
+      })
     }
+    if (vehicle.hourlyPrice) {
+      plans.push({
+        price: vehicle.hourlyPrice,
+        name: 'Theo Giờ (VNĐ/giờ)',
+        shortName: 'Theo Giờ',
+        unit: 'VNĐ/giờ',
+        icon: 'schedule',
+      })
+    }
+    if (vehicle.monthlyPrice) {
+      plans.push({
+        price: vehicle.monthlyPrice,
+        name: 'Theo Tháng (VNĐ/tháng)',
+        shortName: 'Theo Tháng',
+        unit: 'VNĐ/tháng',
+        icon: 'date_range',
+      })
+    }
+    if (vehicle.yearlyPrice) {
+      plans.push({
+        price: vehicle.yearlyPrice,
+        name: 'Theo Năm (VNĐ/năm)',
+        shortName: 'Theo Năm',
+        unit: 'VNĐ/năm',
+        icon: 'event_repeat',
+      })
+    }
+    return plans
   }
 
   return (
@@ -393,10 +457,10 @@ export default function ProviderVehicleListPage() {
                 className="px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-hidden focus:border-emerald-600"
               >
                 <option value="">Tất cả nhiên liệu</option>
-                <option value="EV">⚡ Thuần điện (EV)</option>
-                <option value="HYBRID">🔋 Xăng điện (Hybrid)</option>
-                <option value="DIESEL">🛢️ Dầu Diesel</option>
-                <option value="GASOLINE">⛽ Xăng</option>
+                <option value="EV">Điện EV</option>
+                <option value="GASOLINE">Xăng</option>
+                <option value="DIESEL">Dầu</option>
+                <option value="HYBRID">Hybrid</option>
               </select>
 
               {/* Sort By */}
@@ -455,7 +519,7 @@ export default function ProviderVehicleListPage() {
               )}
               {fuelFilter && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-medium">
-                  Nhiên liệu: {fuelFilter}
+                  Nhiên liệu: {FUEL_CONFIG[fuelFilter]?.label || fuelFilter}
                   <button type="button" onClick={() => setFuelFilter('')} className="hover:text-blue-900">
                     ✕
                   </button>
@@ -551,20 +615,26 @@ export default function ProviderVehicleListPage() {
 
                     {/* Top Overlay Badges */}
                     <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
-                      <div className="pointer-events-auto">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md border border-slate-300 bg-white/95 backdrop-blur-xs font-mono text-xs font-bold text-slate-900 shadow-sm">
-                          {vehicle.licensePlate}
-                        </span>
-                      </div>
+                      {/* Top-Left: Status Badge (e.g. • Đã duyệt / • Chờ duyệt) */}
                       <div className="pointer-events-auto">
                         {renderStatusBadge(vehicle.status)}
                       </div>
+
+                      {/* Top-Right: Fuel Badge (e.g. EV / Xăng / Dầu / Hybrid) */}
+                      <div className="pointer-events-auto">
+                        {renderFuelBadge(vehicle.fuelType, true)}
+                      </div>
                     </div>
 
-                    {/* Bottom Fuel Chip */}
+                    {/* Bottom-Left: License Plate Badge with Red Dot */}
                     <div className="absolute bottom-3 left-3 pointer-events-none">
                       <div className="pointer-events-auto">
-                        {renderFuelBadge(vehicle.fuelType)}
+                        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200/90 shadow-md">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-600 flex-shrink-0" />
+                          <span className="font-mono text-xs sm:text-sm font-bold text-[#0b1c30] tracking-wider">
+                            {vehicle.licensePlate}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -573,59 +643,99 @@ export default function ProviderVehicleListPage() {
                   <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                     <div>
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h3 className="text-lg font-bold text-[#0b1c30] leading-snug">
-                            {vehicle.brand} {vehicle.model}
-                          </h3>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            Năm SX: {vehicle.manufactureYear} • {vehicle.color || 'Tiêu chuẩn'}
-                          </p>
-                        </div>
+                        <h3 className="text-lg font-bold text-[#0b1c30] leading-snug">
+                          {vehicle.brand} {vehicle.model}
+                        </h3>
 
                         {vehicle.ratingCount > 0 ? (
-                          <div className="flex items-center gap-1 text-xs font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded-md">
+                          <div className="flex items-center gap-1 text-xs font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded-md flex-shrink-0">
                             <span>★</span>
                             <span>{Number(vehicle.ratingAvg).toFixed(1)}</span>
                             <span className="text-slate-400 font-normal text-[10px]">({vehicle.ratingCount})</span>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
+                          <span className="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md font-medium flex-shrink-0">
                             Chưa có đánh giá
                           </span>
                         )}
                       </div>
 
-                      {/* Specs Row */}
-                      <div className="flex items-center gap-4 text-xs text-slate-600 mt-3 pt-3 border-t border-slate-100">
-                        <span className="inline-flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">airline_seat_recline_normal</span>
-                          {vehicle.seatCount} chỗ
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[16px] text-slate-400">settings</span>
-                          {TRANSMISSION_LABELS[vehicle.transmission] || vehicle.transmission}
-                        </span>
+                      {/* Vehicle Specs Box (Gộp chung 1 ô) */}
+                      <div className="mt-3 p-3 rounded-2xl bg-slate-50/80 border border-slate-100 grid grid-cols-2 gap-y-2.5 gap-x-3 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[16px] text-slate-500 flex-shrink-0">
+                            calendar_today
+                          </span>
+                          <span className="text-slate-600 truncate">
+                            Năm SX: <strong className="font-bold text-[#0b1c30]">{vehicle.manufactureYear}</strong>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[16px] text-slate-500 flex-shrink-0">
+                            airline_seat_recline_normal
+                          </span>
+                          <span className="text-slate-600 truncate">
+                            Số chỗ: <strong className="font-bold text-[#0b1c30]">{vehicle.seatCount} Chỗ</strong>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[16px] text-slate-500 flex-shrink-0">
+                            settings
+                          </span>
+                          <span className="text-slate-600 truncate">
+                            Hộp số: <strong className="font-bold text-[#0b1c30]">{TRANSMISSION_LABELS[vehicle.transmission] || vehicle.transmission}</strong>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[16px] text-slate-500 flex-shrink-0">
+                            palette
+                          </span>
+                          <span className="text-slate-600 truncate" title={vehicle.color || 'Tiêu chuẩn'}>
+                            Màu: <strong className="font-bold text-[#0b1c30]">{vehicle.color || 'Tiêu chuẩn'}</strong>
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Price Row */}
-                      <div className="mt-3">
-                        {vehicle.dailyPrice ? (
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base font-extrabold text-emerald-700">
-                              {formatCurrency(vehicle.dailyPrice)}
-                            </span>
-                            <span className="text-xs text-slate-500 font-medium">/ ngày</span>
-                          </div>
-                        ) : vehicle.hourlyPrice ? (
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base font-extrabold text-emerald-700">
-                              {formatCurrency(vehicle.hourlyPrice)}
-                            </span>
-                            <span className="text-xs text-slate-500 font-medium">/ giờ</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Chưa cài đặt giá</span>
-                        )}
+                      {/* Active Rental Plans Table */}
+                      <div className="mt-3.5">
+                        {(() => {
+                          const plans = getActivePlans(vehicle)
+                          if (plans.length === 0) {
+                            return (
+                              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
+                                <span className="text-slate-400 font-medium">Bảng giá:</span>
+                                <span className="text-slate-400 italic">Chưa cài đặt giá</span>
+                              </div>
+                            )
+                          }
+
+                          return (
+                            <div className="p-3 rounded-2xl bg-slate-50/80 border border-slate-100 overflow-hidden">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 pb-1.5 border-b border-slate-200/60">
+                                <span>Giá</span>
+                                <span>Gói cước đang hoạt động</span>
+                              </div>
+                              <div className="divide-y divide-slate-100 mt-1">
+                                {plans.map((p, idx) => (
+                                  <div key={idx} className="flex items-center justify-between py-1.5 text-xs">
+                                    <span className="font-extrabold text-emerald-700">
+                                      {formatCurrency(p.price)}
+                                    </span>
+                                    <span className="font-medium text-slate-700 flex items-center gap-1.5">
+                                      <span className="material-symbols-outlined text-[14px] text-slate-400">
+                                        {p.icon}
+                                      </span>
+                                      {p.name}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
 
@@ -720,19 +830,28 @@ export default function ProviderVehicleListPage() {
                           </div>
                         </td>
                         <td className="py-3.5 px-4 text-xs text-slate-600">
-                          {vehicle.manufactureYear} • {vehicle.seatCount} chỗ • {TRANSMISSION_LABELS[vehicle.transmission] || vehicle.transmission}
+                          {vehicle.manufactureYear} • {vehicle.seatCount} chỗ • {TRANSMISSION_LABELS[vehicle.transmission] || vehicle.transmission} • {vehicle.color || 'Tiêu chuẩn'}
                         </td>
                         <td className="py-3.5 px-4">
                           {renderFuelBadge(vehicle.fuelType)}
                         </td>
                         <td className="py-3.5 px-4">
-                          {vehicle.dailyPrice ? (
-                            <span className="font-bold text-emerald-700">{formatCurrency(vehicle.dailyPrice)}/ngày</span>
-                          ) : vehicle.hourlyPrice ? (
-                            <span className="font-bold text-emerald-700">{formatCurrency(vehicle.hourlyPrice)}/giờ</span>
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">—</span>
-                          )}
+                          {(() => {
+                            const plans = getActivePlans(vehicle)
+                            if (plans.length === 0) {
+                              return <span className="text-xs text-slate-400 italic">—</span>
+                            }
+                            return (
+                              <div className="space-y-1">
+                                {plans.map((p, idx) => (
+                                  <div key={idx} className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                                    <span className="font-bold text-emerald-700">{formatCurrency(p.price)}</span>
+                                    <span className="text-[11px] text-slate-500 font-medium">({p.shortName})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td className="py-3.5 px-4">
                           {renderStatusBadge(vehicle.status)}

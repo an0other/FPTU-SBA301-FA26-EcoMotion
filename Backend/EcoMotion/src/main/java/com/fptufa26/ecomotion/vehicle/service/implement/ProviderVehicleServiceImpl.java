@@ -5,23 +5,29 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderRentalPlanResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleStatsResponse;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
+import com.fptufa26.ecomotion.vehicle.entity.VehicleDocument;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentStatus;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentType;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import com.fptufa26.ecomotion.vehicle.service.ProviderVehicleService;
@@ -43,6 +49,7 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
     private final VehicleRepository vehicleRepository;
     private final RentalPlanRepository rentalPlanRepository;
     private final VehicleImageRepository vehicleImageRepository;
+    private final VehicleDocumentRepository vehicleDocumentRepository;
     private final ProviderScheduleService providerScheduleService;
 
     public ProviderVehicleServiceImpl(
@@ -50,12 +57,14 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
             VehicleRepository vehicleRepository,
             RentalPlanRepository rentalPlanRepository,
             VehicleImageRepository vehicleImageRepository,
+            VehicleDocumentRepository vehicleDocumentRepository,
             ProviderScheduleService providerScheduleService
     ) {
         this.userService = userService;
         this.vehicleRepository = vehicleRepository;
         this.rentalPlanRepository = rentalPlanRepository;
         this.vehicleImageRepository = vehicleImageRepository;
+        this.vehicleDocumentRepository = vehicleDocumentRepository;
         this.providerScheduleService = providerScheduleService;
     }
 
@@ -292,6 +301,10 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 .orElse(null);
 
         List<ProviderRentalPlanResponse> plans = buildRentalPlanResponses(vehicle);
+        List<ProviderVehicleDocumentResponse> documents = vehicleDocumentRepository.findByVehicle_Id(vehicleId)
+                .stream()
+                .map(this::mapToDocumentResponse)
+                .toList();
 
         return new ProviderVehicleDetailResponse(
                 vehicle.getId(),
@@ -312,7 +325,8 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 vehicle.getRatingCount(),
                 vehicle.getCreatedAt(),
                 vehicle.getUpdatedAt(),
-                plans
+                plans,
+                documents
         );
     }
 
@@ -673,6 +687,18 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 .findFirst()
                 .orElse(null);
 
+        BigDecimal monthlyPrice = activePlans.stream()
+                .filter(p -> p.getPlanType() == PlanType.MONTHLY)
+                .map(RentalPlan::getSlotPrice)
+                .findFirst()
+                .orElse(null);
+
+        BigDecimal yearlyPrice = activePlans.stream()
+                .filter(p -> p.getPlanType() == PlanType.YEARLY)
+                .map(RentalPlan::getSlotPrice)
+                .findFirst()
+                .orElse(null);
+
         return new ProviderVehicleItemResponse(
                 vehicle.getId(),
                 vehicle.getLicensePlate(),
@@ -689,7 +715,68 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 coverImageUrl,
                 dailyPrice,
                 hourlyPrice,
+                monthlyPrice,
+                yearlyPrice,
                 vehicle.getCreatedAt()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProviderVehicleDocumentResponse> getVehicleDocuments(Long userId, Long vehicleId) {
+        Provider provider = findProviderByUserId(userId);
+        vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+
+        return vehicleDocumentRepository.findByVehicle_Id(vehicleId).stream()
+                .map(this::mapToDocumentResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public ProviderVehicleDocumentResponse updateVehicleDocument(Long userId, Long vehicleId, UpdateVehicleDocumentRequest request) {
+        Provider provider = findProviderByUserId(userId);
+        Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+
+        if (request.docType() != DocumentType.REGISTRATION && request.expiryDate() == null) {
+            throw new IllegalArgumentException("Ngày hết hạn là bắt buộc đối với loại giấy tờ " + request.docType());
+        }
+
+        var existingOpt = vehicleDocumentRepository.findByVehicle_IdAndDocType(vehicleId, request.docType());
+        VehicleDocument doc;
+        if (existingOpt.isPresent()) {
+            doc = existingOpt.get();
+            doc.setDocNumber(request.docNumber().trim());
+            doc.setExpiryDate(request.docType() == DocumentType.REGISTRATION ? null : request.expiryDate());
+            doc.setFileUrl(request.fileUrl().trim());
+            doc.setStatus(DocumentStatus.PENDING);
+        } else {
+            doc = new VehicleDocument();
+            doc.setVehicle(vehicle);
+            doc.setDocType(request.docType());
+            doc.setDocNumber(request.docNumber().trim());
+            doc.setExpiryDate(request.docType() == DocumentType.REGISTRATION ? null : request.expiryDate());
+            doc.setFileUrl(request.fileUrl().trim());
+            doc.setStatus(DocumentStatus.PENDING);
+        }
+
+        VehicleDocument saved = vehicleDocumentRepository.save(doc);
+        return mapToDocumentResponse(saved);
+    }
+
+    private ProviderVehicleDocumentResponse mapToDocumentResponse(VehicleDocument doc) {
+        return new ProviderVehicleDocumentResponse(
+                doc.getId(),
+                doc.getVehicle().getId(),
+                doc.getDocType(),
+                doc.getDocNumber(),
+                doc.getExpiryDate(),
+                doc.getFileUrl(),
+                doc.getStatus(),
+                doc.getCreatedAt(),
+                doc.getUpdatedAt()
         );
     }
 }

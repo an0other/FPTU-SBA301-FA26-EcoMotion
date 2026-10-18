@@ -2,11 +2,13 @@ package com.fptufa26.ecomotion.vehicle.service;
 
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderRentalPlanResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
@@ -58,5 +60,16 @@ public interface ProviderVehicleService {
             Long userId,
             Long vehicleId,
             UpdateRentalPlansRequest request
+    );
+
+    List<ProviderVehicleDocumentResponse> getVehicleDocuments(
+            Long userId,
+            Long vehicleId
+    );
+
+    ProviderVehicleDocumentResponse updateVehicleDocument(
+            Long userId,
+            Long vehicleId,
+            UpdateVehicleDocumentRequest request
     );
 }

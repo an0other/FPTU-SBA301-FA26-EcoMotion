@@ -22,6 +22,8 @@ public record ProviderVehicleItemResponse(
         String coverImageUrl,
         BigDecimal dailyPrice,
         BigDecimal hourlyPrice,
+        BigDecimal monthlyPrice,
+        BigDecimal yearlyPrice,
         Instant createdAt
 ) {
 }

@@ -40,4 +40,14 @@ export const providerService = {
     const { data } = await apiClient.put(`/provider/vehicles/${id}/plans`, payload)
     return data?.data
   },
+
+  async getVehicleDocuments(id) {
+    const { data } = await apiClient.get(`/provider/vehicles/${id}/documents`)
+    return data?.data
+  },
+
+  async updateVehicleDocument(id, payload) {
+    const { data } = await apiClient.put(`/provider/vehicles/${id}/documents`, payload)
+    return data?.data
+  },
 }

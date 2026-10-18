@@ -6,14 +6,18 @@ import com.fptufa26.ecomotion.user.repository.UserRepository;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderRentalPlanResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentStatus;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentType;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
@@ -29,6 +33,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
@@ -479,5 +484,46 @@ class ProviderVehicleServiceTest {
         assertThatThrownBy(() ->
                 providerVehicleService.updateVehicleRentalPlans(user.getUserId(), vehicle.getId(), request)
         ).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("getVehicleDocuments returns seeded vehicle documents")
+    void getVehicleDocumentsReturnsSeededDocuments() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+
+        List<ProviderVehicleDocumentResponse> docs = providerVehicleService.getVehicleDocuments(user.getUserId(), vehicle.getId());
+
+        assertThat(docs).isNotEmpty();
+        assertThat(docs).anyMatch(d -> d.docType() == DocumentType.REGISTRATION && d.status() == DocumentStatus.VERIFIED);
+        assertThat(docs).anyMatch(d -> d.docType() == DocumentType.INSPECTION && d.status() == DocumentStatus.VERIFIED);
+    }
+
+    @Test
+    @DisplayName("updateVehicleDocument upserts document and sets status to PENDING")
+    void updateVehicleDocumentUpsertsAndSetsPending() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+
+        UpdateVehicleDocumentRequest request = new UpdateVehicleDocumentRequest(
+                DocumentType.INSPECTION,
+                "KD-NEW-9999",
+                LocalDate.of(2028, 5, 20),
+                "/uploads/test_dangkiem.pdf"
+        );
+
+        ProviderVehicleDocumentResponse response = providerVehicleService.updateVehicleDocument(
+                user.getUserId(),
+                vehicle.getId(),
+                request
+        );
+
+        assertThat(response).isNotNull();
+        assertThat(response.docType()).isEqualTo(DocumentType.INSPECTION);
+        assertThat(response.docNumber()).isEqualTo("KD-NEW-9999");
+        assertThat(response.expiryDate()).isEqualTo(LocalDate.of(2028, 5, 20));
+        assertThat(response.status()).isEqualTo(DocumentStatus.PENDING);
     }
 }

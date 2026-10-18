@@ -31,6 +31,96 @@ export default function ProviderHomePage() {
   const depotAddress = summary?.depotAddress || '120 Phổ Quang, Q. Tân Bình, TP.HCM'
   const hotline = summary?.hotline || '1900 6868'
 
+  const pendingCount = summary?.pendingVehicles || 0
+  const hiddenCount = summary?.hiddenVehicles || 0
+  const activeBlocks = summary?.activeBlocks || 0
+  const totalDrivers = summary?.totalDrivers || 0
+  const totalVehicles = summary?.totalVehicles || 0
+  const approvedCount = summary?.approvedVehicles || 0
+  const rejectedCount = Math.max(0, totalVehicles - pendingCount - approvedCount - hiddenCount)
+
+  const notices = []
+
+  if (rejectedCount > 0) {
+    notices.push({
+      id: 'rejected',
+      icon: 'error',
+      boxClass: 'bg-rose-50 border-rose-200',
+      iconColor: 'text-rose-700',
+      titleColor: 'text-rose-800',
+      descColor: 'text-rose-700',
+      linkColor: 'text-rose-800',
+      title: `${rejectedCount} xe bị từ chối duyệt hồ sơ`,
+      description: 'Hồ sơ phương tiện chưa đạt tiêu chuẩn kiểm duyệt. Vui lòng kiểm tra lại thông tin và ảnh giấy tờ xe.',
+      linkTo: '/provider/vehicles?status=REJECTED',
+      actionText: 'Cập nhật hồ sơ xe',
+    })
+  }
+
+  if (pendingCount > 0) {
+    notices.push({
+      id: 'pending',
+      icon: 'pending_actions',
+      boxClass: 'bg-amber-50 border-amber-200',
+      iconColor: 'text-amber-700',
+      titleColor: 'text-amber-800',
+      descColor: 'text-amber-700',
+      linkColor: 'text-amber-800',
+      title: `${pendingCount} xe đang chờ Quản trị viên duyệt`,
+      description: 'Phương tiện mới đăng ký đang được Ban quản trị kiểm tra hồ sơ trước khi đưa vào vận hành thực tế.',
+      linkTo: '/provider/vehicles?status=PENDING',
+      actionText: 'Xem danh sách xe',
+    })
+  }
+
+  if (hiddenCount > 0) {
+    notices.push({
+      id: 'hidden',
+      icon: 'visibility_off',
+      boxClass: 'bg-slate-50 border-slate-200',
+      iconColor: 'text-slate-700',
+      titleColor: 'text-[#0b1c30]',
+      descColor: 'text-slate-600',
+      linkColor: 'text-emerald-700',
+      title: `${hiddenCount} xe đang tạm dừng nhận khách`,
+      description: 'Xe ở trạng thái ẩn (HIDDEN), không xuất hiện trên ứng dụng khách. Bạn có thể bật nhận khách lại bất cứ lúc nào.',
+      linkTo: '/provider/vehicles?status=HIDDEN',
+      actionText: 'Quản lý hiển thị xe',
+    })
+  }
+
+  if (activeBlocks > 0) {
+    notices.push({
+      id: 'blocks',
+      icon: 'event_busy',
+      boxClass: 'bg-sky-50 border-sky-200',
+      iconColor: 'text-sky-700',
+      titleColor: 'text-sky-900',
+      descColor: 'text-sky-700',
+      linkColor: 'text-sky-800',
+      title: `${activeBlocks} lịch chặn / bảo trì đang kích hoạt`,
+      description: 'Đội xe đang có khung giờ chặn lịch (BLOCKED / MAINTENANCE) để bảo dưỡng hoặc nghỉ ngơi.',
+      linkTo: '/provider/vehicles',
+      actionText: 'Xem lịch trình xe',
+    })
+  }
+
+  if (totalDrivers === 0) {
+    notices.push({
+      id: 'drivers',
+      icon: 'person_add',
+      boxClass: 'bg-purple-50 border-purple-200',
+      iconColor: 'text-purple-700',
+      titleColor: 'text-purple-900',
+      descColor: 'text-purple-700',
+      linkColor: 'text-purple-800',
+      title: 'Chưa có tài xế nào trong đội xe',
+      description: 'Mô hình thuê xe kèm tài xế cần có tài xế nhận chuyến. Hãy tạo tài khoản tài xế hộ để sẵn sàng nhận chuyến.',
+      linkTo: '/provider/drivers',
+      actionText: 'Tạo tài xế hộ',
+    })
+  }
+
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#334155] font-sans">
       <ProviderHeader
@@ -224,72 +314,65 @@ export default function ProviderHomePage() {
               <div className="lg:col-span-7 bg-white rounded-xl p-6 sm:p-7 shadow-xs border border-slate-200 flex flex-col gap-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-600"></div>
+                    <div className={`w-2.5 h-2.5 rounded-full ${notices.length > 0 ? 'bg-amber-500' : 'bg-emerald-600'}`}></div>
                     <h2 className="text-[18px] font-bold text-[#0b1c30]">Thông báo cần chú ý</h2>
                   </div>
-                  <span className="text-[11px] font-semibold text-slate-500">3 việc cần xử lý</span>
+                  <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${
+                    notices.length > 0 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
+                    {notices.length > 0 ? `${notices.length} việc cần lưu ý` : 'Hệ thống ổn định'}
+                  </span>
                 </div>
 
                 <div className="flex flex-col gap-3.5">
-                  {/* Alert 1: Rejected */}
-                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3">
-                      <span className="material-symbols-outlined text-rose-700 text-[24px] shrink-0 mt-0.5">error</span>
-                      <div className="flex flex-col">
-                        <span className="text-[14px] font-bold text-rose-800">Xe 51K-888.88 bị từ chối duyệt</span>
-                        <p className="text-[13px] text-rose-700 mt-0.5">
-                          Lý do: Giấy chứng nhận kiểm định bị mờ góc hoặc không đúng số khung.
-                        </p>
+                  {notices.length > 0 ? (
+                    notices.map((notice) => (
+                      <div
+                        key={notice.id}
+                        className={`${notice.boxClass} border rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className={`material-symbols-outlined ${notice.iconColor} text-[24px] shrink-0 mt-0.5`}>
+                            {notice.icon}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className={`text-[14px] font-bold ${notice.titleColor}`}>
+                              {notice.title}
+                            </span>
+                            <p className={`text-[13px] ${notice.descColor} mt-0.5`}>
+                              {notice.description}
+                            </p>
+                          </div>
+                        </div>
+                        <Link
+                          to={notice.linkTo}
+                          className={`inline-flex items-center gap-1.5 text-[12px] font-bold ${notice.linkColor} hover:underline whitespace-nowrap self-end sm:self-center shrink-0`}
+                        >
+                          <span>{notice.actionText}</span>
+                          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                        </Link>
                       </div>
-                    </div>
-                    <Link
-                      to="/provider/vehicles"
-                      className="inline-flex items-center gap-1.5 text-[12px] font-bold text-rose-800 hover:underline whitespace-nowrap self-end sm:self-center shrink-0"
-                    >
-                      <span>Cập nhật hồ sơ xe</span>
-                      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                    </Link>
-                  </div>
-
-                  {/* Alert 2: Driver Pending */}
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3">
-                      <span className="material-symbols-outlined text-amber-700 text-[24px] shrink-0 mt-0.5">pending_actions</span>
-                      <div className="flex flex-col">
-                        <span className="text-[14px] font-bold text-amber-800">Tài xế mới chờ kích hoạt</span>
-                        <p className="text-[13px] text-amber-700 mt-0.5">
-                          Tài xế Nguyễn Văn A đang ở trạng thái PENDING chờ Admin duyệt GPLX.
-                        </p>
+                    ))
+                  ) : (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <span className="material-symbols-outlined text-emerald-700 text-[26px] shrink-0 mt-0.5">verified</span>
+                        <div className="flex flex-col">
+                          <span className="text-[14px] font-bold text-emerald-800">Tất cả phương tiện đang vận hành bình thường</span>
+                          <p className="text-[13px] text-emerald-700 mt-0.5">
+                            Không có cảnh báo khẩn cấp, không có xe bị từ chối hay chờ duyệt. Toàn bộ xe đã sẵn sàng tiếp nhận khách hàng.
+                          </p>
+                        </div>
                       </div>
+                      <Link
+                        to="/provider/vehicles"
+                        className="inline-flex items-center gap-1.5 text-[12px] font-bold text-emerald-800 hover:underline whitespace-nowrap self-end sm:self-center shrink-0"
+                      >
+                        <span>Xem đội xe</span>
+                        <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                      </Link>
                     </div>
-                    <Link
-                      to="/provider/drivers"
-                      className="inline-flex items-center gap-1.5 text-[12px] font-bold text-amber-800 hover:underline whitespace-nowrap self-end sm:self-center shrink-0"
-                    >
-                      <span>Kiểm tra tài xế</span>
-                      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                    </Link>
-                  </div>
-
-                  {/* Alert 3: Insurance Expiring */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3">
-                      <span className="material-symbols-outlined text-slate-700 text-[24px] shrink-0 mt-0.5">shield</span>
-                      <div className="flex flex-col">
-                        <span className="text-[14px] font-bold text-[#0b1c30]">Hết hạn bảo hiểm bắt buộc</span>
-                        <p className="text-[13px] text-slate-600 mt-0.5">
-                          Bảo hiểm TNDS của xe 51H-123.45 sắp hết hạn (còn 5 ngày hiệu lực).
-                        </p>
-                      </div>
-                    </div>
-                    <Link
-                      to="/provider/vehicles"
-                      className="inline-flex items-center gap-1.5 text-[12px] font-bold text-emerald-700 hover:underline whitespace-nowrap self-end sm:self-center shrink-0"
-                    >
-                      <span>Gia hạn giấy tờ</span>
-                      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                    </Link>
-                  </div>
+                  )}
                 </div>
               </div>
 
