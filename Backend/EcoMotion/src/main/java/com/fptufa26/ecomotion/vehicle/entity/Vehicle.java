@@ -97,6 +97,10 @@ public class Vehicle {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    public Long getProviderId() {
+        return provider == null ? null : provider.getId();
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
