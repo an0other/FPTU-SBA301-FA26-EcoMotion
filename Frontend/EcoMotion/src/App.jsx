@@ -9,6 +9,7 @@ import VehicleDetailPage from './pages/VehicleDetailPage'
 import ProviderHomePage from './pages/provider/ProviderHomePage'
 import ProviderVehicleListPage from './pages/provider/ProviderVehicleListPage'
 import ProviderVehicleCreatePage from './pages/provider/ProviderVehicleCreatePage'
+import ProviderVehicleHubPage from './pages/provider/ProviderVehicleHubPage'
 import AdminDashboard from './pages/AdminDashboard'
 
 export default function App() {
@@ -27,6 +28,8 @@ export default function App() {
         <Route path="/provider" element={<ProviderHomePage />} />
         <Route path="/provider/vehicles" element={<ProviderVehicleListPage />} />
         <Route path="/provider/vehicles/new" element={<ProviderVehicleCreatePage />} />
+        <Route path="/provider/vehicles/:id" element={<ProviderVehicleHubPage />} />
+        <Route path="/provider/vehicles/:id/edit" element={<ProviderVehicleHubPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
       </Route>
 

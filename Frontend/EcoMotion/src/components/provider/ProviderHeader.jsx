@@ -138,7 +138,7 @@ export default function ProviderHeader({
                   {user?.fullName || "Chủ xe"}
                 </span>
                 <span className="text-[11px] text-slate-500 font-medium">
-                  Quản lý
+                  Provider
                 </span>
               </div>
               <span className="material-symbols-outlined text-slate-400 text-[18px]">

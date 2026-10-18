@@ -1,11 +1,17 @@
 package com.fptufa26.ecomotion.vehicle.service;
 
+import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderRentalPlanResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
+import java.util.List;
 
 public interface ProviderVehicleService {
 
@@ -27,8 +33,30 @@ public interface ProviderVehicleService {
             VehicleVisibilityRequest request
     );
 
-    com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse createVehicle(
+    ProviderVehicleDetailResponse createVehicle(
             Long userId,
-            com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request
+            CreateVehicleRequest request
+    );
+
+    ProviderVehicleDetailResponse getVehicleDetail(
+            Long userId,
+            Long vehicleId
+    );
+
+    ProviderVehicleDetailResponse updateVehicle(
+            Long userId,
+            Long vehicleId,
+            UpdateVehicleRequest request
+    );
+
+    List<ProviderRentalPlanResponse> getVehicleRentalPlans(
+            Long userId,
+            Long vehicleId
+    );
+
+    List<ProviderRentalPlanResponse> updateVehicleRentalPlans(
+            Long userId,
+            Long vehicleId,
+            UpdateRentalPlansRequest request
     );
 }

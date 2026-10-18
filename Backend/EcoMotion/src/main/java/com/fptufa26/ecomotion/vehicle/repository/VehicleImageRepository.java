@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface VehicleImageRepository extends JpaRepository<VehicleImage, Long> {
@@ -14,5 +15,5 @@ public interface VehicleImageRepository extends JpaRepository<VehicleImage, Long
 
     List<VehicleImage> findByVehicle_IdInOrderByDisplayOrderAsc(Collection<Long> vehicleIds);
 
-    java.util.Optional<VehicleImage> findByVehicle_IdAndDisplayOrder(Long vehicleId, Integer displayOrder);
+    Optional<VehicleImage> findByVehicle_IdAndDisplayOrder(Long vehicleId, Integer displayOrder);
 }

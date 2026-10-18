@@ -20,4 +20,24 @@ export const providerService = {
     const { data } = await apiClient.post('/provider/vehicles', payload)
     return data?.data
   },
+
+  async getVehicleById(id) {
+    const { data } = await apiClient.get(`/provider/vehicles/${id}`)
+    return data?.data
+  },
+
+  async updateVehicle(id, payload) {
+    const { data } = await apiClient.put(`/provider/vehicles/${id}`, payload)
+    return data?.data
+  },
+
+  async getVehicleRentalPlans(id) {
+    const { data } = await apiClient.get(`/provider/vehicles/${id}/plans`)
+    return data?.data
+  },
+
+  async updateVehicleRentalPlans(id, payload) {
+    const { data } = await apiClient.put(`/provider/vehicles/${id}/plans`, payload)
+    return data?.data
+  },
 }

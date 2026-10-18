@@ -3,8 +3,11 @@ package com.fptufa26.ecomotion.vehicle.controller;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderRentalPlanResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
@@ -20,10 +23,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/provider")
@@ -88,5 +93,43 @@ public class ProviderVehicleController {
             @Valid @RequestBody CreateVehicleRequest request
     ) {
         return ApiResponse.success(providerVehicleService.createVehicle(user.getUserId(), request));
+    }
+
+    @GetMapping("/vehicles/{id}")
+    @Operation(summary = "Get provider vehicle detail for hub & edit (O04)")
+    public ApiResponse<ProviderVehicleDetailResponse> getVehicleDetail(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.success(providerVehicleService.getVehicleDetail(user.getUserId(), id));
+    }
+
+    @PutMapping("/vehicles/{id}")
+    @Operation(summary = "Update provider vehicle profile (O04)")
+    public ApiResponse<ProviderVehicleDetailResponse> updateVehicle(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateVehicleRequest request
+    ) {
+        return ApiResponse.success(providerVehicleService.updateVehicle(user.getUserId(), id, request));
+    }
+
+    @GetMapping("/vehicles/{id}/plans")
+    @Operation(summary = "Get provider vehicle rental plans (O04)")
+    public ApiResponse<List<ProviderRentalPlanResponse>> getVehicleRentalPlans(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.success(providerVehicleService.getVehicleRentalPlans(user.getUserId(), id));
+    }
+
+    @PutMapping("/vehicles/{id}/plans")
+    @Operation(summary = "Update provider vehicle rental plans (O04)")
+    public ApiResponse<List<ProviderRentalPlanResponse>> updateVehicleRentalPlans(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateRentalPlansRequest request
+    ) {
+        return ApiResponse.success(providerVehicleService.updateVehicleRentalPlans(user.getUserId(), id, request));
     }
 }
