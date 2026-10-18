@@ -32,4 +32,7 @@ public interface VehicleService {
                                                 VehicleSort sort);
 
     VehicleAvailabilityResponse getAvailability(Long vehicleId, Instant from, Instant to);
+
+    void updateRating(Long vehicleId, BigDecimal ratingAvg, int ratingCount);
+
 }

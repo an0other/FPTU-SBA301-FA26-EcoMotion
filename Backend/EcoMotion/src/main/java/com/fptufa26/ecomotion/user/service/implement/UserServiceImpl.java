@@ -29,6 +29,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.fptufa26.ecomotion.user.entity.Driver;
+import com.fptufa26.ecomotion.user.repository.DriverRepository;
+import org.springframework.transaction.annotation.Propagation;
 
 @Service
 @RequiredArgsConstructor
@@ -324,5 +327,65 @@ public class UserServiceImpl implements UserService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    @Override
+    public void updateDriverRating(
+            Long driverId,
+            BigDecimal ratingAvg,
+            int ratingCount) {
+        if (driverId == null) {
+            throw new IllegalArgumentException("Driver id is required");
+        }
+
+        validateRatingSummary(ratingAvg, ratingCount);
+
+        Driver driver = driverRepository.findById(driverId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Driver not found"));
+
+        driver.setRatingAvg(ratingAvg);
+        driver.setRatingCount(ratingCount);
+    }
+
+    @Override
+    public void updateProviderRating(
+            Long providerId,
+            BigDecimal ratingAvg,
+            int ratingCount) {
+        if (providerId == null) {
+            throw new IllegalArgumentException("Provider id is required");
+        }
+
+        validateRatingSummary(ratingAvg, ratingCount);
+
+        Provider provider = providerRepository.findById(providerId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Provider not found"));
+
+        provider.setRatingAvg(ratingAvg);
+        provider.setRatingCount(ratingCount);
+    }
+
+    private void validateRatingSummary(
+            BigDecimal ratingAvg,
+            int ratingCount) {
+        if (ratingAvg == null
+                || ratingAvg.signum() < 0
+                || ratingAvg.compareTo(BigDecimal.valueOf(5)) > 0
+                || ratingCount < 0
+                || (ratingCount == 0 && ratingAvg.signum() != 0)
+                || (ratingCount > 0
+                && ratingAvg.compareTo(BigDecimal.ONE) < 0)) {
+            throw new IllegalArgumentException("Invalid rating summary");
+        }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockProviderForReview(Long providerId) {
+        providerRepository.findProviderById(providerId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Provider not found"));
     }
 }
