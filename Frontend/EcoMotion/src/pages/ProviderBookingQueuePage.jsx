@@ -36,7 +36,7 @@ const STATUS_LABELS = {
 }
 
 export default function ProviderBookingQueuePage() {
-  const { user, logout } = useAuth()
+  const { logout } = useAuth()
   const navigate = useNavigate()
 
   const [activeFilter, setActiveFilter] = useState('ALL')

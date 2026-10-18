@@ -230,6 +230,42 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Malformed request body", request);
     }
 
+    @ExceptionHandler(com.fptufa26.ecomotion.booking.exception.BookingNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleBookingNotFound(com.fptufa26.ecomotion.booking.exception.BookingNotFoundException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(com.fptufa26.ecomotion.booking.exception.BookingAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleBookingAccessDenied(com.fptufa26.ecomotion.booking.exception.BookingAccessDeniedException ex,
+                                                                   HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(com.fptufa26.ecomotion.booking.exception.InvalidBookingStateException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidBookingState(com.fptufa26.ecomotion.booking.exception.InvalidBookingStateException ex,
+                                                                   HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(com.fptufa26.ecomotion.booking.exception.VehicleUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleVehicleUnavailable(com.fptufa26.ecomotion.booking.exception.VehicleUnavailableException ex,
+                                                                  HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(com.fptufa26.ecomotion.booking.exception.DriverUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleDriverUnavailable(com.fptufa26.ecomotion.booking.exception.DriverUnavailableException ex,
+                                                                 HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(com.fptufa26.ecomotion.booking.exception.SettledChargeException.class)
+    public ResponseEntity<ErrorResponse> handleSettledCharge(com.fptufa26.ecomotion.booking.exception.SettledChargeException ex,
+                                                            HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
