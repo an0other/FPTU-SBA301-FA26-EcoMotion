@@ -14,7 +14,7 @@ public interface VehicleService {
 
     PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
                                                            String fuelType, String planType,
-                                                           java.math.BigDecimal maxPrice,
+                                                           BigDecimal maxPrice,
                                                            VehicleSort sort,
                                                            int offset, int limit);
 

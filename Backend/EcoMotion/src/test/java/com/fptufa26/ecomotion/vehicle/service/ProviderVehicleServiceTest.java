@@ -4,11 +4,19 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderRentalPlanResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
+import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.enums.Transmission;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
@@ -21,6 +29,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -178,10 +188,10 @@ class ProviderVehicleServiceTest {
     void createVehicleCreatesPendingVehicle() {
         User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
         String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
-        int randPlate = 10000 + new java.util.Random().nextInt(90000);
+        int randPlate = 10000 + new Random().nextInt(90000);
 
-        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request =
-                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+        CreateVehicleRequest request =
+                new CreateVehicleRequest(
                         "CHASSIS-" + uniqueSuffix,
                         "ENGINE-" + uniqueSuffix,
                         "51K-" + randPlate,
@@ -196,7 +206,7 @@ class ProviderVehicleServiceTest {
                         "https://example.com/cover.png"
                 );
 
-        com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse response =
+        ProviderVehicleDetailResponse response =
                 providerVehicleService.createVehicle(user.getUserId(), request);
 
         assertThat(response.id()).isNotNull();
@@ -212,10 +222,10 @@ class ProviderVehicleServiceTest {
     void createVehicleRejectsDuplicateLicensePlate() {
         User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
         String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
-        int randPlate = 10000 + new java.util.Random().nextInt(90000);
+        int randPlate = 10000 + new Random().nextInt(90000);
 
-        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request1 =
-                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+        CreateVehicleRequest request1 =
+                new CreateVehicleRequest(
                         "CHASSIS1-" + uniqueSuffix,
                         "ENGINE1-" + uniqueSuffix,
                         "51A-" + randPlate,
@@ -232,8 +242,8 @@ class ProviderVehicleServiceTest {
 
         providerVehicleService.createVehicle(user.getUserId(), request1);
 
-        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest duplicateRequest =
-                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+        CreateVehicleRequest duplicateRequest =
+                new CreateVehicleRequest(
                         "CHASSIS2-" + uniqueSuffix,
                         "ENGINE2-" + uniqueSuffix,
                         request1.licensePlate(),
@@ -257,8 +267,8 @@ class ProviderVehicleServiceTest {
     @DisplayName("createVehicle throws IllegalArgumentException on invalid license plate pattern like 77AAAAAAA")
     void createVehicleRejectsInvalidLicensePlatePattern() {
         User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
-        com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest request =
-                new com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest(
+        CreateVehicleRequest request =
+                new CreateVehicleRequest(
                         "CHASSIS-INVALID",
                         "ENGINE-INVALID",
                         "77AAAAAAA",
@@ -276,5 +286,198 @@ class ProviderVehicleServiceTest {
         assertThatThrownBy(() -> providerVehicleService.createVehicle(user.getUserId(), request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Biển số xe không đúng định dạng quy chuẩn Việt Nam");
+    }
+
+    @Test
+    @DisplayName("getVehicleDetail returns vehicle detail for owner")
+    void getVehicleDetailReturnsVehicleForOwner() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+
+        var detail = providerVehicleService.getVehicleDetail(user.getUserId(), vehicle.getId());
+
+        assertThat(detail).isNotNull();
+        assertThat(detail.id()).isEqualTo(vehicle.getId());
+        assertThat(detail.licensePlate()).isEqualTo(vehicle.getLicensePlate());
+        assertThat(detail.chassisNo()).isEqualTo(vehicle.getChassisNo());
+        assertThat(detail.engineNo()).isEqualTo(vehicle.getEngineNo());
+    }
+
+    @Test
+    @DisplayName("updateVehicle updates Tier 3 fields successfully without altering status")
+    void updateVehicleUpdatesTier3WithoutChangingStatus() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+        VehicleStatus originalStatus = vehicle.getStatus();
+
+        UpdateVehicleRequest request =
+                new UpdateVehicleRequest(
+                        vehicle.getLicensePlate(),
+                        "VinFast",
+                        "VF 8 Plus New",
+                        2025,
+                        7,
+                        Transmission.AUTOMATIC,
+                        FuelType.EV,
+                        "Trắng Ngọc Trai",
+                        90,
+                        "https://example.com/new-cover.jpg"
+                );
+
+        var updated = providerVehicleService.updateVehicle(user.getUserId(), vehicle.getId(), request);
+
+        assertThat(updated).isNotNull();
+        assertThat(updated.model()).isEqualTo("VF 8 Plus New");
+        assertThat(updated.manufactureYear()).isEqualTo(2025);
+        assertThat(updated.seatCount()).isEqualTo(7);
+        assertThat(updated.color()).isEqualTo("Trắng Ngọc Trai");
+        assertThat(updated.maintenanceBufferMinutes()).isEqualTo(90);
+        assertThat(updated.status()).isEqualTo(originalStatus);
+    }
+
+    @Test
+    @DisplayName("updateVehicle changing license plate triggers PENDING re-approval status")
+    void updateVehicleChangingPlateTriggersPendingStatus() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+
+        String randomSuffix = String.format("%02d", (int) (Math.random() * 90 + 10));
+        String newPlate = "51K-999." + randomSuffix;
+
+        UpdateVehicleRequest request =
+                new UpdateVehicleRequest(
+                        newPlate,
+                        vehicle.getBrand(),
+                        vehicle.getModel(),
+                        vehicle.getManufactureYear(),
+                        vehicle.getSeatCount(),
+                        vehicle.getTransmission(),
+                        vehicle.getFuelType(),
+                        vehicle.getColor(),
+                        vehicle.getMaintenanceBufferMinutes(),
+                        null
+                );
+
+        var updated = providerVehicleService.updateVehicle(user.getUserId(), vehicle.getId(), request);
+
+        assertThat(updated.licensePlate()).isEqualTo(newPlate);
+        assertThat(updated.status()).isEqualTo(VehicleStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("getVehicleRentalPlans returns standard 4 plans for owner")
+    void getVehicleRentalPlansReturnsPlansForOwner() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+
+        var plans = providerVehicleService.getVehicleRentalPlans(user.getUserId(), vehicle.getId());
+
+        assertThat(plans).isNotNull();
+        assertThat(plans).hasSize(4);
+        assertThat(plans.stream().map(ProviderRentalPlanResponse::planType).toList())
+                .contains(PlanType.HOURLY, PlanType.DAILY, PlanType.MONTHLY, PlanType.YEARLY);
+    }
+
+    @Test
+    @DisplayName("updateVehicleRentalPlans updates prices and operational surcharges")
+    void updateVehicleRentalPlansUpdatesPricesAndSurcharges() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+
+        List<UpdateRentalPlansRequest.PlanItemRequest> planItems = List.of(
+                new UpdateRentalPlansRequest.PlanItemRequest(
+                        PlanType.HOURLY,
+                        new BigDecimal("150000.00"),
+                        PlanStatus.ACTIVE,
+                        null,
+                        480
+                ),
+                new UpdateRentalPlansRequest.PlanItemRequest(
+                        PlanType.DAILY,
+                        new BigDecimal("950000.00"),
+                        PlanStatus.ACTIVE,
+                        null,
+                        null
+                ),
+                new UpdateRentalPlansRequest.PlanItemRequest(
+                        PlanType.MONTHLY,
+                        new BigDecimal("25000000.00"),
+                        PlanStatus.ACTIVE,
+                        null,
+                        null
+                ),
+                new UpdateRentalPlansRequest.PlanItemRequest(
+                        PlanType.YEARLY,
+                        new BigDecimal("270000000.00"),
+                        PlanStatus.ACTIVE,
+                        new BigDecimal("60000000.00"),
+                        null
+                )
+        );
+
+        UpdateRentalPlansRequest request = new UpdateRentalPlansRequest(
+                planItems,
+                20,
+                new BigDecimal("0.2000"),
+                15,
+                new BigDecimal("15000.00"),
+                20,
+                new BigDecimal("2500.00"),
+                new BigDecimal("0.2000")
+        );
+
+        var updatedPlans = providerVehicleService.updateVehicleRentalPlans(user.getUserId(), vehicle.getId(), request);
+
+        assertThat(updatedPlans).hasSize(4);
+
+        var daily = updatedPlans.stream().filter(p -> p.planType() == PlanType.DAILY).findFirst().orElseThrow();
+        assertThat(daily.slotPrice()).isEqualByComparingTo("950000.00");
+        assertThat(daily.freeRadiusKm()).isEqualTo(15);
+        assertThat(daily.outOfRadiusRate()).isEqualByComparingTo("15000.00");
+
+        var yearly = updatedPlans.stream().filter(p -> p.planType() == PlanType.YEARLY).findFirst().orElseThrow();
+        assertThat(yearly.slotPrice()).isEqualByComparingTo("270000000.00");
+        assertThat(yearly.upfrontAmount()).isEqualByComparingTo("60000000.00");
+        assertThat(yearly.status()).isEqualTo(PlanStatus.ACTIVE);
+        assertThat(yearly.freeRadiusKm()).isNull();
+        assertThat(yearly.allowedOvertimeMinutes()).isNull();
+    }
+
+    @Test
+    @DisplayName("updateVehicleRentalPlans throws when active plan has no price")
+    void updateVehicleRentalPlansThrowsWhenActivePlanHasNoPrice() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).get(0);
+
+        List<UpdateRentalPlansRequest.PlanItemRequest> planItems = List.of(
+                new UpdateRentalPlansRequest.PlanItemRequest(
+                        PlanType.HOURLY,
+                        null,
+                        PlanStatus.ACTIVE,
+                        null,
+                        480
+                )
+        );
+
+        UpdateRentalPlansRequest request = new UpdateRentalPlansRequest(
+                planItems,
+                15,
+                new BigDecimal("0.1500"),
+                10,
+                new BigDecimal("12000.00"),
+                15,
+                new BigDecimal("2000.00"),
+                new BigDecimal("0.1500")
+        );
+
+        assertThatThrownBy(() ->
+                providerVehicleService.updateVehicleRentalPlans(user.getUserId(), vehicle.getId(), request)
+        ).isInstanceOf(IllegalArgumentException.class);
     }
 }

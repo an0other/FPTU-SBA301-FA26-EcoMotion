@@ -19,6 +19,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Random;
+import java.util.UUID;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -112,8 +115,8 @@ class ProviderVehicleApiTest {
     void providerCanRegisterNewVehicle() throws Exception {
         User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
         String token = jwtService.generateAccessToken(providerUser);
-        String uniqueSuffix = java.util.UUID.randomUUID().toString().substring(0, 8);
-        int randomDigits = 10000 + new java.util.Random().nextInt(90000);
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+        int randomDigits = 10000 + new Random().nextInt(90000);
         String validPlate = "51K-" + randomDigits;
 
         String payload = """
@@ -151,7 +154,7 @@ class ProviderVehicleApiTest {
     void providerCannotRegisterVehicleWithInvalidLicensePlate() throws Exception {
         User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
         String token = jwtService.generateAccessToken(providerUser);
-        String uniqueSuffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
 
         String payload = """
                 {
