@@ -18,4 +18,6 @@ public record CreateReviewRequest(
         @Size(max = 1000)
         String comment
 ) {
+    public static class UpdateReviewRequest {
+    }
 }

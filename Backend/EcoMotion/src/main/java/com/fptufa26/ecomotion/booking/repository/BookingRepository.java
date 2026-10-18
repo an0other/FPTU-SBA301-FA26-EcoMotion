@@ -19,6 +19,8 @@ import org.springframework.stereotype.Repository;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import java.util.Optional;
 
 @Repository
@@ -161,4 +163,9 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
             @Param("excludeBookingId") Long excludeBookingId,
             @Param("windowEnd") Instant windowEnd
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<Booking> findBookingByBookingCodeAndRenter_User_Id(
+            String bookingCode,
+            Long userId);
 }
