@@ -1,21 +1,20 @@
 package com.fptufa26.ecomotion.vehicle.service.implement;
 
 import com.fptufa26.ecomotion.common.response.PageResponse;
-import com.fptufa26.ecomotion.user.entity.Provider;
+import com.fptufa26.ecomotion.user.dto.ProviderSummary;
+import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleMapResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
-import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
-import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
-import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
-import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.vehicle.service.RentalPlanService;
+import com.fptufa26.ecomotion.vehicle.service.VehicleImageService;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +27,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -38,8 +36,9 @@ public class VehicleServiceImpl implements VehicleService {
     private static final double EARTH_RADIUS_KM = 6371.0088;
 
     private final VehicleRepository vehicleRepository;
-    private final VehicleImageRepository vehicleImageRepository;
-    private final RentalPlanRepository rentalPlanRepository;
+    private final VehicleImageService vehicleImageService;
+    private final RentalPlanService rentalPlanService;
+    private final UserService userService;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -63,22 +62,21 @@ public class VehicleServiceImpl implements VehicleService {
 
         double userLatitude = Math.toRadians(latitude.doubleValue());
         double userLongitude = Math.toRadians(longitude.doubleValue());
-        Map<Long, Provider> providersByVehicle = vehicleRepository
-                .findByStatusOrderByIdAsc(VehicleStatus.APPROVED).stream()
-                .collect(Collectors.toMap(Vehicle::getId, Vehicle::getProvider));
-        return matchingCards(keyword, location, fuelType, planType, maxPrice, sort).stream()
+        List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
+        Map<Long, ProviderSummary> providers = findProviders(vehicles);
+        return matchingCards(vehicles, providers, keyword, location, fuelType, planType, maxPrice, sort).stream()
                 .map(card -> {
-                    Provider provider = providersByVehicle.get(card.id());
-                    if (provider == null || provider.getDepotLatitude() == null
-                            || provider.getDepotLongitude() == null) {
+                    ProviderSummary provider = card.providerId() == null ? null : providers.get(card.providerId());
+                    if (provider == null || provider.depotLatitude() == null
+                            || provider.depotLongitude() == null) {
                         return null;
                     }
                     double distance = distanceKm(userLatitude, userLongitude,
-                            provider.getDepotLatitude().doubleValue(),
-                            provider.getDepotLongitude().doubleValue());
+                            provider.depotLatitude().doubleValue(),
+                            provider.depotLongitude().doubleValue());
                     return distance <= radiusKm
-                            ? new VehicleMapResponse(card, provider.getDepotLatitude(),
-                            provider.getDepotLongitude(), distance)
+                            ? new VehicleMapResponse(card, provider.depotLatitude(),
+                            provider.depotLongitude(), distance)
                             : null;
                 })
                 .filter(Objects::nonNull)
@@ -89,42 +87,59 @@ public class VehicleServiceImpl implements VehicleService {
                                                      String fuelType, String planType,
                                                      BigDecimal maxPrice, VehicleSort sort) {
         List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
+        return matchingCards(vehicles, findProviders(vehicles), keyword, location, fuelType, planType,
+                maxPrice, sort);
+    }
+
+    private Map<Long, ProviderSummary> findProviders(List<Vehicle> vehicles) {
+        List<Long> providerIds = vehicles.stream()
+                .map(Vehicle::getProviderId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return providerIds.isEmpty() ? Map.of() : userService.findProvidersByIds(providerIds);
+    }
+
+    private ProviderSummary providerFor(Vehicle vehicle, Map<Long, ProviderSummary> providers) {
+        Long providerId = vehicle.getProviderId();
+        return providerId == null ? null : providers.get(providerId);
+    }
+
+    private List<VehicleCardResponse> matchingCards(List<Vehicle> vehicles,
+                                                     Map<Long, ProviderSummary> providers,
+                                                     String keyword, String location,
+                                                     String fuelType, String planType,
+                                                     BigDecimal maxPrice, VehicleSort sort) {
         if (vehicles.isEmpty()) {
             return List.of();
         }
 
         List<Long> vehicleIds = vehicles.stream().map(Vehicle::getId).toList();
 
-        Map<Long, List<VehicleImage>> imagesByVehicle = vehicleImageRepository
-                .findByVehicle_IdInOrderByDisplayOrderAsc(vehicleIds).stream()
-                .collect(Collectors.groupingBy(image -> image.getVehicle().getId()));
+        Map<Long, List<String>> imagesByVehicle = vehicleImageService.findImageUrlsByVehicleIds(vehicleIds);
 
-        Map<Long, List<RentalPlan>> plansByVehicle = rentalPlanRepository
-                .findByVehicle_IdInAndStatusOrderByIdAsc(vehicleIds, PlanStatus.ACTIVE).stream()
-                .collect(Collectors.groupingBy(plan -> plan.getVehicle().getId()));
+        Map<Long, List<RentalPlanData>> plansByVehicle = rentalPlanService.findActivePlansByVehicleIds(vehicleIds);
 
         String normalizedKeyword = keyword == null ? null : keyword.trim().toLowerCase(Locale.ROOT);
         String normalizedLocation = location == null ? null : location.trim().toLowerCase(Locale.ROOT);
         FuelType fuelFilter = parseFuelType(fuelType);
         PlanType planFilter = parsePlanType(planType);
 
-        List<VehicleCardResponse> matching = vehicles.stream()
-                .filter(vehicle -> matchesKeyword(vehicle, normalizedKeyword))
-                .filter(vehicle -> matchesLocation(vehicle, normalizedLocation))
+        return vehicles.stream()
+                .filter(vehicle -> matchesKeyword(vehicle, providerFor(vehicle, providers), normalizedKeyword))
+                .filter(vehicle -> matchesLocation(providerFor(vehicle, providers), normalizedLocation))
                 .filter(vehicle -> !plansFor(plansByVehicle, vehicle).isEmpty())
                 .filter(vehicle -> fuelFilter == null || vehicle.getFuelType() == fuelFilter)
                 .filter(vehicle -> planFilter == null || plansFor(plansByVehicle, vehicle).stream()
-                        .anyMatch(plan -> plan.getPlanType() == planFilter))
+                        .anyMatch(plan -> plan.planType() == planFilter))
                 .filter(vehicle -> maxPrice == null
                         || cheapestSlotPrice(plansFor(plansByVehicle, vehicle), planFilter)
                         .compareTo(maxPrice) <= 0)
                 .map(vehicle -> toCard(vehicle,
                         imagesByVehicle.getOrDefault(vehicle.getId(), List.of()),
-                        plansFor(plansByVehicle, vehicle)))
+                        plansFor(plansByVehicle, vehicle), providerFor(vehicle, providers)))
                 .sorted(comparatorFor(sort, planFilter))
                 .toList();
-
-        return matching;
     }
 
     private void validateCoordinates(BigDecimal latitude, BigDecimal longitude) {
@@ -152,13 +167,9 @@ public class VehicleServiceImpl implements VehicleService {
         Vehicle vehicle = vehicleRepository.findByIdAndStatus(id, VehicleStatus.APPROVED)
                 .orElseThrow(() -> new VehicleNotFoundException(id));
 
-        List<String> imageUrls = vehicleImageRepository
-                .findByVehicle_IdOrderByDisplayOrderAsc(vehicle.getId()).stream()
-                .map(VehicleImage::getImageUrl)
-                .toList();
+        List<String> imageUrls = vehicleImageService.findImageUrls(vehicle.getId());
 
-        List<VehicleDetailResponse.PlanDetail> plans = rentalPlanRepository
-                .findByVehicle_IdAndStatusOrderByIdAsc(vehicle.getId(), PlanStatus.ACTIVE).stream()
+        List<VehicleDetailResponse.PlanDetail> plans = rentalPlanService.findActivePlans(vehicle.getId()).stream()
                 .map(this::toPlanDetail)
                 .toList();
 
@@ -174,29 +185,24 @@ public class VehicleServiceImpl implements VehicleService {
                 vehicle.getRatingAvg(),
                 vehicle.getRatingCount(),
                 imageUrls,
-                toProviderInfo(vehicle.getProvider()),
+                toProviderInfo(providerFor(vehicle, findProviders(List.of(vehicle)))),
                 plans);
     }
 
-    private List<RentalPlan> plansFor(Map<Long, List<RentalPlan>> plansByVehicle, Vehicle vehicle) {
+    private List<RentalPlanData> plansFor(Map<Long, List<RentalPlanData>> plansByVehicle, Vehicle vehicle) {
         return plansByVehicle.getOrDefault(vehicle.getId(), List.of());
     }
 
-    private VehicleCardResponse toCard(Vehicle vehicle, List<VehicleImage> images, List<RentalPlan> plans) {
-        List<String> imageUrls = images.stream()
-                .sorted(Comparator.comparing(VehicleImage::getDisplayOrder))
-                .map(VehicleImage::getImageUrl)
-                .toList();
-
+    private VehicleCardResponse toCard(Vehicle vehicle, List<String> imageUrls,
+                                       List<RentalPlanData> plans, ProviderSummary provider) {
         List<VehicleCardResponse.PlanPrice> planPrices = plans.stream()
                 .map(plan -> new VehicleCardResponse.PlanPrice(
-                        plan.getPlanType(),
-                        plan.getSlotLengthMinutes(),
-                        plan.getSlotPrice(),
-                        plan.getUpfrontAmount()))
+                        plan.planType(),
+                        plan.slotLengthMinutes(),
+                        plan.slotPrice(),
+                        plan.upfrontAmount()))
                 .toList();
 
-        var provider = vehicle.getProvider();
         return new VehicleCardResponse(
                 vehicle.getId(),
                 vehicle.getBrand(),
@@ -210,47 +216,47 @@ public class VehicleServiceImpl implements VehicleService {
                 vehicle.getRatingCount(),
                 imageUrls.isEmpty() ? null : imageUrls.get(0),
                 imageUrls,
-                provider == null ? null : provider.getId(),
-                provider == null ? null : provider.getDisplayName(),
-                provider == null ? null : provider.getHotline(),
-                provider == null ? null : provider.getDepotAddress(),
+                provider == null ? null : provider.id(),
+                provider == null ? null : provider.displayName(),
+                provider == null ? null : provider.hotline(),
+                provider == null ? null : provider.depotAddress(),
                 planPrices);
     }
 
-    private VehicleDetailResponse.ProviderInfo toProviderInfo(Provider provider) {
+    private VehicleDetailResponse.ProviderInfo toProviderInfo(ProviderSummary provider) {
         if (provider == null) {
             return null;
         }
         return new VehicleDetailResponse.ProviderInfo(
-                provider.getId(),
-                provider.getDisplayName(),
-                provider.getProviderType(),
-                provider.getHotline(),
-                provider.getDepotAddress(),
-                provider.getRatingAvg(),
-                provider.getRatingCount());
+                provider.id(),
+                provider.displayName(),
+                provider.providerType(),
+                provider.hotline(),
+                provider.depotAddress(),
+                provider.ratingAvg(),
+                provider.ratingCount());
     }
 
-    private VehicleDetailResponse.PlanDetail toPlanDetail(RentalPlan plan) {
+    private VehicleDetailResponse.PlanDetail toPlanDetail(RentalPlanData plan) {
         return new VehicleDetailResponse.PlanDetail(
-                plan.getPlanType(),
-                plan.getSlotLengthMinutes(),
-                plan.getSlotPrice(),
-                plan.getUpfrontAmount(),
-                plan.getAllowedOvertimeMinutes(),
-                plan.getOvertimeSurchargeRatio(),
-                plan.getFreeRadiusKm(),
-                plan.getOutOfRadiusRate(),
-                plan.getWaitingFreeMinutes(),
-                plan.getWaitingRate(),
-                plan.getWeekendSurchargeRatio(),
-                plan.getHourlyToDailyThresholdMinutes());
+                plan.planType(),
+                plan.slotLengthMinutes(),
+                plan.slotPrice(),
+                plan.upfrontAmount(),
+                plan.allowedOvertimeMinutes(),
+                plan.overtimeSurchargeRatio(),
+                plan.freeRadiusKm(),
+                plan.outOfRadiusRate(),
+                plan.waitingFreeMinutes(),
+                plan.waitingRate(),
+                plan.weekendSurchargeRatio(),
+                plan.hourlyToDailyThresholdMinutes());
     }
 
-    private BigDecimal cheapestSlotPrice(List<RentalPlan> plans, PlanType planFilter) {
+    private BigDecimal cheapestSlotPrice(List<RentalPlanData> plans, PlanType planFilter) {
         return plans.stream()
-                .filter(plan -> planFilter == null || plan.getPlanType() == planFilter)
-                .map(RentalPlan::getSlotPrice)
+                .filter(plan -> planFilter == null || plan.planType() == planFilter)
+                .map(RentalPlanData::slotPrice)
                 .filter(Objects::nonNull)
                 .min(Comparator.naturalOrder())
                 .orElse(BigDecimal.valueOf(Long.MAX_VALUE));
@@ -296,23 +302,21 @@ public class VehicleServiceImpl implements VehicleService {
         };
     }
 
-    private boolean matchesKeyword(Vehicle vehicle, String keyword) {
+    private boolean matchesKeyword(Vehicle vehicle, ProviderSummary provider, String keyword) {
         if (keyword == null || keyword.isEmpty()) {
             return true;
         }
-        Provider provider = vehicle.getProvider();
         return contains(vehicle.getBrand(), keyword)
                 || contains(vehicle.getModel(), keyword)
                 || contains(vehicle.getLicensePlate(), keyword)
-                || contains(provider == null ? null : provider.getDisplayName(), keyword);
+                || contains(provider == null ? null : provider.displayName(), keyword);
     }
 
-    private boolean matchesLocation(Vehicle vehicle, String location) {
+    private boolean matchesLocation(ProviderSummary provider, String location) {
         if (location == null || location.isEmpty()) {
             return true;
         }
-        Provider provider = vehicle.getProvider();
-        return contains(provider == null ? null : provider.getDepotAddress(), location);
+        return contains(provider == null ? null : provider.depotAddress(), location);
     }
 
     private boolean contains(String value, String keyword) {
