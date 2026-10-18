@@ -25,7 +25,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
-
+import com.fptufa26.ecomotion.review.dto.request.UpdateReviewRequest;
+import com.fptufa26.ecomotion.review.exception.ReviewNotFoundException;
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
@@ -37,6 +38,83 @@ public class ReviewServiceImpl implements ReviewService {
     private final VehicleService vehicleService;
     private final UserService userService;
     private final EntityManager entityManager;
+
+    @Override
+    @Transactional
+    public ReviewResponse updateReview(Long userId, String bookingCode, ReviewTarget target, UpdateReviewRequest request) {
+        validateUpdateRequest(target, request);
+
+        BookingReviewContext booking =
+                bookingReviewAccessService.getOwnedBooking(userId, bookingCode);
+
+        validateBooking(booking, target);
+
+        userService.lockProviderForReview(booking.vehicleProviderId());
+
+        Review review = findExistingReview(booking, target);
+        review.setRating(request.rating());
+        review.setComment(normalizeComment(request.comment()));
+
+        reviewRepository.flush();
+
+        refreshTargetRating(booking, target);
+        refreshProviderRating(booking.vehicleProviderId());
+
+        return toResponse(review);
+    }
+
+    @Override
+    @Transactional
+    public void deleteReview(Long userId, String bookingCode, ReviewTarget target) {
+        if (target == null) {
+            throw new IllegalArgumentException("Review target is required");
+        }
+
+        BookingReviewContext booking =
+                bookingReviewAccessService.getOwnedBooking(userId, bookingCode);
+
+        validateBooking(booking, target);
+
+        userService.lockProviderForReview(booking.vehicleProviderId());
+
+        Review review = findExistingReview(booking, target);
+        reviewRepository.delete(review);
+        reviewRepository.flush();
+
+        refreshTargetRating(booking, target);
+        refreshProviderRating(booking.vehicleProviderId());
+    }
+
+    private Review findExistingReview(BookingReviewContext booking, ReviewTarget target) {
+        if (target == ReviewTarget.VEHICLE) {
+            return reviewRepository
+                    .findByBooking_IdAndVehicle_Id(
+                            booking.bookingId(),
+                            booking.vehicleId())
+                    .orElseThrow(ReviewNotFoundException::new);
+        }
+
+        return reviewRepository
+                .findByBooking_IdAndDriver_Id(
+                        booking.bookingId(),
+                        booking.driverId())
+                .orElseThrow(ReviewNotFoundException::new);
+    }
+
+    private void validateUpdateRequest(ReviewTarget target, UpdateReviewRequest request) {
+        if (target == null
+                || request == null
+                || request.rating() == null
+                || request.rating() < 1
+                || request.rating() > 5) {
+            throw new IllegalArgumentException("Invalid review update request");
+        }
+
+        if (request.comment() != null && request.comment().length() > 1000) {
+            throw new IllegalArgumentException(
+                    "Review comment must not exceed 1000 characters");
+        }
+    }
 
     @Override
     @Transactional(readOnly = true)

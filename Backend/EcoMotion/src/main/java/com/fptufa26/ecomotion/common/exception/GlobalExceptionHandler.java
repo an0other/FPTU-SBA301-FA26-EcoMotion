@@ -40,6 +40,14 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.review.exception.ReviewAlreadyExistsException;
 import com.fptufa26.ecomotion.review.exception.ReviewNotAllowedException;
+import com.fptufa26.ecomotion.review.exception.ReviewNotFoundException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import com.fptufa26.ecomotion.user.exception.DrivingLicenseAlreadyExistsException;
+import com.fptufa26.ecomotion.user.exception.RenterProfileNotFoundException;
+import com.fptufa26.ecomotion.booking.exception.BookingContractNotAllowedException;
+import com.fptufa26.ecomotion.booking.exception.BookingContractNotFoundException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.stream.Collectors;
 
@@ -365,6 +373,71 @@ public class GlobalExceptionHandler {
             RuntimeException ex,
             HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ReviewNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleReviewNotFound(
+            ReviewNotFoundException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException ex,
+            HttpServletRequest request) {
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Invalid value for parameter: " + ex.getName(),
+                request);
+    }
+
+    @ExceptionHandler(RenterProfileNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleRenterProfileNotFound(
+            RenterProfileNotFoundException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(DrivingLicenseAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleDrivingLicenseAlreadyExists(
+            DrivingLicenseAlreadyExistsException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(BookingContractNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleContractNotAllowed(
+            BookingContractNotAllowedException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(BookingContractNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleContractNotFound(
+            BookingContractNotFoundException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleUploadTooLarge(
+            MaxUploadSizeExceededException ex,
+            HttpServletRequest request) {
+        return build(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "Uploaded file exceeds the maximum allowed size",
+                request);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingUploadPart(
+            MissingServletRequestPartException ex,
+            HttpServletRequest request) {
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Missing multipart field: " + ex.getRequestPartName(),
+                request);
     }
 
 }

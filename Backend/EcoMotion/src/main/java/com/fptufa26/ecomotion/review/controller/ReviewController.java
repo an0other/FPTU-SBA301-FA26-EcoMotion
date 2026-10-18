@@ -19,6 +19,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.fptufa26.ecomotion.review.dto.request.UpdateReviewRequest;
+import com.fptufa26.ecomotion.review.enums.ReviewTarget;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import java.util.List;
 
@@ -33,9 +37,7 @@ public class ReviewController {
 
     @GetMapping
     @Operation(summary = "Get the authenticated renter's reviews for a booking")
-    public ApiResponse<List<ReviewResponse>> getBookingReviews(
-            @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable String bookingCode) {
+    public ApiResponse<List<ReviewResponse>> getBookingReviews(@AuthenticationPrincipal SecurityUser principal, @PathVariable String bookingCode) {
         return ApiResponse.success(
                 reviewService.getBookingReviews(
                         principal.getUserId(),
@@ -44,10 +46,7 @@ public class ReviewController {
 
     @PostMapping
     @Operation(summary = "Review a vehicle or driver after booking completion")
-    public ResponseEntity<ApiResponse<ReviewResponse>> createReview(
-            @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable String bookingCode,
-            @Valid @RequestBody CreateReviewRequest request) {
+    public ResponseEntity<ApiResponse<ReviewResponse>> createReview(@AuthenticationPrincipal SecurityUser principal, @PathVariable String bookingCode, @Valid @RequestBody CreateReviewRequest request) {
         ReviewResponse response = reviewService.createReview(
                 principal.getUserId(),
                 bookingCode,
@@ -55,5 +54,27 @@ public class ReviewController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response));
+    }
+
+    @PutMapping("/{target}")
+    @Operation(summary = "Update a vehicle or driver review")
+    public ApiResponse<ReviewResponse> updateReview(@AuthenticationPrincipal SecurityUser principal, @PathVariable String bookingCode, @PathVariable ReviewTarget target, @Valid @RequestBody UpdateReviewRequest request) {
+        return ApiResponse.success(
+                reviewService.updateReview(
+                        principal.getUserId(),
+                        bookingCode,
+                        target,
+                        request));
+    }
+
+    @DeleteMapping("/{target}")
+    @Operation(summary = "Delete a vehicle or driver review")
+    public ResponseEntity<Void> deleteReview(@AuthenticationPrincipal SecurityUser principal, @PathVariable String bookingCode, @PathVariable ReviewTarget target) {
+        reviewService.deleteReview(
+                principal.getUserId(),
+                bookingCode,
+                target);
+
+        return ResponseEntity.noContent().build();
     }
 }

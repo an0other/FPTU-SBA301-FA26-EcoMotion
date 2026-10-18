@@ -3,7 +3,7 @@ package com.fptufa26.ecomotion.review.repository;
 import com.fptufa26.ecomotion.review.entity.Review;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-
+import java.util.Optional;
 import java.util.List;
 
 public interface ReviewRepository extends JpaRepository<Review, Long> {
@@ -24,7 +24,10 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     List<Review> findByDriver_Id(Long driverId);
 
-    List<Review> findByVehicle_Provider_IdOrDriver_Provider_Id(
-            Long vehicleProviderId,
-            Long driverProviderId);
+    List<Review> findByVehicle_Provider_IdOrDriver_Provider_Id(Long vehicleProviderId, Long driverProviderId);
+
+    Optional<Review> findByBooking_IdAndVehicle_Id(Long bookingId, Long vehicleId);
+
+    Optional<Review> findByBooking_IdAndDriver_Id(Long bookingId, Long driverId);
+
 }
