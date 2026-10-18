@@ -74,4 +74,10 @@ public interface UserService {
             String bankAccountHolder,
             String businessLicenseNo,
             String taxCode);
+
+    void updateDriverRating(Long driverId, BigDecimal ratingAvg, int ratingCount);
+
+    void updateProviderRating(Long providerId, BigDecimal ratingAvg, int ratingCount);
+
+    void lockProviderForReview(Long providerId);
 }
