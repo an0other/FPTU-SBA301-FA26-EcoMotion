@@ -8,6 +8,7 @@ import VehicleListPage from './pages/VehicleListPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import ProviderDashboard from './pages/ProviderDashboard'
 import ProviderBookingQueuePage from './pages/ProviderBookingQueuePage'
+import ProviderBookingDetailPage from './pages/ProviderBookingDetailPage'
 import AdminDashboard from './pages/AdminDashboard'
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/me" element={<MePage />} />
         <Route path="/provider" element={<ProviderDashboard />} />
         <Route path="/provider/bookings" element={<ProviderBookingQueuePage />} />
+        <Route path="/provider/bookings/:bookingId" element={<ProviderBookingDetailPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
       </Route>
 
