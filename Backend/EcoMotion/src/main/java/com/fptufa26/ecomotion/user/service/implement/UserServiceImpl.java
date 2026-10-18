@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.user.service.implement;
 
 import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
+import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
 import com.fptufa26.ecomotion.user.entity.Provider;
@@ -20,8 +21,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -53,6 +57,25 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public Optional<User> findById(Long userId) {
         return userId == null ? Optional.empty() : userRepository.findById(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, ProviderSummary> findProvidersByIds(Collection<Long> providerIds) {
+        if (providerIds.isEmpty()) {
+            return Map.of();
+        }
+        return providerRepository.findAllById(providerIds).stream()
+                .collect(Collectors.toMap(Provider::getId, provider -> new ProviderSummary(
+                        provider.getId(),
+                        provider.getDisplayName(),
+                        provider.getProviderType(),
+                        provider.getHotline(),
+                        provider.getDepotAddress(),
+                        provider.getDepotLatitude(),
+                        provider.getDepotLongitude(),
+                        provider.getRatingAvg(),
+                        provider.getRatingCount())));
     }
 
     @Override
