@@ -130,6 +130,7 @@ desktop.ini
 #  KHÁC
 # ------------------------------------------------------------
 HELP.md
+GUIDE_FOR_BEGINNERS.md
 *.tmp
 *.bak
 *.orig

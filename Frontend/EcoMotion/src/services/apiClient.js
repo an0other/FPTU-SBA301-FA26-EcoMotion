@@ -1,9 +1,9 @@
 import axios from 'axios'
-import { clearAccessToken, getAccessToken, setAccessToken } from '../utils/tokenStore'
-import { toVietnameseError } from '../utils/errorMessage'
+import { clearAccessToken, getAccessToken, setAccessToken } from '../utils/tokenStore.js'
+import { toVietnameseError } from '../utils/errorMessage.js'
 
 const clientConfig = {
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: import.meta.env?.VITE_API_BASE_URL || '/api',
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,

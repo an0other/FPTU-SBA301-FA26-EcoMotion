@@ -1,8 +1,11 @@
 package com.fptufa26.ecomotion.user.service;
 
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
+import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.enums.Role;
@@ -37,6 +40,10 @@ public interface UserService {
     User assignPhone(Long userId, String phone);
 
     Optional<Renter> findRenterProfile(Long userId);
+
+    Optional<Provider> findProviderProfile(Long userId);
+
+    Optional<Driver> findDriverProfile(Long userId);
 
     User saveCccdIdentity(Long userId, CccdIdentity identity);
 

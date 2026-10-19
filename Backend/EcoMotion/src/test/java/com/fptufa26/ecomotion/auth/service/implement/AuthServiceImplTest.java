@@ -71,27 +71,7 @@ class AuthServiceImplTest {
                 refreshTokenRepository,
                 passwordEncoder,
                 jwtService,
-                new AuthMapper() {
-                    @Override
-                    public LoginResponse toLoginResponse(User user, String accessToken, long expiresIn) {
-                        return null;
-                    }
-
-                    @Override
-                    public RefreshResponse toRefreshResponse(String accessToken, long expiresIn) {
-                        return null;
-                    }
-
-                    @Override
-                    public CurrentUserResponse toCurrentUserResponse(User user) {
-                        return null;
-                    }
-
-                    @Override
-                    public UserResponse toUserResponse(User user) {
-                        return null;
-                    }
-                },
+                org.mapstruct.factory.Mappers.getMapper(AuthMapper.class),
                 captchaVerifier,
                 TTL_REMEMBER_ME,
                 TTL_DEFAULT);
