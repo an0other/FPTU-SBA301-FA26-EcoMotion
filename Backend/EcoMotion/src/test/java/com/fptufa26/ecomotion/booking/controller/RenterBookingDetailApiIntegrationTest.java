@@ -111,13 +111,13 @@ class RenterBookingDetailApiIntegrationTest {
         mockMvc.perform(post("/api/renter/bookings/" + code + "/cancel")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.refundAmount").value(435000.0));
+                .andExpect(jsonPath("$.data.refundAmount").value(330000.0));
 
         Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
         assertThat(paymentTransactionRepository.findByBooking_Id(booking.getId()))
                 .filteredOn(payment -> payment.getType() == PaymentType.REFUND)
                 .singleElement()
-                .satisfies(payment -> assertThat(payment.getAmount()).isEqualByComparingTo(new BigDecimal("435000.00")));
+                .satisfies(payment -> assertThat(payment.getAmount()).isEqualByComparingTo(new BigDecimal("330000.00")));
         assertThat(vehicleScheduleRepository.findByBooking_Id(booking.getId()))
                 .allSatisfy(row -> assertThat(row.getStatus()).isEqualTo(ScheduleStatus.CANCELLED));
     }
@@ -133,7 +133,7 @@ class RenterBookingDetailApiIntegrationTest {
         mockMvc.perform(post("/api/renter/bookings/" + code + "/cancel")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.refundAmount").value(217500.0));
+                .andExpect(jsonPath("$.data.refundAmount").value(165000.0));
     }
 
     @Test

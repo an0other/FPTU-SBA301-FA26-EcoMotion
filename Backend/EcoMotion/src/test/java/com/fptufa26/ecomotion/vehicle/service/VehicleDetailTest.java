@@ -86,8 +86,9 @@ class VehicleDetailTest {
         VehicleDetailResponse detail = vehicleService.getVehicleDetail(1L);
 
         assertThat(detail.plans()).extracting(VehicleDetailResponse.PlanDetail::planType)
-                .containsExactly(PlanType.HOURLY, PlanType.DAILY, PlanType.MONTHLY)
-                .doesNotContain(PlanType.YEARLY);
+                .containsExactly(PlanType.HOURLY, PlanType.DAILY, PlanType.MONTHLY, PlanType.YEARLY);
+        assertThat(detail.plans()).extracting(VehicleDetailResponse.PlanDetail::id)
+                .doesNotContain(retired.getId());
     }
 
     @Test

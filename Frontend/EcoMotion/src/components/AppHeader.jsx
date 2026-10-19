@@ -166,6 +166,24 @@ export default function AppHeader({ filters, onSearchSubmit, showViewSwitch = fa
                 <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
               </button>
 
+              {user.role === 'DRIVER' && (
+                <Link
+                  to="/driver/schedule"
+                  className="rounded-lg bg-teal-50 border border-teal-200 px-3 py-1.5 text-xs font-bold text-teal-700 transition hover:bg-teal-100"
+                >
+                  Lịch chuyến
+                </Link>
+              )}
+
+              {user.role === 'PROVIDER' && (
+                <Link
+                  to="/provider/bookings"
+                  className="rounded-lg bg-brand-50 border border-brand-200 px-3 py-1.5 text-xs font-bold text-brand-700 transition hover:bg-brand-100"
+                >
+                  Quản lý đơn
+                </Link>
+              )}
+
               <Link
                 to="/me"
                 title="Trang của tôi"
