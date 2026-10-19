@@ -4,7 +4,7 @@
 > Đọc file này **trước tiên** mỗi khi mở lại phiên làm việc để khôi phục hiểu biết về dự án.  
 > Cập nhật file này mỗi khi có thay đổi kiến trúc hoặc quyết định kỹ thuật mới.
 >
-> **Cập nhật lần cuối:** 2026-10-09 · **Phiên bản dự án:** Spec v8.0 / Data model v10.1 / Backend: auth feature · **7 mục**
+> **Cập nhật lần cuối:** 2026-10-11 · **Phiên bản dự án:** Spec v8.0 / Data model v10.1 + tọa độ depot / Backend: tìm xe trên bản đồ · **7 mục**
 >
 > **File này KHÔNG chứa trạng thái code hay danh sách task.** Nó chứa **ý định** (luật, quyết định, thứ tự làm). Trạng thái thật đọc từ code / Swagger / git.
 
@@ -565,6 +565,7 @@ public record ApiResponse<T>(String code, String message, T data) {
 | T18 | **Lưu ảnh qua `common/storage/FileStorageService` port**            | Chọn local hoặc Supabase bằng `app.upload.provider`; DB giữ object key chung; chuyển provider phải di chuyển ảnh cũ |
 | T19 | **eKYC provider nằm trong `verification/ekyc`**                     | `auth` giữ quy trình kích hoạt; tích hợp xác minh có thể phục vụ luồng GPLX của tài xế khi được triển khai |
 | T20 | **Refresh token rotation theo từng phiên**                           | Khóa bản ghi khi refresh, chỉ dùng token một lần; dùng lại token cũ thu hồi cả phiên; giữ hạn hết hạn gốc |
+| T21 | **Tìm xe trên bản đồ từ tọa độ depot provider**                      | Vị trí khách do GPS hoặc ghim đã xác nhận; 10/15 km đường thẳng chỉ lọc tìm kiếm, tách khỏi `free_radius_km` tính phí. Tọa độ depot nullable theo cặp; dữ liệu cũ cập nhật bằng migration cộng dồn, không chạy lại `schema.sql`. Reverse geocoding đi qua vehicle service để giới hạn Nominatim 1 request/giây. |
 
 ---
 

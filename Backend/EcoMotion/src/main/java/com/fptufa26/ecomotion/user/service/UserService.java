@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.user.service;
 
+import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
@@ -13,7 +14,9 @@ import com.fptufa26.ecomotion.user.enums.UserStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface UserService {
@@ -24,17 +27,25 @@ public interface UserService {
 
     Optional<User> findById(Long userId);
 
+    Map<Long, ProviderSummary> findProvidersByIds(Collection<Long> providerIds);
+
     boolean existsByEmail(String email);
 
     boolean existsByPhone(String phone);
 
     User createUser(String email, String rawPassword, String fullName, String phone, Role role, UserStatus status);
 
+    Renter requireRenterByUserId(Long userId);
+
     User createPendingUser(String email, String rawPassword, Role role);
 
     User assignPhone(Long userId, String phone);
 
     Optional<Renter> findRenterProfile(Long userId);
+
+    Optional<Provider> findProviderProfile(Long userId);
+
+    Optional<Driver> findDriverProfile(Long userId);
 
     User saveCccdIdentity(Long userId, CccdIdentity identity);
 

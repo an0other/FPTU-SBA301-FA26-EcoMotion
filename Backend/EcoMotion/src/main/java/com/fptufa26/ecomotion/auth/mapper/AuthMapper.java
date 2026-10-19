@@ -5,37 +5,21 @@ import com.fptufa26.ecomotion.auth.dto.response.LoginResponse;
 import com.fptufa26.ecomotion.auth.dto.response.RefreshResponse;
 import com.fptufa26.ecomotion.user.dto.response.UserResponse;
 import com.fptufa26.ecomotion.user.entity.User;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingConstants;
 
-@Component
-public class AuthMapper {
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
+public interface AuthMapper {
 
-    private static final String TOKEN_TYPE = "Bearer";
+    @Mapping(target = "tokenType", constant = "Bearer")
+    @Mapping(target = "user", source = "user")
+    LoginResponse toLoginResponse(User user, String accessToken, long expiresIn);
 
-    public LoginResponse toLoginResponse(User user, String accessToken, long expiresIn) {
-        return new LoginResponse(accessToken, TOKEN_TYPE, expiresIn, toUserResponse(user));
-    }
+    @Mapping(target = "tokenType", constant = "Bearer")
+    RefreshResponse toRefreshResponse(String accessToken, long expiresIn);
 
-    public RefreshResponse toRefreshResponse(String accessToken, long expiresIn) {
-        return new RefreshResponse(accessToken, TOKEN_TYPE, expiresIn);
-    }
+    CurrentUserResponse toCurrentUserResponse(User user);
 
-    public CurrentUserResponse toCurrentUserResponse(User user) {
-        return new CurrentUserResponse(
-                user.getUserId(),
-                user.getEmail(),
-                user.getFullName(),
-                user.getPhone(),
-                user.getRole(),
-                user.getStatus(),
-                user.getEkycStatus());
-    }
-
-    public UserResponse toUserResponse(User user) {
-        return new UserResponse(
-                user.getUserId(),
-                user.getEmail(),
-                user.getRole(),
-                user.getStatus());
-    }
+    UserResponse toUserResponse(User user);
 }

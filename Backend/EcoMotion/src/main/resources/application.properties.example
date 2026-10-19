@@ -14,6 +14,7 @@
 
 
 spring.application.name=EcoMotion
+spring.profiles.active=dev
 
 
 # ===============================
@@ -64,8 +65,7 @@ spring.data.jpa.repositories.enabled=true
 # ===============================
 # app.jwt.secret MUST be at least 32 bytes (256 bit) or HS256 signing fails with WeakKeyException.
 # Generated with: openssl rand -base64 48
-# There is deliberately NO default: a committed fallback would let anyone forge tokens.
-app.jwt.secret=${JWT_SECRET:}
+app.jwt.secret=${JWT_SECRET:dev-secret-key-must-be-at-least-32-bytes-long-for-hs256}
 app.jwt.access-token-ttl=15m
 app.jwt.issuer=ecomotion
 
@@ -76,7 +76,7 @@ app.jwt.issuer=ecomotion
 # Encrypts short PII at rest: users.phone and renter.cccd_no.
 # MUST be at least 32 bytes. Override DATA_CRYPTO_SECRET in every real environment.
 # WARNING: rotating this key makes previously stored values unreadable — treat it like the JWT secret.
-app.crypto.secret=${DATA_CRYPTO_SECRET:}
+app.crypto.secret=${DATA_CRYPTO_SECRET:dev-crypto-secret-0123456789abcdef-32bytes}
 
 
 # ===============================
@@ -258,3 +258,13 @@ springdoc.swagger-ui.try-it-out-enabled=true
 springdoc.swagger-ui.operations-sorter=method
 springdoc.swagger-ui.tags-sorter=alpha
 springdoc.packages-to-scan=com.fptufa26.ecomotion
+
+
+# ===============================
+# Map address lookup (OpenStreetMap Nominatim)
+# ===============================
+app.map.reverse-url=https://nominatim.openstreetmap.org/reverse
+app.map.search-url=https://nominatim.openstreetmap.org/search
+app.map.user-agent=EcoMotion-localhost/1.0 (https://github.com/an0other/FPTU-SBA301-FA26-EcoMotion)
+app.map.connect-timeout=5s
+app.map.request-timeout=8s

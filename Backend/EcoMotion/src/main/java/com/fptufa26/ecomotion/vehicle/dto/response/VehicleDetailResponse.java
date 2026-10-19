@@ -36,6 +36,7 @@ public record VehicleDetailResponse(
     }
 
     public record PlanDetail(
+            Long id,
             PlanType planType,
             Integer slotLengthMinutes,
             BigDecimal slotPrice,

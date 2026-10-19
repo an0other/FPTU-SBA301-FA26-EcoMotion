@@ -43,8 +43,11 @@ export default function LoginPage() {
     try {
       const captchaToken = await recaptcha.execute('login')
       const user = await login(form.email.trim(), form.password, form.rememberMe, captchaToken)
-      const from = location.state?.from?.pathname
-      navigate(from || homeRouteForRole(user.role), { replace: true })
+      const from = location.state?.from
+      const redirectTo = from
+        ? `${from.pathname ?? ''}${from.search ?? ''}${from.hash ?? ''}`
+        : ''
+      navigate(redirectTo || homeRouteForRole(user.role), { replace: true })
     } catch (err) {
       const raw = err?.original?.response?.data?.message || ''
       if (err?.status === 403 && /pending/i.test(raw)) {
