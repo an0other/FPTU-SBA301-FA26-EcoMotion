@@ -50,4 +50,15 @@ export const providerService = {
     const { data } = await apiClient.put(`/provider/vehicles/${id}/documents`, payload)
     return data?.data
   },
+
+  async uploadDocumentFile(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const { data } = await apiClient.post('/provider/vehicles/documents/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return data?.data
+  },
 }

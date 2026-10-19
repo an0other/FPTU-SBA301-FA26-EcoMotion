@@ -39,9 +39,12 @@ import java.util.List;
 public class ProviderVehicleController {
 
     private final ProviderVehicleService providerVehicleService;
+    private final com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService;
 
-    public ProviderVehicleController(ProviderVehicleService providerVehicleService) {
+    public ProviderVehicleController(ProviderVehicleService providerVehicleService,
+                                     com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService) {
         this.providerVehicleService = providerVehicleService;
+        this.fileStorageService = fileStorageService;
     }
 
     @GetMapping("/dashboard/summary")
@@ -152,5 +155,40 @@ public class ProviderVehicleController {
             @Valid @RequestBody UpdateVehicleDocumentRequest request
     ) {
         return ApiResponse.success(providerVehicleService.updateVehicleDocument(user.getUserId(), id, request));
+    }
+
+    @PostMapping(value = "/vehicles/documents/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload real vehicle legal document file (JPG, PNG, PDF)")
+    public ApiResponse<java.util.Map<String, String>> uploadDocumentFile(
+            @AuthenticationPrincipal SecurityUser user,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn tệp tài liệu hoặc hình ảnh");
+        }
+        String contentType = file.getContentType();
+        boolean isImage = contentType != null && (contentType.equalsIgnoreCase("image/jpeg") || contentType.equalsIgnoreCase("image/png"));
+        boolean isPdf = contentType != null && contentType.equalsIgnoreCase("application/pdf");
+        if (!isImage && !isPdf) {
+            throw new IllegalArgumentException("Hệ thống chỉ chấp nhận tệp hình ảnh (JPG, PNG) hoặc tài liệu PDF");
+        }
+
+        try {
+            String originalFilename = file.getOriginalFilename();
+            String storedKey = fileStorageService.store(
+                    "vehicle",
+                    user.getUserId(),
+                    originalFilename,
+                    file.getBytes(),
+                    contentType
+            );
+            String fileUrl = "/api/files/" + storedKey;
+            return ApiResponse.success(java.util.Map.of(
+                    "fileUrl", fileUrl,
+                    "fileName", originalFilename != null ? originalFilename : "document"
+            ));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Không thể đọc tệp tải lên: " + e.getMessage());
+        }
     }
 }
