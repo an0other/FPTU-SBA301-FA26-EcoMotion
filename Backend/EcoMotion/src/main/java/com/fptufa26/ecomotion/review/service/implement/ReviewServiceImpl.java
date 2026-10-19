@@ -20,6 +20,7 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptufa26.ecomotion.review.dto.response.BookingReviewsResponse;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -118,18 +119,32 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ReviewResponse> getBookingReviews(
+    public BookingReviewsResponse getBookingReviews(
             Long userId,
             String bookingCode) {
         BookingReviewContext booking =
                 bookingReviewAccessService.getOwnedBooking(userId, bookingCode);
 
-        return reviewRepository
+        List<ReviewResponse> reviews = reviewRepository
                 .findByBooking_BookingCodeOrderByCreatedAtAscIdAsc(
                         booking.bookingCode())
                 .stream()
                 .map(this::toResponse)
                 .toList();
+
+        boolean canReview = booking.status() == BookingStatus.COMPLETED;
+
+        return new BookingReviewsResponse(
+                booking.bookingCode(),
+                booking.status(),
+                booking.vehicleName(),
+                booking.driverId() != null,
+                booking.driverName(),
+                canReview,
+                canReview
+                        ? null
+                        : "Bạn chỉ có thể đánh giá sau khi đơn thuê hoàn tất.",
+                reviews);
     }
 
     @Override
