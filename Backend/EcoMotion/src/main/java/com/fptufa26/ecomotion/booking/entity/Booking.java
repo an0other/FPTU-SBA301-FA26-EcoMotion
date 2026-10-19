@@ -61,8 +61,17 @@ public class Booking {
     private Driver driver;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 50)
     private BookingStatus status = BookingStatus.PENDING;
+
+    @Column(name = "assigned_at")
+    private Instant assignedAt;
+
+    @Column(name = "driver_confirmed_at")
+    private Instant driverConfirmedAt;
+
+    @Column(name = "actual_arrived_at")
+    private Instant actualArrivedAt;
 
     @Column(name = "actual_start_at")
     private Instant actualStartAt;
@@ -75,6 +84,10 @@ public class Booking {
 
     @Column(name = "provider_confirmed_at")
     private Instant providerConfirmedAt;
+
+    @jakarta.persistence.Version
+    @Column(name = "version")
+    private Long version = 0L;
 
     @Column(name = "pickup_address", nullable = false, length = 500)
     private String pickupAddress;

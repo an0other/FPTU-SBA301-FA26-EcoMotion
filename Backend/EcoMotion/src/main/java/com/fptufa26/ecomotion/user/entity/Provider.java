@@ -1,8 +1,10 @@
 package com.fptufa26.ecomotion.user.entity;
 
+import com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter;
 import com.fptufa26.ecomotion.user.enums.ProviderStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -15,6 +17,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -55,14 +58,22 @@ public class Provider {
     @Column(name = "deposit_ratio", nullable = false, precision = 6, scale = 4)
     private BigDecimal depositRatio;
 
+    @Column(name = "bank_code", length = 20)
+    private String bankCode;
+
     @Column(name = "bank_name", length = 150)
     private String bankName;
 
-    @Column(name = "bank_account_no", length = 50)
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "bank_account_no", length = 255)
     private String bankAccountNo;
 
     @Column(name = "bank_account_holder", length = 150)
     private String bankAccountHolder;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
 
     @Column(name = "business_license_no", length = 50)
     private String businessLicenseNo;
