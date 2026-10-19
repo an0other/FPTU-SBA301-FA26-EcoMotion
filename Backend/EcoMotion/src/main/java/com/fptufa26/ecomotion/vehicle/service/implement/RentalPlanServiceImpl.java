@@ -42,6 +42,7 @@ public class RentalPlanServiceImpl implements RentalPlanService {
 
     private RentalPlanData toData(RentalPlan plan) {
         return new RentalPlanData(
+                plan.getId(),
                 plan.getPlanType(),
                 plan.getSlotLengthMinutes(),
                 plan.getSlotPrice(),

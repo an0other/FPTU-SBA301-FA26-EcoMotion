@@ -1,4 +1,3 @@
-
 import axios from 'axios'
 import { clearAccessToken, getAccessToken, setAccessToken } from '../utils/tokenStore'
 import { toVietnameseError } from '../utils/errorMessage'
@@ -79,4 +78,12 @@ apiClient.interceptors.response.use(
   },
 )
 
+export function readErrorMessage(error) {
+  return error?.message
+    || error?.original?.response?.data?.message
+    || error?.response?.data?.message
+    || 'Không kết nối được máy chủ'
+}
+
+export { apiClient, getAccessToken, setAccessToken, clearAccessToken }
 export default apiClient

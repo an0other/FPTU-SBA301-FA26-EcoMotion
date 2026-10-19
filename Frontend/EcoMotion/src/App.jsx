@@ -1,15 +1,45 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import ActivatePage from './pages/ActivatePage'
-import MePage from './pages/MePage'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import AppHeader from './components/AppHeader'
+import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
-import VehicleListPage from './pages/VehicleListPage'
-import VehicleDetailPage from './pages/VehicleDetailPage'
-import ProviderDashboard from './pages/ProviderDashboard'
+import ActivatePage from './pages/ActivatePage'
 import AdminDashboard from './pages/AdminDashboard'
+import LoginPage from './pages/LoginPage'
+import MePage from './pages/MePage'
+import ProviderDashboard from './pages/ProviderDashboard'
+import RegisterPage from './pages/RegisterPage'
+import VehicleDetailPage from './pages/VehicleDetailPage'
+import VehicleListPage from './pages/VehicleListPage'
+import { BookingDetailPage } from './pages/booking/BookingDetailPage'
+import { BookingRequestPage } from './pages/booking/BookingRequestPage'
+import { DepositPaymentPage } from './pages/booking/DepositPaymentPage'
+import { MyBookingsPage } from './pages/booking/MyBookingsPage'
+import { SubmittedBookingPage } from './pages/booking/SubmittedBookingPage'
+import { PolicyPage } from './pages/PolicyPage'
+
+function BookingShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
+      <BookingSubnav />
+      <main className="w-full flex-1">{children}</main>
+    </div>
+  )
+}
+
+
+function WizardShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
+      <main className="w-full flex-1">{children}</main>
+    </div>
+  )
+}
 
 export default function App() {
+  const navigate = useNavigate()
+
   return (
     <Routes>
       <Route path="/" element={<VehicleListPage />} />
@@ -24,7 +54,36 @@ export default function App() {
         <Route path="/me" element={<MePage />} />
         <Route path="/provider" element={<ProviderDashboard />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route
+          path="/renter/bookings/new"
+          element={<BookingShell><BookingRequestPage /></BookingShell>}
+        />
+        <Route
+          path="/renter/bookings/:bookingCode/submitted"
+          element={<BookingShell><SubmittedBookingPage /></BookingShell>}
+        />
+        <Route
+          path="/renter/bookings/:bookingCode/checkout"
+          element={<BookingShell><DepositPaymentPage /></BookingShell>}
+        />
+        <Route
+          path="/renter/bookings/:bookingCode"
+          element={<BookingShell><BookingDetailPage /></BookingShell>}
+        />
+        <Route
+          path="/renter/bookings"
+          element={<BookingShell><MyBookingsPage /></BookingShell>}
+        />
       </Route>
+
+      <Route
+        path="/policy"
+        element={(
+          <BookingShell>
+            <PolicyPage onBookNow={() => navigate('/')} />
+          </BookingShell>
+        )}
+      />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

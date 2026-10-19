@@ -113,7 +113,7 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
               {featured ? formatCurrency(featured.slotPrice) : 'Liên hệ'}
               {featured && (
                 <span className="ml-0.5 text-[10px] font-medium text-slate-500">
-                  {PLAN_META[featured.planType]?.suffix ?? ''}
+                  / slot
                 </span>
               )}
             </p>

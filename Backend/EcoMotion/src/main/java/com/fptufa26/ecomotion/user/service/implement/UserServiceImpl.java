@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.user.service.implement;
 
 import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
+import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
 import com.fptufa26.ecomotion.user.entity.Provider;
@@ -171,6 +172,13 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public Optional<Renter> findRenterProfile(Long userId) {
         return userId == null ? Optional.empty() : renterRepository.findByUser_Id(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Renter requireRenterByUserId(Long userId) {
+        return renterRepository.findByUser_Id(userId)
+                .orElseThrow(() -> new NotFoundException("Renter profile not found"));
     }
 
     @Override

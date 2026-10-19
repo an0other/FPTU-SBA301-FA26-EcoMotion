@@ -1,24 +1,39 @@
 package com.fptufa26.ecomotion.seed;
 
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.entity.BookingCharge;
+import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
+import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
+import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
+import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
+import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
+import com.fptufa26.ecomotion.booking.enums.PaymentType;
+import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
+import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
+import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.common.crypto.DeterministicCipher;
-import com.fptufa26.ecomotion.user.enums.EkycStatus;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.entity.Provider;
+import com.fptufa26.ecomotion.user.entity.Renter;
+import com.fptufa26.ecomotion.user.entity.User;
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
-import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.enums.Role;
-import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
+import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
+import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
-import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.enums.Transmission;
-import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
@@ -31,7 +46,11 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 @Component
@@ -40,6 +59,12 @@ import java.util.List;
 public class DevDataSeeder implements ApplicationRunner {
 
     public static final String DEFAULT_PASSWORD = "EcoMotion@123";
+    public static final String RENTER_EMAIL = "renter01@ecomotion.vn";
+    public static final String PROVIDER_EMAIL = "provider.a@ecomotion.vn";
+    public static final String VEHICLE_PLATE = "51A-11111";
+    public static final String ACCEPTED_BOOKING_CODE = "EM-2026-9001";
+    public static final String PENDING_BOOKING_CODE = "EM-2026-9002";
+    public static final String IN_PROGRESS_BOOKING_CODE = "EM-2026-9003";
 
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
@@ -73,6 +98,11 @@ public class DevDataSeeder implements ApplicationRunner {
     private final VehicleRepository vehicleRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final RentalPlanRepository rentalPlanRepository;
+    private final BookingRepository bookingRepository;
+    private final BookingPolicySnapshotRepository snapshotRepository;
+    private final BookingChargeRepository chargeRepository;
+    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final ScheduleService scheduleService;
     private final PasswordEncoder passwordEncoder;
     private final DeterministicCipher cipher;
     private final EntityManager entityManager;
@@ -83,12 +113,13 @@ public class DevDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        seedUser(1L, "renter01@ecomotion.vn", "0901000001", "Renter 01", Role.RENTER);
-        seedUser(PROVIDER_A_USER_ID, "provider.a@ecomotion.vn", "0901000010", NAME_PROVIDER_A, Role.PROVIDER);
+        seedUser(1L, RENTER_EMAIL, "0901000001", "Renter 01", Role.RENTER);
+        seedUser(PROVIDER_A_USER_ID, PROVIDER_EMAIL, "0901000010", NAME_PROVIDER_A, Role.PROVIDER);
         seedUser(3L, "admin01@ecomotion.vn", "0901000003", "Admin 01", Role.ADMIN);
         seedUser(PROVIDER_B_USER_ID, "provider.b@ecomotion.vn", "0901000011", NAME_PROVIDER_B, Role.PROVIDER);
         seedUser(5L, "renter.demo@ecomotion.vn", "0901000012", NAME_RENTER, Role.RENTER);
 
+        User renterUser = userRepository.findById(1L).orElseThrow();
         User providerUserA = userRepository.findById(PROVIDER_A_USER_ID).orElseThrow();
         User providerUserB = userRepository.findById(PROVIDER_B_USER_ID).orElseThrow();
         Provider providerA = seedProvider(providerUserA, "EcoMotion Depot A", ADDRESS_A, "02873000010",
@@ -96,6 +127,7 @@ public class DevDataSeeder implements ApplicationRunner {
         Provider providerB = seedProvider(providerUserB, "EcoMotion Depot B", ADDRESS_B, "02873000011",
                 new BigDecimal("10.774900"), new BigDecimal("106.698500"));
 
+        Renter renter = seedRenterProfile(renterUser);
         seedRenterProfile(userRepository.findById(5L).orElseThrow());
 
         seedVehicle(providerA.getId(), 1L, PROVIDER_A_USER_ID, "VinFast", "VF 6", 2024, 5, Transmission.AUTOMATIC,
@@ -176,6 +208,13 @@ public class DevDataSeeder implements ApplicationRunner {
                         "RANGE-ROVER-ELECTRIC-FRONT-3-4-02_09_26_1.jpg_auto=format,compress&fit=crop&h=303&ixlib=php-3.3.webp",
                         "range-rover-sport-in-monte-carlo-monaco.webp"),
                 DESC_RANGE_ROVER);
+
+        Vehicle bookingVehicle = vehicleRepository.findByLicensePlate(VEHICLE_PLATE).orElseThrow();
+        seedSampleBooking(renter, renterUser, providerA, bookingVehicle,
+                ACCEPTED_BOOKING_CODE, BookingStatus.ACCEPTED, Instant.parse("2026-12-20T01:00:00Z"));
+        seedSampleBooking(renter, renterUser, providerA, bookingVehicle,
+                PENDING_BOOKING_CODE, BookingStatus.PENDING, Instant.parse("2026-12-28T01:00:00Z"));
+        seedInProgressBooking(renter, renterUser, providerA, bookingVehicle);
 
         realignPinnedIdentitySequences();
     }
@@ -273,13 +312,12 @@ public class DevDataSeeder implements ApplicationRunner {
         return providerRepository.save(provider);
     }
 
-    private void seedRenterProfile(User user) {
-        if (renterRepository.existsByUser_Id(user.getId())) {
-            return;
-        }
-        Renter renter = new Renter();
-        renter.setUser(user);
-        renterRepository.save(renter);
+    private Renter seedRenterProfile(User user) {
+        return renterRepository.findByUser_Id(user.getId()).orElseGet(() -> {
+            Renter renter = new Renter();
+            renter.setUser(user);
+            return renterRepository.save(renter);
+        });
     }
 
 
@@ -344,21 +382,178 @@ public class DevDataSeeder implements ApplicationRunner {
         if (!rentalPlanRepository.findByVehicle_IdOrderByIdAsc(vehicle.getId()).isEmpty()) {
             return;
         }
-        createPlan(vehicle, PlanType.HOURLY, 240, prices.hourly(), UPFRONT_HOURLY);
-        createPlan(vehicle, PlanType.DAILY, 1440, prices.daily(), UPFRONT_DAILY);
-        createPlan(vehicle, PlanType.MONTHLY, 43200, prices.monthly(), UPFRONT_MONTHLY);
+        createPlan(vehicle, PlanType.HOURLY, 240, prices.hourly(), UPFRONT_HOURLY, true);
+        createPlan(vehicle, PlanType.DAILY, 1440, prices.daily(), UPFRONT_DAILY, false);
+        createPlan(vehicle, PlanType.MONTHLY, 43200, prices.monthly(), UPFRONT_MONTHLY, false);
+        createPlan(vehicle, PlanType.YEARLY, 525600, "280000000.00", "50000000.00", false);
     }
 
     private void createPlan(Vehicle vehicle, PlanType planType, int slotLengthMinutes,
-                            String slotPrice, String upfrontAmount) {
+                            String slotPrice, String upfrontAmount, boolean hourly) {
         RentalPlan plan = new RentalPlan();
         plan.setVehicle(vehicle);
         plan.setPlanType(planType);
         plan.setSlotLengthMinutes(slotLengthMinutes);
         plan.setSlotPrice(new BigDecimal(slotPrice));
-        plan.setUpfrontAmount(new BigDecimal(upfrontAmount));
+        plan.setUpfrontAmount(upfrontAmount == null ? null : new BigDecimal(upfrontAmount));
         plan.setStatus(PlanStatus.ACTIVE);
+        if (planType != PlanType.YEARLY) {
+            plan.setAllowedOvertimeMinutes(30);
+            plan.setOvertimeSurchargeRatio(new BigDecimal("1.2000"));
+            plan.setFreeRadiusKm(10);
+            plan.setOutOfRadiusRate(new BigDecimal("10000.00"));
+            plan.setWaitingFreeMinutes(15);
+            plan.setWaitingRate(new BigDecimal("5000.00"));
+            plan.setWeekendSurchargeRatio(new BigDecimal("1.1000"));
+            if (hourly) {
+                plan.setHourlyToDailyThresholdMinutes(1260);
+            }
+        }
         rentalPlanRepository.save(plan);
+    }
+
+    private void seedSampleBooking(Renter renter,
+                                   User renterUser,
+                                   Provider provider,
+                                   Vehicle vehicle,
+                                   String bookingCode,
+                                   BookingStatus status,
+                                   Instant pickupTime) {
+        if (bookingRepository.existsByBookingCode(bookingCode)) {
+            return;
+        }
+        RentalPlan daily = rentalPlanRepository
+                .findByVehicle_IdAndStatusOrderByIdAsc(vehicle.getId(), PlanStatus.ACTIVE)
+                .stream()
+                .filter(plan -> plan.getPlanType() == PlanType.DAILY)
+                .findFirst()
+                .orElseThrow();
+
+        Booking booking = new Booking();
+        booking.setBookingCode(bookingCode);
+        booking.setRenter(renter);
+        booking.setVehicle(vehicle);
+        booking.setPlan(daily);
+        booking.setStatus(status);
+        booking.setPickupAddress(provider.getDepotAddress());
+        booking.setPickupTime(pickupTime);
+        booking.setPassengerCount(2);
+        booking.setTotalAmount(daily.getSlotPrice());
+        bookingRepository.save(booking);
+
+        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
+        snapshot.setBooking(booking);
+        snapshot.setSlotPrice(daily.getSlotPrice());
+        snapshot.setSlotLengthMinutes(daily.getSlotLengthMinutes());
+        snapshot.setPlanType(daily.getPlanType());
+        snapshot.setDepositRatio(provider.getDepositRatio());
+        snapshot.setUpfrontAmount(null);
+        snapshot.setAllowedOvertimeMinutes(daily.getAllowedOvertimeMinutes());
+        snapshot.setOvertimeSurchargeRatio(daily.getOvertimeSurchargeRatio());
+        snapshot.setWaitingFreeMinutes(daily.getWaitingFreeMinutes());
+        snapshot.setWaitingRate(daily.getWaitingRate());
+        snapshot.setWeekendSurchargeRatio(daily.getWeekendSurchargeRatio());
+        snapshot.setFreeRadiusKm(daily.getFreeRadiusKm());
+        snapshot.setOutOfRadiusRate(daily.getOutOfRadiusRate());
+        snapshot.setHourlyToDailyThresholdMinutes(daily.getHourlyToDailyThresholdMinutes());
+        snapshotRepository.save(snapshot);
+
+        BookingCharge charge = new BookingCharge();
+        charge.setBooking(booking);
+        charge.setChargeType(ChargeType.BASE_RENTAL);
+        charge.setDescription("Thuê 1 slot");
+        charge.setQuantity(1);
+        charge.setUnitPrice(daily.getSlotPrice());
+        charge.setAmount(daily.getSlotPrice());
+        charge.setCreatedBy(renterUser);
+        charge.setWaived(false);
+        chargeRepository.save(charge);
+    }
+
+    private void seedInProgressBooking(Renter renter, User renterUser, Provider provider, Vehicle vehicle) {
+        if (bookingRepository.existsByBookingCode(IN_PROGRESS_BOOKING_CODE)) {
+            return;
+        }
+        RentalPlan daily = rentalPlanRepository
+                .findByVehicle_IdAndStatusOrderByIdAsc(vehicle.getId(), PlanStatus.ACTIVE)
+                .stream()
+                .filter(plan -> plan.getPlanType() == PlanType.DAILY)
+                .findFirst()
+                .orElseThrow();
+        Instant pickup = Instant.parse("2026-11-15T01:00:00Z");
+        BigDecimal deposit = daily.getSlotPrice()
+                .multiply(provider.getDepositRatio())
+                .setScale(2, RoundingMode.HALF_UP);
+
+        Booking booking = new Booking();
+        booking.setBookingCode(IN_PROGRESS_BOOKING_CODE);
+        booking.setRenter(renter);
+        booking.setVehicle(vehicle);
+        booking.setPlan(daily);
+        booking.setStatus(BookingStatus.IN_PROGRESS);
+        booking.setPickupAddress(provider.getDepotAddress());
+        booking.setPickupTime(pickup);
+        booking.setPassengerCount(2);
+        booking.setTotalAmount(daily.getSlotPrice());
+        booking.setActualStartAt(pickup.plus(Duration.ofMinutes(5)));
+        bookingRepository.save(booking);
+
+        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
+        snapshot.setBooking(booking);
+        snapshot.setSlotPrice(daily.getSlotPrice());
+        snapshot.setSlotLengthMinutes(daily.getSlotLengthMinutes());
+        snapshot.setPlanType(daily.getPlanType());
+        snapshot.setDepositRatio(provider.getDepositRatio());
+        snapshot.setUpfrontAmount(null);
+        snapshot.setAllowedOvertimeMinutes(daily.getAllowedOvertimeMinutes());
+        snapshot.setOvertimeSurchargeRatio(daily.getOvertimeSurchargeRatio());
+        snapshot.setWaitingFreeMinutes(daily.getWaitingFreeMinutes());
+        snapshot.setWaitingRate(daily.getWaitingRate());
+        snapshot.setWeekendSurchargeRatio(daily.getWeekendSurchargeRatio());
+        snapshot.setFreeRadiusKm(daily.getFreeRadiusKm());
+        snapshot.setOutOfRadiusRate(daily.getOutOfRadiusRate());
+        snapshot.setHourlyToDailyThresholdMinutes(daily.getHourlyToDailyThresholdMinutes());
+        snapshotRepository.save(snapshot);
+
+        BookingCharge rental = new BookingCharge();
+        rental.setBooking(booking);
+        rental.setChargeType(ChargeType.BASE_RENTAL);
+        rental.setDescription("Thuê 1 slot");
+        rental.setQuantity(1);
+        rental.setUnitPrice(daily.getSlotPrice());
+        rental.setAmount(daily.getSlotPrice());
+        rental.setCreatedBy(renterUser);
+        rental.setWaived(false);
+        chargeRepository.save(rental);
+
+        BookingCharge depositCharge = new BookingCharge();
+        depositCharge.setBooking(booking);
+        depositCharge.setChargeType(ChargeType.DEPOSIT);
+        depositCharge.setDescription("Cọc giữ chỗ");
+        depositCharge.setQuantity(null);
+        depositCharge.setUnitPrice(daily.getSlotPrice());
+        depositCharge.setAppliedRate(provider.getDepositRatio());
+        depositCharge.setAmount(deposit);
+        depositCharge.setCreatedBy(renterUser);
+        depositCharge.setWaived(false);
+        chargeRepository.save(depositCharge);
+
+        PaymentTransaction payment = new PaymentTransaction();
+        payment.setBooking(booking);
+        payment.setCharge(depositCharge);
+        payment.setType(PaymentType.DEPOSIT_PAY);
+        payment.setAmount(deposit);
+        payment.setDirection(PaymentDirection.IN);
+        payment.setMethod(PaymentMethod.CARD);
+        payment.setStatus(PaymentStatus.PAID);
+        payment.setPaidAt(pickup.minus(Duration.ofHours(1)));
+        paymentTransactionRepository.save(payment);
+
+        scheduleService.book(
+                vehicle,
+                booking,
+                pickup,
+                pickup.plus(Duration.ofMinutes(daily.getSlotLengthMinutes())));
     }
 
     private static String encodePathSegment(String segment) {
