@@ -134,3 +134,12 @@ HELP.md
 *.bak
 *.orig
 *.rej
+
+# Uploaded files
+uploads/
+**/uploads/*
+!**/uploads/sample/
+!**/uploads/sample/**
+
+# Local AI / Agent configs
+.agents/

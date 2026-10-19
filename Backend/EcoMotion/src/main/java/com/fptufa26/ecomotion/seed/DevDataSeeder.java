@@ -27,6 +27,7 @@ import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import java.time.LocalDate;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
@@ -36,7 +37,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 
 @Component
@@ -337,52 +337,6 @@ public class DevDataSeeder implements ApplicationRunner {
         seedDocuments(vehicle);
     }
 
-    private void seedDocuments(Vehicle vehicle) {
-        if (!vehicleDocumentRepository.findByVehicle_Id(vehicle.getId()).isEmpty()) {
-            return;
-        }
-
-        // 1. REGISTRATION (Đăng ký xe / Cà vẹt - không thời hạn)
-        VehicleDocument registration = new VehicleDocument();
-        registration.setVehicle(vehicle);
-        registration.setDocType(DocumentType.REGISTRATION);
-        registration.setDocNumber("049" + vehicle.getId() + "82/ĐKX");
-        registration.setExpiryDate(null);
-        registration.setFileUrl("/documents/" + vehicle.getId() + "/cavet_goc.pdf");
-        registration.setStatus(DocumentStatus.VERIFIED);
-        vehicleDocumentRepository.save(registration);
-
-        // 2. INSPECTION (Kiểm định)
-        VehicleDocument inspection = new VehicleDocument();
-        inspection.setVehicle(vehicle);
-        inspection.setDocType(DocumentType.INSPECTION);
-        inspection.setDocNumber("KD-883" + vehicle.getId() + "102-TPHCM");
-        inspection.setExpiryDate(LocalDate.of(2027, 4, 15));
-        inspection.setFileUrl("/documents/" + vehicle.getId() + "/so_dangkiem.pdf");
-        inspection.setStatus(DocumentStatus.VERIFIED);
-        vehicleDocumentRepository.save(inspection);
-
-        // 3. INSURANCE (Bảo hiểm TNDS)
-        VehicleDocument insurance = new VehicleDocument();
-        insurance.setVehicle(vehicle);
-        insurance.setDocType(DocumentType.INSURANCE);
-        insurance.setDocNumber("PVI-AUT-2025-" + (9910 + vehicle.getId()));
-        insurance.setExpiryDate(LocalDate.of(2027, 1, 18));
-        insurance.setFileUrl("/documents/" + vehicle.getId() + "/baohiem_tnds.pdf");
-        insurance.setStatus(DocumentStatus.VERIFIED);
-        vehicleDocumentRepository.save(insurance);
-
-        // 4. BUSINESS_BADGE (Phù hiệu vận tải)
-        VehicleDocument badge = new VehicleDocument();
-        badge.setVehicle(vehicle);
-        badge.setDocType(DocumentType.BUSINESS_BADGE);
-        badge.setDocNumber("PH-HCM-2025-" + (88420 + vehicle.getId()));
-        badge.setExpiryDate(LocalDate.of(2028, 12, 31));
-        badge.setFileUrl("/documents/" + vehicle.getId() + "/phuhieu_sgtvt.pdf");
-        badge.setStatus(DocumentStatus.VERIFIED);
-        vehicleDocumentRepository.save(badge);
-    }
-
     private void seedImages(Vehicle vehicle, Long providerUserId, List<String> imageFiles, String description) {
         if (!vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(vehicle.getId()).isEmpty()) {
             return;
@@ -406,6 +360,27 @@ public class DevDataSeeder implements ApplicationRunner {
         createPlan(vehicle, PlanType.HOURLY, 240, prices.hourly(), null);
         createPlan(vehicle, PlanType.DAILY, 1440, prices.daily(), null);
         createPlan(vehicle, PlanType.MONTHLY, 43200, prices.monthly(), null);
+    }
+
+    private void seedDocuments(Vehicle vehicle) {
+        if (!vehicleDocumentRepository.findByVehicle_Id(vehicle.getId()).isEmpty()) {
+            return;
+        }
+        createDocument(vehicle, DocumentType.REGISTRATION, "DK-" + vehicle.getId() + "-8899", LocalDate.now().plusYears(3), "/api/files/sample/sample-registration.pdf");
+        createDocument(vehicle, DocumentType.INSPECTION, "KD-" + vehicle.getId() + "-4455", LocalDate.now().plusMonths(18), "/api/files/sample/sample-inspection.pdf");
+        createDocument(vehicle, DocumentType.INSURANCE, "BH-" + vehicle.getId() + "-1122", LocalDate.now().plusYears(1), "/api/files/sample/sample-insurance.pdf");
+        createDocument(vehicle, DocumentType.BUSINESS_BADGE, "PH-" + vehicle.getId() + "-7788", LocalDate.now().plusYears(2), "/api/files/sample/sample-badge.pdf");
+    }
+
+    private void createDocument(Vehicle vehicle, DocumentType docType, String docNumber, LocalDate expiryDate, String fileUrl) {
+        VehicleDocument doc = new VehicleDocument();
+        doc.setVehicle(vehicle);
+        doc.setDocType(docType);
+        doc.setDocNumber(docNumber);
+        doc.setExpiryDate(expiryDate);
+        doc.setFileUrl(fileUrl);
+        doc.setStatus(DocumentStatus.VERIFIED);
+        vehicleDocumentRepository.save(doc);
     }
 
     private void createPlan(Vehicle vehicle, PlanType planType, int slotLengthMinutes,

@@ -1,49 +1,45 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
 
-const REQUIRED_DOC_TYPES = [
+const DOC_SPECS = [
   {
     type: 'REGISTRATION',
     title: '1. Giấy đăng ký xe (Cà vẹt)',
     code: 'REGISTRATION',
     icon: 'badge',
-    badgeColor: 'emerald',
     iconBg: 'bg-emerald-100 text-emerald-800',
-    isNonExpiring: true,
-    description: 'Bản lưu trữ hồ sơ đăng ký xe hợp chuẩn Cục Cảnh Sát Giao Thông.'
+    description: 'Chứng nhận quyền sở hữu và lưu hành phương tiện do CSGT cấp.',
+    expiryHint: 'Thường vô thời hạn đối với xe cá nhân/doanh nghiệp'
   },
   {
     type: 'INSPECTION',
     title: '2. Giấy chứng nhận kiểm định',
     code: 'INSPECTION',
     icon: 'fact_check',
-    badgeColor: 'amber',
     iconBg: 'bg-amber-100 text-amber-800',
-    isNonExpiring: false,
-    description: 'Chứng nhận chất lượng an toàn kỹ thuật & bảo vệ môi trường xe cơ giới.'
+    description: 'Chứng nhận an toàn kỹ thuật & bảo vệ môi trường định kỳ (Sổ đăng kiểm).',
+    expiryHint: 'Bắt buộc nhập ngày hết hạn ghi trên tem kiểm định'
   },
   {
     type: 'INSURANCE',
     title: '3. Bảo hiểm TNDS bắt buộc',
     code: 'INSURANCE',
     icon: 'health_and_safety',
-    badgeColor: 'blue',
     iconBg: 'bg-blue-100 text-blue-700',
-    isNonExpiring: false,
-    description: 'Bảo hiểm trách nhiệm dân sự bắt buộc của chủ xe cơ giới đang còn hiệu lực.'
+    description: 'Bảo hiểm trách nhiệm dân sự bắt buộc của chủ xe cơ giới còn hiệu lực.',
+    expiryHint: 'Bắt buộc nhập ngày hết hạn chứng nhận bảo hiểm'
   },
   {
     type: 'BUSINESS_BADGE',
-    title: '4. Phù hiệu xe Hợp đồng vận tải',
+    title: '4. Phù hiệu xe hợp đồng',
     code: 'BUSINESS_BADGE',
     icon: 'drive_eta',
-    badgeColor: 'purple',
     iconBg: 'bg-purple-100 text-purple-700',
-    isNonExpiring: false,
-    description: 'Phù hiệu xe hợp đồng vận tải hành khách do Sở GTVT cấp phép lưu hành.'
+    description: 'Phù hiệu xe hợp đồng vận tải do Sở GTVT cấp để đủ điều kiện kinh doanh cho thuê.',
+    expiryHint: 'Bắt buộc nhập ngày hết hạn ghi trên phù hiệu'
   }
 ]
 
@@ -51,6 +47,7 @@ export default function ProviderVehicleHubPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const fileInputRef = useRef(null)
 
   const tabParam = searchParams.get('tab')
   const activeTab = (tabParam === 'documents' || tabParam === 'pricing') ? tabParam : 'profile'
@@ -61,18 +58,19 @@ export default function ProviderVehicleHubPage() {
   const [showRuleModal, setShowRuleModal] = useState(false)
   const [vehicle, setVehicle] = useState(null)
   const [providerInfo, setProviderInfo] = useState({ displayName: '', depotAddress: '' })
+
   const [documents, setDocuments] = useState([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
   const [docModal, setDocModal] = useState({
     isOpen: false,
-    docType: 'REGISTRATION',
-    title: '',
+    docType: null,
     docNumber: '',
     expiryDate: '',
     fileUrl: '',
-    isNonExpiring: false,
-    status: 'PENDING'
+    fileName: '',
+    uploading: false,
+    saving: false
   })
-  const [savingDoc, setSavingDoc] = useState(false)
 
   const [initialData, setInitialData] = useState(null)
   const [form, setForm] = useState({
@@ -118,7 +116,6 @@ export default function ProviderVehicleHubPage() {
       setLoading(true)
       const data = await providerService.getVehicleById(id)
       setVehicle(data)
-      setDocuments(data?.documents || [])
       const initialForm = {
         licensePlate: data.licensePlate || '',
         brand: data.brand || '',
@@ -173,6 +170,17 @@ export default function ProviderVehicleHubPage() {
           setInitialSurcharges(foundSurcharges)
         }
       }
+
+      // Fetch documents
+      try {
+        setLoadingDocs(true)
+        const docs = await providerService.getVehicleDocuments(id)
+        setDocuments(docs || [])
+      } catch (e) {
+        console.error('Failed to load vehicle documents', e)
+      } finally {
+        setLoadingDocs(false)
+      }
     } catch (err) {
       setToast({
         type: 'error',
@@ -180,6 +188,94 @@ export default function ProviderVehicleHubPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  function openUploadDocModal(docType, existingDoc = null) {
+    setDocModal({
+      isOpen: true,
+      docType,
+      docNumber: existingDoc?.docNumber || '',
+      expiryDate: existingDoc?.expiryDate || '',
+      fileUrl: existingDoc?.fileUrl || '',
+      fileName: existingDoc?.fileUrl ? existingDoc.fileUrl.split('/').pop() : '',
+      uploading: false,
+      saving: false
+    })
+  }
+
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 8 * 1024 * 1024) {
+      setToast({ type: 'error', message: 'Dung lượng tệp vượt quá 8MB. Vui lòng chọn tệp nhỏ hơn.' })
+      e.target.value = ''
+      return
+    }
+
+    const validTypes = ['image/jpeg', 'image/png', 'application/pdf']
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const validExts = ['jpg', 'jpeg', 'png', 'pdf']
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+      setToast({ type: 'error', message: 'Hệ thống chỉ chấp nhận hình ảnh JPG, PNG hoặc tài liệu PDF.' })
+      e.target.value = ''
+      return
+    }
+
+    try {
+      setDocModal(prev => ({ ...prev, uploading: true }))
+      const res = await providerService.uploadDocumentFile(file)
+      setDocModal(prev => ({
+        ...prev,
+        fileUrl: res.fileUrl,
+        fileName: res.fileName || file.name,
+        uploading: false
+      }))
+      setToast({ type: 'success', message: 'Tải tệp lên thành công!' })
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Lỗi khi tải tệp lên'
+      })
+      setDocModal(prev => ({ ...prev, uploading: false }))
+    } finally {
+      e.target.value = ''
+    }
+  }
+
+  async function handleSaveDocument(e) {
+    if (e) e.preventDefault()
+    if (!docModal.docNumber.trim()) {
+      setToast({ type: 'warning', message: 'Vui lòng nhập số hiệu giấy tờ' })
+      return
+    }
+    if (!docModal.fileUrl.trim()) {
+      setToast({ type: 'warning', message: 'Vui lòng tải lên tệp đính kèm (JPG, PNG hoặc PDF)' })
+      return
+    }
+
+    try {
+      setDocModal(prev => ({ ...prev, saving: true }))
+      const payload = {
+        docType: docModal.docType,
+        docNumber: docModal.docNumber.trim(),
+        expiryDate: docModal.expiryDate ? docModal.expiryDate : null,
+        fileUrl: docModal.fileUrl.trim()
+      }
+      const savedDoc = await providerService.updateVehicleDocument(id, payload)
+      setDocuments(prev => {
+        const filtered = prev.filter(d => d.docType !== docModal.docType)
+        return [...filtered, savedDoc]
+      })
+      setToast({ type: 'success', message: 'Cập nhật giấy tờ thành công! Hồ sơ đã được đồng bộ.' })
+      setDocModal(prev => ({ ...prev, isOpen: false, saving: false }))
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Lỗi khi lưu giấy tờ'
+      })
+      setDocModal(prev => ({ ...prev, saving: false }))
     }
   }
 
@@ -444,64 +540,6 @@ export default function ProviderVehicleHubPage() {
     }
   }
 
-  function openDocModal(targetDocType) {
-    const meta = REQUIRED_DOC_TYPES.find(d => d.type === targetDocType) || REQUIRED_DOC_TYPES[0]
-    const current = documents.find(d => d.docType === targetDocType)
-
-    setDocModal({
-      isOpen: true,
-      docType: meta.type,
-      title: meta.title,
-      docNumber: current?.docNumber || '',
-      expiryDate: current?.expiryDate || '',
-      fileUrl: current?.fileUrl || '',
-      isNonExpiring: meta.isNonExpiring,
-      status: current?.status || 'MISSING'
-    })
-  }
-
-  async function handleSaveDocument(e) {
-    if (e) e.preventDefault()
-    if (!docModal.docNumber?.trim()) {
-      setToast({ type: 'error', message: 'Vui lòng nhập Số hiệu giấy tờ (doc_number)' })
-      return
-    }
-    if (!docModal.isNonExpiring && !docModal.expiryDate) {
-      setToast({ type: 'error', message: 'Vui lòng chọn Ngày hết hạn (expiry_date)' })
-      return
-    }
-    if (!docModal.fileUrl?.trim()) {
-      setToast({ type: 'error', message: 'Vui lòng nhập đường dẫn hoặc tên tệp scan giấy tờ' })
-      return
-    }
-
-    try {
-      setSavingDoc(true)
-      const payload = {
-        docType: docModal.docType,
-        docNumber: docModal.docNumber.trim(),
-        expiryDate: docModal.isNonExpiring ? null : docModal.expiryDate,
-        fileUrl: docModal.fileUrl.trim()
-      }
-      const updated = await providerService.updateVehicleDocument(id, payload)
-      setDocuments(prev => {
-        const remaining = prev.filter(d => d.docType !== updated.docType)
-        return [...remaining, updated]
-      })
-      setDocModal(prev => ({ ...prev, isOpen: false }))
-      setToast({
-        type: 'success',
-        message: `Đã nộp ${docModal.title}! Hồ sơ đang ở trạng thái CHỜ DUYỆT (PENDING).`
-      })
-    } catch (err) {
-      console.error(err)
-      const msg = err.response?.data?.message || err.message || 'Không thể lưu hồ sơ giấy tờ'
-      setToast({ type: 'error', message: msg })
-    } finally {
-      setSavingDoc(false)
-    }
-  }
-
   function renderStatusBadge(status) {
     switch (status) {
       case 'APPROVED':
@@ -673,11 +711,10 @@ export default function ProviderVehicleHubPage() {
             <button
               type="button"
               onClick={() => handleTabChange('profile')}
-              className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-all border-b-2 ${
-                activeTab === 'profile'
+              className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-all border-b-2 ${activeTab === 'profile'
                   ? 'text-emerald-700 border-emerald-600'
                   : 'text-slate-500 border-transparent hover:text-slate-800'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-lg">description</span>
               <span>Tab 1: Hồ sơ & Thông số xe (3 Tầng)</span>
@@ -687,25 +724,25 @@ export default function ProviderVehicleHubPage() {
             <button
               type="button"
               onClick={() => handleTabChange('documents')}
-              className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-all border-b-2 ${
-                activeTab === 'documents'
+              className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-all border-b-2 ${activeTab === 'documents'
                   ? 'text-emerald-700 border-emerald-600'
                   : 'text-slate-500 border-transparent hover:text-slate-800'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-lg">folder_shared</span>
               <span>Tab 2: Giấy tờ pháp lý</span>
-              <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-[11px] flex items-center justify-center font-bold">4</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-mono font-bold">
+                {documents.length}/{DOC_SPECS.length}
+              </span>
             </button>
 
             <button
               type="button"
               onClick={() => handleTabChange('pricing')}
-              className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-all border-b-2 ${
-                activeTab === 'pricing'
+              className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-all border-b-2 ${activeTab === 'pricing'
                   ? 'text-emerald-700 border-emerald-600'
                   : 'text-slate-500 border-transparent hover:text-slate-800'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-lg">payments</span>
               <span>Tab 3: Bảng giá & Gói cước (Rental Plans)</span>
@@ -1021,11 +1058,10 @@ export default function ProviderVehicleHubPage() {
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-2">Hộp số truyền động <span className="text-rose-500">*</span></label>
                   <div className="grid grid-cols-2 gap-2">
-                    <label className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                      form.transmission === 'AUTOMATIC'
+                    <label className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${form.transmission === 'AUTOMATIC'
                         ? 'bg-emerald-50 border-2 border-emerald-600 text-emerald-800'
                         : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium'
-                    }`}>
+                      }`}>
                       <input
                         type="radio"
                         name="transmission"
@@ -1038,11 +1074,10 @@ export default function ProviderVehicleHubPage() {
                       Tự động (AT)
                     </label>
 
-                    <label className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                      form.transmission === 'MANUAL'
+                    <label className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${form.transmission === 'MANUAL'
                         ? 'bg-emerald-50 border-2 border-emerald-600 text-emerald-800'
                         : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium'
-                    }`}>
+                      }`}>
                       <input
                         type="radio"
                         name="transmission"
@@ -1069,11 +1104,10 @@ export default function ProviderVehicleHubPage() {
                     ].map(f => (
                       <label
                         key={f.key}
-                        className={`flex flex-col items-center justify-center p-2 rounded-lg text-[11px] cursor-pointer transition-all ${
-                          form.fuelType === f.key
+                        className={`flex flex-col items-center justify-center p-2 rounded-lg text-[11px] cursor-pointer transition-all ${form.fuelType === f.key
                             ? 'bg-emerald-50 border-2 border-emerald-600 text-emerald-800 font-bold'
                             : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium'
-                        }`}
+                          }`}
                       >
                         <input
                           type="radio"
@@ -1195,160 +1229,147 @@ export default function ProviderVehicleHubPage() {
         {/* ======================================================== */}
         {/* TAB 2: GIẤY TỜ PHÁP LÝ (VEHICLE DOCUMENTS)                 */}
         {/* ======================================================== */}
-        {/* ======================================================== */}
-        {/* TAB 2: GIẤY TỜ PHÁP LÝ (VEHICLE DOCUMENTS)                 */}
-        {/* ======================================================== */}
         {activeTab === 'documents' && (
           <section className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                 <div>
                   <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-emerald-600">verified_user</span>
-                    Bộ Hồ Sơ Pháp Lý Phương Tiện Vận Tải
+                    Bộ Hồ Sơ Pháp Lý Phương Tiện
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                      {DOC_SPECS.length} Giấy tờ quy chuẩn
+                    </span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Quản lý 4 loại giấy tờ bắt buộc theo CSDL vehicle_document và Tiêu chuẩn an toàn EcoMotion VN.
+                    Hệ thống lưu trữ tài liệu máy chủ bảo mật. Hỗ trợ tệp hình ảnh (JPG, PNG) và tệp PDF. Nhấp vào tệp đính kèm để mở toàn màn hình xem trên tab mới.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openDocModal('REGISTRATION')}
-                  className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-sm flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm">upload_file</span>
-                  Tải lên giấy tờ mới
-                </button>
               </div>
 
-              {/* 4 Document Cards Grid */}
+              {/* Document Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
-                {REQUIRED_DOC_TYPES.map((item) => {
-                  const doc = documents.find((d) => d.docType === item.type)
-                  const status = doc?.status || 'MISSING'
-
-                  let badge = null
-                  if (status === 'VERIFIED') {
-                    badge = (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">verified</span> Đã xác thực
-                      </span>
-                    )
-                  } else if (status === 'PENDING') {
-                    badge = (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">hourglass_top</span> Chờ duyệt lại
-                      </span>
-                    )
-                  } else if (status === 'EXPIRED') {
-                    badge = (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">warning</span> Đã hết hạn
-                      </span>
-                    )
-                  } else if (status === 'REJECTED') {
-                    badge = (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">cancel</span> Bị từ chối
-                      </span>
-                    )
-                  } else {
-                    badge = (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">info</span> Chưa nộp hồ sơ
-                      </span>
-                    )
-                  }
+                {DOC_SPECS.map(spec => {
+                  const doc = documents.find(d => d.docType === spec.type)
+                  const isPdf = doc?.fileUrl?.toLowerCase().endsWith('.pdf')
+                  const fileName = doc?.fileUrl ? doc.fileUrl.split('/').pop() : ''
 
                   return (
                     <div
-                      key={item.type}
-                      className="bg-slate-50/70 rounded-xl border border-slate-200 p-4 hover:border-emerald-300 transition-all flex flex-col justify-between"
+                      key={spec.type}
+                      className="bg-slate-50 rounded-xl border border-slate-200 p-4 hover:border-emerald-300 transition-all flex flex-col justify-between"
                     >
                       <div>
+                        {/* Header: Icon & Status */}
                         <div className="flex items-start justify-between gap-2 mb-3">
                           <div className="flex items-center gap-2.5">
-                            <div className={`w-9 h-9 rounded-lg ${item.iconBg} flex items-center justify-center font-bold text-sm shrink-0`}>
-                              <span className="material-symbols-outlined text-lg">{item.icon}</span>
+                            <div className={`w-9 h-9 rounded-lg ${spec.iconBg} flex items-center justify-center font-bold text-sm shadow-xs`}>
+                              <span className="material-symbols-outlined text-lg">{spec.icon}</span>
                             </div>
                             <div>
-                              <h4 className="text-xs font-bold text-slate-900">{item.title}</h4>
-                              <span className="text-[11px] text-slate-500 font-mono">{item.code}</span>
+                              <h4 className="text-xs font-bold text-slate-900">{spec.title}</h4>
+                              <span className="text-[11px] text-slate-500 font-mono">{spec.code}</span>
                             </div>
                           </div>
-                          {badge}
-                        </div>
 
-                        <div className="space-y-2 text-xs text-slate-600 mb-4 bg-white p-3 rounded-lg border border-slate-200/80">
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-400">Số hiệu (doc_number):</span>
-                            <span className="font-mono font-semibold text-slate-800">
-                              {doc?.docNumber || <span className="text-slate-400 italic font-normal">Chưa cập nhật</span>}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-400">Ngày hết hạn (expiry_date):</span>
-                            <span className="font-medium text-slate-700">
-                              {item.isNonExpiring ? (
-                                <span className="text-emerald-700 font-semibold">Vô thời hạn (Không thời hạn)</span>
-                              ) : doc?.expiryDate ? (
-                                <span className={status === 'EXPIRED' ? 'text-red-600 font-bold' : 'text-slate-800 font-semibold'}>
-                                  {doc.expiryDate}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 italic font-normal">Chưa cập nhật</span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center pt-1 border-t border-slate-100">
-                            <span className="text-slate-400">Tệp đính kèm (file_url):</span>
-                            {doc?.fileUrl ? (
-                              <span className="text-emerald-700 font-medium flex items-center gap-1 font-mono text-[11px] truncate max-w-[220px]" title={doc.fileUrl}>
-                                <span className="material-symbols-outlined text-xs shrink-0">attachment</span>
-                                {doc.fileUrl.split('/').pop()}
+                          {doc ? (
+                            doc.status === 'VERIFIED' ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs">verified</span> Đã xác thực
+                              </span>
+                            ) : doc.status === 'PENDING' ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs">hourglass_top</span> Chờ duyệt
                               </span>
                             ) : (
-                              <span className="text-slate-400 italic text-[11px]">Chưa tải tệp</span>
-                            )}
-                          </div>
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs">cancel</span> Từ chối
+                              </span>
+                            )
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">pending</span> Chưa có
+                            </span>
+                          )}
                         </div>
+
+                        {/* Body Details */}
+                        {doc ? (
+                          <div className="space-y-2 text-xs text-slate-600 mb-4 bg-white p-3 rounded-lg border border-slate-200/80 shadow-xs">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-400">Số hiệu văn bản:</span>
+                              <span className="font-mono font-semibold text-slate-800">{doc.docNumber}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-400">Ngày hết hạn:</span>
+                              <span className="font-medium text-slate-700">
+                                {doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('vi-VN') : 'Vô thời hạn'}
+                              </span>
+                            </div>
+                            <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100">
+                              <span className="text-slate-400 text-[11px]">Tệp đính kèm:</span>
+                              <button
+                                type="button"
+                                onClick={() => window.open(doc.fileUrl, '_blank', 'noopener,noreferrer')}
+                                title="Click để mở xem tài liệu trên tab mới"
+                                className="inline-flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50/80 hover:bg-emerald-100/90 text-emerald-800 border border-emerald-200 transition-all text-xs font-medium group cursor-pointer"
+                              >
+                                <span className="inline-flex items-center gap-1.5 min-w-0">
+                                  <span className={`material-symbols-outlined text-base ${isPdf ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    {isPdf ? 'picture_as_pdf' : 'image'}
+                                  </span>
+                                  <span className="truncate max-w-[140px] font-mono text-[11px] text-slate-700 group-hover:text-emerald-950 font-semibold">
+                                    {fileName}
+                                  </span>
+                                </span>
+                                <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 font-bold group-hover:text-emerald-900 bg-white/70 px-1.5 py-0.5 rounded border border-emerald-200/60 ml-1">
+                                  Mở tab mới
+                                  <span className="material-symbols-outlined text-[12px] group-hover:translate-x-0.5 transition-transform">
+                                    open_in_new
+                                  </span>
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mb-4 bg-amber-50/50 p-3.5 rounded-lg border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                            <span className="material-symbols-outlined text-amber-600 text-base mt-0.5 flex-shrink-0">info</span>
+                            <p className="leading-relaxed">
+                              {spec.description}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                        <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                          {status === 'VERIFIED' && (
-                            <>
-                              <span className="material-symbols-outlined text-xs text-emerald-600">check_circle</span> Bản lưu trữ hợp lệ
-                            </>
-                          )}
-                          {status === 'PENDING' && (
-                            <>
-                              <span className="material-symbols-outlined text-xs text-amber-600">schedule</span> Chờ chuyên viên duyệt
-                            </>
-                          )}
-                          {status === 'EXPIRED' && (
-                            <>
-                              <span className="material-symbols-outlined text-xs text-red-600">error</span> Cần gia hạn gấp
-                            </>
-                          )}
-                          {status === 'REJECTED' && (
-                            <>
-                              <span className="material-symbols-outlined text-xs text-rose-600">warning</span> Cần nộp lại bản đúng
-                            </>
-                          )}
-                          {status === 'MISSING' && (
-                            <>
-                              <span className="material-symbols-outlined text-xs text-slate-400">info</span> Bắt buộc bổ sung
-                            </>
-                          )}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => openDocModal(item.type)}
-                          className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
-                        >
-                          {status === 'MISSING' ? 'Tải lên ngay' : item.isNonExpiring ? 'Cập nhật bản mới' : 'Gia hạn / Cập nhật'}
-                        </button>
+                      {/* Footer Actions */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-200/70">
+                        {doc ? (
+                          <>
+                            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs text-emerald-600">check_circle</span>
+                              {doc.status === 'VERIFIED' ? 'Đã duyệt hợp lệ' : 'Đã nộp hồ sơ'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openUploadDocModal(spec.type, doc)}
+                              className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-xs">edit</span>
+                              Cập nhật bản mới
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-[11px] text-amber-600 font-medium">Bắt buộc bổ sung</span>
+                            <button
+                              type="button"
+                              onClick={() => openUploadDocModal(spec.type)}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-xs">upload</span>
+                              Tải lên ngay
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   )
@@ -1407,11 +1428,10 @@ export default function ProviderVehicleHubPage() {
               {/* 4 Plan Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
                 {/* Gói 1: DAILY */}
-                <div className={`rounded-xl border-2 p-4 relative flex flex-col justify-between shadow-sm transition-all ${
-                  pricingPlans.DAILY?.status === 'ACTIVE'
+                <div className={`rounded-xl border-2 p-4 relative flex flex-col justify-between shadow-sm transition-all ${pricingPlans.DAILY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/20'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
-                }`}>
+                  }`}>
                   <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider">
                     Phổ biến nhất
                   </span>
@@ -1425,15 +1445,13 @@ export default function ProviderVehicleHubPage() {
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('DAILY')}
-                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          pricingPlans.DAILY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
-                        }`}
+                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${pricingPlans.DAILY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
+                          }`}
                         title="Bật/Tắt gói ngày"
                       >
                         <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            pricingPlans.DAILY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
-                          }`}
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${pricingPlans.DAILY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
+                            }`}
                         />
                       </button>
                     </div>
@@ -1441,11 +1459,10 @@ export default function ProviderVehicleHubPage() {
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[11px] font-semibold text-slate-700">Đơn giá niêm yết (VNĐ/ngày)</label>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          pricingPlans.DAILY?.status === 'ACTIVE'
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pricingPlans.DAILY?.status === 'ACTIVE'
                             ? 'text-emerald-700 bg-emerald-100'
                             : 'text-slate-500 bg-slate-200'
-                        }`}>
+                          }`}>
                           {pricingPlans.DAILY?.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'}
                         </span>
                       </div>
@@ -1476,21 +1493,19 @@ export default function ProviderVehicleHubPage() {
                       </li>
                     </ul>
                   </div>
-                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${
-                    pricingPlans.DAILY?.status === 'ACTIVE'
+                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${pricingPlans.DAILY?.status === 'ACTIVE'
                       ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                       : 'text-slate-500 bg-slate-100 border-slate-200'
-                  }`}>
+                    }`}>
                     {pricingPlans.DAILY?.status === 'ACTIVE' ? 'Đang nhận khách trên ứng dụng' : 'Tạm tắt gói cước này'}
                   </div>
                 </div>
 
                 {/* Gói 2: HOURLY */}
-                <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${
-                  pricingPlans.HOURLY?.status === 'ACTIVE'
+                <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${pricingPlans.HOURLY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/10'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
-                }`}>
+                  }`}>
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
@@ -1501,15 +1516,13 @@ export default function ProviderVehicleHubPage() {
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('HOURLY')}
-                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          pricingPlans.HOURLY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
-                        }`}
+                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${pricingPlans.HOURLY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
+                          }`}
                         title="Bật/Tắt gói giờ"
                       >
                         <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            pricingPlans.HOURLY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
-                          }`}
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${pricingPlans.HOURLY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
+                            }`}
                         />
                       </button>
                     </div>
@@ -1517,11 +1530,10 @@ export default function ProviderVehicleHubPage() {
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[11px] font-semibold text-slate-700">Đơn giá niêm yết (VNĐ/giờ)</label>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          pricingPlans.HOURLY?.status === 'ACTIVE'
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pricingPlans.HOURLY?.status === 'ACTIVE'
                             ? 'text-emerald-700 bg-emerald-100'
                             : 'text-slate-500 bg-slate-200'
-                        }`}>
+                          }`}>
                           {pricingPlans.HOURLY?.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'}
                         </span>
                       </div>
@@ -1567,21 +1579,19 @@ export default function ProviderVehicleHubPage() {
                       </li>
                     </ul>
                   </div>
-                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${
-                    pricingPlans.HOURLY?.status === 'ACTIVE'
+                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${pricingPlans.HOURLY?.status === 'ACTIVE'
                       ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                       : 'text-slate-500 bg-slate-100 border-slate-200'
-                  }`}>
+                    }`}>
                     {pricingPlans.HOURLY?.status === 'ACTIVE' ? 'Đang nhận khách trên ứng dụng' : 'Tạm tắt gói cước này'}
                   </div>
                 </div>
 
                 {/* Gói 3: MONTHLY */}
-                <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${
-                  pricingPlans.MONTHLY?.status === 'ACTIVE'
+                <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${pricingPlans.MONTHLY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/10'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
-                }`}>
+                  }`}>
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
@@ -1592,15 +1602,13 @@ export default function ProviderVehicleHubPage() {
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('MONTHLY')}
-                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          pricingPlans.MONTHLY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
-                        }`}
+                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${pricingPlans.MONTHLY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
+                          }`}
                         title="Bật/Tắt gói tháng"
                       >
                         <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            pricingPlans.MONTHLY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
-                          }`}
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${pricingPlans.MONTHLY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
+                            }`}
                         />
                       </button>
                     </div>
@@ -1608,11 +1616,10 @@ export default function ProviderVehicleHubPage() {
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[11px] font-semibold text-slate-700">Đơn giá niêm yết (VNĐ/tháng)</label>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          pricingPlans.MONTHLY?.status === 'ACTIVE'
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pricingPlans.MONTHLY?.status === 'ACTIVE'
                             ? 'text-emerald-700 bg-emerald-100'
                             : 'text-slate-500 bg-slate-200'
-                        }`}>
+                          }`}>
                           {pricingPlans.MONTHLY?.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'}
                         </span>
                       </div>
@@ -1643,21 +1650,19 @@ export default function ProviderVehicleHubPage() {
                       </li>
                     </ul>
                   </div>
-                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${
-                    pricingPlans.MONTHLY?.status === 'ACTIVE'
+                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${pricingPlans.MONTHLY?.status === 'ACTIVE'
                       ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                       : 'text-slate-500 bg-slate-100 border-slate-200'
-                  }`}>
+                    }`}>
                     {pricingPlans.MONTHLY?.status === 'ACTIVE' ? 'Gói thuê dài hạn doanh nghiệp đang mở' : 'Tạm tắt gói cước này'}
                   </div>
                 </div>
 
                 {/* Gói 4: YEARLY */}
-                <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${
-                  pricingPlans.YEARLY?.status === 'ACTIVE'
+                <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${pricingPlans.YEARLY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/10'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
-                }`}>
+                  }`}>
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
@@ -1668,15 +1673,13 @@ export default function ProviderVehicleHubPage() {
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('YEARLY')}
-                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          pricingPlans.YEARLY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
-                        }`}
+                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${pricingPlans.YEARLY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
+                          }`}
                         title="Bật/Tắt gói năm"
                       >
                         <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            pricingPlans.YEARLY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
-                          }`}
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${pricingPlans.YEARLY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
+                            }`}
                         />
                       </button>
                     </div>
@@ -1684,11 +1687,10 @@ export default function ProviderVehicleHubPage() {
                     <div className="mb-3">
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[11px] font-semibold text-slate-700">Đơn giá niêm yết (VNĐ/năm)</label>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          pricingPlans.YEARLY?.status === 'ACTIVE'
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pricingPlans.YEARLY?.status === 'ACTIVE'
                             ? 'text-emerald-700 bg-emerald-100'
                             : 'text-slate-500 bg-slate-200'
-                        }`}>
+                          }`}>
                           {pricingPlans.YEARLY?.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'}
                         </span>
                       </div>
@@ -1737,11 +1739,10 @@ export default function ProviderVehicleHubPage() {
                       </li>
                     </ul>
                   </div>
-                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${
-                    pricingPlans.YEARLY?.status === 'ACTIVE'
+                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${pricingPlans.YEARLY?.status === 'ACTIVE'
                       ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                       : 'text-amber-700 bg-amber-50 border-amber-200'
-                  }`}>
+                    }`}>
                     {pricingPlans.YEARLY?.status === 'ACTIVE' ? 'Đang mở gói hợp đồng năm' : 'Tạm khóa cấu hình gói năm'}
                   </div>
                 </div>
@@ -1876,9 +1877,8 @@ export default function ProviderVehicleHubPage() {
         <aside className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-xl z-30 py-3 px-4 sm:px-8">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs text-slate-600 w-full sm:w-auto">
-              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                isPlateChanged ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'
-              }`}></span>
+              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isPlateChanged ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'
+                }`}></span>
               <span className="leading-tight">
                 {isPlateChanged ? (
                   <span>
@@ -1905,11 +1905,10 @@ export default function ProviderVehicleHubPage() {
                 type="button"
                 onClick={handleSaveProfile}
                 disabled={saving}
-                className={`px-5 py-2 text-xs font-bold text-white rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50 ${
-                  isPlateChanged
+                className={`px-5 py-2 text-xs font-bold text-white rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50 ${isPlateChanged
                     ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/25'
                     : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/25'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-sm">save</span>
                 <span>{saving ? 'Đang lưu...' : isPlateChanged ? 'Lưu và Gửi duyệt lại' : 'Cập nhật hồ sơ xe'}</span>
@@ -1950,132 +1949,6 @@ export default function ProviderVehicleHubPage() {
             </div>
           </div>
         </aside>
-      )}
-
-      {/* ======================================================== */}
-      {/* MODAL: CẬP NHẬT / GIA HẠN HỒ SƠ PHÁP LÝ                   */}
-      {/* ======================================================== */}
-      {docModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all animate-fadeIn">
-            <div className="p-5 bg-gradient-to-r from-emerald-800 to-emerald-600 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-2xl">file_present</span>
-                <div>
-                  <h3 className="text-base font-bold">Cập Nhật Hồ Sơ Phương Tiện</h3>
-                  <p className="text-xs text-emerald-100">{docModal.title}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDocModal(prev => ({ ...prev, isOpen: false }))}
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveDocument} className="p-6 space-y-4 text-xs text-slate-700">
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 flex items-start gap-2">
-                <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">info</span>
-                <span>
-                  Hồ sơ giấy tờ thuộc <strong>Tầng 2 (Định danh pháp lý)</strong>. Khi cập nhật bản mới, hồ sơ sẽ chuyển sang trạng thái <strong>CHỜ DUYỆT (PENDING)</strong> để Chuyên viên kiểm duyệt lại trước khi kích hoạt.
-                </span>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Loại giấy tờ (doc_type)</label>
-                <select
-                  value={docModal.docType}
-                  onChange={(e) => {
-                    const newType = e.target.value
-                    const meta = REQUIRED_DOC_TYPES.find(d => d.type === newType)
-                    const existing = documents.find(d => d.docType === newType)
-                    setDocModal(prev => ({
-                      ...prev,
-                      docType: newType,
-                      title: meta?.title || newType,
-                      isNonExpiring: meta?.isNonExpiring || false,
-                      docNumber: existing?.docNumber || prev.docNumber,
-                      expiryDate: existing?.expiryDate || prev.expiryDate,
-                      fileUrl: existing?.fileUrl || prev.fileUrl
-                    }))
-                  }}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-medium text-xs focus:ring-2 focus:ring-emerald-200"
-                >
-                  {REQUIRED_DOC_TYPES.map(d => (
-                    <option key={d.type} value={d.type}>{d.title}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Số hiệu giấy tờ (doc_number) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="VD: 049182/ĐKX hoặc KD-8839102-TPHCM"
-                  value={docModal.docNumber}
-                  onChange={(e) => setDocModal(prev => ({ ...prev, docNumber: e.target.value }))}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium text-xs focus:ring-2 focus:ring-emerald-200"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Ngày hết hạn (expiry_date) {!docModal.isNonExpiring && <span className="text-red-500">*</span>}
-                </label>
-                {docModal.isNonExpiring ? (
-                  <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-medium italic">
-                    Vô thời hạn (Cà vẹt xe không có ngày hết hạn)
-                  </div>
-                ) : (
-                  <input
-                    type="date"
-                    required
-                    value={docModal.expiryDate}
-                    onChange={(e) => setDocModal(prev => ({ ...prev, expiryDate: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium text-xs focus:ring-2 focus:ring-emerald-200"
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Đường dẫn tệp đính kèm / scan (file_url) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="VD: /documents/so_dangkiem_moi.pdf hoặc https://..."
-                  value={docModal.fileUrl}
-                  onChange={(e) => setDocModal(prev => ({ ...prev, fileUrl: e.target.value }))}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium text-xs focus:ring-2 focus:ring-emerald-200"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDocModal(prev => ({ ...prev, isOpen: false }))}
-                  className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingDoc}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                >
-                  {savingDoc && <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>}
-                  {savingDoc ? 'Đang lưu...' : 'Lưu & Gửi Duyệt'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
 
       {/* ======================================================== */}
@@ -2145,6 +2018,171 @@ export default function ProviderVehicleHubPage() {
                 Đã hiểu quy chuẩn
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: TẢI LÊN / CẬP NHẬT GIẤY TỜ PHÁP LÝ (JPG, PNG, PDF) */}
+      {/* ======================================================== */}
+      {docModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all animate-fadeIn">
+            {/* Header */}
+            <div className="p-5 bg-gradient-to-r from-emerald-800 to-emerald-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-2xl">upload_file</span>
+                <div>
+                  <h3 className="text-base font-bold">
+                    Cập nhật {DOC_SPECS.find(s => s.type === docModal.docType)?.title || 'Giấy tờ'}
+                  </h3>
+                  <p className="text-xs text-emerald-100">Chỉ chấp nhận JPG, PNG hoặc tài liệu PDF (tối đa 8MB)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDocModal(prev => ({ ...prev, isOpen: false }))}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveDocument} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Số hiệu văn bản (doc_number) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={docModal.docNumber}
+                  onChange={(e) => setDocModal(prev => ({ ...prev, docNumber: e.target.value }))}
+                  placeholder="Ví dụ: DK-883921 hoặc KD-771829"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Ngày hết hạn (expiry_date)
+                  {docModal.docType !== 'REGISTRATION' && <span className="text-rose-500"> *</span>}
+                </label>
+                <input
+                  type="date"
+                  value={docModal.expiryDate}
+                  onChange={(e) => setDocModal(prev => ({ ...prev, expiryDate: e.target.value }))}
+                  required={docModal.docType !== 'REGISTRATION'}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {DOC_SPECS.find(s => s.type === docModal.docType)?.expiryHint}
+                </p>
+              </div>
+
+              {/* File Attachment Upload */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Tệp đính kèm văn bản <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+
+                {docModal.uploading ? (
+                  <div className="border-2 border-dashed border-emerald-300 bg-emerald-50/50 rounded-xl p-6 flex flex-col items-center justify-center text-center">
+                    <div className="w-8 h-8 rounded-full border-3 border-emerald-200 border-t-emerald-600 animate-spin mb-2"></div>
+                    <p className="text-xs font-semibold text-emerald-800">Đang tải tệp lên máy chủ lưu trữ...</p>
+                    <p className="text-[11px] text-emerald-600 mt-0.5">Vui lòng chờ trong giây lát</p>
+                  </div>
+                ) : docModal.fileUrl ? (
+                  <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`material-symbols-outlined text-2xl ${docModal.fileUrl.toLowerCase().endsWith('.pdf') ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {docModal.fileUrl.toLowerCase().endsWith('.pdf') ? 'picture_as_pdf' : 'image'}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate font-mono">
+                            {docModal.fileName || docModal.fileUrl.split('/').pop()}
+                          </p>
+                          <p className="text-[10px] text-emerald-700">Đã lưu trữ an toàn trên máy chủ Backend</p>
+                        </div>
+                      </div>
+                      <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-emerald-200/60 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => window.open(docModal.fileUrl, '_blank', 'noopener,noreferrer')}
+                        className="text-xs font-bold text-emerald-800 hover:text-emerald-950 inline-flex items-center gap-1 hover:underline cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                        Xem thử tệp (Mở tab mới)
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Đổi tệp khác
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/20 rounded-xl p-6 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-slate-100 group-hover:bg-emerald-100 text-slate-600 group-hover:text-emerald-700 flex items-center justify-center mb-2 transition-colors">
+                      <span className="material-symbols-outlined text-xl">cloud_upload</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-800">
+                      Nhấp để chọn tệp từ máy tính
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Chấp nhận hình ảnh JPG, PNG hoặc tài liệu PDF (Tối đa 8MB)
+                    </p>
+                  </button>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setDocModal(prev => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={docModal.uploading || docModal.saving}
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {docModal.saving ? (
+                    <>
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-sm">save</span>
+                      <span>Lưu hồ sơ giấy tờ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
