@@ -33,12 +33,6 @@ function bookingRequestPath(vehicleId, planId) {
   return `/renter/bookings/new?${params}`
 }
 
-const PLAN_SUFFIX = {
-  HOURLY: '/giờ',
-  DAILY: '/ngày',
-  MONTHLY: '/tháng',
-  YEARLY: '/năm',
-}
 
 function formatDuration(minutes) {
   const value = Number(minutes)
@@ -360,7 +354,7 @@ export default function VehicleDetailPage() {
                         {selectedPlan ? formatCurrency(selectedPlan.slotPrice) : 'Chưa có giá'}
                       </span>
                       <span className="pb-1 text-[13px] font-medium text-slate-500">
-                        {PLAN_SUFFIX[selectedPlan?.planType] ?? ''}
+                        / slot
                       </span>
                     </p>
                   </div>
