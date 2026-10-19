@@ -13,7 +13,7 @@ public class StaticResourceConfig implements WebMvcConfigurer {
 
     private final Path imagesRoot;
 
-    public StaticResourceConfig(@Value("${app.images.root:../../images}") String imagesRoot) {
+    public StaticResourceConfig(@Value("${D:\\FPT\\FALL26\\SBA301\\CarRental\\source\\FPTU-SBA301-FA26-EcoMotion\\images}") String imagesRoot) {
         this.imagesRoot = Paths.get(imagesRoot).toAbsolutePath().normalize();
     }
 

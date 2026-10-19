@@ -1,0 +1,162 @@
+package com.fptufa26.ecomotion.booking.mapper;
+
+import com.fptufa26.ecomotion.booking.dto.response.BookingChargeLineResponse;
+import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
+import com.fptufa26.ecomotion.booking.dto.response.BookingDetailResponse;
+import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
+import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
+import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
+import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
+import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.DriverSnippetResponse;
+import com.fptufa26.ecomotion.booking.dto.response.RefundPreviewResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TimelineStepResponse;
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.entity.BookingCharge;
+import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
+import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
+import com.fptufa26.ecomotion.user.entity.Driver;
+import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingConstants;
+import org.mapstruct.Named;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
+public interface BookingMapper {
+
+    @Mapping(target = "bookingCode", source = "booking.bookingCode")
+    @Mapping(target = "status", source = "booking.status")
+    @Mapping(target = "totalAmount", source = "booking.totalAmount")
+    @Mapping(target = "pickupTime", source = "booking.pickupTime")
+    @Mapping(target = "endTime", source = "endTime")
+    @Mapping(target = "baseRental", source = "charge")
+    CreateBookingResponse toCreateBookingResponse(Booking booking, Instant endTime, BookingCharge charge);
+
+    @Mapping(target = "createdByName", source = "createdBy.fullName")
+    BookingChargeResponse toChargeResponse(BookingCharge charge);
+
+    BookingChargeLineResponse toChargeLine(BookingCharge charge);
+
+    @Mapping(target = "fullName", source = "user.fullName")
+    @Mapping(target = "phone", source = "user.phone")
+    @Mapping(target = "ratingCount", source = "ratingCount", qualifiedByName = "nullToZero")
+    DriverSnippetResponse toDriver(Driver driver);
+
+    @Named("nullToZero")
+    default int nullToZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    default CheckoutPreviewResponse toCheckoutPreview(Booking booking,
+                                                      BookingPolicySnapshot snapshot,
+                                                      String imageUrl,
+                                                      Instant endTime,
+                                                      int slotCount,
+                                                      BigDecimal amountDue) {
+        Vehicle vehicle = booking.getVehicle();
+        boolean upfront = snapshot.getPlanType() == PlanType.YEARLY;
+        return new CheckoutPreviewResponse(
+                booking.getBookingCode(),
+                vehicle.getBrand() + " " + vehicle.getModel(),
+                vehicle.getManufactureYear(),
+                vehicle.getLicensePlate(),
+                imageUrl,
+                booking.getPickupAddress(),
+                booking.getPickupTime(),
+                endTime,
+                booking.getPassengerCount(),
+                slotCount,
+                snapshot.getPlanType(),
+                booking.getTotalAmount(),
+                snapshot.getDepositRatio(),
+                amountDue,
+                upfront);
+    }
+
+    @Mapping(target = "bookingCode", source = "booking.bookingCode")
+    @Mapping(target = "status", source = "booking.status")
+    @Mapping(target = "paymentType", source = "payment.type")
+    @Mapping(target = "amountPaid", source = "payment.amount")
+    @Mapping(target = "endTime", source = "endTime")
+    CheckoutResultResponse toCheckoutResult(Booking booking, PaymentTransaction payment, Instant endTime);
+
+    default BookingSummaryResponse toSummary(Booking booking, PlanType planType, String imageUrl) {
+        Vehicle vehicle = booking.getVehicle();
+        return new BookingSummaryResponse(
+                booking.getBookingCode(),
+                booking.getStatus(),
+                planType,
+                vehicle.getBrand() + " " + vehicle.getModel(),
+                vehicle.getManufactureYear(),
+                vehicle.getLicensePlate(),
+                imageUrl,
+                booking.getPickupAddress(),
+                booking.getPickupTime(),
+                booking.getPassengerCount(),
+                booking.getTotalAmount());
+    }
+
+    default BookingDetailResponse toDetail(Booking booking,
+                                           PlanType planType,
+                                           String imageUrl,
+                                           Instant endTime,
+                                           int slotCount,
+                                           List<BookingChargeLineResponse> charges,
+                                           List<TimelineStepResponse> timeline,
+                                           RefundPreviewResponse refundPreview,
+                                           boolean canConfirmEnd,
+                                           List<DisputeCategory> disputeCategories) {
+        Vehicle vehicle = booking.getVehicle();
+        return new BookingDetailResponse(
+                booking.getBookingCode(),
+                booking.getStatus(),
+                planType,
+                vehicle.getBrand() + " " + vehicle.getModel(),
+                vehicle.getManufactureYear(),
+                vehicle.getLicensePlate(),
+                imageUrl,
+                booking.getPickupAddress(),
+                booking.getPickupTime(),
+                endTime,
+                booking.getPassengerCount(),
+                slotCount,
+                booking.getTotalAmount(),
+                booking.getCreatedAt(),
+                booking.getActualStartAt(),
+                booking.getActualEndAt(),
+                booking.getRenterConfirmedAt(),
+                booking.getProviderConfirmedAt(),
+                booking.getCancelReason(),
+                booking.getCancelledAt(),
+                toDriver(booking.getDriver()),
+                charges,
+                timeline,
+                refundPreview,
+                canConfirmEnd,
+                disputeCategories);
+    }
+
+    @Mapping(target = "bookingCode", source = "booking.bookingCode")
+    @Mapping(target = "status", source = "booking.status")
+    @Mapping(target = "cancelReason", source = "booking.cancelReason")
+    @Mapping(target = "cancelledAt", source = "booking.cancelledAt")
+    @Mapping(target = "refundAmount", source = "refundAmount")
+    CancelBookingResponse toCancel(Booking booking, BigDecimal refundAmount);
+
+    default ConfirmEndResponse toConfirmEnd(Booking booking) {
+        return new ConfirmEndResponse(
+                booking.getBookingCode(),
+                booking.getStatus(),
+                booking.getRenterConfirmedAt(),
+                booking.getStatus() == BookingStatus.COMPLETED);
+    }
+}

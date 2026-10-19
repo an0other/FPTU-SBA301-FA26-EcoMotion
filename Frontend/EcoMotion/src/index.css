@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+﻿@import 'tailwindcss';
 
 @theme {
   --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -25,6 +25,25 @@
   --color-error-container: #ffdad6;
   --color-on-error-container: #93000a;
 
+  --color-primary: #006948;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #00855d;
+  --color-on-primary-container: #f5fff7;
+  --color-primary-fixed: #85f8c4;
+  --color-secondary: #006a63;
+  --color-secondary-fixed: #9cf2e8;
+  --color-tertiary: #0051d5;
+  --color-tertiary-fixed: #dbe1ff;
+  --color-on-surface: #121e18;
+  --color-on-surface-variant: #3d4a42;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #e9f7ed;
+  --color-surface-container: #e4f1e7;
+  --color-surface-container-high: #deece2;
+  --color-surface-container-highest: #d8e6dc;
+
+  --font-mono-badge: 'JetBrains Mono', ui-monospace, monospace;
+
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
@@ -38,6 +57,25 @@ body {
   margin: 0;
   padding: 0;
 }
+
+.leaflet-interactive[role='button']:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.vehicle-map-popup { min-width: 0; font-family: 'Be Vietnam Pro', sans-serif; }
+.vehicle-map-popup-address { margin: 0 0 8px; color: #475569; font-size: 11px; }
+.vehicle-map-popup-hint { margin: 0 0 8px; color: #64748b; font-size: 10px; }
+.vehicle-map-popup-layout { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 6fr); gap: 12px; align-items: start; }
+.vehicle-map-popup-list { min-width: 0; max-height: 240px; overflow-y: auto; }
+.vehicle-map-popup-car { display: grid; gap: 4px; padding: 7px 0; border-top: 1px solid #e2e8f0; }
+.vehicle-map-popup-car:hover, .vehicle-map-popup-car:focus-within { background: #f0fdf4; }
+.vehicle-map-popup-car-info { display: grid; gap: 2px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.vehicle-map-popup-car-info:focus-visible, .vehicle-map-popup-car a:focus-visible { outline: 2px solid #047857; outline-offset: 2px; border-radius: 2px; }
+.vehicle-map-popup-car strong { color: #0f172a; font-size: 12px; }
+.vehicle-map-popup-car span { color: #475569; font-size: 11px; }
+.vehicle-map-popup-car a { width: fit-content; color: #047857; font-size: 11px; font-weight: 700; }
+.vehicle-map-popup-preview { min-width: 0; margin: 0; }
+.vehicle-map-popup-preview[hidden], .vehicle-map-popup-preview img[hidden], .vehicle-map-popup-preview p[hidden] { display: none; }
+.vehicle-map-popup-preview img { display: block; width: 100%; height: 150px; border-radius: 8px; object-fit: cover; }
+.vehicle-map-popup-preview p { display: grid; min-height: 150px; place-items: center; margin: 0; padding: 12px; border-radius: 8px; background: #f1f5f9; color: #475569; text-align: center; font-size: 11px; }
+.vehicle-map-popup-preview figcaption { margin-top: 4px; color: #334155; font-size: 11px; font-weight: 600; }
 
 body {
   font-family: var(--font-sans);
@@ -66,4 +104,30 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+
+/* Material Symbols font helper (booking UI) */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

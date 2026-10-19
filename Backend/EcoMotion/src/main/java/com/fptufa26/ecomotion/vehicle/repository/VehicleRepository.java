@@ -13,6 +13,8 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
     List<Vehicle> findAllByOrderByIdDesc();
 
+    Optional<Vehicle> findByLicensePlate(String licensePlate);
+
     List<Vehicle> findByStatusOrderByIdAsc(VehicleStatus status);
 
     List<Vehicle> findByStatusOrderByIdDesc(VehicleStatus status);

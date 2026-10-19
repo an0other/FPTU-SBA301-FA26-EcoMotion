@@ -15,12 +15,6 @@ const PLAN_OPTIONS = [
   { value: 'YEARLY', label: 'Theo năm' },
 ]
 
-const PLAN_SUFFIX = {
-  HOURLY: '/giờ',
-  DAILY: '/ngày',
-  MONTHLY: '/tháng',
-  YEARLY: '/năm',
-}
 
 const SORT_OPTIONS = [
   { value: 'default', label: 'Mặc định' },
@@ -74,7 +68,7 @@ export default function FilterSidebar({ filters, onChange, onReset, onApply }) {
 
   const range = PLAN_PRICE_RANGES[filters.planType] ?? PLAN_PRICE_RANGES['']
   const planLabel = PLAN_OPTIONS.find((option) => option.value === filters.planType)?.label
-  const suffix = PLAN_SUFFIX[filters.planType] ?? ''
+  const suffix = filters.planType ? '/slot' : ''
   const formatPrice = (value) => new Intl.NumberFormat('vi-VN').format(value)
 
   return (
