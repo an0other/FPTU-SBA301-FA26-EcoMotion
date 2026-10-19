@@ -3,13 +3,15 @@ import AppHeader from './components/AppHeader'
 import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
 import ActivatePage from './pages/ActivatePage'
+import VehicleListPage from './pages/VehicleListPage'
+import VehicleDetailPage from './pages/VehicleDetailPage'
+import ProviderDashboard from './pages/ProviderDashboard'
+import ProviderBookingQueuePage from './pages/ProviderBookingQueuePage'
+import ProviderBookingDetailPage from './pages/ProviderBookingDetailPage'
 import AdminDashboard from './pages/AdminDashboard'
 import LoginPage from './pages/LoginPage'
 import MePage from './pages/MePage'
-import ProviderDashboard from './pages/ProviderDashboard'
 import RegisterPage from './pages/RegisterPage'
-import VehicleDetailPage from './pages/VehicleDetailPage'
-import VehicleListPage from './pages/VehicleListPage'
 import { BookingDetailPage } from './pages/booking/BookingDetailPage'
 import { BookingRequestPage } from './pages/booking/BookingRequestPage'
 import { DepositPaymentPage } from './pages/booking/DepositPaymentPage'
@@ -53,6 +55,8 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/me" element={<MePage />} />
         <Route path="/provider" element={<ProviderDashboard />} />
+        <Route path="/provider/bookings" element={<ProviderBookingQueuePage />} />
+        <Route path="/provider/bookings/:bookingId" element={<ProviderBookingDetailPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route
           path="/renter/bookings/new"

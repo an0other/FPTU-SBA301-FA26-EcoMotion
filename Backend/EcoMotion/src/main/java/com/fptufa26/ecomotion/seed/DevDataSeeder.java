@@ -51,6 +51,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Component
@@ -69,24 +70,24 @@ public class DevDataSeeder implements ApplicationRunner {
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
 
-    private static final String NAME_PROVIDER_A = "Nguy\u1ec5n V\u0103n A";
-    private static final String NAME_PROVIDER_B = "Tr\u1ea7n Th\u1ecb B";
-    private static final String NAME_RENTER = "Ph\u1ea1m Thu H\u00e0";
-    private static final String ADDRESS_A = "12 Nguy\u1ec5n Hu\u1ec7, Qu\u1eadn 1, TP. H\u1ed3 Ch\u00ed Minh";
-    private static final String ADDRESS_B = "45 L\u00ea L\u1ee3i, Qu\u1eadn 1, TP. H\u1ed3 Ch\u00ed Minh";
-    private static final String COLOR_WHITE = "Tr\u1eafng";
-    private static final String COLOR_RED = "\u0110\u1ecf";
-    private static final String COLOR_BLACK = "\u0110en";
-    private static final String DESC_VF6 = "Xe \u0111i\u1ec7n 5 ch\u1ed7, ph\u00f9 h\u1ee3p \u0111i n\u1ed9i th\u00e0nh v\u00e0 l\u00e2n c\u1eadn.";
-    private static final String DESC_VF3 = "Xe \u0111i\u1ec7n c\u1ee1 nh\u1ecf, ti\u1ebft ki\u1ec7m, d\u1ec5 di chuy\u1ec3n trong ph\u1ed1.";
-    private static final String DESC_CIVIC = "Xe th\u1ec3 thao s\u1ed1 s\u00e0n, ph\u00f9 h\u1ee3p kh\u00e1ch th\u00edch tr\u1ea3i nghi\u1ec7m l\u00e1i.";
-    private static final String DESC_CAMRY = "Sedan hybrid h\u1ea1ng D, r\u1ed9ng r\u00e3i cho gia \u0111\u00ecnh v\u00e0 c\u00f4ng t\u00e1c.";
-    private static final String DESC_BMW = "Sedan sang tr\u1ecdng, ph\u00f9 h\u1ee3p \u0111\u01b0a \u0111\u00f3n \u0111\u1ed1i t\u00e1c v\u00e0 s\u1ef1 ki\u1ec7n.";
-    private static final String COLOR_SILVER = "B\u1ea1c";
-    private static final String COLOR_GREY = "X\u00e1m";
-    private static final String DESC_PORSCHE = "Coupe th\u1ec3 thao 2 c\u1eeda, ph\u00f9 h\u1ee3p kh\u00e1ch y\u00eau c\u1ea3m gi\u00e1c l\u00e1i.";
-    private static final String DESC_CAMRY_XSE = "Sedan hybrid h\u1ea1ng D b\u1ea3n XSE, r\u1ed9ng r\u00e3i v\u00e0 ti\u1ebft ki\u1ec7m.";
-    private static final String DESC_RANGE_ROVER = "SUV h\u1ea1ng sang, n\u1ed9i th\u1ea5t r\u1ed9ng r\u00e3i, ph\u00f9 h\u1ee3p h\u00e0nh tr\u00ecnh d\u00e0i.";
+    private static final String NAME_PROVIDER_A = "Nguyễn Văn A";
+    private static final String NAME_PROVIDER_B = "Trần Thị B";
+    private static final String NAME_RENTER = "Phạm Thu Hà";
+    private static final String ADDRESS_A = "12 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh";
+    private static final String ADDRESS_B = "45 Lê Lợi, Quận 1, TP. Hồ Chí Minh";
+    private static final String COLOR_WHITE = "Trắng";
+    private static final String COLOR_RED = "Đỏ";
+    private static final String COLOR_BLACK = "Đen";
+    private static final String DESC_VF6 = "Xe điện 5 chỗ, phù hợp đi nội thành và lân cận.";
+    private static final String DESC_VF3 = "Xe điện cỡ nhỏ, tiết kiệm, dễ di chuyển trong phố.";
+    private static final String DESC_CIVIC = "Xe thể thao số sàn, phù hợp khách thích trải nghiệm lái.";
+    private static final String DESC_CAMRY = "Sedan hybrid hạng D, rộng rãi cho gia đình và công tác.";
+    private static final String DESC_BMW = "Sedan sang trọng, phù hợp đưa đón đối tác và sự kiện.";
+    private static final String COLOR_SILVER = "Bạc";
+    private static final String COLOR_GREY = "Xám";
+    private static final String DESC_PORSCHE = "Coupe thể thao 2 cửa, phù hợp khách yêu cảm giác lái.";
+    private static final String DESC_CAMRY_XSE = "Sedan hybrid hạng D bản XSE, rộng rãi và tiết kiệm.";
+    private static final String DESC_RANGE_ROVER = "SUV hạng sang, nội thất rộng rãi, phù hợp hành trình dài.";
 
     private static final String UPFRONT_HOURLY = "500000.00";
     private static final String UPFRONT_DAILY = "2000000.00";
@@ -217,8 +218,66 @@ public class DevDataSeeder implements ApplicationRunner {
         seedInProgressBooking(renter, renterUser, providerA, bookingVehicle);
 
         realignPinnedIdentitySequences();
+
+        seedBookings();
     }
 
+    private void seedBookings() {
+        if (bookingRepository.count() > 0) {
+            return;
+        }
+
+        Renter renter = renterRepository.findByUser_Id(5L).orElse(null);
+        Vehicle vehicle1 = vehicleRepository.findById(1L).orElse(null);
+        Vehicle vehicle2 = vehicleRepository.findById(2L).orElse(null);
+        if (renter == null || vehicle1 == null || vehicle2 == null) {
+            return;
+        }
+
+        RentalPlan plan1 = rentalPlanRepository.findByVehicle_IdOrderByIdAsc(1L).stream()
+                .findFirst().orElse(null);
+        RentalPlan plan2 = rentalPlanRepository.findByVehicle_IdOrderByIdAsc(2L).stream()
+                .findFirst().orElse(null);
+        if (plan1 == null || plan2 == null) {
+            return;
+        }
+
+        Booking b1 = new Booking();
+        b1.setBookingCode("BK-20261008-001");
+        b1.setRenter(renter);
+        b1.setVehicle(vehicle1);
+        b1.setPlan(plan1);
+        b1.setStatus(BookingStatus.PENDING);
+        b1.setPickupAddress("720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM");
+        b1.setPickupTime(Instant.now().plus(1, ChronoUnit.DAYS));
+        b1.setPassengerCount(2);
+        b1.setTotalAmount(new BigDecimal("1200000.00"));
+        bookingRepository.save(b1);
+
+        Booking b2 = new Booking();
+        b2.setBookingCode("BK-20261008-002");
+        b2.setRenter(renter);
+        b2.setVehicle(vehicle1);
+        b2.setPlan(plan1);
+        b2.setStatus(BookingStatus.ACCEPTED);
+        b2.setPickupAddress("Sân bay Tân Sơn Nhất, Tân Bình, TP.HCM");
+        b2.setPickupTime(Instant.now().plus(2, ChronoUnit.DAYS));
+        b2.setPassengerCount(4);
+        b2.setTotalAmount(new BigDecimal("2400000.00"));
+        bookingRepository.save(b2);
+
+        Booking b3 = new Booking();
+        b3.setBookingCode("BK-20261008-003");
+        b3.setRenter(renter);
+        b3.setVehicle(vehicle2);
+        b3.setPlan(plan2);
+        b3.setStatus(BookingStatus.CONFIRMED);
+        b3.setPickupAddress("12 Võ Văn Kiệt, Quận 1, TP.HCM");
+        b3.setPickupTime(Instant.now().plus(3, ChronoUnit.DAYS));
+        b3.setPassengerCount(3);
+        b3.setTotalAmount(new BigDecimal("1800000.00"));
+        bookingRepository.save(b3);
+    }
 
     private void realignPinnedIdentitySequences() {
         realignIdentitySequence("users");
@@ -234,7 +293,6 @@ public class DevDataSeeder implements ApplicationRunner {
                         + (maxId.longValue() + 1L))
                 .executeUpdate();
     }
-
 
     private User seedUser(long id, String email, String phone, String fullName, Role role) {
         User existing = userRepository.findByEmailIgnoreCase(email).orElse(null);
@@ -276,7 +334,7 @@ public class DevDataSeeder implements ApplicationRunner {
         if (existing != null) {
             boolean changed = false;
             if ("EcoMotion Depot B".equals(existing.getDisplayName())
-                    && "45 L\u00ea L\u1ee3i, Qu\u1eadn 3, TP. H\u1ed3 Ch\u00ed Minh".equals(existing.getDepotAddress())) {
+                    && "45 Lê Lợi, Quận 3, TP. Hồ Chí Minh".equals(existing.getDepotAddress())) {
                 existing.setDepotAddress(ADDRESS_B);
                 changed = true;
             }
@@ -320,7 +378,6 @@ public class DevDataSeeder implements ApplicationRunner {
         });
     }
 
-
     private void seedVehicle(Long providerId, Long vehicleId, Long providerUserId,
                              String brand, String model, int year, int seats,
                              Transmission transmission, String color, FuelType fuelType,
@@ -334,7 +391,7 @@ public class DevDataSeeder implements ApplicationRunner {
                                  manufacture_year, seat_count, transmission, color, fuel_type, status,
                                  maintenance_buffer_minutes, rating_avg, rating_count, created_at, updated_at)
                             VALUES
-                                (                                 :id, :providerId, :licensePlate, :chassisNo, :engineNo, :brand, :model,
+                                (:id, :providerId, :licensePlate, :chassisNo, :engineNo, :brand, :model,
                                  :year, :seats, :transmission, :color, :fuelType, :status,
                                  60, :ratingAvg, :ratingCount, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             """)

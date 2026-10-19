@@ -41,6 +41,7 @@ public interface BookingMapper {
     @Mapping(target = "baseRental", source = "charge")
     CreateBookingResponse toCreateBookingResponse(Booking booking, Instant endTime, BookingCharge charge);
 
+    @Mapping(target = "createdByName", source = "createdBy.fullName")
     BookingChargeResponse toChargeResponse(BookingCharge charge);
 
     BookingChargeLineResponse toChargeLine(BookingCharge charge);
