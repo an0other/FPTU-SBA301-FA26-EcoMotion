@@ -14,10 +14,30 @@ const BOOKING_STATUS_META = {
     className: 'bg-secondary-fixed text-secondary',
     dot: 'bg-secondary',
   },
+  DRIVER_ASSIGNED: {
+    label: 'Đã gán tài xế',
+    className: 'bg-blue-100 text-blue-800',
+    dot: 'bg-blue-600',
+  },
+  DRIVER_CONFIRMED: {
+    label: 'Tài xế đã nhận',
+    className: 'bg-indigo-100 text-indigo-800',
+    dot: 'bg-indigo-600',
+  },
+  DRIVER_ARRIVED: {
+    label: 'Tài xế đã đến',
+    className: 'bg-cyan-100 text-cyan-800',
+    dot: 'bg-cyan-600 animate-pulse',
+  },
   IN_PROGRESS: {
     label: 'Đang chạy',
     className: 'bg-primary-fixed text-primary',
     dot: 'bg-primary animate-ping',
+  },
+  AWAITING_EXTRA_CHARGE_CONFIRMATION: {
+    label: 'Chờ duyệt phụ phí',
+    className: 'bg-orange-100 text-orange-800',
+    dot: 'bg-orange-600 animate-pulse',
   },
   COMPLETED: {
     label: 'Hoàn tất',

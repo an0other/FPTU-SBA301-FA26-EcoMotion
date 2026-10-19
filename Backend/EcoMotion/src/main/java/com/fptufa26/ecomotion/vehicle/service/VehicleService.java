@@ -18,4 +18,6 @@ public interface VehicleService {
     VehicleDetailResponse getVehicleDetail(Long id);
 
     String getCoverImageUrl(Long vehicleId);
+
+    java.util.Map<Long, String> getCoverImageUrls(java.util.Collection<Long> vehicleIds);
 }

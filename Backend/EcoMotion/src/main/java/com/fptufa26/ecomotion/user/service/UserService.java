@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.user.service;
 
+import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
@@ -31,6 +32,8 @@ public interface UserService {
     Optional<Renter> findRenterProfile(Long userId);
 
     Optional<Provider> findProviderProfile(Long userId);
+
+    Optional<Driver> findDriverProfile(Long userId);
 
     User saveCccdIdentity(Long userId, CccdIdentity identity);
 

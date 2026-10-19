@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.user.service.implement;
 import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
+import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
@@ -31,6 +32,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RenterRepository renterRepository;
     private final ProviderRepository providerRepository;
+    private final com.fptufa26.ecomotion.user.repository.DriverRepository driverRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -157,6 +159,12 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<Driver> findDriverProfile(Long userId) {
+        return userId == null ? Optional.empty() : driverRepository.findByUser_Id(userId);
+    }
+
+    @Override
     public User saveCccdIdentity(Long userId, CccdIdentity identity) {
         User user = loadUser(userId);
         Renter renter = loadOrCreateRenter(user);
@@ -265,6 +273,10 @@ public class UserServiceImpl implements UserService {
 
         boolean anyBank = !isBlank(bankName) || !isBlank(bankAccountNo) || !isBlank(bankAccountHolder);
         if (anyBank) {
+            String bCode = com.fptufa26.ecomotion.finance.enums.SupportedBank.fromName(bankName)
+                    .map(com.fptufa26.ecomotion.finance.enums.SupportedBank::getCode)
+                    .orElse("VCB");
+            provider.setBankCode(bCode);
             provider.setBankName(bankName.trim());
             provider.setBankAccountNo(bankAccountNo.trim());
             provider.setBankAccountHolder(bankAccountHolder.trim());

@@ -7,7 +7,7 @@ const NAV_ITEMS = [
   { label: 'Tài xế', icon: 'badge' },
   { label: 'Đơn thuê', icon: 'local_taxi', to: '/provider/bookings' },
   { label: 'Chặn lịch', icon: 'event_busy' },
-  { label: 'Tài chính', icon: 'account_balance_wallet' },
+  { label: 'Tài chính', icon: 'account_balance_wallet', to: '/provider/finance' },
 ]
 
 function Icon({ name, className = '' }) {

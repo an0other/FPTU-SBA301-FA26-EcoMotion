@@ -284,4 +284,19 @@ public class VehicleServiceImpl implements VehicleService {
         List<VehicleImage> images = vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(vehicleId);
         return images.isEmpty() ? null : images.get(0).getImageUrl();
     }
+
+    @Override
+    public java.util.Map<Long, String> getCoverImageUrls(java.util.Collection<Long> vehicleIds) {
+        if (vehicleIds == null || vehicleIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        List<VehicleImage> images = vehicleImageRepository.findByVehicle_IdInOrderByDisplayOrderAsc(vehicleIds);
+        java.util.Map<Long, String> result = new java.util.HashMap<>();
+        for (VehicleImage img : images) {
+            if (img.getVehicle() != null && img.getVehicle().getId() != null) {
+                result.putIfAbsent(img.getVehicle().getId(), img.getImageUrl());
+            }
+        }
+        return result;
+    }
 }
