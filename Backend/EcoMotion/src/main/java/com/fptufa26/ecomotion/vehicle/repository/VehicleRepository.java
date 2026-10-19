@@ -11,9 +11,13 @@ import java.util.Optional;
 @Repository
 public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
+    List<Vehicle> findAllByOrderByIdDesc();
+
     Optional<Vehicle> findByLicensePlate(String licensePlate);
 
     List<Vehicle> findByStatusOrderByIdAsc(VehicleStatus status);
+
+    List<Vehicle> findByStatusOrderByIdDesc(VehicleStatus status);
 
     Optional<Vehicle> findByIdAndStatus(Long id, VehicleStatus status);
 
@@ -32,4 +36,6 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
     boolean existsByChassisNoIgnoreCase(String chassisNo);
 
     boolean existsByEngineNoIgnoreCase(String engineNo);
+
+    long countByStatus(VehicleStatus status);
 }

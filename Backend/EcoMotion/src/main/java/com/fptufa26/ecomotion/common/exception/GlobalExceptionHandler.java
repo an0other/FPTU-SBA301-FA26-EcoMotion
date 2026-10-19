@@ -192,6 +192,7 @@ public class GlobalExceptionHandler {
             BookingContractNotFoundException.class,
             PayoutNotFoundException.class,
             PaymentRequestNotFoundException.class,
+            ResourceNotFoundException.class,
             NotFoundException.class
     })
     public ResponseEntity<ErrorResponse> handleNotFound(

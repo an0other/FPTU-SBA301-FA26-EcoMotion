@@ -26,6 +26,16 @@ import java.util.Optional;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpecificationExecutor<Booking> {
 
+    List<Booking> findAllByOrderByCreatedAtDesc();
+
+    List<Booking> findByStatusOrderByCreatedAtDesc(BookingStatus status);
+
+    List<Booking> findByRenter_IdOrderByCreatedAtDesc(Long renterId);
+
+    List<Booking> findByVehicle_IdOrderByCreatedAtDesc(Long vehicleId);
+
+    long countByStatus(BookingStatus status);
+
     @Override
     @EntityGraph(attributePaths = {
             "vehicle", "renter", "renter.user", "driver", "driver.user", "plan"

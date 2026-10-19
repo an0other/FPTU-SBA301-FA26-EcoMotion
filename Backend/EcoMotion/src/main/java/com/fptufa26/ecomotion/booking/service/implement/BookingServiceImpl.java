@@ -20,6 +20,7 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
+import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
@@ -33,6 +34,7 @@ import com.fptufa26.ecomotion.booking.service.DepositRefundRules;
 import com.fptufa26.ecomotion.common.exception.BadRequestException;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
+import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
@@ -57,7 +59,10 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -159,7 +164,7 @@ public class BookingServiceImpl implements BookingService {
         BookingCharge charge = new BookingCharge();
         charge.setBooking(booking);
         charge.setChargeType(ChargeType.BASE_RENTAL);
-        charge.setDescription("ThuÃª " + request.slotCount() + " slot");
+        charge.setDescription("Thuê " + request.slotCount() + " slot");
         charge.setQuantity(request.slotCount());
         charge.setUnitPrice(plan.getSlotPrice());
         charge.setAmount(total);
@@ -225,7 +230,7 @@ public class BookingServiceImpl implements BookingService {
             BookingCharge deposit = new BookingCharge();
             deposit.setBooking(booking);
             deposit.setChargeType(ChargeType.DEPOSIT);
-            deposit.setDescription("Cá»c giá»¯ chá»—");
+            deposit.setDescription("Cọc giữ chỗ");
             deposit.setQuantity(null);
             deposit.setUnitPrice(booking.getTotalAmount());
             deposit.setAppliedRate(snapshot.getDepositRatio());
@@ -374,20 +379,20 @@ public class BookingServiceImpl implements BookingService {
                                                 List<PaymentTransaction> payments,
                                                 Instant at) {
         if (!CANCELLABLE.contains(booking.getStatus())) {
-            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "ÄÆ¡n nÃ y khÃ´ng huá»· Ä‘Æ°á»£c");
+            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "Đơn này không huỷ được");
         }
         if (snapshot.getPlanType() == PlanType.YEARLY) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Tráº£ trÆ°á»›c khÃ´ng hoÃ n theo chÃ­nh sÃ¡ch gÃ³i nÄƒm");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Trả trước không hoàn theo chính sách gói năm");
         }
         BigDecimal paidDeposit = paidDeposit(charges, payments);
         if (paidDeposit == null) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "ChÆ°a thu cá»c, sá»‘ hoÃ n lÃ  0");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Chưa thu cọc, số hoàn là 0");
         }
         BigDecimal ratio = DepositRefundRules.ratio(snapshot.getPlanType(), at, booking.getPickupTime());
         BigDecimal amount = paidDeposit.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
         String explanation = ratio.compareTo(DepositRefundRules.FULL) == 0
-                ? "Huá»· trÆ°á»›c má»‘c, hoÃ n 100% cá»c"
-                : "Huá»· sau má»‘c, hoÃ n 50% cá»c. Pháº§n cÃ²n láº¡i thuá»™c nhÃ  cung cáº¥p";
+                ? "Huỷ trước mốc, hoàn 100% cọc"
+                : "Huỷ sau mốc, hoàn 50% cọc. Phần còn lại thuộc nhà cung cấp";
         return new RefundPreviewResponse(true, ratio, amount, explanation);
     }
 
@@ -439,49 +444,49 @@ public class BookingServiceImpl implements BookingService {
 
     private List<TimelineStepResponse> timeline(Booking booking, List<PaymentTransaction> payments) {
         List<TimelineStepResponse> steps = new ArrayList<>();
-        steps.add(new TimelineStepResponse("ÄÃ£ gá»­i yÃªu cáº§u", booking.getCreatedAt(), null, true, false));
+        steps.add(new TimelineStepResponse("Đã gửi yêu cầu", booking.getCreatedAt(), null, true, false));
         if (booking.getStatus() == BookingStatus.REJECTED) {
-            steps.add(new TimelineStepResponse("Chá»§ xe tá»« chá»‘i", null, "KhÃ´ng cÃ³ lÃ½ do", true, true));
+            steps.add(new TimelineStepResponse("Chủ xe đã từ chối", null, "Không có lý do", true, true));
         } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
-            steps.add(new TimelineStepResponse("Chá»§ xe Ä‘Ã£ cháº¥p nháº­n", null, null, true, false));
+            steps.add(new TimelineStepResponse("Chủ xe đã chấp nhận", null, null, true, false));
         }
         payments.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID
                         && (payment.getType() == PaymentType.DEPOSIT_PAY || payment.getType() == PaymentType.UPFRONT_PAY))
                 .findFirst()
                 .ifPresent(payment -> steps.add(new TimelineStepResponse(
-                        payment.getType() == PaymentType.UPFRONT_PAY ? "ÄÃ£ thanh toÃ¡n tráº£ trÆ°á»›c" : "ÄÃ£ thanh toÃ¡n cá»c",
+                        payment.getType() == PaymentType.UPFRONT_PAY ? "Đã thanh toán trả trước" : "Đã thanh toán cọc",
                         payment.getPaidAt(),
                         null,
                         true,
                         false)));
         if (booking.getActualStartAt() != null) {
-            steps.add(new TimelineStepResponse("Äang cháº¡y", booking.getActualStartAt(), null, true, false));
+            steps.add(new TimelineStepResponse("Đang chạy", booking.getActualStartAt(), null, true, false));
         }
         if (booking.getActualEndAt() != null) {
-            steps.add(new TimelineStepResponse("Káº¿t thÃºc thá»±c táº¿", booking.getActualEndAt(), null, true, false));
+            steps.add(new TimelineStepResponse("Kết thúc thực tế", booking.getActualEndAt(), null, true, false));
         }
         if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.COMPLETED
                 || booking.getRenterConfirmedAt() != null) {
             steps.add(new TimelineStepResponse(
-                    "Báº¡n Ä‘Ã£ xÃ¡c nháº­n káº¿t thÃºc",
+                    "Bạn đã xác nhận kết thúc",
                     booking.getRenterConfirmedAt(),
                     null,
                     booking.getRenterConfirmedAt() != null,
                     false));
             steps.add(new TimelineStepResponse(
-                    "PhÃ­a nhÃ  cung cáº¥p Ä‘Ã£ xÃ¡c nháº­n",
+                    "Phía nhà cung cấp đã xác nhận",
                     booking.getProviderConfirmedAt(),
                     null,
                     booking.getProviderConfirmedAt() != null,
                     false));
         }
         if (booking.getStatus() == BookingStatus.COMPLETED) {
-            steps.add(new TimelineStepResponse("HoÃ n thÃ nh", null, null, true, false));
+            steps.add(new TimelineStepResponse("Hoàn thành", null, null, true, false));
         }
         if (booking.getCancelledAt() != null) {
             steps.add(new TimelineStepResponse(
-                    "ÄÃ£ huá»·",
+                    "Đã huỷ",
                     booking.getCancelledAt(),
                     cancelLabel(booking.getCancelReason()),
                     true,
@@ -495,12 +500,12 @@ public class BookingServiceImpl implements BookingService {
             return null;
         }
         return switch (reason) {
-            case RENTER_REQUEST -> "KhÃ¡ch tá»± huá»·";
-            case PROVIDER_NO_VEHICLE -> "NhÃ  cung cáº¥p háº¿t xe";
-            case PROVIDER_NO_DRIVER -> "NhÃ  cung cáº¥p háº¿t tÃ i xáº¿";
-            case PREVIOUS_RENTER_OVERDUE -> "KhÃ¡ch cá»§a chuyáº¿n trÆ°á»›c chÆ°a tráº£ xe";
-            case FORCE_MAJEURE -> "Báº¥t kháº£ khÃ¡ng";
-            case SYSTEM -> "Há»‡ thá»‘ng huá»·";
+            case RENTER_REQUEST -> "Khách tự huỷ";
+            case PROVIDER_NO_VEHICLE -> "Nhà cung cấp hết xe";
+            case PROVIDER_NO_DRIVER -> "Nhà cung cấp hết tài xế";
+            case PREVIOUS_RENTER_OVERDUE -> "Khách của chuyến trước chưa trả xe";
+            case FORCE_MAJEURE -> "Bất khả kháng";
+            case SYSTEM -> "Hệ thống huỷ";
         };
     }
 
@@ -581,5 +586,96 @@ public class BookingServiceImpl implements BookingService {
         String prefix = "EM-" + year + "-";
         long sequence = bookingRepository.countByBookingCodeStartingWith(prefix) + 1;
         return prefix + String.format("%04d", sequence);
+    }
+
+    // ---------------------------------------------------------
+    // Admin Operations Methods (TV6 - A04)
+    // ---------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Booking> listAdminBookings(BookingStatus status, String keyword) {
+        List<Booking> bookings = (status != null)
+                ? bookingRepository.findByStatusOrderByCreatedAtDesc(status)
+                : bookingRepository.findAllByOrderByCreatedAtDesc();
+
+        if (keyword != null && !keyword.isBlank()) {
+            String lower = keyword.trim().toLowerCase(Locale.ROOT);
+            return bookings.stream()
+                    .filter(b -> (b.getBookingCode() != null && b.getBookingCode().toLowerCase(Locale.ROOT).contains(lower))
+                            || (b.getPickupAddress() != null && b.getPickupAddress().toLowerCase(Locale.ROOT).contains(lower))
+                            || (b.getVehicle() != null && (b.getVehicle().getLicensePlate().toLowerCase(Locale.ROOT).contains(lower)
+                                || b.getVehicle().getModel().toLowerCase(Locale.ROOT).contains(lower))))
+                    .toList();
+        }
+        return bookings;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Booking> getBookingById(Long bookingId) {
+        return bookingRepository.findById(bookingId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BookingCharge> getChargesForBooking(Long bookingId) {
+        return chargeRepository.findByBooking_Id(bookingId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PaymentTransaction> listTransactions(PaymentStatus status, PaymentType type) {
+        if (status != null) {
+            return paymentTransactionRepository.findByStatusOrderByCreatedAtDesc(status);
+        }
+        if (type != null) {
+            return paymentTransactionRepository.findByTypeOrderByCreatedAtDesc(type);
+        }
+        return paymentTransactionRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PaymentTransaction> getTransactionsForBooking(Long bookingId) {
+        return paymentTransactionRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId);
+    }
+
+    @Override
+    @Transactional
+    public PaymentTransaction processMockRefund(Long bookingId, BigDecimal amount, String reason) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn thuê không tồn tại: " + bookingId));
+
+        PaymentTransaction refund = new PaymentTransaction();
+        refund.setBooking(booking);
+        refund.setAmount(amount != null && amount.compareTo(BigDecimal.ZERO) > 0 ? amount : booking.getTotalAmount());
+        refund.setType(PaymentType.REFUND);
+        refund.setDirection(PaymentDirection.OUT);
+        refund.setMethod(PaymentMethod.BANK_TRANSFER);
+        refund.setStatus(PaymentStatus.PAID);
+        refund.setGatewayRef("MOCK-REFUND-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        refund.setPaidAt(Instant.now());
+        refund.setReceiptUrl("/receipts/refund-" + booking.getBookingCode() + ".pdf");
+
+        return paymentTransactionRepository.save(refund);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countBookingsByStatus(BookingStatus status) {
+        return bookingRepository.countByStatus(status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countTotalBookings() {
+        return bookingRepository.count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumTotalRevenue() {
+        return paymentTransactionRepository.sumTotalPaidIn();
     }
 }
