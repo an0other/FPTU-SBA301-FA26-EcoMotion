@@ -22,6 +22,10 @@ public interface VehicleService {
 
     VehicleDetailResponse getVehicleDetail(Long id);
 
+    String getCoverImageUrl(Long vehicleId);
+
+    java.util.Map<Long, String> getCoverImageUrls(java.util.Collection<Long> vehicleIds);
+
     List<VehicleMapResponse> findNearbyVehicles(BigDecimal latitude, BigDecimal longitude,
                                                 int radiusKm, String keyword, String location,
                                                 String fuelType, String planType, BigDecimal maxPrice,

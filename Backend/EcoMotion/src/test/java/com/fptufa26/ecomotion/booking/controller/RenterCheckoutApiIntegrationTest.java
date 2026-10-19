@@ -76,20 +76,21 @@ class RenterCheckoutApiIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
                 .andExpect(jsonPath("$.data.paymentType").value("DEPOSIT_PAY"));
 
+        // Seeded VF6: 3 daily slots x 1,100,000 VND x 30% deposit.
         Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(bookingChargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.DEPOSIT))
                 .get()
                 .satisfies(charge -> {
                     assertThat(charge.getQuantity()).isNull();
-                    assertThat(charge.getAmount()).isEqualByComparingTo(new BigDecimal("1305000.00"));
+                    assertThat(charge.getAmount()).isEqualByComparingTo(new BigDecimal("990000.00"));
                 });
         assertThat(paymentTransactionRepository.findByBooking_Id(booking.getId()))
                 .singleElement()
                 .satisfies(payment -> {
                     assertThat(payment.getType()).isEqualTo(PaymentType.DEPOSIT_PAY);
                     assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
-                    assertThat(payment.getAmount()).isEqualByComparingTo(new BigDecimal("1305000.00"));
+                    assertThat(payment.getAmount()).isEqualByComparingTo(new BigDecimal("990000.00"));
                 });
         assertThat(vehicleScheduleRepository.findByBooking_Id(booking.getId()))
                 .singleElement()

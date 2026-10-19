@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
@@ -10,129 +11,118 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record ProviderBookingDetailResponse(
         Long id,
+        Long bookingId,
         String bookingCode,
         BookingStatus status,
+        BookingStatus bookingStatus,
+        Instant pickupTime,
+        String pickupAddress,
+        Integer passengerCount,
+        String contractUrl,
+        BigDecimal totalAmount,
+        Instant actualStartAt,
+        Instant actualEndAt,
+        Instant renterConfirmedAt,
+        Instant providerConfirmedAt,
+        Instant cancelledAt,
+        CancelReason cancelReason,
+        String cancelledByName,
         Instant createdAt,
         Instant updatedAt,
 
-        // Renter details
-        RenterInfo renter,
+        Long renterId,
+        String renterName,
+        String renterPhone,
+        String renterEmail,
+        String renterAvatarUrl,
 
-        // Vehicle details
-        VehicleInfo vehicle,
+        Long vehicleId,
+        String vehicleName,
+        String licensePlate,
+        String brand,
+        String model,
+        Integer modelYear,
+        Integer seats,
+        Transmission transmission,
+        FuelType fuelType,
+        String color,
+        String vehicleImageUrl,
+        List<String> vehicleImageUrls,
 
-        // Plan details
-        PlanInfo rentalPlan,
+        String rentalType,
+        String rentalDuration,
+        BigDecimal slotPrice,
+        Integer slotLengthMinutes,
+        PlanType planType,
+        BigDecimal depositRatio,
+        BigDecimal upfrontAmount,
+        Integer allowedOvertimeMinutes,
+        BigDecimal overtimeSurchargeRatio,
+        Integer waitingFreeMinutes,
+        BigDecimal waitingRate,
+        BigDecimal weekendSurchargeRatio,
+        Integer freeRadiusKm,
+        BigDecimal outOfRadiusRate,
 
-        // Trip details
-        TripInfo trip,
+        Long driverId,
+        String driverName,
+        String driverPhone,
+        String driverLicenseNo,
+        String driverLicenseClass,
+        String driverPortraitUrl,
+        BigDecimal driverRatingAvg,
 
-        // Assigned Driver (nullable)
-        DriverInfo driver,
+        DriverSummary driver,
+        TripSummary trip,
 
-        // Financial breakdown
-        FinancialInfo pricing,
+        List<BookingChargeResponse> charges,
+        List<PaymentTransactionDetailResponse> paymentTransactions,
+        List<TimelineEventResponse> timeline,
 
-        // Policy Snapshot (nullable)
-        PolicySnapshotInfo policySnapshot,
-
-        // Cancellation (nullable)
-        CancellationInfo cancellation,
-
-        // Activity timeline
-        List<TimelineEvent> timeline
+        Instant assignedAt,
+        Instant driverConfirmedAt,
+        Instant actualArrivedAt,
+        String executionStatus,
+        TripLocationResponse latestLocation
 ) {
-    public record RenterInfo(
+    public record DriverSummary(
             Long id,
-            Long userId,
-            String fullName,
-            String phone,
-            String email,
-            String avatarUrl,
-            boolean licenseVerified
-    ) {}
-
-    public record VehicleInfo(
-            Long id,
-            String brand,
-            String model,
-            String licensePlate,
-            Integer seatCount,
-            Transmission transmission,
-            FuelType fuelType,
-            String color,
-            Integer manufactureYear,
-            List<String> imageUrls
-    ) {}
-
-    public record PlanInfo(
-            Long id,
-            PlanType planType,
-            Integer slotLengthMinutes,
-            BigDecimal slotPrice,
-            BigDecimal upfrontAmount
-    ) {}
-
-    public record TripInfo(
-            String pickupAddress,
-            Instant pickupTime,
-            Instant estimatedEndTime,
-            Instant actualStartAt,
-            Instant actualEndAt,
-            Integer passengerCount,
-            String contractUrl,
-            Instant renterConfirmedAt,
-            Instant providerConfirmedAt
-    ) {}
-
-    public record DriverInfo(
-            Long id,
-            Long userId,
-            String fullName,
+            String name,
             String phone,
             String licenseNo,
             String licenseClass,
             String portraitUrl,
-            BigDecimal ratingAvg,
-            Integer ratingCount
+            BigDecimal ratingAvg
     ) {}
 
-    public record FinancialInfo(
-            BigDecimal baseRentalAmount,
-            BigDecimal totalAmount,
-            List<BookingChargeResponse> charges,
-            List<PaymentTransactionResponse> transactions
-    ) {}
-
-    public record PolicySnapshotInfo(
+    public record TripSummary(
             Long id,
-            PlanType planType,
-            BigDecimal slotPrice,
-            Integer slotLengthMinutes,
-            BigDecimal depositRatio,
-            BigDecimal upfrontAmount,
-            Integer allowedOvertimeMinutes,
-            BigDecimal overtimeSurchargeRatio,
-            Integer waitingFreeMinutes,
-            BigDecimal waitingRate,
-            BigDecimal weekendSurchargeRatio,
-            Integer freeRadiusKm,
-            BigDecimal outOfRadiusRate
+            String status,
+            Instant actualArrivalAt,
+            Instant actualStartAt,
+            Instant actualEndAt
     ) {}
 
-    public record CancellationInfo(
-            Long cancelledById,
-            String cancelledByName,
-            CancelReason cancelReason,
-            Instant cancelledAt
+    public record PaymentTransactionDetailResponse(
+            Long id,
+            String type,
+            BigDecimal amount,
+            String direction,
+            String method,
+            String status,
+            String receiptUrl,
+            Instant paidAt,
+            Instant createdAt
     ) {}
 
-    public record TimelineEvent(
+    public record TimelineEventResponse(
             String title,
             String description,
             Instant timestamp,
-            String actor
+            String status,
+            String icon
     ) {}
 }
