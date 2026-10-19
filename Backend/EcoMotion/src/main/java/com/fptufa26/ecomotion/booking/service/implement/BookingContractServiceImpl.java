@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import com.fptufa26.ecomotion.common.storage.DocumentStorageService;
+import com.fptufa26.ecomotion.booking.dto.response.BookingContractStatusResponse;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +46,47 @@ public class BookingContractServiceImpl implements BookingContractService {
         this.snapshotRepository = snapshotRepository;
         this.documentStorageService = documentStorageService;
         this.maxBytes = maxBytes;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BookingContractStatusResponse getContractStatus(
+            Long userId,
+            String bookingCode) {
+        Booking booking = bookingRepository
+                .findByBookingCodeAndRenter_User_Id(
+                        bookingCode,
+                        userId)
+                .orElseThrow(BookingNotFoundException::new);
+
+        validateYearlyBooking(booking);
+
+        String storedPath = booking.getContractUrl();
+        boolean contractUploaded =
+                storedPath != null && !storedPath.isBlank();
+
+        boolean supportedDocument = contractUploaded
+                && storedPath.startsWith(STORAGE_ENTITY + "/" + userId + "/")
+                && storedPath.endsWith(".pdf");
+
+        boolean canUpload =
+                booking.getStatus() == BookingStatus.ACCEPTED;
+
+        String restrictionReason = canUpload
+                ? null
+                : "Chỉ được upload hoặc thay hợp đồng khi đơn đã được chấp nhận và chưa xác nhận thanh toán.";
+
+        return new BookingContractStatusResponse(
+                booking.getBookingCode(),
+                booking.getStatus(),
+                booking.getVehicle().getBrand()
+                        + " "
+                        + booking.getVehicle().getModel(),
+                PlanType.YEARLY,
+                contractUploaded,
+                canUpload,
+                supportedDocument,
+                restrictionReason);
     }
 
     @Override

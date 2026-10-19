@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.review.controller;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.review.dto.request.CreateReviewRequest;
+import com.fptufa26.ecomotion.review.dto.response.BookingReviewsResponse;
 import com.fptufa26.ecomotion.review.dto.response.ReviewResponse;
 import com.fptufa26.ecomotion.review.service.ReviewService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,8 +37,10 @@ public class ReviewController {
     private final ReviewService reviewService;
 
     @GetMapping
-    @Operation(summary = "Get the authenticated renter's reviews for a booking")
-    public ApiResponse<List<ReviewResponse>> getBookingReviews(@AuthenticationPrincipal SecurityUser principal, @PathVariable String bookingCode) {
+    @Operation(summary = "Get booking information and the renter's reviews")
+    public ApiResponse<BookingReviewsResponse> getBookingReviews(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode) {
         return ApiResponse.success(
                 reviewService.getBookingReviews(
                         principal.getUserId(),

@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import com.fptufa26.ecomotion.booking.dto.response.BookingContractStatusResponse;
 
 @RestController
 @RequestMapping("/api/renter/bookings/{bookingCode}/contract")
@@ -29,6 +30,16 @@ import org.springframework.web.multipart.MultipartFile;
 public class BookingContractController {
 
     private final BookingContractService bookingContractService;
+
+    @GetMapping("/status")
+    public ApiResponse<BookingContractStatusResponse> getContractStatus(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(
+                bookingContractService.getContractStatus(
+                        principal.getUserId(),
+                        bookingCode));
+    }
 
     @PutMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<BookingContractResponse> uploadContract(

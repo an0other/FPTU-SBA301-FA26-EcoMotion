@@ -9,6 +9,8 @@ public record BookingReviewContext(
         Long vehicleId,
         Long vehicleProviderId,
         Long driverId,
-        Long driverProviderId
+        Long driverProviderId,
+        String vehicleName,
+        String driverName
 ) {
 }

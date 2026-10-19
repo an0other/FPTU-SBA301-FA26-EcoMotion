@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
+import java.util.List;
+
 public interface PaymentTransactionRepository
         extends JpaRepository<PaymentTransaction, Long> {
 
@@ -56,4 +58,11 @@ public interface PaymentTransactionRepository
             Long userId,
             PaymentType excludedType,
             Pageable pageable);
+
+    @EntityGraph(attributePaths = "booking")
+    List<PaymentTransaction> findByBooking_IdAndTypeNotOrderByCreatedAtDescIdDesc(
+            Long bookingId,
+            PaymentType excludedType);
+
+
 }

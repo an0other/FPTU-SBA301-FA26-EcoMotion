@@ -35,6 +35,10 @@ public class BookingReviewAccessServiceImpl
                 booking.getVehicle().getId(),
                 booking.getVehicle().getProvider().getId(),
                 driver == null ? null : driver.getId(),
-                driver == null ? null : driver.getProvider().getId());
+                driver == null ? null : driver.getProvider().getId(),
+                booking.getVehicle().getBrand()
+                        + " "
+                        + booking.getVehicle().getModel(),
+                driver == null ? null : driver.getUser().getFullName());
     }
 }

@@ -34,6 +34,19 @@ function BookingShell({ children }) {
   )
 }
 
+import { Navigate, Route, Routes } from "react-router-dom";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import ActivatePage from "./pages/ActivatePage";
+import MePage from "./pages/MePage";
+import ProtectedRoute from "./components/ProtectedRoute";
+import VehicleListPage from "./pages/VehicleListPage";
+import VehicleDetailPage from "./pages/VehicleDetailPage";
+import ProviderDashboard from "./pages/ProviderDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
+import PaymentHistoryPage from "./pages/PaymentHistoryPage";
+import BookingReviewsPage from "./pages/BookingReviewsPage";
+import YearlyRentalPage from "./pages/YearlyRentalPage";
 
 export default function App() {
   const navigate = useNavigate()
@@ -97,7 +110,21 @@ export default function App() {
         <Route path="/driver/trips/:bookingCode" element={<DriverTripDetailPage />} />
       </Route>
 
+      <Route element={<ProtectedRoute allowedRoles={["RENTER"]} />}>
+        <Route path="/renter/payments" element={<PaymentHistoryPage />} />
+        <Route
+          path="/renter/bookings/:bookingCode/reviews"
+          element={<BookingReviewsPage />}
+        />
+        <Route path="/renter/yearly-rental" element={<YearlyRentalPage />} />
+
+        <Route
+          path="/renter/bookings/:bookingCode/yearly-rental"
+          element={<YearlyRentalPage />}
+        />
+      </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-  )
+  );
 }

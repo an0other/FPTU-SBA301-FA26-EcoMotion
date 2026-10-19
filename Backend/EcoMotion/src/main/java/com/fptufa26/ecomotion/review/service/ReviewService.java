@@ -4,11 +4,15 @@ import com.fptufa26.ecomotion.review.dto.request.CreateReviewRequest;
 import com.fptufa26.ecomotion.review.dto.response.ReviewResponse;
 import com.fptufa26.ecomotion.review.dto.request.UpdateReviewRequest;
 import com.fptufa26.ecomotion.review.enums.ReviewTarget;
+import com.fptufa26.ecomotion.review.dto.response.BookingReviewsResponse;
 import java.util.List;
 
 public interface ReviewService {
 
-    List<ReviewResponse> getBookingReviews(Long userId, String bookingCode);
+//    List<ReviewResponse> getBookingReviews(Long userId, String bookingCode);
+BookingReviewsResponse getBookingReviews(
+        Long userId,
+        String bookingCode);
 
     ReviewResponse createReview(Long userId, String bookingCode, CreateReviewRequest request);
 
