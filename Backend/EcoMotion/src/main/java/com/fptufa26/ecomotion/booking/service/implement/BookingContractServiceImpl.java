@@ -57,7 +57,8 @@ public class BookingContractServiceImpl implements BookingContractService {
                 .findByBookingCodeAndRenter_User_Id(
                         bookingCode,
                         userId)
-                .orElseThrow(BookingNotFoundException::new);
+                .orElseThrow(() -> new BookingNotFoundException(
+                        "Không tìm thấy đơn thuê: " + bookingCode));
 
         validateYearlyBooking(booking);
 
@@ -99,7 +100,8 @@ public class BookingContractServiceImpl implements BookingContractService {
                 .findBookingByBookingCodeAndRenter_User_Id(
                         bookingCode,
                         userId)
-                .orElseThrow(BookingNotFoundException::new);
+                .orElseThrow(() -> new BookingNotFoundException(
+                        "Không tìm thấy đơn thuê: " + bookingCode));
 
         validateYearlyBooking(booking);
 
@@ -135,7 +137,8 @@ public class BookingContractServiceImpl implements BookingContractService {
                 .findByBookingCodeAndRenter_User_Id(
                         bookingCode,
                         userId)
-                .orElseThrow(BookingNotFoundException::new);
+                .orElseThrow(() -> new BookingNotFoundException(
+                        "Không tìm thấy đơn thuê: " + bookingCode));
 
         validateYearlyBooking(booking);
 

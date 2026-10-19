@@ -11,10 +11,9 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-
-@Repository
 import java.util.List;
 
+@Repository
 public interface PaymentTransactionRepository
         extends JpaRepository<PaymentTransaction, Long> {
 
