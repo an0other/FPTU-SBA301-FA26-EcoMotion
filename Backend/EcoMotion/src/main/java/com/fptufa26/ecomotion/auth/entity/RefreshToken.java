@@ -27,8 +27,10 @@ import java.time.Instant;
 )
 @Getter
 @Setter
-@NoArgsConstructor
 public class RefreshToken {
+
+    public RefreshToken() {
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -15,6 +15,20 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
 
     List<VehicleSchedule> findByBooking_Id(Long bookingId);
 
+    List<VehicleSchedule> findByVehicle_IdOrderByStartAtAsc(Long vehicleId);
+
+    List<VehicleSchedule> findByVehicle_IdAndStatusOrderByStartAtAsc(Long vehicleId, ScheduleStatus status);
+
+    List<VehicleSchedule> findByVehicle_IdAndStatus(Long vehicleId, ScheduleStatus status);
+
+    @Query("""
+            SELECT COUNT(s) FROM VehicleSchedule s
+            WHERE s.vehicle.provider.id = :providerId
+              AND s.type IN ('BLOCKED', 'MAINTENANCE')
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+            """)
+    long countActiveBlocksByProviderId(@Param("providerId") Long providerId);
+
     @Query("""
             select count(s) > 0 from VehicleSchedule s
             where s.vehicle.id = :vehicleId
@@ -22,9 +36,11 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
               and s.startAt < :endAt
               and s.endAt > :startAt
             """)
-    boolean existsActiveOverlap(@Param("vehicleId") Long vehicleId,
-                                @Param("startAt") Instant startAt,
-                                @Param("endAt") Instant endAt);
+    boolean existsActiveOverlap(
+            @Param("vehicleId") Long vehicleId,
+            @Param("startAt") Instant startAt,
+            @Param("endAt") Instant endAt
+    );
 
     @Query("""
             select s from VehicleSchedule s
@@ -34,9 +50,25 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
               and s.endAt > :rangeFrom
             order by s.startAt
             """)
-    List<VehicleSchedule> findActiveInRange(@Param("vehicleId") Long vehicleId,
-                                            @Param("rangeFrom") Instant rangeFrom,
-                                            @Param("rangeTo") Instant rangeTo);
+    List<VehicleSchedule> findActiveInRange(
+            @Param("vehicleId") Long vehicleId,
+            @Param("rangeFrom") Instant rangeFrom,
+            @Param("rangeTo") Instant rangeTo
+    );
+
+    @Query("""
+            SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END
+            FROM VehicleSchedule s
+            WHERE s.vehicle.id = :vehicleId
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.startAt < :endAt
+              AND s.endAt > :startAt
+            """)
+    boolean existsOverlappingSchedule(
+            @Param("vehicleId") Long vehicleId,
+            @Param("startAt") Instant startAt,
+            @Param("endAt") Instant endAt
+    );
 
     @Query("SELECT COUNT(s) > 0 FROM VehicleSchedule s " +
             "WHERE s.vehicle.id = :vehicleId " +
@@ -51,16 +83,18 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             @Param("endAt") Instant endAt,
             @Param("excludeBookingId") Long excludeBookingId
     );
+
     boolean existsByVehicle_IdAndStatusAndStartAtLessThanAndEndAtGreaterThan(
             Long vehicleId,
             ScheduleStatus status,
             Instant endAt,
-            Instant startAt);
+            Instant startAt
+    );
 
-    List<VehicleSchedule> findByVehicle_IdAndStatus(Long vehicleId, ScheduleStatus status);
     boolean existsByBooking_Renter_IdAndStatusAndStartAtLessThanAndEndAtGreaterThan(
             Long renterId,
             ScheduleStatus status,
             Instant endAt,
-            Instant startAt);
+            Instant startAt
+    );
 }

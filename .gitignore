@@ -136,3 +136,12 @@ GUIDE_FOR_BEGINNERS.md
 *.orig
 *.rej
 docs/phat
+
+# Uploaded files
+uploads/
+**/uploads/*
+!**/uploads/sample/
+!**/uploads/sample/**
+
+# Local AI / Agent configs
+.agents/

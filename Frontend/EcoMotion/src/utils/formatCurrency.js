@@ -17,7 +17,7 @@ export const PLAN_LABELS = {
 }
 
 export const FUEL_LABELS = {
-  EV: 'Điện',
+  EV: 'Điện EV',
   GASOLINE: 'Xăng',
   DIESEL: 'Dầu',
   HYBRID: 'Hybrid',
