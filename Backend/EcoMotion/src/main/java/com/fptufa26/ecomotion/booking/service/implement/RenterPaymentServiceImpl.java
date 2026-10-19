@@ -79,7 +79,9 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
             String bookingCode) {
         Booking booking = bookingRepository
                 .findByBookingCodeAndRenter_User_Id(bookingCode, userId)
-                .orElseThrow(BookingNotFoundException::new);
+                .orElseThrow(() -> new BookingNotFoundException(
+                        "Không tìm thấy đơn thuê: " + bookingCode));
+
 
         BookingPolicySnapshot snapshot = snapshotRepository
                 .findByBooking_Id(booking.getId())
@@ -127,6 +129,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
     private BookingChargeResponse toBookingChargeResponse(
             BookingCharge charge) {
         return new BookingChargeResponse(
+                charge.getId(),
                 charge.getChargeType(),
                 charge.getDescription(),
                 charge.getQuantity(),
@@ -135,6 +138,9 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 charge.getAmount(),
                 charge.isWaived(),
                 charge.getEvidenceUrl(),
+                charge.getCreatedBy() == null
+                        ? null
+                        : charge.getCreatedBy().getFullName(),
                 charge.getCreatedAt());
     }
 

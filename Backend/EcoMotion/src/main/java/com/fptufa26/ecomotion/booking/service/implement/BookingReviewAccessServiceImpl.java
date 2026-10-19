@@ -24,7 +24,8 @@ public class BookingReviewAccessServiceImpl
             String bookingCode) {
         Booking booking = bookingRepository
                 .findByBookingCodeAndRenter_User_Id(bookingCode, userId)
-                .orElseThrow(BookingNotFoundException::new);
+                .orElseThrow(() -> new BookingNotFoundException(
+                        "Không tìm thấy đơn thuê: " + bookingCode));
 
         Driver driver = booking.getDriver();
 
