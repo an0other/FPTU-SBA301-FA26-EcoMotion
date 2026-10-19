@@ -5,12 +5,14 @@ import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
+import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
+import com.fptufa26.ecomotion.user.repository.DriverRepository;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
@@ -36,6 +38,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RenterRepository renterRepository;
     private final ProviderRepository providerRepository;
+    private final DriverRepository driverRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -176,6 +179,18 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Provider> findProviderProfile(Long userId) {
+        return userId == null ? Optional.empty() : providerRepository.findByUser_Id(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Driver> findDriverProfile(Long userId) {
+        return userId == null ? Optional.empty() : driverRepository.findByUser_Id(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Renter requireRenterByUserId(Long userId) {
         return renterRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new NotFoundException("Renter profile not found"));
@@ -290,6 +305,10 @@ public class UserServiceImpl implements UserService {
 
         boolean anyBank = !isBlank(bankName) || !isBlank(bankAccountNo) || !isBlank(bankAccountHolder);
         if (anyBank) {
+            String bCode = com.fptufa26.ecomotion.finance.enums.SupportedBank.fromName(bankName)
+                    .map(com.fptufa26.ecomotion.finance.enums.SupportedBank::getCode)
+                    .orElse("VCB");
+            provider.setBankCode(bCode);
             provider.setBankName(bankName.trim());
             provider.setBankAccountNo(bankAccountNo.trim());
             provider.setBankAccountHolder(bankAccountHolder.trim());

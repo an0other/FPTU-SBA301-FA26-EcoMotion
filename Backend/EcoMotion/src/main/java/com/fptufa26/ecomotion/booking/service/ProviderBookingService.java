@@ -1,31 +1,46 @@
 package com.fptufa26.ecomotion.booking.service;
 
-import com.fptufa26.ecomotion.booking.dto.request.AddBookingChargeRequest;
-import com.fptufa26.ecomotion.booking.dto.request.AssignDriverRequest;
-import com.fptufa26.ecomotion.booking.dto.request.RejectBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest;
+import com.fptufa26.ecomotion.booking.dto.response.AvailableDriverResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
-import com.fptufa26.ecomotion.booking.dto.response.DriverAvailabilityResponse;
+import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingResponse;
-import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
+import com.fptufa26.ecomotion.common.response.PageResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
 public interface ProviderBookingService {
 
-    List<ProviderBookingResponse> getProviderBookings(Long userId, BookingStatus status);
+    List<ProviderBookingResponse> listBookings(Long currentUserId, String status);
 
-    ProviderBookingDetailResponse getBookingDetail(Long userId, String bookingIdentifier);
+    Page<ProviderBookingResponse> listBookings(Long currentUserId, String status, Pageable pageable);
 
-    ProviderBookingDetailResponse acceptBooking(Long userId, String bookingIdentifier);
+    PageResponse<ProviderBookingResponse> listBookingsPaged(Long currentUserId, String status, int offset, int limit);
 
-    ProviderBookingDetailResponse rejectBooking(Long userId, String bookingIdentifier, RejectBookingRequest request);
+    ProviderBookingSummaryResponse getSummary(Long currentUserId);
 
-    List<DriverAvailabilityResponse> getAvailableDrivers(Long userId, String bookingIdentifier);
+    ProviderBookingDetailResponse getBookingDetail(Long currentUserId, String bookingCodeOrId);
 
-    ProviderBookingDetailResponse assignDriver(Long userId, String bookingIdentifier, AssignDriverRequest request);
+    ProviderBookingResponse acceptBooking(Long currentUserId, String bookingCodeOrId);
 
-    BookingChargeResponse addManualCharge(Long userId, String bookingIdentifier, AddBookingChargeRequest request);
+    ProviderBookingResponse denyBooking(Long currentUserId, String bookingCodeOrId, String reason);
 
-    void removeManualCharge(Long userId, String bookingIdentifier, Long chargeId);
+    ProviderBookingResponse assignDriver(Long currentUserId, String bookingCodeOrId, Long driverId);
+
+    List<BookingChargeResponse> getCharges(Long currentUserId, String bookingCodeOrId);
+
+    BookingChargeResponse addCharge(Long currentUserId, String bookingCodeOrId, AddChargeRequest request);
+
+    List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId);
+
+    byte[] exportBookingsCsv(Long currentUserId, String status);
+
+    TripTrackingResponse getTripTracking(Long currentUserId, String bookingCodeOrId);
+
+    TripLocationResponse getTripLocation(Long currentUserId, String bookingCodeOrId);
 }

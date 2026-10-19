@@ -64,6 +64,7 @@ public class VehicleServiceImpl implements VehicleService {
 
     private static final Set<BookingStatus> BLOCKING_STATUSES = EnumSet.of(
             BookingStatus.PENDING, BookingStatus.ACCEPTED,
+            BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED,
             BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
     private static final long BUFFER_MINUTES = 60;
 
@@ -419,5 +420,29 @@ public class VehicleServiceImpl implements VehicleService {
         } catch (IllegalArgumentException ex) {
             return null;
         }
+    }
+
+    @Override
+    public String getCoverImageUrl(Long vehicleId) {
+        if (vehicleId == null) {
+            return null;
+        }
+        List<String> images = vehicleImageService.findImageUrls(vehicleId);
+        return images.isEmpty() ? null : images.get(0);
+    }
+
+    @Override
+    public java.util.Map<Long, String> getCoverImageUrls(java.util.Collection<Long> vehicleIds) {
+        if (vehicleIds == null || vehicleIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        Map<Long, List<String>> images = vehicleImageService.findImageUrlsByVehicleIds(vehicleIds);
+        Map<Long, String> result = new java.util.HashMap<>();
+        images.forEach((id, urls) -> {
+            if (!urls.isEmpty()) {
+                result.put(id, urls.get(0));
+            }
+        });
+        return result;
     }
 }

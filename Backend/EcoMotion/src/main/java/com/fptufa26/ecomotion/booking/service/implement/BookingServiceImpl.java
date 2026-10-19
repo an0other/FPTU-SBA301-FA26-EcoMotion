@@ -71,6 +71,9 @@ public class BookingServiceImpl implements BookingService {
             BookingStatus.PENDING,
             BookingStatus.ACCEPTED,
             BookingStatus.CONFIRMED,
+            BookingStatus.DRIVER_ASSIGNED,
+            BookingStatus.DRIVER_CONFIRMED,
+            BookingStatus.DRIVER_ARRIVED,
             BookingStatus.IN_PROGRESS);
 
     private final BookingRepository bookingRepository;

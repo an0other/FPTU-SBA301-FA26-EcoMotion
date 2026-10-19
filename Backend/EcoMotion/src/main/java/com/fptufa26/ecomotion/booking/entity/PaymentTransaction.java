@@ -70,6 +70,30 @@ public class PaymentTransaction {
     @Column(name = "paid_at")
     private Instant paidAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "verification_method", length = 30)
+    private com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod verificationMethod = com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_request_id")
+    private com.fptufa26.ecomotion.finance.entity.PaymentRequest paymentRequest;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "confirmed_by_id")
+    private com.fptufa26.ecomotion.user.entity.User confirmedBy;
+
+    @Column(name = "bank_code_snapshot", length = 20)
+    private String bankCodeSnapshot;
+
+    @Column(name = "bank_name_snapshot", length = 150)
+    private String bankNameSnapshot;
+
+    @Column(name = "bank_account_no_snapshot", length = 255)
+    private String bankAccountNoSnapshot;
+
+    @Column(name = "bank_account_holder_snapshot", length = 150)
+    private String bankAccountHolderSnapshot;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -87,6 +111,9 @@ public class PaymentTransaction {
         }
         if (status == null) {
             status = PaymentStatus.PENDING;
+        }
+        if (verificationMethod == null) {
+            verificationMethod = com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED;
         }
     }
 
