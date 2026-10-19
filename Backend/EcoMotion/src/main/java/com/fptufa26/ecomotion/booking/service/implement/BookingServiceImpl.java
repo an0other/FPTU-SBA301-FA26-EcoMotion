@@ -64,6 +64,9 @@ import java.util.Set;
 public class BookingServiceImpl implements BookingService {
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
+    /** Buffer time (minutes) before/after each booking for vehicle preparation */
+    private static final Duration SCHEDULE_BUFFER = Duration.ofMinutes(60);
     private static final Set<BookingStatus> BLOCKING = EnumSet.of(
             BookingStatus.PENDING,
             BookingStatus.ACCEPTED,
@@ -108,8 +111,11 @@ public class BookingServiceImpl implements BookingService {
         if (!end.isAfter(start)) {
             throw new ConflictException("Rental range is empty");
         }
-        if (!scheduleService.isRangeFree(vehicle.getId(), start, end)) {
-            throw new ConflictException("Vehicle is not free in the selected range");
+        // Apply buffer for vehicle preparation time between bookings
+        Instant bufferedStart = start.minus(SCHEDULE_BUFFER);
+        Instant bufferedEnd = end.plus(SCHEDULE_BUFFER);
+        if (!scheduleService.isRangeFree(vehicle.getId(), bufferedStart, bufferedEnd)) {
+            throw new ConflictException("Vehicle is not free in the selected range (including 1-hour buffer)");
         }
         if (renterOverlaps(renter.getId(), start, end)) {
             throw new ConflictException("Renter already has a booking in the selected range");
@@ -190,8 +196,10 @@ public class BookingServiceImpl implements BookingService {
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
         int slots = baseSlots(booking);
         Instant end = endOf(booking, snapshot, slots);
-        if (!scheduleService.isRangeFree(booking.getVehicle().getId(), booking.getPickupTime(), end)) {
-            throw new ConflictException("Vehicle is not free in the selected range");
+        Instant bufStart = booking.getPickupTime().minus(SCHEDULE_BUFFER);
+        Instant bufEnd = end.plus(SCHEDULE_BUFFER);
+        if (!scheduleService.isRangeFree(booking.getVehicle().getId(), bufStart, bufEnd)) {
+            throw new ConflictException("Vehicle is not free in the selected range (including 1-hour buffer)");
         }
 
         BigDecimal due = amountDue(booking, snapshot);
