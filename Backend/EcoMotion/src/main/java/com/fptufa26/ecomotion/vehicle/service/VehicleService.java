@@ -7,7 +7,9 @@ import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleMapResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleAvailabilityResponse;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 public interface VehicleService {
@@ -20,8 +22,17 @@ public interface VehicleService {
 
     VehicleDetailResponse getVehicleDetail(Long id);
 
+    String getCoverImageUrl(Long vehicleId);
+
+    java.util.Map<Long, String> getCoverImageUrls(java.util.Collection<Long> vehicleIds);
+
     List<VehicleMapResponse> findNearbyVehicles(BigDecimal latitude, BigDecimal longitude,
                                                 int radiusKm, String keyword, String location,
                                                 String fuelType, String planType, BigDecimal maxPrice,
                                                 VehicleSort sort);
+
+    VehicleAvailabilityResponse getAvailability(Long vehicleId, Instant from, Instant to);
+
+    void updateRating(Long vehicleId, BigDecimal ratingAvg, int ratingCount);
+
 }

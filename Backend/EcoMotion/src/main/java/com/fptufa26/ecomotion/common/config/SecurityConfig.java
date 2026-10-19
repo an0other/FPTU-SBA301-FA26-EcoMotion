@@ -48,9 +48,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/files/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vehicles", "/api/vehicles/**").permitAll()
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/provider/**").hasAnyRole("PROVIDER", "ADMIN")
-                        .requestMatchers("/api/renter/**").hasRole("RENTER")
+                        .requestMatchers("/api/admin/**", "/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/provider/**", "/api/v1/provider/**").hasAnyRole("PROVIDER", "ADMIN")
+                        .requestMatchers("/api/driver/**", "/api/v1/driver/**").hasRole("DRIVER")
+                        .requestMatchers("/api/renter/**", "/api/v1/renter/**").hasRole("RENTER")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

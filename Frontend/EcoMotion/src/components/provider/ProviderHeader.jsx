@@ -90,24 +90,24 @@ export default function ProviderHeader({
             Đội xe của tôi
           </Link>
           <Link
-            to="/provider/drivers"
+            to="/provider/bookings"
             className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
-              activeTab === "drivers"
+              activeTab === "bookings"
                 ? "bg-emerald-50 text-emerald-700 font-bold"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
-            Quản lý tài xế
+            Đơn thuê
           </Link>
           <Link
-            to="/provider/vehicles"
+            to="/provider/finance"
             className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
-              activeTab === "schedules"
+              activeTab === "finance"
                 ? "bg-emerald-50 text-emerald-700 font-bold"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
-            Lịch xe &amp; Bảo dưỡng
+            Tài chính
           </Link>
         </nav>
 

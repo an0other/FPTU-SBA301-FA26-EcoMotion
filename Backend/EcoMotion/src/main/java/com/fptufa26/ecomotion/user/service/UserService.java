@@ -1,13 +1,18 @@
 package com.fptufa26.ecomotion.user.service;
 
+import com.fptufa26.ecomotion.user.dto.ProviderSummary;
+import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
-import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
-import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 public interface UserService {
@@ -18,17 +23,29 @@ public interface UserService {
 
     Optional<User> findById(Long userId);
 
+    Map<Long, ProviderSummary> findProvidersByIds(Collection<Long> providerIds);
+
     boolean existsByEmail(String email);
 
     boolean existsByPhone(String phone);
 
     User createUser(String email, String rawPassword, String fullName, String phone, Role role, UserStatus status);
 
+    Renter requireRenterByUserId(Long userId);
+
     User createPendingUser(String email, String rawPassword, Role role);
 
     User assignPhone(Long userId, String phone);
 
     Optional<Renter> findRenterProfile(Long userId);
+
+    Optional<Provider> findProviderProfile(Long userId);
+
+    Optional<Provider> findProviderByUserId(Long userId);
+
+    Optional<Driver> findDriverProfile(Long userId);
+
+    long countDriversByProviderId(Long providerId);
 
     User saveCccdIdentity(Long userId, CccdIdentity identity);
 
@@ -60,7 +77,9 @@ public interface UserService {
             String businessLicenseNo,
             String taxCode);
 
-    Optional<Provider> findProviderByUserId(Long userId);
+    void updateDriverRating(Long driverId, BigDecimal ratingAvg, int ratingCount);
 
-    long countDriversByProviderId(Long providerId);
+    void updateProviderRating(Long providerId, BigDecimal ratingAvg, int ratingCount);
+
+    void lockProviderForReview(Long providerId);
 }
