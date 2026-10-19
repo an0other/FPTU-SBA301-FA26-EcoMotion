@@ -1,7 +1,8 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { planLabel } from '../../utils/planLabels'
+import { planLabel, slotDurationLabel } from '../../utils/planLabels'
+import { vehicleService } from '../../services/vehicleService'
 
 export const ChoosePlanStep = ({
   vehicleId,
@@ -37,26 +38,71 @@ export const ChoosePlanStep = ({
     return vn.getFullYear() + '-' + String(vn.getMonth() + 1).padStart(2, '0') + '-' + String(vn.getDate()).padStart(2, '0')
   }, [])
 
+  // Fetch occupied slots when date changes
+  const [occupiedSlots, setOccupiedSlots] = useState([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+
+  // Total rental duration in ms based on selected plan
+  const rentalDurationMs = useMemo(() => {
+    if (!selected) return 0
+    return selected.slotLengthMinutes * slots * 60 * 1000
+  }, [selected, slots])
+
+  useEffect(() => {
+    if (!startDate || !vehicleId) { setOccupiedSlots([]); return }
+    let cancelled = false
+    ;(async () => {
+      setLoadingSlots(true)
+      try {
+        // Query from start of selected day to end of rental range (latest possible start = 23:00 + duration)
+        const fromDate = new Date(startDate + 'T00:00:00+07:00')
+        const latestStart = new Date(startDate + 'T23:00:00+07:00')
+        const toDate = new Date(latestStart.getTime() + rentalDurationMs)
+        const from = fromDate.toISOString()
+        const to = toDate.toISOString()
+        const resp = await vehicleService.getAvailability(vehicleId, from, to)
+        if (!cancelled) setOccupiedSlots(resp.occupiedSlots ?? [])
+      } catch (err) { console.error('[Availability] error', err); if (!cancelled) setOccupiedSlots([]) }
+      finally { if (!cancelled) setLoadingSlots(false) }
+    })()
+    return () => { cancelled = true }
+  }, [startDate, vehicleId, rentalDurationMs])
+
   // Generate available time slots (hourly), filtering out past hours if today
+  // Debug: show rental duration calculation
   const timeSlots = useMemo(() => {
     const all = []
     for (let h = 0; h < 24; h++) {
       const value = String(h).padStart(2, '0') + ':00'
       const label = h === 0 ? '12:00 SA' : h < 12 ? `${h}:00 SA` : h === 12 ? '12:00 PM' : `${h - 12}:00 PM`
-      all.push({ value, label })
+      // Check if starting at this hour, the entire rental range overlaps with any occupied slot
+      let occupied = false
+      if (startDate && occupiedSlots.length > 0 && rentalDurationMs > 0) {
+        const rentalStart = new Date(startDate + 'T' + value + ':00+07:00')
+        const rentalEnd = new Date(rentalStart.getTime() + rentalDurationMs)
+        occupied = occupiedSlots.some((os) => {
+          if (h === 0 || h === 1 || h === 3 || h === 4) {
+          }
+          const osStart = new Date(os.startAt)
+          const osEnd = new Date(os.endAt)
+          return rentalStart < osEnd && rentalEnd > osStart
+        })
+      }
+      all.push({ value, label, occupied })
     }
+    let filtered = all
     if (startDate === today) {
       const now = new Date()
       const vn = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }))
       let minHour = vn.getHours()
       if (vn.getMinutes() > 0) minHour += 1
-      return all.filter((s) => {
+      filtered = filtered.filter((s) => {
         const h = parseInt(s.value.split(':')[0], 10)
         return h >= minHour
       })
     }
-    return all
-  }, [startDate, today])
+    return filtered
+  }, [startDate, today, occupiedSlots, rentalDurationMs])
 
   const [timeOpen, setTimeOpen] = useState(false)
   const timeRef = useRef(null)
@@ -163,7 +209,7 @@ export const ChoosePlanStep = ({
                   <span className="text-xl font-bold text-[#14221A]">{formatCurrency(plan.slotPrice)}</span>
                   <span className="text-xs text-gray-500 font-medium">/ slot</span>
                 </div>
-                <p className="text-xs text-gray-600 mt-2.5 leading-relaxed">{copy.detail}</p>
+                <p className="text-xs text-gray-600 mt-2.5 leading-relaxed">1 slot = {slotDurationLabel(plan.slotLengthMinutes) || copy.unit}.</p>
               </div>
               <div className={`mt-4 pt-3 border-t text-xs font-medium ${active ? 'border-[#15803D]/20 text-[#15803D]' : 'border-[#E6EBE8] text-gray-500'}`}>
                 {copy.footer}
@@ -248,20 +294,30 @@ export const ChoosePlanStep = ({
               </button>
               {timeOpen && (
                 <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-[12px] border border-[#E6EBE8] bg-white shadow-lg">
-                  {timeSlots.length === 0 ? (
+                  {loadingSlots ? (
+                    <div className="px-3 py-2 text-xs text-gray-400">Đang tải lịch...</div>
+                  ) : timeSlots.length === 0 ? (
                     <div className="px-3 py-2 text-xs text-gray-400">Không còn khung giờ khả dụng hôm nay</div>
                   ) : timeSlots.map((slot) => (
                     <button
                       key={slot.value}
                       type="button"
+                      disabled={slot.occupied}
                       onClick={() => {
+                        if (slot.occupied) return
                         setStartTime(slot.value)
                         setTimeOpen(false)
                         setFieldErrors((prev) => { const next = { ...prev }; delete next.startTime; return next })
                       }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-[#E8F6EE] transition-colors cursor-pointer ${startTime === slot.value ? 'bg-[#E8F6EE] font-semibold text-[#15803D]' : 'text-[#14221A]'}`}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                        slot.occupied
+                          ? 'text-gray-300 line-through cursor-not-allowed bg-gray-50'
+                          : startTime === slot.value
+                            ? 'bg-[#E8F6EE] font-semibold text-[#15803D] cursor-pointer'
+                            : 'text-[#14221A] hover:bg-[#E8F6EE] cursor-pointer'
+                      }`}
                     >
-                      {slot.label}
+                      {slot.label}{slot.occupied ? ' — Đã có lịch' : ''}
                     </button>
                   ))}
                 </div>
@@ -276,9 +332,23 @@ export const ChoosePlanStep = ({
         <span className="text-sm font-medium text-[#14221A]">
           Thời điểm kết thúc dự kiến: <strong>{projectedEnd}</strong>
         </span>
-        <div className="flex-shrink-0 px-3.5 py-1 text-xs font-semibold text-white rounded-full bg-[#15803D]">
-          Xe còn chỗ trong khung giờ này
-        </div>
+        {startDate && startTime ? (
+          (() => {
+            const selH = parseInt(startTime.split(':')[0], 10)
+            const selStart = new Date(startDate + 'T' + startTime + ':00+07:00')
+            const selEnd = new Date(selStart.getTime() + rentalDurationMs)
+            const conflict = occupiedSlots.some((os) => {
+              const osStart = new Date(os.startAt)
+              const osEnd = new Date(os.endAt)
+              return selStart < osEnd && selEnd > osStart
+            })
+            return conflict
+              ? <div className="flex-shrink-0 px-3.5 py-1 text-xs font-semibold text-white rounded-full bg-[#B42318]">Khung giờ này đã có lịch</div>
+              : <div className="flex-shrink-0 px-3.5 py-1 text-xs font-semibold text-white rounded-full bg-[#15803D]">Xe còn chỗ trong khung giờ này</div>
+          })()
+        ) : (
+          <div className="flex-shrink-0 px-3.5 py-1 text-xs font-semibold text-gray-500 rounded-full bg-gray-100">Chọn ngày và giờ để kiểm tra</div>
+        )}
       </div>
 
       {selected && slots > 0 && (
