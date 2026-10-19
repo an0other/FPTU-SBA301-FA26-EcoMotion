@@ -20,6 +20,18 @@ import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.entity.BookingCharge;
+import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
+import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
+import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
+import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +56,16 @@ public class VehicleServiceImpl implements VehicleService {
     private final VehicleImageRepository vehicleImageRepository;
     private final RentalPlanRepository rentalPlanRepository;
     private final VehicleScheduleRepository vehicleScheduleRepository;
+    private final BookingRepository bookingRepository;
+    private final BookingPolicySnapshotRepository snapshotRepository;
+    private final BookingChargeRepository chargeRepository;
+
+    private static final Set<BookingStatus> BLOCKING_STATUSES = EnumSet.of(
+            BookingStatus.PENDING, BookingStatus.ACCEPTED,
+            BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
+
+    /** Buffer time (minutes) before and after each occupied slot for vehicle preparation */
+    private static final long BUFFER_MINUTES = 60;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -341,14 +363,46 @@ public class VehicleServiceImpl implements VehicleService {
         vehicleRepository.findByIdAndStatus(vehicleId, VehicleStatus.APPROVED)
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
 
-        var schedules = vehicleScheduleRepository.findActiveInRange(vehicleId, from, to);
+        List<VehicleAvailabilityResponse.OccupiedSlot> result = new ArrayList<>();
 
-        var slots = schedules.stream()
-                .map(s -> new VehicleAvailabilityResponse.OccupiedSlot(
-                        s.getStartAt(), s.getEndAt(), s.getType().name()))
-                .toList();
+        // Expand query range by buffer so edge bookings are not missed
+        Duration buffer = Duration.ofMinutes(BUFFER_MINUTES);
+        Instant expandedFrom = from.minus(buffer);
+        Instant expandedTo = to.plus(buffer);
 
-        return new VehicleAvailabilityResponse(vehicleId, slots);
+        // 1. Schedule-based slots (CONFIRMED bookings, maintenance, blocked)
+        var schedules = vehicleScheduleRepository.findActiveInRange(vehicleId, expandedFrom, expandedTo);
+        for (var s : schedules) {
+            result.add(new VehicleAvailabilityResponse.OccupiedSlot(
+                    s.getStartAt().minus(buffer), s.getEndAt().plus(buffer), s.getType().name()));
+        }
+
+        // 2. Booking-based slots (PENDING/ACCEPTED that don't yet have a schedule row)
+        var blockingBookings = bookingRepository.findByVehicle_IdAndStatusIn(vehicleId, BLOCKING_STATUSES);
+        for (Booking b : blockingBookings) {
+            Instant bookingEnd = computeBookingEnd(b);
+            // Only include if it overlaps the requested range and isn't already covered by a schedule
+            if (bookingEnd != null && b.getPickupTime().isBefore(expandedTo) && bookingEnd.isAfter(expandedFrom)) {
+                boolean alreadyCovered = schedules.stream().anyMatch(s ->
+                        s.getBooking() != null && s.getBooking().getId().equals(b.getId()));
+                if (!alreadyCovered) {
+                    result.add(new VehicleAvailabilityResponse.OccupiedSlot(
+                            b.getPickupTime().minus(buffer), bookingEnd.plus(buffer), "BOOKED"));
+                }
+            }
+        }
+
+        result.sort(Comparator.comparing(VehicleAvailabilityResponse.OccupiedSlot::startAt));
+        return new VehicleAvailabilityResponse(vehicleId, result);
+    }
+
+    private Instant computeBookingEnd(Booking booking) {
+        BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
+        if (snapshot == null) return null;
+        int slots = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
+                .map(BookingCharge::getQuantity)
+                .orElse(1);
+        return booking.getPickupTime().plus(Duration.ofMinutes((long) snapshot.getSlotLengthMinutes() * slots));
     }
 
     private PlanType parsePlanType(String planType) {
