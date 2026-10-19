@@ -1,13 +1,16 @@
 package com.fptufa26.ecomotion.user.service.implement;
 
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
+import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
+import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.ProviderStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
@@ -26,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -403,5 +407,132 @@ public class UserServiceImpl implements UserService {
         providerRepository.findProviderById(providerId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Provider not found"));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> listAdminUsers(Role role, UserStatus status, String keyword) {
+        List<User> users;
+        if (role != null) {
+            users = userRepository.findByRoleOrderByCreatedAtDesc(role);
+        } else if (status != null) {
+            users = userRepository.findByStatusOrderByCreatedAtDesc(status);
+        } else {
+            users = userRepository.findAllByOrderByCreatedAtDesc();
+        }
+
+        if (status != null && role != null) {
+            users = users.stream().filter(u -> u.getStatus() == status).toList();
+        }
+
+        if (keyword != null && !keyword.isBlank()) {
+            String lower = keyword.trim().toLowerCase(Locale.ROOT);
+            users = users.stream()
+                    .filter(u -> (u.getEmail() != null && u.getEmail().toLowerCase(Locale.ROOT).contains(lower))
+                            || (u.getFullName() != null && u.getFullName().toLowerCase(Locale.ROOT).contains(lower))
+                            || (u.getPhone() != null && u.getPhone().contains(lower)))
+                    .toList();
+        }
+
+        return users;
+    }
+
+    @Override
+    public User updateUserStatus(Long userId, UserStatus status) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại: " + userId));
+        user.setStatus(status);
+        return userRepository.save(user);
+    }
+
+    @Override
+    public User updateEkycStatus(Long userId, EkycStatus status) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại: " + userId));
+        user.setEkycStatus(status);
+        return userRepository.save(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Provider> listProviders(ProviderStatus status) {
+        if (status != null) {
+            return providerRepository.findByStatusOrderByCreatedAtDesc(status);
+        }
+        return providerRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    @Override
+    public Provider updateProviderStatus(Long providerId, ProviderStatus status) {
+        Provider provider = providerRepository.findById(providerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Nhà cung cấp không tồn tại: " + providerId));
+        provider.setStatus(status);
+        if (status == ProviderStatus.APPROVED && provider.getUser() != null) {
+            User user = provider.getUser();
+            if (user.getStatus() == UserStatus.PENDING) {
+                user.setStatus(UserStatus.ACTIVE);
+                userRepository.save(user);
+            }
+        }
+        return providerRepository.save(provider);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Driver> listDrivers(DriverStatus status) {
+        if (status != null) {
+            return driverRepository.findByStatusOrderByCreatedAtDesc(status);
+        }
+        return driverRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    @Override
+    public Driver updateDriverStatus(Long driverId, DriverStatus status, String rejectReason) {
+        Driver driver = driverRepository.findById(driverId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tài xế không tồn tại: " + driverId));
+        driver.setStatus(status);
+        if (status == DriverStatus.REJECTED) {
+            driver.setRejectReason(rejectReason != null ? rejectReason : "Hồ sơ không hợp lệ");
+        } else {
+            driver.setRejectReason(null);
+            if (status == DriverStatus.APPROVED && driver.getUser() != null) {
+                User user = driver.getUser();
+                if (user.getStatus() == UserStatus.PENDING) {
+                    user.setStatus(UserStatus.ACTIVE);
+                    userRepository.save(user);
+                }
+            }
+        }
+        return driverRepository.save(driver);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countUsersByStatus(UserStatus status) {
+        return userRepository.countByStatus(status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countUsersByRole(Role role) {
+        return userRepository.countByRole(role);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingEkyc() {
+        return userRepository.countByEkycStatus(EkycStatus.PENDING);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingProviders() {
+        return providerRepository.countByStatus(ProviderStatus.PENDING);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingDrivers() {
+        return driverRepository.countByStatus(DriverStatus.PENDING);
     }
 }

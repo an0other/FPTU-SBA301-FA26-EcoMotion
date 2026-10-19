@@ -14,6 +14,10 @@ import java.util.Optional;
 @Repository
 public interface DriverRepository extends JpaRepository<Driver, Long> {
 
+    List<Driver> findAllByOrderByCreatedAtDesc();
+
+    List<Driver> findByStatusOrderByCreatedAtDesc(DriverStatus status);
+
     Optional<Driver> findByUser_Id(Long userId);
 
     boolean existsByUser_Id(Long userId);
@@ -29,6 +33,8 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     Optional<Driver> findByIdAndProvider_Id(Long id, Long providerId);
 
     boolean existsByLicenseNoIgnoreCase(String licenseNo);
+
+    long countByStatus(DriverStatus status);
 
     @Query("SELECT d FROM Driver d " +
             "JOIN FETCH d.user u " +
