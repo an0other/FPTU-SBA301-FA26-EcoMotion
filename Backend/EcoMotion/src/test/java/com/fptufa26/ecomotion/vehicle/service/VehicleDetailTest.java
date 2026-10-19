@@ -86,8 +86,9 @@ class VehicleDetailTest {
         VehicleDetailResponse detail = vehicleService.getVehicleDetail(1L);
 
         assertThat(detail.plans()).extracting(VehicleDetailResponse.PlanDetail::planType)
-                .containsExactly(PlanType.HOURLY, PlanType.DAILY, PlanType.MONTHLY)
-                .doesNotContain(PlanType.YEARLY);
+                .containsExactly(PlanType.HOURLY, PlanType.DAILY, PlanType.MONTHLY, PlanType.YEARLY);
+        assertThat(detail.plans()).extracting(VehicleDetailResponse.PlanDetail::id)
+                .doesNotContain(retired.getId());
     }
 
     @Test
@@ -100,9 +101,10 @@ class VehicleDetailTest {
                 .findFirst()
                 .orElseThrow();
 
+        assertThat(hourly.id()).isNotNull();
         assertThat(hourly.slotLengthMinutes()).isEqualTo(240);
         assertThat(hourly.slotPrice()).isEqualByComparingTo(new BigDecimal("180000.00"));
-        assertThat(hourly.upfrontAmount()).isNull();
+        assertThat(hourly.upfrontAmount()).isEqualByComparingTo(new BigDecimal("500000.00"));
     }
 
     @Test

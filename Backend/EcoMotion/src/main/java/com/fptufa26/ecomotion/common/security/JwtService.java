@@ -23,7 +23,7 @@ public class JwtService {
     private final String issuer;
 
     public JwtService(
-            @Value("${app.jwt.secret}") String secret,
+            @Value("${app.jwt.secret:dev-secret-key-must-be-at-least-32-bytes-long-for-hs256}") String secret,
             @Value("${app.jwt.access-token-ttl:15m}") Duration accessTokenTtl,
             @Value("${app.jwt.issuer:ecomotion}") String issuer) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
