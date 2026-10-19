@@ -1,13 +1,19 @@
 package com.fptufa26.ecomotion.user.service;
 
+import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
+import com.fptufa26.ecomotion.user.enums.DriverStatus;
+import com.fptufa26.ecomotion.user.enums.EkycStatus;
+import com.fptufa26.ecomotion.user.enums.ProviderStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 public interface UserService {
@@ -59,4 +65,28 @@ public interface UserService {
             String bankAccountHolder,
             String businessLicenseNo,
             String taxCode);
+
+    List<User> listAdminUsers(Role role, UserStatus status, String keyword);
+
+    User updateUserStatus(Long userId, UserStatus status);
+
+    User updateEkycStatus(Long userId, EkycStatus status);
+
+    List<Provider> listProviders(ProviderStatus status);
+
+    Provider updateProviderStatus(Long providerId, ProviderStatus status);
+
+    List<Driver> listDrivers(DriverStatus status);
+
+    Driver updateDriverStatus(Long driverId, DriverStatus status, String rejectReason);
+
+    long countUsersByStatus(UserStatus status);
+
+    long countUsersByRole(Role role);
+
+    long countPendingEkyc();
+
+    long countPendingProviders();
+
+    long countPendingDrivers();
 }

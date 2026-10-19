@@ -1,9 +1,11 @@
 package com.fptufa26.ecomotion.user.service.implement;
 
 import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
+import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
 import com.fptufa26.ecomotion.user.entity.Provider;
+import com.fptufa26.ecomotion.user.enums.ProviderStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.enums.Role;
@@ -31,6 +33,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RenterRepository renterRepository;
     private final ProviderRepository providerRepository;
+    private final com.fptufa26.ecomotion.user.repository.DriverRepository driverRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -275,4 +278,132 @@ public class UserServiceImpl implements UserService {
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<User> listAdminUsers(Role role, UserStatus status, String keyword) {
+        java.util.List<User> users;
+        if (role != null) {
+            users = userRepository.findByRoleOrderByCreatedAtDesc(role);
+        } else if (status != null) {
+            users = userRepository.findByStatusOrderByCreatedAtDesc(status);
+        } else {
+            users = userRepository.findAllByOrderByCreatedAtDesc();
+        }
+
+        if (status != null && role != null) {
+            users = users.stream().filter(u -> u.getStatus() == status).toList();
+        }
+
+        if (keyword != null && !keyword.isBlank()) {
+            String lower = keyword.trim().toLowerCase(Locale.ROOT);
+            users = users.stream()
+                    .filter(u -> (u.getEmail() != null && u.getEmail().toLowerCase(Locale.ROOT).contains(lower))
+                            || (u.getFullName() != null && u.getFullName().toLowerCase(Locale.ROOT).contains(lower))
+                            || (u.getPhone() != null && u.getPhone().contains(lower)))
+                    .toList();
+        }
+
+        return users;
+    }
+
+    @Override
+    public User updateUserStatus(Long userId, UserStatus status) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.ResourceNotFoundException("Người dùng không tồn tại: " + userId));
+        user.setStatus(status);
+        return userRepository.save(user);
+    }
+
+    @Override
+    public User updateEkycStatus(Long userId, EkycStatus status) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.ResourceNotFoundException("Người dùng không tồn tại: " + userId));
+        user.setEkycStatus(status);
+        return userRepository.save(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<Provider> listProviders(ProviderStatus status) {
+        if (status != null) {
+            return providerRepository.findByStatusOrderByCreatedAtDesc(status);
+        }
+        return providerRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    @Override
+    public Provider updateProviderStatus(Long providerId, ProviderStatus status) {
+        Provider provider = providerRepository.findById(providerId)
+                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.ResourceNotFoundException("Nhà cung cấp không tồn tại: " + providerId));
+        provider.setStatus(status);
+        if (status == ProviderStatus.APPROVED && provider.getUser() != null) {
+            User user = provider.getUser();
+            if (user.getStatus() == UserStatus.PENDING) {
+                user.setStatus(UserStatus.ACTIVE);
+                userRepository.save(user);
+            }
+        }
+        return providerRepository.save(provider);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<com.fptufa26.ecomotion.user.entity.Driver> listDrivers(DriverStatus status) {
+        if (status != null) {
+            return driverRepository.findByStatusOrderByCreatedAtDesc(status);
+        }
+        return driverRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    @Override
+    public com.fptufa26.ecomotion.user.entity.Driver updateDriverStatus(Long driverId, DriverStatus status, String rejectReason) {
+        com.fptufa26.ecomotion.user.entity.Driver driver = driverRepository.findById(driverId)
+                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.ResourceNotFoundException("Tài xế không tồn tại: " + driverId));
+        driver.setStatus(status);
+        if (status == DriverStatus.REJECTED) {
+            driver.setRejectReason(rejectReason != null ? rejectReason : "Hồ sơ không hợp lệ");
+        } else {
+            driver.setRejectReason(null);
+            if (status == DriverStatus.APPROVED && driver.getUser() != null) {
+                User user = driver.getUser();
+                if (user.getStatus() == UserStatus.PENDING) {
+                    user.setStatus(UserStatus.ACTIVE);
+                    userRepository.save(user);
+                }
+            }
+        }
+        return driverRepository.save(driver);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countUsersByStatus(UserStatus status) {
+        return userRepository.countByStatus(status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countUsersByRole(Role role) {
+        return userRepository.countByRole(role);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingEkyc() {
+        return userRepository.countByEkycStatus(EkycStatus.PENDING);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingProviders() {
+        return providerRepository.countByStatus(ProviderStatus.PENDING);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPendingDrivers() {
+        return driverRepository.countByStatus(DriverStatus.PENDING);
+    }
 }
+
