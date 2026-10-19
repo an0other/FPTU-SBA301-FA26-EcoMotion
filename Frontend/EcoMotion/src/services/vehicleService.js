@@ -60,4 +60,11 @@ export const vehicleService = {
     return data?.data ?? []
   },
 
+  async getAvailability(vehicleId, from, to) {
+    const { data } = await apiClient.get(`/vehicles/${vehicleId}/availability`, {
+      params: { from, to },
+    })
+    return data?.data ?? { occupiedSlots: [] }
+  },
+
 }

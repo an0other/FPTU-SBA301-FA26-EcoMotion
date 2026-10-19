@@ -2,11 +2,12 @@ package com.fptufa26.ecomotion.user.service;
 
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.entity.Provider;
-import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.entity.Renter;
-import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
+import com.fptufa26.ecomotion.user.enums.ProviderType;
+import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
@@ -28,6 +29,8 @@ public interface UserService {
     boolean existsByPhone(String phone);
 
     User createUser(String email, String rawPassword, String fullName, String phone, Role role, UserStatus status);
+
+    Renter requireRenterByUserId(Long userId);
 
     User createPendingUser(String email, String rawPassword, Role role);
 

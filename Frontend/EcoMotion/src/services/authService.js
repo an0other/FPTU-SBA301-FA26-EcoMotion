@@ -1,4 +1,5 @@
 import apiClient, { refreshAccessToken } from './apiClient'
+import { getAccessToken, setAccessToken } from '../utils/tokenStore'
 
 export const authService = {
   async login(email, password, rememberMe = false, captchaToken = '') {
@@ -19,7 +20,6 @@ export const authService = {
     await apiClient.post('/auth/logout')
   },
 
-
   async sendRegisterOtp(email) {
     const { data } = await apiClient.post('/auth/register/send-otp', { email })
     return data
@@ -34,7 +34,6 @@ export const authService = {
     const { data } = await apiClient.post('/auth/register', payload)
     return data
   },
-
 
   async activateStatus(activationToken) {
     const { data } = await apiClient.post('/auth/activate/status', { activationToken })
@@ -67,7 +66,6 @@ export const authService = {
     return data
   },
 
-
   async activateResumeOtp(email) {
     const { data } = await apiClient.post('/auth/activate/resume-otp', { email })
     return data
@@ -77,4 +75,12 @@ export const authService = {
     const { data } = await apiClient.post('/auth/activate/resume', { email, otp })
     return data
   },
+}
+
+export async function ensureRenterSession() {
+  if (getAccessToken()) {
+    return
+  }
+  const data = await authService.login('renter01@ecomotion.vn', 'EcoMotion@123', false, '')
+  setAccessToken(data.accessToken)
 }
