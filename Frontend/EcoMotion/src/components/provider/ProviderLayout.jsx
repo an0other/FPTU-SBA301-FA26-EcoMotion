@@ -2,8 +2,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
 const NAV_ITEMS = [
-  { label: 'Tổng quan', icon: 'grid_view' },
-  { label: 'Xe của tôi', icon: 'directions_car' },
+  { label: 'Tổng quan', icon: 'grid_view', to: '/provider' },
+  { label: 'Xe của tôi', icon: 'directions_car', to: '/provider/vehicles' },
   { label: 'Tài xế', icon: 'badge' },
   { label: 'Đơn thuê', icon: 'local_taxi', to: '/provider/bookings' },
   { label: 'Chặn lịch', icon: 'event_busy' },

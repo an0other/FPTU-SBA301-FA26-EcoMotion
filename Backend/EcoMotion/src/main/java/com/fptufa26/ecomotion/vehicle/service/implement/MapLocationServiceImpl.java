@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -103,7 +104,7 @@ public class MapLocationServiceImpl implements MapLocationService {
         if (normalized.length() < 3 || normalized.length() > 200) {
             throw new IllegalArgumentException("Address query must be between 3 and 200 characters");
         }
-        String key = normalized.toLowerCase(java.util.Locale.ROOT);
+        String key = normalized.toLowerCase(Locale.ROOT);
         if (searchCache.containsKey(key)) return searchCache.get(key);
         if (!awaitRequestSlot()) throw new MapLocationUnavailableException("Address lookup interrupted");
 

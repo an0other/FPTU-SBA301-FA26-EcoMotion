@@ -24,7 +24,7 @@ public class LocalDocumentStorageService implements DocumentStorageService {
     private final long maxBytes;
 
     public LocalDocumentStorageService(
-            @Value("${app.document-storage.dir}") String rootDir,
+            @Value("${app.document-storage.dir:${app.upload.dir:./uploads}}") String rootDir,
             @Value("${app.upload.max-file-size-bytes:8388608}") long maxBytes) {
         this.root = Paths.get(rootDir).toAbsolutePath().normalize();
         this.maxBytes = maxBytes;

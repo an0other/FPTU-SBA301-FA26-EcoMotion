@@ -42,7 +42,11 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.enums.Transmission;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
+import com.fptufa26.ecomotion.vehicle.entity.VehicleDocument;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentStatus;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentType;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import jakarta.persistence.EntityManager;
@@ -111,6 +115,7 @@ public class DevDataSeeder implements ApplicationRunner {
         private final VehicleRepository vehicleRepository;
         private final VehicleImageRepository vehicleImageRepository;
         private final RentalPlanRepository rentalPlanRepository;
+        private final VehicleDocumentRepository vehicleDocumentRepository;
         private final BookingRepository bookingRepository;
         private final PasswordEncoder passwordEncoder;
         private final DeterministicCipher cipher;
@@ -590,6 +595,8 @@ public class DevDataSeeder implements ApplicationRunner {
         provider.setDepotLongitude(longitude);
         provider.setCommissionRate(new BigDecimal("0.1000"));
         provider.setDepositRatio(new BigDecimal("0.3000"));
+        provider.setBusinessLicenseNo("GP-HCM-00000" + user.getId());
+        provider.setTaxCode("031000000" + user.getId());
         provider.setStatus(ProviderStatus.APPROVED);
         provider.setRatingAvg(new BigDecimal("5.00"));
         provider.setRatingCount(2);
@@ -645,7 +652,29 @@ public class DevDataSeeder implements ApplicationRunner {
 
                 seedImages(vehicle, providerUserId, imageFiles, description);
                 seedPlans(vehicle, prices);
+                seedDocuments(vehicle);
         }
+
+    private void seedDocuments(Vehicle vehicle) {
+        if (!vehicleDocumentRepository.findByVehicle_Id(vehicle.getId()).isEmpty()) {
+            return;
+        }
+        createDocument(vehicle, DocumentType.REGISTRATION, "DK-" + vehicle.getId() + "-8899", LocalDate.now().plusYears(3), "/api/files/sample/sample-registration.pdf");
+        createDocument(vehicle, DocumentType.INSPECTION, "KD-" + vehicle.getId() + "-4455", LocalDate.now().plusMonths(18), "/api/files/sample/sample-inspection.pdf");
+        createDocument(vehicle, DocumentType.INSURANCE, "BH-" + vehicle.getId() + "-1122", LocalDate.now().plusYears(1), "/api/files/sample/sample-insurance.pdf");
+        createDocument(vehicle, DocumentType.BUSINESS_BADGE, "PH-" + vehicle.getId() + "-7788", LocalDate.now().plusYears(2), "/api/files/sample/sample-badge.pdf");
+    }
+
+    private void createDocument(Vehicle vehicle, DocumentType docType, String docNumber, LocalDate expiryDate, String fileUrl) {
+        VehicleDocument doc = new VehicleDocument();
+        doc.setVehicle(vehicle);
+        doc.setDocType(docType);
+        doc.setDocNumber(docNumber);
+        doc.setExpiryDate(expiryDate);
+        doc.setFileUrl(fileUrl);
+        doc.setStatus(DocumentStatus.VERIFIED);
+        vehicleDocumentRepository.save(doc);
+    }
 
         private void seedImages(Vehicle vehicle, Long providerUserId, List<String> imageFiles, String description) {
                 if (!vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(vehicle.getId()).isEmpty()) {

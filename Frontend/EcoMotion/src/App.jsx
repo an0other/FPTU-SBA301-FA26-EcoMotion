@@ -16,12 +16,16 @@ import PaymentHistoryPage from './pages/PaymentHistoryPage'
 import { PolicyPage } from './pages/PolicyPage'
 import ProviderBookingDetailPage from './pages/ProviderBookingDetailPage'
 import ProviderBookingQueuePage from './pages/ProviderBookingQueuePage'
-import ProviderDashboard from './pages/ProviderDashboard'
 import ProviderFinancePage from './pages/ProviderFinancePage'
 import RegisterPage from './pages/RegisterPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import VehicleListPage from './pages/VehicleListPage'
 import YearlyRentalPage from './pages/YearlyRentalPage'
+
+import ProviderHomePage from './pages/provider/ProviderHomePage'
+import ProviderVehicleListPage from './pages/provider/ProviderVehicleListPage'
+import ProviderVehicleCreatePage from './pages/provider/ProviderVehicleCreatePage'
+import ProviderVehicleHubPage from './pages/provider/ProviderVehicleHubPage'
 
 import { BookingDetailPage } from './pages/booking/BookingDetailPage'
 import { BookingRequestPage } from './pages/booking/BookingRequestPage'
@@ -146,7 +150,11 @@ export default function App() {
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={['PROVIDER']} />}>
-        <Route path="/provider" element={<ProviderDashboard />} />
+        <Route path="/provider" element={<ProviderHomePage />} />
+        <Route path="/provider/vehicles" element={<ProviderVehicleListPage />} />
+        <Route path="/provider/vehicles/new" element={<ProviderVehicleCreatePage />} />
+        <Route path="/provider/vehicles/:id" element={<ProviderVehicleHubPage />} />
+        <Route path="/provider/vehicles/:id/edit" element={<ProviderVehicleHubPage />} />
         <Route
           path="/provider/bookings"
           element={<ProviderBookingQueuePage />}

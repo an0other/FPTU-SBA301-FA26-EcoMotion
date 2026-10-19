@@ -15,8 +15,10 @@ public final class StorageObjectPath {
         if (content == null || content.length == 0) {
             throw new FileStorageException("Uploaded file is empty");
         }
-        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
-            throw new FileStorageException("Only image uploads are accepted");
+        boolean isImage = contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/");
+        boolean isPdf = contentType != null && contentType.equalsIgnoreCase("application/pdf");
+        if (!isImage && !isPdf) {
+            throw new FileStorageException("Only image (JPG, PNG) or PDF document uploads are accepted");
         }
         if (content.length > maxBytes) {
             throw new FileStorageException("Uploaded file exceeds the maximum allowed size");
