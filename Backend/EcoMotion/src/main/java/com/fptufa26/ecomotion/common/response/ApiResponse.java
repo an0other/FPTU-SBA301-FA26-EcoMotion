@@ -13,6 +13,18 @@ public record ApiResponse<T>(
         return new ApiResponse<>("SUCCESS", "OK", data);
     }
 
+    public static <T> ApiResponse<T> success(String message, T data) {
+        return new ApiResponse<>("SUCCESS", message, data);
+    }
+
+    public static <T> ApiResponse<T> ok(T data) {
+        return success(data);
+    }
+
+    public static <T> ApiResponse<T> ok(String message, T data) {
+        return success(message, data);
+    }
+
     public static <T> ApiResponse<T> error(String code, String message) {
         return new ApiResponse<>(code, message, null);
     }

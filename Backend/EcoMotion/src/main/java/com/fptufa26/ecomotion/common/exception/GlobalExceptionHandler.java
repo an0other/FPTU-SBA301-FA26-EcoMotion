@@ -162,6 +162,12 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex,
+                                                                HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(AccountAlreadyActiveException.class)
     public ResponseEntity<ErrorResponse> handleAccountAlreadyActive(AccountAlreadyActiveException ex,
                                                                     HttpServletRequest request) {

@@ -37,6 +37,7 @@ public class VehicleServiceImpl implements VehicleService {
     private final VehicleRepository vehicleRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final RentalPlanRepository rentalPlanRepository;
+    private final com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository vehicleDocumentRepository;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -275,4 +276,71 @@ public class VehicleServiceImpl implements VehicleService {
             return null;
         }
     }
+
+    @Override
+    public List<Vehicle> listAdminVehicles(VehicleStatus status, String keyword) {
+        List<Vehicle> vehicles = (status != null)
+                ? vehicleRepository.findByStatusOrderByIdDesc(status)
+                : vehicleRepository.findAllByOrderByIdDesc();
+
+        if (keyword != null && !keyword.isBlank()) {
+            String lower = keyword.trim().toLowerCase(Locale.ROOT);
+            return vehicles.stream()
+                    .filter(v -> matchesKeyword(v, lower))
+                    .toList();
+        }
+        return vehicles;
+    }
+
+    @Override
+    public Vehicle getAdminVehicle(Long id) {
+        return vehicleRepository.findById(id)
+                .orElseThrow(() -> new VehicleNotFoundException(id));
+    }
+
+    @Override
+    public List<com.fptufa26.ecomotion.vehicle.entity.VehicleDocument> getVehicleDocuments(Long vehicleId) {
+        return vehicleDocumentRepository.findByVehicle_Id(vehicleId);
+    }
+
+    @Override
+    @Transactional
+    public Vehicle updateVehicleApproval(Long vehicleId, VehicleStatus status, String reason) {
+        Vehicle vehicle = vehicleRepository.findById(vehicleId)
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+
+        vehicle.setStatus(status != null ? status : VehicleStatus.APPROVED);
+
+        // If approved, update vehicle documents from PENDING to VERIFIED
+        if (status == VehicleStatus.APPROVED) {
+            List<com.fptufa26.ecomotion.vehicle.entity.VehicleDocument> docs = vehicleDocumentRepository.findByVehicle_Id(vehicleId);
+            for (com.fptufa26.ecomotion.vehicle.entity.VehicleDocument doc : docs) {
+                if (doc.getStatus() == com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.PENDING) {
+                    doc.setStatus(com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.VERIFIED);
+                    vehicleDocumentRepository.save(doc);
+                }
+            }
+        } else if (status == VehicleStatus.REJECTED) {
+            List<com.fptufa26.ecomotion.vehicle.entity.VehicleDocument> docs = vehicleDocumentRepository.findByVehicle_Id(vehicleId);
+            for (com.fptufa26.ecomotion.vehicle.entity.VehicleDocument doc : docs) {
+                if (doc.getStatus() == com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.PENDING) {
+                    doc.setStatus(com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.REJECTED);
+                    vehicleDocumentRepository.save(doc);
+                }
+            }
+        }
+
+        return vehicleRepository.save(vehicle);
+    }
+
+    @Override
+    public long countVehiclesByStatus(VehicleStatus status) {
+        return vehicleRepository.countByStatus(status);
+    }
+
+    @Override
+    public long countTotalVehicles() {
+        return vehicleRepository.count();
+    }
 }
+
