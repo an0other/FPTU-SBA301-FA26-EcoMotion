@@ -14,12 +14,15 @@ import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 
 import java.util.List;
+import java.math.BigDecimal;
 
 public interface PaymentRequestService {
 
     PaymentRequest createDepositPaymentRequest(Booking booking);
 
     PaymentRequest createFinalBalancePaymentRequest(Long bookingId);
+
+    BigDecimal calculateRemainingAmount(Long bookingId);
 
     List<PaymentRequestResponse> getPaymentRequestsByBooking(Long bookingId, Long currentUserId);
 

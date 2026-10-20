@@ -121,7 +121,7 @@ export function BookingDetailPage() {
         booking={booking}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
-        onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/checkout`)}
+        onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
         onCancelBooking={async () => {
           const updated = await cancelMyBooking(booking.id)
           navigate(`/renter/bookings/${updated.bookingCode}`, { replace: true })

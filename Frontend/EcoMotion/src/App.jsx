@@ -29,7 +29,6 @@ import ProviderVehicleHubPage from './pages/provider/ProviderVehicleHubPage'
 
 import { BookingDetailPage } from './pages/booking/BookingDetailPage'
 import { BookingRequestPage } from './pages/booking/BookingRequestPage'
-import { DepositPaymentPage } from './pages/booking/DepositPaymentPage'
 import { MyBookingsPage } from './pages/booking/MyBookingsPage'
 import { SubmittedBookingPage } from './pages/booking/SubmittedBookingPage'
 
@@ -97,15 +96,6 @@ export default function App() {
           element={
             <BookingShell>
               <SubmittedBookingPage />
-            </BookingShell>
-          }
-        />
-
-        <Route
-          path="/renter/bookings/:bookingCode/checkout"
-          element={
-            <BookingShell>
-              <DepositPaymentPage />
             </BookingShell>
           }
         />

@@ -59,7 +59,7 @@ export function MyBookingsPage() {
     <MyBookingsList
       bookings={bookings}
       onSelectBooking={(booking) => navigate(`/renter/bookings/${booking.id}`)}
-      onPayDeposit={(booking) => navigate(`/renter/bookings/${booking.id}/checkout`)}
+      onPayDeposit={(booking) => navigate(`/renter/bookings/${booking.id}/payment`)}
       onBookCar={() => navigate('/')}
     />
   )

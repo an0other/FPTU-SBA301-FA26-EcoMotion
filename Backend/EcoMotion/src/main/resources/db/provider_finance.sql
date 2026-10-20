@@ -46,11 +46,12 @@ CREATE TABLE IF NOT EXISTS payment_request (
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_payment_request_type CHECK (payment_type IN ('DEPOSIT', 'FINAL_BALANCE', 'ADJUSTMENT')),
-    CONSTRAINT ck_payment_request_status CHECK (status IN ('PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'CONFIRMED', 'REJECTED', 'EXPIRED', 'REVIEW_REQUIRED')),
+    CONSTRAINT ck_payment_request_status CHECK (status IN ('PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'CONFIRMED', 'REJECTED', 'EXPIRED', 'REVIEW_REQUIRED', 'VOIDED')),
     CONSTRAINT ck_payment_request_amount CHECK (amount > 0)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_payment_request_ref ON payment_request (transfer_reference);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_payment_request_booking_type ON payment_request (booking_id, payment_type);
 CREATE INDEX IF NOT EXISTS idx_payment_request_booking ON payment_request (booking_id);
 CREATE INDEX IF NOT EXISTS idx_payment_request_status ON payment_request (status);
 
