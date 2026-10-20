@@ -47,7 +47,9 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   const [disputes, setDisputes] = useState([])
   const [disputeStatus, setDisputeStatus] = useState(initialFilter.status || 'ALL')
   const [resolvingDispute, setResolvingDispute] = useState(null)
-  const [disputeForm, setDisputeForm] = useState({ status: 'RESOLVED', resolution: '' })
+  const [disputeForm, setDisputeForm] = useState({
+    status: 'RESOLVED', decision: 'KEEP_CHARGE', resolution: '',
+  })
 
   // SubTab 3: Payments & Refund
   const [payments, setPayments] = useState([])
@@ -103,7 +105,12 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
     }
     setActionLoading(true)
     try {
-      await adminService.resolveDispute(resolvingDispute.id, disputeForm.status, disputeForm.resolution.trim())
+      await adminService.resolveDispute(
+        resolvingDispute.id,
+        disputeForm.status,
+        disputeForm.decision,
+        disputeForm.resolution.trim(),
+      )
       setMessage({ type: 'success', text: 'Đã cập nhật phân xử tranh chấp thành công!' })
       setResolvingDispute(null)
       loadData()
@@ -389,6 +396,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                               setResolvingDispute(d)
                               setDisputeForm({
                                 status: d.status === 'OPEN' ? 'RESOLVED' : d.status,
+                                decision: 'KEEP_CHARGE',
                                 resolution: d.resolution || '',
                               })
                             }}
@@ -643,10 +651,24 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                   className="w-full rounded-xl border border-slate-300 p-2.5 outline-none font-semibold"
                 >
                   <option value="RESOLVED">RESOLVED (Đã giải quyết dứt điểm)</option>
-                  <option value="UNDER_REVIEW">UNDER_REVIEW (Đang tiếp nhận thẩm tra)</option>
+                  <option value="IN_REVIEW">IN_REVIEW (Đang tiếp nhận thẩm tra)</option>
                   <option value="REJECTED">REJECTED (Bác bỏ khiếu nại)</option>
                 </select>
               </div>
+
+              {resolvingDispute.category === 'CHARGE' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Quyết định đối với phụ phí:</label>
+                  <select
+                    value={disputeForm.decision}
+                    onChange={(e) => setDisputeForm((prev) => ({ ...prev, decision: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 outline-none font-semibold"
+                  >
+                    <option value="KEEP_CHARGE">KEEP_CHARGE — Giữ nguyên phụ phí</option>
+                    <option value="WAIVE_CHARGE">WAIVE_CHARGE — Miễn toàn bộ phụ phí</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">

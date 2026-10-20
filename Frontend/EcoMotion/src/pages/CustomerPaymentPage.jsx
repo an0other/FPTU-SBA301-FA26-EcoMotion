@@ -36,6 +36,7 @@ const STATUS_BADGES = {
   REJECTED: { label: 'Bị từ chối', bg: 'bg-red-50 text-red-800 border-red-200' },
   EXPIRED: { label: 'Hết hạn', bg: 'bg-slate-100 text-slate-700 border-slate-300' },
   REVIEW_REQUIRED: { label: 'Cần đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
+  VOIDED: { label: 'Đã huỷ yêu cầu', bg: 'bg-slate-100 text-slate-700 border-slate-300' },
 }
 
 export default function CustomerPaymentPage() {
@@ -302,7 +303,7 @@ export default function CustomerPaymentPage() {
             <button
               type="button"
               onClick={() => setProofModalOpen(true)}
-              disabled={selectedRequest.status === 'CONFIRMED'}
+              disabled={!['PENDING', 'PARTIALLY_PAID', 'REJECTED'].includes(selectedRequest.status)}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#047857] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Icon name="receipt_long" className="text-lg" />

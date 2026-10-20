@@ -88,7 +88,8 @@ public class AdminOperationsController {
             @Valid @RequestBody DisputeResolveRequest request,
             @AuthenticationPrincipal SecurityUser securityUser) {
         Long adminId = (securityUser != null) ? securityUser.getUserId() : null;
-        Dispute resolved = disputeService.resolveDispute(id, adminId, request.getStatus(), request.getResolution());
+        Dispute resolved = disputeService.resolveDispute(
+                id, adminId, request.getStatus(), request.getDecision(), request.getResolution());
         return ResponseEntity.ok(ApiResponse.ok("Xử lý tranh chấp thành công", mapDisputeDto(resolved)));
     }
 
