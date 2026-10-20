@@ -93,7 +93,7 @@ class DriverTripApiIntegrationTest {
                         .param("status", "ASSIGNED")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.total").value(2));
+                .andExpect(jsonPath("$.data.total").value(0));
     }
 
     @Test

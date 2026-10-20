@@ -7,6 +7,7 @@ const FILTER_TABS = [
   { label: 'Đã chấp nhận', status: 'ACCEPTED' },
   { label: 'Đã xác nhận', status: 'CONFIRMED' },
   { label: 'Đang chạy', status: 'IN_PROGRESS' },
+  { label: 'Chờ quyết toán', status: 'AWAITING_FINAL_PAYMENT' },
   { label: 'Hoàn thành', status: 'COMPLETED' },
   { label: 'Đã huỷ', status: 'CANCELLED' },
   { label: 'Từ chối', status: 'REJECTED' },
@@ -55,6 +56,18 @@ export const MyBookingsList = ({
         return (
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 whitespace-nowrap">
             Hoàn thành
+          </span>
+        );
+      case 'AWAITING_FINAL_PAYMENT':
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-200 whitespace-nowrap">
+            Chờ quyết toán
+          </span>
+        );
+      case 'AWAITING_EXTRA_CHARGE_CONFIRMATION':
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-orange-800 bg-orange-50 border border-orange-200 whitespace-nowrap">
+            Chờ chốt phụ phí
           </span>
         );
       case 'CANCELLED':
@@ -158,7 +171,7 @@ export const MyBookingsList = ({
                 <div className="shrink-0">{getStatusBadge(booking.status)}</div>
 
                 {/* Col 6: Contextual Action (if ACCEPTED) */}
-                {booking.status === 'ACCEPTED' && (
+                {['ACCEPTED', 'AWAITING_FINAL_PAYMENT'].includes(booking.status) && (
                   <div className="shrink-0">
                     <button
                       onClick={(e) => {
@@ -168,7 +181,9 @@ export const MyBookingsList = ({
                       className="px-4 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-medium shadow-xs whitespace-nowrap cursor-pointer active:scale-98 transition-all duration-180"
                       type="button"
                     >
-                      Thanh toán {booking.planType === 'YEARLY' ? 'trả trước' : 'giữ chỗ'}
+                      {booking.status === 'AWAITING_FINAL_PAYMENT'
+                        ? 'Thanh toán quyết toán'
+                        : `Thanh toán ${booking.planType === 'YEARLY' ? 'trả trước' : 'giữ chỗ'}`}
                     </button>
                   </div>
                 )}

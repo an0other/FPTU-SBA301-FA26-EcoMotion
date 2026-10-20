@@ -6,6 +6,7 @@ import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
@@ -17,8 +18,15 @@ import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.booking.service.ProviderBookingService;
+import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 import com.fptufa26.ecomotion.booking.specification.BookingSpecification;
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
+import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
@@ -92,6 +100,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final VehicleService vehicleService;
     private final MapGeocodingService mapGeocodingService;
     private final com.fptufa26.ecomotion.finance.service.PaymentRequestService paymentRequestService;
+    private final DisputeRepository disputeRepository;
+    private final ScheduleService scheduleService;
     private final Clock clock;
 
     @Override
@@ -355,8 +365,23 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new IllegalArgumentException("Chỉ có thể chấp nhận đơn ở trạng thái Chờ duyệt (PENDING)");
         }
 
+        BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
+                .orElse(null);
+        int slots = bookingChargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
+                .map(BookingCharge::getQuantity)
+                .orElse(1);
+        int slotLengthMinutes = snapshot != null
+                ? snapshot.getSlotLengthMinutes()
+                : booking.getPlan().getSlotLengthMinutes();
+        Instant end = booking.getPickupTime().plus(
+                Duration.ofMinutes((long) slotLengthMinutes * Math.max(1, slots)));
+        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
+                booking.getVehicle(), booking.getPickupTime(), end);
+        if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
+            throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn");
+        }
+
         booking.setStatus(BookingStatus.ACCEPTED);
-        booking.setProviderConfirmedAt(Instant.now());
         Booking saved = bookingRepository.save(booking);
 
         paymentRequestService.createDepositPaymentRequest(saved);
@@ -391,11 +416,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         Booking booking = resolveBooking(provider, bookingCodeOrId);
 
         BookingStatus oldStatus = booking.getStatus();
-        if (booking.getStatus() == BookingStatus.REJECTED || booking.getStatus() == BookingStatus.CANCELLED) {
-            throw new IllegalArgumentException("Không thể phân công tài xế cho đơn đã bị từ chối hoặc đã huỷ");
-        }
-        if (booking.getStatus() == BookingStatus.COMPLETED) {
-            throw new IllegalArgumentException("Không thể phân công tài xế cho đơn đã hoàn tất");
+        if (oldStatus != BookingStatus.CONFIRMED) {
+            throw new ConflictException("Chỉ có thể phân công tài xế sau khi khoản cọc đã được xác nhận");
         }
 
         Driver driver = driverRepository.findByIdAndProvider_Id(driverId, provider.getId())
@@ -445,7 +467,15 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     @Transactional
     public BookingChargeResponse addCharge(Long currentUserId, String bookingCodeOrId, AddChargeRequest request) {
         Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
+
+        if (booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
+                || booking.getActualEndAt() == null) {
+            throw new ConflictException("Chỉ có thể thêm phụ phí sau khi tài xế kết thúc chuyến đi");
+        }
+        if (request.chargeType() == ChargeType.BASE_RENTAL || request.chargeType() == ChargeType.DEPOSIT) {
+            throw new ConflictException("Không thể thêm thủ công tiền thuê gốc hoặc tiền cọc");
+        }
 
         BookingCharge charge = new BookingCharge();
         charge.setBooking(booking);
@@ -461,12 +491,50 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
         BookingCharge saved = bookingChargeRepository.save(charge);
 
-        BigDecimal newTotal = (booking.getTotalAmount() != null ? booking.getTotalAmount() : BigDecimal.ZERO)
-                .add(request.amount());
-        booking.setTotalAmount(newTotal);
-        bookingRepository.save(booking);
-
         return toChargeResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public SettlementResultResponse finalizeSettlement(Long currentUserId, String bookingCodeOrId) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
+
+        if (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT) {
+            PaymentRequest existing = paymentRequestService.createFinalBalancePaymentRequest(booking.getId());
+            return new SettlementResultResponse(
+                    booking.getBookingCode(),
+                    booking.getStatus(),
+                    existing.getId(),
+                    existing.getAmount().subtract(existing.getPaidAmount()).max(BigDecimal.ZERO));
+        }
+        if (booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
+            throw new ConflictException("Đơn thuê chưa ở bước chốt quyết toán");
+        }
+        if (booking.getProviderConfirmedAt() == null || booking.getRenterConfirmedAt() == null) {
+            throw new ConflictException("Cần xác nhận kết thúc từ cả tài xế và người thuê trước khi chốt quyết toán");
+        }
+        if (disputeRepository.existsByBooking_IdAndStatusIn(
+                booking.getId(), List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW))) {
+            throw new ConflictException("Không thể chốt quyết toán khi đơn thuê đang có tranh chấp");
+        }
+
+        BigDecimal remaining = paymentRequestService.calculateRemainingAmount(booking.getId());
+        if (remaining.signum() <= 0) {
+            booking.setStatus(BookingStatus.COMPLETED);
+            bookingRepository.save(booking);
+            return new SettlementResultResponse(
+                    booking.getBookingCode(), BookingStatus.COMPLETED, null, BigDecimal.ZERO.setScale(2));
+        }
+
+        PaymentRequest paymentRequest = paymentRequestService.createFinalBalancePaymentRequest(booking.getId());
+        booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+        bookingRepository.save(booking);
+        return new SettlementResultResponse(
+                booking.getBookingCode(),
+                booking.getStatus(),
+                paymentRequest.getId(),
+                paymentRequest.getAmount().subtract(paymentRequest.getPaidAmount()).max(BigDecimal.ZERO));
     }
 
     @Override
@@ -551,6 +619,21 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         } catch (NumberFormatException ex) {
             return bookingRepository.findByBookingCodeAndVehicle_Provider_Id(bookingCodeOrId.trim(), provider.getId())
                     .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + bookingCodeOrId));
+        }
+    }
+
+    private Booking resolveBookingForUpdate(Provider provider, String bookingCodeOrId) {
+        if (bookingCodeOrId == null || bookingCodeOrId.isBlank()) {
+            throw new BookingNotFoundException("Mã đơn thuê không hợp lệ");
+        }
+        String value = bookingCodeOrId.trim();
+        try {
+            return bookingRepository.findByIdAndProviderIdForUpdate(Long.parseLong(value), provider.getId())
+                    .orElseGet(() -> bookingRepository.findByBookingCodeAndProviderIdForUpdate(value, provider.getId())
+                            .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + value)));
+        } catch (NumberFormatException ex) {
+            return bookingRepository.findByBookingCodeAndProviderIdForUpdate(value, provider.getId())
+                    .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + value));
         }
     }
 

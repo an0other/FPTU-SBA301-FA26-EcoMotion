@@ -21,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.Locale;
 
 @RequiredArgsConstructor
 @Service
@@ -132,6 +133,10 @@ public class DocumentVerificationServiceImpl implements DocumentVerificationServ
     private byte[] read(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new FileStorageException("A required image is missing");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            throw new FileStorageException("Only image uploads are accepted for identity verification");
         }
         try {
             return file.getBytes();

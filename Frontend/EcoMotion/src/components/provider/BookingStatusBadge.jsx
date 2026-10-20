@@ -39,6 +39,11 @@ const BOOKING_STATUS_META = {
     className: 'bg-orange-100 text-orange-800',
     dot: 'bg-orange-600 animate-pulse',
   },
+  AWAITING_FINAL_PAYMENT: {
+    label: 'Chờ quyết toán',
+    className: 'bg-purple-100 text-purple-800',
+    dot: 'bg-purple-600 animate-pulse',
+  },
   COMPLETED: {
     label: 'Hoàn tất',
     className: 'bg-surface-container text-on-surface-variant',

@@ -117,8 +117,8 @@ export const providerFinanceService = {
   // Customer Payment & Proofs
   // ==========================================
 
-  async getPaymentRequestsByBooking(bookingId) {
-    const { data } = await apiClient.get(`/v1/bookings/${bookingId}/payment-requests`)
+  async getPaymentRequestsByBooking(bookingCode) {
+    const { data } = await apiClient.get(`/v1/renter/bookings/${encodeURIComponent(bookingCode)}/payment-requests`)
     return data?.data ?? []
   },
 

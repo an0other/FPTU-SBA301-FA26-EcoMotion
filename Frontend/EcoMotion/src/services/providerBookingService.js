@@ -59,6 +59,11 @@ export const providerBookingService = {
     return data?.data
   },
 
+  async finalizeSettlement(idOrCode) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/settlement/finalize`)
+    return data?.data
+  },
+
   async getAvailableDrivers() {
     const { data } = await apiClient.get('/provider/drivers/available')
     return data?.data ?? []

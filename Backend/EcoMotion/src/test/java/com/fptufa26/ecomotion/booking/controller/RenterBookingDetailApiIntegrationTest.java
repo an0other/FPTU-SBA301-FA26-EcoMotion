@@ -9,6 +9,15 @@ import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
 import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.seed.DevDataSeeder;
+import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
+import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
+import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
+import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
+import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +59,18 @@ class RenterBookingDetailApiIntegrationTest {
 
     @Autowired
     private VehicleScheduleRepository vehicleScheduleRepository;
+
+    @Autowired
+    private PaymentRequestService paymentRequestService;
+
+    @Autowired
+    private PaymentRequestRepository paymentRequestRepository;
+
+    @Autowired
+    private ProviderBankAccountRepository bankAccountRepository;
+
+    @Autowired
+    private ProviderRepository providerRepository;
 
     @Test
     @DisplayName("detail hides sequential ids and shows no refund before a deposit is paid")
@@ -126,9 +147,12 @@ class RenterBookingDetailApiIntegrationTest {
     @DisplayName("cancelling inside 24 hours refunds half the deposit")
     void cancelLateRefundsHalfDeposit() throws Exception {
         String token = login();
-        String code = createBooking(token, "DAILY", 1, Instant.now().plus(Duration.ofHours(2)).toString());
+        String code = createBooking(token, "DAILY", 1, "2027-08-01T01:00:00Z");
         accept(code);
         checkout(token, code, "CARD");
+        Booking lateBooking = bookingRepository.findByBookingCode(code).orElseThrow();
+        lateBooking.setPickupTime(Instant.now().plus(Duration.ofHours(2)));
+        bookingRepository.saveAndFlush(lateBooking);
 
         mockMvc.perform(post("/api/renter/bookings/" + code + "/cancel")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -183,8 +207,8 @@ class RenterBookingDetailApiIntegrationTest {
         mockMvc.perform(post("/api/renter/bookings/" + code + "/confirm-end")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.completed").value(true));
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"))
+                .andExpect(jsonPath("$.data.completed").value(false));
     }
 
     @Test
@@ -223,11 +247,27 @@ class RenterBookingDetailApiIntegrationTest {
     }
 
     private void checkout(String token, String code, String method) throws Exception {
-        mockMvc.perform(post("/api/renter/bookings/" + code + "/checkout")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"method\":\"" + method + "\"}"))
-                .andExpect(status().isOk());
+        Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
+        ensureBankAccount(booking);
+        PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
+        request.setStatus(PaymentRequestStatus.PROOF_SUBMITTED);
+        paymentRequestRepository.saveAndFlush(request);
+        paymentRequestService.confirmPayment(
+                request.getId(), 2L,
+                new ConfirmPaymentRequest(request.getAmount(), "TEST-" + code, method));
+    }
+
+    private void ensureBankAccount(Booking booking) {
+        if (bankAccountRepository.findByProvider_IdAndStatus(
+                booking.getVehicle().getProvider().getId(), BankAccountStatus.ACTIVE).isPresent()) return;
+        ProviderBankAccount account = new ProviderBankAccount();
+        account.setProvider(providerRepository.findById(
+                booking.getVehicle().getProvider().getId()).orElseThrow());
+        account.setBankCode("VCB");
+        account.setBankName("Vietcombank");
+        account.setAccountNumber("0123456789");
+        account.setAccountHolderName("ECOMOTION TEST");
+        bankAccountRepository.saveAndFlush(account);
     }
 
     private String createBooking(String token, String planType, int slotCount, String pickupTime) throws Exception {

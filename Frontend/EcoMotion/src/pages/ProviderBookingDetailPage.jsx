@@ -10,6 +10,7 @@ import AddChargeModal from '../components/provider/modals/AddChargeModal'
 import LiveMapViewer from '../components/map/LiveMapViewer'
 import { useProviderBookingDetail } from '../hooks/useProviderBookingDetail'
 import { useProviderTripTracking } from '../hooks/useProviderTripTracking'
+import { providerBookingService } from '../services/providerBookingService'
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded ${className}`}>{name}</span>
@@ -53,6 +54,7 @@ export default function ProviderBookingDetailPage() {
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [showAddChargeModal, setShowAddChargeModal] = useState(false)
   const [toast, setToast] = useState({ message: '', type: 'success' })
+  const [finalizing, setFinalizing] = useState(false)
 
   const isPending = booking?.status === 'PENDING'
   const isRejected = booking?.status === 'REJECTED'
@@ -65,6 +67,24 @@ export default function ProviderBookingDetailPage() {
   const handleActionSuccess = (_, message) => {
     refetch()
     setToast({ message, type: 'success' })
+  }
+
+  const handleFinalizeSettlement = async () => {
+    setFinalizing(true)
+    try {
+      const result = await providerBookingService.finalizeSettlement(booking.bookingCode)
+      setToast({
+        message: result.status === 'COMPLETED'
+          ? 'Đã chốt quyết toán. Đơn thuê đã hoàn thành.'
+          : 'Đã chốt phụ phí và tạo yêu cầu thanh toán VietQR.',
+        type: 'success',
+      })
+      refetch()
+    } catch (err) {
+      setToast({ message: err.message || 'Không thể chốt quyết toán', type: 'error' })
+    } finally {
+      setFinalizing(false)
+    }
   }
 
   if (loading) {
@@ -175,7 +195,7 @@ export default function ProviderBookingDetailPage() {
               </>
             )}
 
-            {!isRejected && !isCancelled && (
+            {booking.status === 'CONFIRMED' && (
               <button
                 type="button"
                 onClick={() => setShowAssignModal(true)}
@@ -186,7 +206,7 @@ export default function ProviderBookingDetailPage() {
               </button>
             )}
 
-            {!isRejected && !isCancelled && (
+            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && (
               <button
                 type="button"
                 onClick={() => setShowAddChargeModal(true)}
@@ -194,6 +214,19 @@ export default function ProviderBookingDetailPage() {
               >
                 <Icon name="add_circle" className="text-[18px]" />
                 <span>Thêm phụ phí</span>
+              </button>
+            )}
+
+            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION'
+              && booking.providerConfirmedAt && booking.renterConfirmedAt && (
+              <button
+                type="button"
+                onClick={handleFinalizeSettlement}
+                disabled={finalizing}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-purple-700 px-4 text-xs font-bold text-white shadow-xs hover:bg-purple-800 disabled:opacity-50"
+              >
+                <Icon name="price_check" className="text-[18px]" />
+                <span>{finalizing ? 'Đang chốt...' : 'Chốt quyết toán'}</span>
               </button>
             )}
           </div>
@@ -359,7 +392,7 @@ export default function ProviderBookingDetailPage() {
                   <Icon name="badge" className="text-[20px] text-[#064e3b]" />
                   <span>Tài xế phân công</span>
                 </h2>
-                {!isRejected && !isCancelled && (
+                {booking.status === 'CONFIRMED' && (
                   <button
                     type="button"
                     onClick={() => setShowAssignModal(true)}
