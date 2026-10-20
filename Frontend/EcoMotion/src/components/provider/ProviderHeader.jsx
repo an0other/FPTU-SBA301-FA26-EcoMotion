@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import { providerService } from "../../services/providerService";
 
 export default function ProviderHeader({
   activeTab = "home",
@@ -11,13 +12,62 @@ export default function ProviderHeader({
   const navigate = useNavigate();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  // Tự động load và cache thông tin Depot để đồng bộ trên mọi trang
+  const [depotInfo, setDepotInfo] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem("ecomotion_provider_depot");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return {
+      name: providerName || "",
+      address: depotAddress || "",
+    };
+  });
+
+  useEffect(() => {
+    if (providerName && depotAddress) {
+      const info = { name: providerName, address: depotAddress };
+      setDepotInfo(info);
+      try {
+        sessionStorage.setItem("ecomotion_provider_depot", JSON.stringify(info));
+      } catch (e) {}
+      return;
+    }
+
+    // Nếu trang hiện tại không truyền prop (như Finance, Bookings), tự động fetch từ API hoặc cache
+    let isMounted = true;
+    async function fetchDepot() {
+      try {
+        const data = await providerService.getDashboardSummary();
+        if (isMounted && data) {
+          const info = {
+            name: data.providerName || user?.fullName || "EcoMotion Depot",
+            address: data.depotAddress || "Hệ thống Depot EcoMotion",
+          };
+          setDepotInfo(info);
+          try {
+            sessionStorage.setItem("ecomotion_provider_depot", JSON.stringify(info));
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.error("Failed to auto-fetch depot info:", err);
+      }
+    }
+    fetchDepot();
+    return () => {
+      isMounted = false;
+    };
+  }, [providerName, depotAddress, user?.fullName]);
+
   async function handleLogout() {
     await logout();
     navigate("/login", { replace: true });
   }
 
-  const displayName = providerName || user?.fullName || "EcoMotion Depot";
-  const displayAddress = depotAddress || "Hệ thống Depot EcoMotion";
+  const displayName =
+    depotInfo.name || providerName || user?.fullName || "EcoMotion Depot";
+  const displayAddress =
+    depotInfo.address || depotAddress || "Hệ thống Depot EcoMotion";
   const initials = user?.fullName
     ? user.fullName
         .trim()
@@ -50,13 +100,13 @@ export default function ProviderHeader({
           </Link>
 
           <div
-            className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/60 max-w-[360px]"
+            className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/60 w-[280px] xl:w-[320px] shrink-0"
             title={`${displayName} - ${displayAddress}`}
           >
             <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0">
               storefront
             </span>
-            <div className="flex flex-col text-left leading-tight truncate">
+            <div className="flex flex-col text-left leading-tight truncate min-w-0 flex-1">
               <span className="font-bold text-slate-900 text-xs truncate">
                 {displayName}
               </span>
