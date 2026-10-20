@@ -30,7 +30,7 @@ export default function ProviderHeader({
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-[0_1px_8px_rgba(11,28,48,0.04)] border-b border-slate-200">
-      <div className="h-20 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between gap-4">
+      <div className="h-20 w-full px-6 lg:px-8 xl:px-12 flex items-center justify-between gap-4">
         {/* Left: Brand Logo & Depot Chip */}
         <div className="flex items-center gap-4 shrink-0">
           <Link to="/provider" className="flex items-center gap-3 shrink-0">
@@ -68,12 +68,12 @@ export default function ProviderHeader({
         </div>
 
         {/* Center: Main Navigation */}
-        <nav className="hidden lg:flex items-center gap-1.5">
+        <nav className="hidden lg:flex items-center justify-center flex-1 mx-4 gap-1.5 xl:gap-2">
           <Link
             to="/provider"
-            className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
+            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
               activeTab === "home"
-                ? "bg-emerald-50 text-emerald-700 font-bold"
+                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
@@ -81,19 +81,39 @@ export default function ProviderHeader({
           </Link>
           <Link
             to="/provider/vehicles"
-            className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
+            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
               activeTab === "vehicles"
-                ? "bg-emerald-50 text-emerald-700 font-bold"
+                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
             Đội xe của tôi
           </Link>
           <Link
+            to="/provider/schedules"
+            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
+              activeTab === "schedules"
+                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
+            }`}
+          >
+            Chặn lịch
+          </Link>
+          <Link
+            to="/provider/drivers"
+            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
+              activeTab === "drivers"
+                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
+            }`}
+          >
+            Quản lý tài xế
+          </Link>
+          <Link
             to="/provider/bookings"
-            className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
+            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
               activeTab === "bookings"
-                ? "bg-emerald-50 text-emerald-700 font-bold"
+                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
@@ -101,9 +121,9 @@ export default function ProviderHeader({
           </Link>
           <Link
             to="/provider/finance"
-            className={`px-4 py-2 rounded-xl text-[14px] transition-colors ${
+            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
               activeTab === "finance"
-                ? "bg-emerald-50 text-emerald-700 font-bold"
+                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
           >
@@ -111,19 +131,8 @@ export default function ProviderHeader({
           </Link>
         </nav>
 
-        {/* Right: Notifications & User Profile */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            title="Thông báo"
-            className="relative p-2 rounded-full text-slate-500 hover:text-[#0b1c30] hover:bg-slate-100 transition-colors"
-          >
-            <span className="material-symbols-outlined text-[22px]">
-              notifications
-            </span>
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white" />
-          </button>
-
+        {/* Right: User Profile (Đã bỏ chuông thông báo) */}
+        <div className="flex items-center shrink-0">
           <div className="relative">
             <button
               type="button"
