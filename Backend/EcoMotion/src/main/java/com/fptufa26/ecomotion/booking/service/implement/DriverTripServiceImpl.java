@@ -173,6 +173,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getDriverConfirmedAt() != null || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
             throw new TripConflictException("Chuyến đi đã được xác nhận trước đó");
         }
+        if (booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
+            throw new InvalidTripTransitionException("Chỉ có thể xác nhận chuyến đã được nhà cung cấp phân công");
+        }
 
         Instant now = clock.instant();
         booking.setDriverConfirmedAt(now);
@@ -308,7 +311,7 @@ public class DriverTripServiceImpl implements DriverTripService {
 
         Instant now = clock.instant();
         booking.setActualEndAt(now);
-        booking.setStatus(BookingStatus.COMPLETED);
+        booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         if (booking.getProviderConfirmedAt() == null) {
             booking.setProviderConfirmedAt(now);
         }
@@ -572,7 +575,7 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
         String clean = status.trim().toUpperCase(Locale.ROOT);
         if ("ASSIGNED".equals(clean)) {
-            return List.of(BookingStatus.ACCEPTED, BookingStatus.CONFIRMED);
+            return List.of(BookingStatus.DRIVER_ASSIGNED);
         }
         try {
             return List.of(BookingStatus.valueOf(clean));

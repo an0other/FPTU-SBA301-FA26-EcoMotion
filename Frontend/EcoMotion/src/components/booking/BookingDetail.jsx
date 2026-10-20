@@ -100,6 +100,18 @@ export const BookingDetail = ({
                 Hoàn thành
               </span>
             )}
+
+            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && (
+              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
+                Chờ chốt phụ phí
+              </span>
+            )}
+
+            {booking.status === 'AWAITING_FINAL_PAYMENT' && (
+              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                Chờ thanh toán quyết toán
+              </span>
+            )}
           </div>
 
           <div className="text-xs sm:text-sm text-gray-600">
@@ -154,10 +166,12 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {booking.status === 'IN_PROGRESS' && (
+          {['IN_PROGRESS', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking.status) && (
             <div className="p-5 text-white bg-[#15803D] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <h2 className="text-base font-bold text-white">Chuyến đang diễn ra</h2>
+                <h2 className="text-base font-bold text-white">
+                  {booking.status === 'IN_PROGRESS' ? 'Chuyến đang diễn ra' : 'Tài xế đã kết thúc chuyến'}
+                </h2>
                 <p className="text-xs sm:text-sm text-white/90">
                   {booking.actualStartTime
                     ? `Bắt đầu thực tế: ${booking.actualStartTime}`
@@ -182,6 +196,18 @@ export const BookingDetail = ({
               ) : (
                 <p className="text-sm font-medium text-white">Đang chờ phía nhà cung cấp xác nhận</p>
               )}
+            </div>
+          )}
+
+          {booking.status === 'AWAITING_FINAL_PAYMENT' && (
+            <div className="p-5 bg-purple-50 border border-purple-200 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-purple-900">Đã chốt quyết toán</h2>
+                <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư bằng VietQR để hoàn tất đơn thuê.</p>
+              </div>
+              <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
+                Thanh toán số dư
+              </button>
             </div>
           )}
 

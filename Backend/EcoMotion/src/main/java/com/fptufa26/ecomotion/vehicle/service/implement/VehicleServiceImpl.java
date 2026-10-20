@@ -64,10 +64,8 @@ public class VehicleServiceImpl implements VehicleService {
     @Autowired private BookingChargeRepository chargeRepository;
 
     private static final Set<BookingStatus> BLOCKING_STATUSES = EnumSet.of(
-            BookingStatus.PENDING, BookingStatus.ACCEPTED,
             BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED,
             BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
-    private static final long BUFFER_MINUTES = 60;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -367,13 +365,14 @@ public class VehicleServiceImpl implements VehicleService {
     @Override
     public VehicleAvailabilityResponse getAvailability(Long vehicleId, Instant from, Instant to) {
         // Verify vehicle exists and is approved
-        vehicleRepository.findByIdAndStatus(vehicleId, VehicleStatus.APPROVED)
+        Vehicle vehicle = vehicleRepository.findByIdAndStatus(vehicleId, VehicleStatus.APPROVED)
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
 
         List<VehicleAvailabilityResponse.OccupiedSlot> result = new ArrayList<>();
 
         // Expand query range by buffer so edge bookings are not missed
-        Duration buffer = Duration.ofMinutes(BUFFER_MINUTES);
+        Duration buffer = Duration.ofMinutes(Math.max(0,
+                vehicle.getMaintenanceBufferMinutes() == null ? 0 : vehicle.getMaintenanceBufferMinutes()));
         Instant expandedFrom = from.minus(buffer);
         Instant expandedTo = to.plus(buffer);
 

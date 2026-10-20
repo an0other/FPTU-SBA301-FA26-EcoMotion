@@ -63,18 +63,20 @@ public class RenterBookingController {
     }
 
     @GetMapping("/{bookingCode}/checkout")
-    public ApiResponse<CheckoutPreviewResponse> previewCheckout(
+    public ResponseEntity<ApiResponse<CheckoutPreviewResponse>> previewCheckout(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
-        return ApiResponse.success(bookingService.previewCheckout(user.getUserId(), bookingCode));
+        return ResponseEntity.status(HttpStatus.GONE).body(
+                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR"));
     }
 
     @PostMapping("/{bookingCode}/checkout")
-    public ApiResponse<CheckoutResultResponse> checkout(
+    public ResponseEntity<ApiResponse<CheckoutResultResponse>> checkout(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode,
             @Valid @RequestBody CheckoutRequest request) {
-        return ApiResponse.success(bookingService.checkout(user.getUserId(), bookingCode, request));
+        return ResponseEntity.status(HttpStatus.GONE).body(
+                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR"));
     }
 
     @GetMapping("/{bookingCode}")

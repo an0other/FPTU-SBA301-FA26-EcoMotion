@@ -26,11 +26,6 @@ const CHARGE_TYPE_CONFIG = {
     quantityLabel: 'Số ngày / lượt',
     defaultUnitPrice: 200000,
   },
-  BASE_RENTAL: {
-    label: 'Tiền thuê bổ sung (BASE_RENTAL)',
-    quantityLabel: 'Số lượng slot',
-    defaultUnitPrice: 500000,
-  },
 }
 
 export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) {

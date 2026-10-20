@@ -40,9 +40,9 @@ class BookingRepositoryRefactorTest {
     @Test
     @DisplayName("1. Provider isolation: Provider only sees bookings for their own vehicles")
     void providerOnlySeesOwnBookings() {
-        // Provider A has 28 incoming bookings plus 3 preserved renter fixtures.
+        // Provider A includes the core queue plus demo fixtures used by review and yearly-plan screens.
         List<ProviderBookingResponse> providerABookings = providerBookingService.listBookings(PROVIDER_A_USER_ID, null);
-        assertThat(providerABookings).hasSize(31);
+        assertThat(providerABookings).hasSize(35);
 
         // Provider B has 2 distinct seeded bookings (BK-B0A111, BK-B0A222) and sees none of Provider A's
         List<ProviderBookingResponse> providerBBookings = providerBookingService.listBookings(PROVIDER_B_USER_ID, null);
@@ -59,7 +59,7 @@ class BookingRepositoryRefactorTest {
     @DisplayName("2. No status filter returns all allowed booking statuses")
     void omittingStatusReturnsAllStatuses() {
         List<ProviderBookingResponse> allBookings = providerBookingService.listBookings(PROVIDER_A_USER_ID, "ALL");
-        assertThat(allBookings).hasSize(31);
+        assertThat(allBookings).hasSize(35);
 
         Set<BookingStatus> statuses = new HashSet<>();
         for (ProviderBookingResponse b : allBookings) {
@@ -108,7 +108,7 @@ class BookingRepositoryRefactorTest {
     @DisplayName("5. Bookings are sorted strictly by createdAt DESC, id DESC")
     void sortingIsCreatedAtDescAndIdDesc() {
         List<ProviderBookingResponse> bookings = providerBookingService.listBookings(PROVIDER_A_USER_ID, null);
-        assertThat(bookings).hasSize(31);
+        assertThat(bookings).hasSize(35);
 
         for (int i = 0; i < bookings.size() - 1; i++) {
             ProviderBookingResponse curr = bookings.get(i);
@@ -130,9 +130,9 @@ class BookingRepositoryRefactorTest {
 
         Page<ProviderBookingResponse> page3 = providerBookingService.listBookings(
                 PROVIDER_A_USER_ID, null, PageRequest.of(3, 10));
-        assertThat(page3.getContent()).hasSize(1);
+        assertThat(page3.getContent()).hasSize(5);
 
-        assertThat(page0.getTotalElements()).isEqualTo(31);
+        assertThat(page0.getTotalElements()).isEqualTo(35);
         assertThat(page0.getTotalPages()).isEqualTo(4);
         assertThat(page0.getContent()).hasSize(10);
         assertThat(page1.getContent()).hasSize(10);
@@ -145,7 +145,7 @@ class BookingRepositoryRefactorTest {
         page2.getContent().forEach(b -> allCodes.add(b.bookingCode()));
 
         page3.getContent().forEach(b -> allCodes.add(b.bookingCode()));
-        assertThat(allCodes).hasSize(31);
+        assertThat(allCodes).hasSize(35);
     }
 
     @Test
@@ -153,7 +153,7 @@ class BookingRepositoryRefactorTest {
     void pageResponsePaginationWorksAccurately() {
         PageResponse<ProviderBookingResponse> p1 = providerBookingService.listBookingsPaged(
                 PROVIDER_A_USER_ID, null, 0, 10);
-        assertThat(p1.total()).isEqualTo(31);
+        assertThat(p1.total()).isEqualTo(35);
         assertThat(p1.offset()).isEqualTo(0);
         assertThat(p1.limit()).isEqualTo(10);
         assertThat(p1.hasMore()).isTrue();
@@ -161,11 +161,11 @@ class BookingRepositoryRefactorTest {
 
         PageResponse<ProviderBookingResponse> p3 = providerBookingService.listBookingsPaged(
                 PROVIDER_A_USER_ID, null, 30, 10);
-        assertThat(p3.total()).isEqualTo(31);
+        assertThat(p3.total()).isEqualTo(35);
         assertThat(p3.offset()).isEqualTo(30);
         assertThat(p3.limit()).isEqualTo(10);
         assertThat(p3.hasMore()).isFalse();
-        assertThat(p3.items()).hasSize(1);
+        assertThat(p3.items()).hasSize(5);
     }
 
     @Test

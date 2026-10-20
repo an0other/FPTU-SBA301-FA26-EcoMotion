@@ -178,7 +178,7 @@ class DriverTripServiceUnitTest {
     }
 
     @Test
-    @DisplayName("Should parse ASSIGNED status to query ACCEPTED and CONFIRMED bookings")
+    @DisplayName("Should parse ASSIGNED status as DRIVER_ASSIGNED only")
     void testAssignedStatusAlias() {
         when(userService.findDriverProfile(201L)).thenReturn(Optional.of(activeDriver));
         when(bookingRepository.findAll(any(Specification.class), any(Pageable.class)))

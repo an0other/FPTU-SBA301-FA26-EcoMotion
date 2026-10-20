@@ -1,5 +1,8 @@
 package com.fptufa26.ecomotion.finance.controller;
 
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
@@ -34,6 +37,7 @@ import java.util.List;
 public class PaymentRequestController {
 
     private final PaymentRequestService paymentRequestService;
+    private final BookingRepository bookingRepository;
 
     // ==========================================
     // 1. Payment Requests (Renter, Provider, Admin)
@@ -45,6 +49,17 @@ public class PaymentRequestController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long bookingId) {
         return ApiResponse.success(paymentRequestService.getPaymentRequestsByBooking(bookingId, principal.getUserId()));
+    }
+
+    @GetMapping({"/api/v1/renter/bookings/{bookingCode}/payment-requests", "/api/renter/bookings/{bookingCode}/payment-requests"})
+    @Operation(summary = "Get VietQR requests for a renter booking code")
+    public ApiResponse<List<PaymentRequestResponse>> getPaymentRequestsByBookingCode(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode) {
+        Booking booking = bookingRepository.findByBookingCode(bookingCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + bookingCode));
+        return ApiResponse.success(paymentRequestService.getPaymentRequestsByBooking(
+                booking.getId(), principal.getUserId()));
     }
 
     @GetMapping({"/api/v1/payment-requests/{id}", "/api/payment-requests/{id}"})

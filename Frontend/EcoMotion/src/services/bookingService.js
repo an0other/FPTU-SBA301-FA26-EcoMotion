@@ -15,16 +15,6 @@ export async function createBooking(body) {
   return data.data
 }
 
-export async function checkoutPreview(bookingCode) {
-  const { data } = await apiClient.get(`/renter/bookings/${bookingCode}/checkout`)
-  return data.data
-}
-
-export async function checkout(bookingCode, method) {
-  const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/checkout`, { method })
-  return data.data
-}
-
 export async function getMyBooking(bookingCode) {
   const { data } = await apiClient.get(`/renter/bookings/${bookingCode}`)
   return data.data
