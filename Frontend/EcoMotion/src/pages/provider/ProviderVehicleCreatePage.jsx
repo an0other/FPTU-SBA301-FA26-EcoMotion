@@ -290,8 +290,8 @@ export default function ProviderVehicleCreatePage() {
     }
   }
 
-  const providerName = summary?.providerName || "Chủ xe";
-  const depotAddress = summary?.depotAddress || "EcoMotion Depot";
+  const providerName = summary?.providerName || "";
+  const depotAddress = summary?.depotAddress || "";
   const cleanPlate = form.licensePlate.trim().toUpperCase();
   const displayPlate = cleanPlate || "51K-334.12";
   const isPlateValid = cleanPlate ? VIETNAM_PLATE_REGEX.test(cleanPlate) : null;
@@ -313,10 +313,10 @@ export default function ProviderVehicleCreatePage() {
         depotAddress={depotAddress}
       />
 
-      <main className="flex-1 w-full pt-24 bg-[#f8f9ff]">
+      <main className="flex-1 w-full bg-[#f8f9ff]">
         <div className="flex flex-col w-full">
           <form className="w-full pb-36" onSubmit={handleSubmit}>
-            <div className="max-w-[1440px] mx-auto px-6 lg:px-12 pt-4">
+            <div className="max-w-[1440px] mx-auto px-6 lg:px-12 py-6">
               {/* Breadcrumb */}
               <nav
                 aria-label="Breadcrumb"

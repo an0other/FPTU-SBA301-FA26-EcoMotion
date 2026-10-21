@@ -9,6 +9,7 @@ public record ProviderDashboardSummaryResponse(
         long approvedVehicles,
         long hiddenVehicles,
         long totalDrivers,
-        long activeBlocks
+        long activeBlocks,
+        long availableVehicles
 ) {
 }
