@@ -1,36 +1,56 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { providerService } from "../../services/providerService";
 
 export default function ProviderHeader({
-  activeTab = "home",
+  activeTab,
   providerName,
   depotAddress,
 }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation(); 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // Tự động load và cache thông tin Depot để đồng bộ trên mọi trang
+  // Tự động nhận diện tab dựa trên pathname nếu activeTab không được truyền cụ thể
+  const currentTab = (() => {
+    if (activeTab) return activeTab;
+    const path = location.pathname;
+    if (path.startsWith("/provider/vehicles")) return "vehicles";
+    if (path.startsWith("/provider/schedules")) return "schedules";
+    if (path.startsWith("/provider/drivers")) return "drivers";
+    if (path.startsWith("/provider/bookings")) return "bookings";
+    if (path.startsWith("/provider/finance")) return "finance";
+    if (path === "/provider" || path === "/provider/") return "home";
+    return "home";
+  })();
+
+  // Cache thông tin Depot để đồng bộ trên mọi trang
   const [depotInfo, setDepotInfo] = useState(() => {
     try {
       const cached = sessionStorage.getItem("ecomotion_provider_depot");
-      if (cached) return JSON.parse(cached);
-    } catch (e) {}
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.name && parsed.name !== "Chủ xe") return parsed;
+      }
+    } catch {}
     return {
-      name: providerName || "",
+      name: providerName && providerName !== "Chủ xe" ? providerName : "",
       address: depotAddress || "",
     };
   });
 
   useEffect(() => {
-    if (providerName && depotAddress) {
+    if (providerName && providerName !== "Chủ xe" && depotAddress) {
       const info = { name: providerName, address: depotAddress };
       setDepotInfo(info);
       try {
-        sessionStorage.setItem("ecomotion_provider_depot", JSON.stringify(info));
-      } catch (e) {}
+        sessionStorage.setItem(
+          "ecomotion_provider_depot",
+          JSON.stringify(info)
+        );
+      } catch {}
       return;
     }
 
@@ -47,13 +67,13 @@ export default function ProviderHeader({
           setDepotInfo(info);
           try {
             sessionStorage.setItem("ecomotion_provider_depot", JSON.stringify(info));
-          } catch (e) {}
+          } catch {}
         }
       } catch (err) {
         console.error("Failed to auto-fetch depot info:", err);
       }
     }
-    fetchDepot();
+    void fetchDepot();
     return () => {
       isMounted = false;
     };
@@ -65,18 +85,23 @@ export default function ProviderHeader({
   }
 
   const displayName =
-    depotInfo.name || providerName || user?.fullName || "EcoMotion Depot";
+    (depotInfo.name && depotInfo.name !== "Chủ xe" ? depotInfo.name : null) ||
+    (providerName && providerName !== "Chủ xe" ? providerName : null) ||
+    user?.fullName ||
+    "EcoMotion Depot";
   const displayAddress =
     depotInfo.address || depotAddress || "Hệ thống Depot EcoMotion";
-  const initials = user?.fullName
-    ? user.fullName
-        .trim()
-        .split(/\s+/)
-        .map((p) => p[0])
-        .slice(-2)
-        .join("")
-        .toUpperCase()
-    : "PV";
+  const initialsSource =
+    (user?.fullName && user.fullName !== "Chủ xe" ? user.fullName : null) ||
+    (displayName && displayName !== "Chủ xe" ? displayName : null) ||
+    "PV";
+  const initials = initialsSource
+    .trim()
+    .split(/\s+/)
+    .map((p) => p[0])
+    .slice(-2)
+    .join("")
+    .toUpperCase();
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-[0_1px_8px_rgba(11,28,48,0.04)] border-b border-slate-200">
@@ -122,7 +147,7 @@ export default function ProviderHeader({
           <Link
             to="/provider"
             className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              activeTab === "home"
+              currentTab === "home"
                 ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
@@ -132,7 +157,7 @@ export default function ProviderHeader({
           <Link
             to="/provider/vehicles"
             className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              activeTab === "vehicles"
+              currentTab === "vehicles"
                 ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
@@ -142,7 +167,7 @@ export default function ProviderHeader({
           <Link
             to="/provider/schedules"
             className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              activeTab === "schedules"
+              currentTab === "schedules"
                 ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
@@ -152,7 +177,7 @@ export default function ProviderHeader({
           <Link
             to="/provider/drivers"
             className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              activeTab === "drivers"
+              currentTab === "drivers"
                 ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
@@ -162,7 +187,7 @@ export default function ProviderHeader({
           <Link
             to="/provider/bookings"
             className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              activeTab === "bookings"
+              currentTab === "bookings"
                 ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
@@ -172,7 +197,7 @@ export default function ProviderHeader({
           <Link
             to="/provider/finance"
             className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              activeTab === "finance"
+              currentTab === "finance"
                 ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
             }`}
@@ -194,7 +219,11 @@ export default function ProviderHeader({
               </span>
               <div className="hidden sm:flex flex-col text-left leading-tight">
                 <span className="text-[13px] font-bold text-slate-800 max-w-[120px] truncate">
-                  {user?.fullName || "Chủ xe"}
+                  {user?.fullName && user.fullName !== "Chủ xe"
+                    ? user.fullName
+                    : displayName && displayName !== "Chủ xe"
+                    ? displayName
+                    : "Provider"}
                 </span>
                 <span className="text-[11px] text-slate-500 font-medium">
                   Provider

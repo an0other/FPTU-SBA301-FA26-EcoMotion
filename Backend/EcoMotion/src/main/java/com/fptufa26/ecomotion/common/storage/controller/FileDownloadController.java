@@ -35,6 +35,9 @@ public class FileDownloadController {
         }
 
         String storedPath = requestUri.substring(index + prefix.length());
+        if (storedPath.startsWith("download/")) {
+            storedPath = storedPath.substring("download/".length());
+        }
         if (storedPath.isBlank()) {
             return ResponseEntity.notFound().build();
         }
