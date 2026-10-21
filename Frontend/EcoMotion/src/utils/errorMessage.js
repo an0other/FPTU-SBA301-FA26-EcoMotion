@@ -57,3 +57,13 @@ export function toVietnameseError(error) {
 
   return FALLBACK_MESSAGE
 }
+
+export function getErrorMessage(error, fallback = FALLBACK_MESSAGE) {
+  if (!error) return fallback
+  const vi = toVietnameseError(error)
+  if (vi && vi !== FALLBACK_MESSAGE) return vi
+  if (error?.response?.data?.message) return error.response.data.message
+  if (error?.message) return error.message
+  return fallback
+}
+
