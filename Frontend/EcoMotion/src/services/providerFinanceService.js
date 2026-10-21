@@ -117,8 +117,13 @@ export const providerFinanceService = {
   // Customer Payment & Proofs
   // ==========================================
 
-  async getPaymentRequestsByBooking(bookingCode) {
-    const { data } = await apiClient.get(`/v1/renter/bookings/${encodeURIComponent(bookingCode)}/payment-requests`)
+  async getPaymentRequestsByBooking(identifier) {
+    if (!identifier) return []
+    const isNumeric = /^\d+$/.test(String(identifier).trim())
+    const url = isNumeric
+      ? `/v1/bookings/${identifier}/payment-requests`
+      : `/v1/renter/bookings/${encodeURIComponent(identifier)}/payment-requests`
+    const { data } = await apiClient.get(url)
     return data?.data ?? []
   },
 
