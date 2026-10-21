@@ -3,8 +3,10 @@ package com.fptufa26.ecomotion.booking.service;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest;
+import com.fptufa26.ecomotion.booking.dto.request.UpdateBookingRequestDetails;
 import com.fptufa26.ecomotion.booking.dto.response.BookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
+import com.fptufa26.ecomotion.booking.dto.response.BookingRequestDetailsResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
@@ -33,6 +35,9 @@ public interface BookingService {
     CheckoutResultResponse checkout(Long userId, String bookingCode, CheckoutRequest request);
 
     BookingDetailResponse detail(Long userId, String bookingCode);
+
+    BookingRequestDetailsResponse updateRequestDetails(
+            Long userId, String bookingCode, UpdateBookingRequestDetails request);
 
     CancelBookingResponse cancel(Long userId, String bookingCode);
 

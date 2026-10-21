@@ -128,8 +128,19 @@ export const providerFinanceService = {
   },
 
   async submitPaymentProof(id, payload) {
-    const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs`, payload)
+    const form = new FormData()
+    form.append('file', payload.file)
+    form.append('transferredAmount', payload.transferredAmount)
+    if (payload.transactionReference) form.append('transactionReference', payload.transactionReference)
+    if (payload.transferredAt) form.append('transferredAt', payload.transferredAt)
+    if (payload.note) form.append('note', payload.note)
+    const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs/multipart`, form)
     return data?.data
+  },
+
+  async getPaymentEvidenceImage(id) {
+    const { data } = await apiClient.get(`/v1/payment-evidences/${id}/file`, { responseType: 'blob' })
+    return data
   },
 
   async getBookingPaymentHistory(bookingId) {

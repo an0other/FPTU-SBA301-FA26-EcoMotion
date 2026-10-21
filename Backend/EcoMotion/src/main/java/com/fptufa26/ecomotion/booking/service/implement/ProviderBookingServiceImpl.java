@@ -286,6 +286,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getStatus(),
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPassengerCount() != null ? booking.getPassengerCount() : 1,
                 booking.getContractUrl(),
                 booking.getTotalAmount(),
@@ -709,6 +712,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 rentalDuration,
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 driverName,
                 booking.getStatus(),
                 DriverTripServiceImpl.deriveExecutionStatus(booking),
@@ -921,9 +927,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private TripTrackingResponse buildTrackingResponse(Booking booking) {
         TripLocationResponse locationResponse = getLatestLocationForBooking(booking.getId());
 
-        Double pickupLat = null;
-        Double pickupLon = null;
-        if (booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
+        Double pickupLat = booking.getPickupLatitude() == null ? null : booking.getPickupLatitude().doubleValue();
+        Double pickupLon = booking.getPickupLongitude() == null ? null : booking.getPickupLongitude().doubleValue();
+        if (pickupLat == null && pickupLon == null
+                && booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
             Optional<MapGeocodingService.GeoPoint> geoOpt = mapGeocodingService.geocodeAddress(booking.getPickupAddress());
             if (geoOpt.isPresent()) {
                 pickupLat = geoOpt.get().latitude();

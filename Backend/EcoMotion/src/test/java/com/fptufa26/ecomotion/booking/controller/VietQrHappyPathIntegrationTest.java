@@ -21,6 +21,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
@@ -30,6 +31,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -121,11 +123,14 @@ class VietQrHappyPathIntegrationTest {
     }
 
     private void submitProof(String token, PaymentRequest request, String reference) throws Exception {
-        call(post("/api/v1/payment-requests/{id}/proofs", request.getId())
-                .content(json(Map.of(
-                        "proofImageUrl", "https://example.com/proof.png",
-                        "transferredAmount", request.getAmount(),
-                        "transactionReference", reference))), token)
+        byte[] png = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+        MockMultipartFile proof = new MockMultipartFile(
+                "file", reference + ".png", MediaType.IMAGE_PNG_VALUE, png);
+        mockMvc.perform(multipart("/api/v1/payment-requests/{id}/proofs/multipart", request.getId())
+                        .file(proof)
+                        .param("transferredAmount", request.getAmount().toPlainString())
+                        .param("transactionReference", reference)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
     }
 
