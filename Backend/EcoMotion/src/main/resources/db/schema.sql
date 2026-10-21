@@ -410,6 +410,9 @@ CREATE TABLE booking (
     provider_confirmed_at   timestamptz,
     version                 bigint        NOT NULL DEFAULT 0,
     pickup_address          varchar(500)  NOT NULL,
+    pickup_latitude         numeric(9,6),
+    pickup_longitude        numeric(9,6),
+    driver_note             varchar(160),
     pickup_time             timestamptz   NOT NULL,
     passenger_count         integer       NOT NULL,
     contract_url            varchar(500),
@@ -444,6 +447,12 @@ CREATE TABLE booking (
         actual_start_at IS NULL OR actual_end_at IS NULL OR actual_end_at >= actual_start_at
     ),
     CONSTRAINT ck_booking_passenger_count CHECK (passenger_count > 0),
+    CONSTRAINT ck_booking_pickup_coordinates CHECK (
+        (pickup_latitude IS NULL AND pickup_longitude IS NULL)
+        OR (pickup_latitude IS NOT NULL AND pickup_longitude IS NOT NULL
+            AND pickup_latitude BETWEEN -90 AND 90
+            AND pickup_longitude BETWEEN -180 AND 180)
+    ),
     CONSTRAINT ck_booking_total_amount CHECK (total_amount >= 0)
 );
 

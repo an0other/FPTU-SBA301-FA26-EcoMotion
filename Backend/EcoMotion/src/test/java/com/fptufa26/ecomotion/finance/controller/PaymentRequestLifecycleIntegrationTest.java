@@ -20,9 +20,11 @@ import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
+import com.fptufa26.ecomotion.common.security.JwtService;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.repository.PaymentEvidenceRepository;
 import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
@@ -31,20 +33,33 @@ import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
 import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
+import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.enums.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @ActiveProfiles("dev")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
 @Transactional
@@ -62,6 +77,119 @@ class PaymentRequestLifecycleIntegrationTest {
     @Autowired DisputeService disputeService;
     @Autowired DisputeRepository disputeRepository;
     @Autowired PaymentRequestRepository paymentRequestRepository;
+    @Autowired PaymentEvidenceRepository paymentEvidenceRepository;
+    @Autowired UserRepository userRepository;
+    @Autowired JwtService jwtService;
+    @Autowired MockMvc mockMvc;
+
+    @Test
+    void renterUploadsImageProofAndInvalidFilesDoNotCreateEvidence() throws Exception {
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        booking.setStatus(BookingStatus.ACCEPTED);
+        bookingRepository.saveAndFlush(booking);
+        ensureBankAccount(booking);
+        PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
+        Long renterUserId = booking.getRenter().getUser().getId();
+
+        byte[] png = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+        MockMultipartFile empty = new MockMultipartFile("file", "receipt.png", "image/png", new byte[0]);
+        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                request.getId(), renterUserId, empty, request.getAmount(), null, null, null))
+                .hasMessageContaining("trống");
+        MockMultipartFile oversized = new MockMultipartFile(
+                "file", "receipt.png", "image/png", new byte[5 * 1024 * 1024 + 1]);
+        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                request.getId(), renterUserId, oversized, request.getAmount(), null, null, null))
+                .hasMessageContaining("5 MB");
+        MockMultipartFile spoofed = new MockMultipartFile(
+                "file", "receipt.png", "image/png", new byte[] {1, 2, 3, 4});
+        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                request.getId(), renterUserId, spoofed, request.getAmount(), null, null, null))
+                .hasMessageContaining("không khớp");
+        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                request.getId(), -999L, new MockMultipartFile("file", "receipt.png", "image/png", png),
+                request.getAmount(), null, null, null))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+
+        MockMultipartFile image = new MockMultipartFile("file", "receipt.png", "image/png", png);
+        var submitted = paymentRequestService.submitPaymentProof(
+                request.getId(), renterUserId, image, request.getAmount(),
+                "BANK-IMAGE-001", null, "VietQR receipt");
+        assertThat(submitted.proofImageUrl()).startsWith("/api/v1/payment-evidences/");
+        assertThat(paymentRequestService.getPaymentEvidenceFile(submitted.id(), renterUserId).content())
+                .containsExactly(png);
+        assertThatThrownBy(() -> paymentRequestService.getPaymentEvidenceFile(submitted.id(), -999L))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThat(paymentRequestRepository.findById(request.getId()).orElseThrow().getEvidences()).hasSize(1);
+
+        String renterToken = jwtService.generateAccessToken(booking.getRenter().getUser());
+        String providerToken = jwtService.generateAccessToken(booking.getVehicle().getProvider().getUser());
+        String adminToken = jwtService.generateAccessToken(userRepository.findAll().stream()
+                .filter(user -> user.getRole() == Role.ADMIN).findFirst().orElseThrow());
+        String storedPath = paymentEvidenceRepository.findById(submitted.id()).orElseThrow().getProofImageUrl();
+
+        mockMvc.perform(get("/api/v1/payment-evidences/{id}/file", submitted.id()))
+                .andExpect(status().isUnauthorized());
+        for (String token : java.util.List.of(renterToken, providerToken, adminToken)) {
+            mockMvc.perform(get("/api/v1/payment-evidences/{id}/file", submitted.id())
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                    .andExpect(content().contentType(MediaType.IMAGE_PNG))
+                    .andExpect(content().bytes(png));
+        }
+        mockMvc.perform(get("/api/files/" + storedPath))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/v1/payment-requests/{id}/proofs", request.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isGone());
+
+        PaymentRequest retry = paymentRequestRepository.findById(request.getId()).orElseThrow();
+        retry.setStatus(PaymentRequestStatus.REJECTED);
+        retry.getEvidences().getFirst().setStatus(
+                com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus.REJECTED);
+        paymentRequestRepository.saveAndFlush(retry);
+        var second = paymentRequestService.submitPaymentProof(
+                request.getId(), renterUserId,
+                new MockMultipartFile("file", "receipt.png", "image/png", png),
+                request.getAmount(), "BANK-IMAGE-002", null, null);
+        assertThat(second.proofImageUrl()).isNotEqualTo(submitted.proofImageUrl());
+
+        retry = paymentRequestRepository.findById(request.getId()).orElseThrow();
+        retry.setStatus(PaymentRequestStatus.REJECTED);
+        retry.getEvidences().getFirst().setStatus(
+                com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus.REJECTED);
+        paymentRequestRepository.saveAndFlush(retry);
+        MockMultipartFile pdf = new MockMultipartFile(
+                "file", "receipt.pdf", "application/pdf", new byte[] {1, 2, 3});
+        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                request.getId(), renterUserId, pdf, request.getAmount(), null, null, null))
+                .hasMessageContaining("JPG");
+        assertThat(paymentRequestRepository.findById(request.getId()).orElseThrow().getEvidences()).hasSize(2);
+    }
+
+    @Test
+    void expiredRequestRejectsProofAndIsNotAdvertisedAsPayable() {
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        booking.setStatus(BookingStatus.ACCEPTED);
+        bookingRepository.saveAndFlush(booking);
+        ensureBankAccount(booking);
+        PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
+        request.setExpiresAt(Instant.now().minusSeconds(1));
+        paymentRequestRepository.saveAndFlush(request);
+
+        byte[] png = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                request.getId(), booking.getRenter().getUser().getId(),
+                new MockMultipartFile("file", "receipt.png", "image/png", png),
+                request.getAmount(), null, null, null))
+                .hasMessageContaining("hết hạn");
+        assertThat(bookingService.listMine(booking.getRenter().getUser().getId(), null)).filteredOn(
+                summary -> summary.bookingCode().equals(booking.getBookingCode()))
+                .allMatch(summary -> !summary.canPay());
+    }
 
     @Test
     void confirmingTheFullDepositLocksTheScheduleAndCreatesTheDepositLedgerEntry() {

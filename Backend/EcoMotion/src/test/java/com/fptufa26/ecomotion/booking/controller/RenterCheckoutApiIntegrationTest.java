@@ -85,9 +85,8 @@ class RenterCheckoutApiIntegrationTest {
     @Test
     @DisplayName("legacy yearly checkout is disabled in favor of VietQR")
     void checkoutYearlyUpfront() throws Exception {
-        String token = login();
-        String code = createBooking(token, "YEARLY", 1, "2027-06-01T01:00:00Z");
-        accept(code);
+        String token = login("renter.demo@ecomotion.vn");
+        String code = "EM-SEED-R14-001";
 
         mockMvc.perform(post("/api/renter/bookings/" + code + "/checkout")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -123,6 +122,8 @@ class RenterCheckoutApiIntegrationTest {
                   "slotCount": %d,
                   "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
+                  "pickupLatitude": 10.801234,
+                  "pickupLongitude": 106.652345,
                   "passengerCount": 2
                 }
                 """.formatted(vehicle.get("id").asLong(), plan.get("id").asLong(), slotCount, pickupTime);
@@ -144,11 +145,15 @@ class RenterCheckoutApiIntegrationTest {
     }
 
     private String login() throws Exception {
+        return login(DevDataSeeder.RENTER_EMAIL);
+    }
+
+    private String login(String email) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","password":"%s"}
-                                """.formatted(DevDataSeeder.RENTER_EMAIL, DevDataSeeder.DEFAULT_PASSWORD)))
+                                """.formatted(email, DevDataSeeder.DEFAULT_PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

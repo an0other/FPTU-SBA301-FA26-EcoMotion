@@ -3,9 +3,11 @@ package com.fptufa26.ecomotion.booking.service.implement;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest;
+import com.fptufa26.ecomotion.booking.dto.request.UpdateBookingRequestDetails;
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeLineResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
+import com.fptufa26.ecomotion.booking.dto.response.BookingRequestDetailsResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
@@ -42,6 +44,7 @@ import com.fptufa26.ecomotion.dispute.service.DisputeService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
+import com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus;
 import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.entity.Renter;
@@ -111,6 +114,12 @@ public class BookingServiceImpl implements BookingService {
         Vehicle vehicle = vehicleCatalogService.requireApproved(request.vehicleId());
         RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(), request.planId());
 
+        if (plan.getPlanType() == PlanType.YEARLY) {
+            throw new ConflictException("Yearly plans must use the dedicated contract flow");
+        }
+
+        String driverNote = normalizeDriverNote(request.driverNote());
+
         int passengerLimit = plan.getPlanType() == PlanType.YEARLY
                 ? vehicle.getSeatCount()
                 : vehicle.getSeatCount() - 1;
@@ -119,6 +128,9 @@ public class BookingServiceImpl implements BookingService {
         }
 
         Instant start = request.pickupTime();
+        if (!start.isAfter(Instant.now())) {
+            throw new ConflictException("Pickup time must be in the future");
+        }
         Instant end = start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
         if (!end.isAfter(start)) {
             throw new ConflictException("Rental range is empty");
@@ -142,6 +154,9 @@ public class BookingServiceImpl implements BookingService {
         booking.setPlan(plan);
         booking.setStatus(BookingStatus.PENDING);
         booking.setPickupAddress(request.pickupAddress().trim());
+        booking.setPickupLatitude(request.pickupLatitude());
+        booking.setPickupLongitude(request.pickupLongitude());
+        booking.setDriverNote(driverNote);
         booking.setPickupTime(start);
         booking.setPassengerCount(request.passengerCount());
         booking.setTotalAmount(total);
@@ -178,6 +193,17 @@ public class BookingServiceImpl implements BookingService {
         return bookingMapper.toCreateBookingResponse(booking, end, charge);
     }
 
+    private String normalizeDriverNote(String note) {
+        if (note == null || note.isBlank()) {
+            return null;
+        }
+        String normalized = note.trim().replaceAll("\\s+", " ");
+        if (normalized.length() > 160) {
+            throw new BadRequestException("Driver note cannot exceed 160 characters");
+        }
+        return normalized;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<BookingSummaryResponse> listMine(Long userId, BookingStatus status) {
@@ -205,6 +231,50 @@ public class BookingServiceImpl implements BookingService {
     public BookingDetailResponse detail(Long userId, String bookingCode) {
         Booking booking = requireOwned(userId, bookingCode);
         return toDetail(booking);
+    }
+
+    @Override
+    @Transactional
+    public BookingRequestDetailsResponse updateRequestDetails(
+            Long userId, String bookingCode, UpdateBookingRequestDetails request) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (!canEditRequest(booking)) {
+            throw new ConflictException("Booking request details can no longer be edited");
+        }
+        if (!request.pickupTime().isAfter(Instant.now())) {
+            throw new ConflictException("Pickup time must be in the future");
+        }
+        int passengerLimit = Math.max(0, booking.getVehicle().getSeatCount() - 1);
+        if (request.passengerCount() > passengerLimit) {
+            throw new ConflictException("Passenger count exceeds seat count");
+        }
+
+        BookingPolicySnapshot snapshot = requireSnapshot(booking);
+        int slots = baseSlots(booking);
+        Instant end = request.pickupTime().plus(
+                Duration.ofMinutes((long) snapshot.getSlotLengthMinutes() * slots));
+        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
+                booking.getVehicle(), request.pickupTime(), end);
+        if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
+            throw new ConflictException("Vehicle is not free in the selected range (including maintenance buffer)");
+        }
+        if (renterOverlaps(booking.getRenter().getId(), request.pickupTime(), end, booking.getId())) {
+            throw new ConflictException("Renter already has a booking in the selected range");
+        }
+
+        booking.setPickupTime(request.pickupTime());
+        booking.setPickupAddress(request.pickupAddress().trim());
+        booking.setPickupLatitude(request.pickupLatitude());
+        booking.setPickupLongitude(request.pickupLongitude());
+        booking.setPassengerCount(request.passengerCount());
+        booking.setDriverNote(normalizeDriverNote(request.driverNote()));
+
+        return new BookingRequestDetailsResponse(
+                booking.getBookingCode(), booking.getPickupTime(), end,
+                booking.getPickupAddress(), booking.getPickupLatitude(), booking.getPickupLongitude(),
+                booking.getPassengerCount(), booking.getDriverNote(), CANCELLABLE.contains(booking.getStatus()),
+                true, canPay(booking));
     }
 
     @Override
@@ -302,6 +372,7 @@ public class BookingServiceImpl implements BookingService {
         boolean canConfirm = (booking.getStatus() == BookingStatus.IN_PROGRESS
                 || booking.getStatus() == BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION)
                 && booking.getRenterConfirmedAt() == null;
+        boolean canEdit = canEditRequest(booking);
         return bookingMapper.toDetail(
                 booking,
                 snapshot.getPlanType(),
@@ -311,6 +382,9 @@ public class BookingServiceImpl implements BookingService {
                 charges,
                 timeline(booking, payments),
                 refundPreview,
+                CANCELLABLE.contains(booking.getStatus()),
+                canEdit,
+                canPay(booking),
                 canConfirm,
                 disputeCategories(booking, chargeRows));
     }
@@ -489,7 +563,7 @@ public class BookingServiceImpl implements BookingService {
                 .map(BookingPolicySnapshot::getPlanType)
                 .orElseGet(() -> booking.getPlan().getPlanType());
         String imageUrl = vehicleCatalogService.coverImageUrl(booking.getVehicle().getId());
-        return bookingMapper.toSummary(booking, planType, imageUrl);
+        return bookingMapper.toSummary(booking, planType, imageUrl, canPay(booking));
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {
@@ -535,14 +609,48 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private boolean renterOverlaps(Long renterId, Instant start, Instant end) {
+        return renterOverlaps(renterId, start, end, null);
+    }
+
+    private boolean renterOverlaps(Long renterId, Instant start, Instant end, Long excludeBookingId) {
         List<Booking> existing = bookingRepository.findByRenter_IdAndStatusIn(renterId, BLOCKING);
         for (Booking booking : existing) {
+            if (excludeBookingId != null && excludeBookingId.equals(booking.getId())) {
+                continue;
+            }
             Instant otherEnd = endOf(booking);
             if (start.isBefore(otherEnd) && booking.getPickupTime().isBefore(end)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean canEditRequest(Booking booking) {
+        if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.ACCEPTED) {
+            return false;
+        }
+        return paymentRequestRepository
+                .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
+                .stream()
+                .flatMap(request -> request.getEvidences().stream())
+                .noneMatch(evidence -> evidence.getStatus() == PaymentEvidenceStatus.PENDING
+                        || evidence.getStatus() == PaymentEvidenceStatus.ACCEPTED);
+    }
+
+    private boolean canPay(Booking booking) {
+        if (booking.getStatus() != BookingStatus.ACCEPTED
+                && booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
+            return false;
+        }
+        PaymentRequestType type = booking.getStatus() == BookingStatus.ACCEPTED
+                ? PaymentRequestType.DEPOSIT
+                : PaymentRequestType.FINAL_BALANCE;
+        return paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), type)
+                .filter(request -> request.getExpiresAt() == null || request.getExpiresAt().isAfter(Instant.now()))
+                .map(request -> request.getStatus() == PaymentRequestStatus.PENDING
+                        || request.getStatus() == PaymentRequestStatus.REJECTED)
+                .orElse(false);
     }
 
     private Instant endOf(Booking booking) {

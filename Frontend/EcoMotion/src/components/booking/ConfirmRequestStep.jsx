@@ -8,6 +8,8 @@ export const ConfirmRequestStep = ({
   plateNumber,
   vehicleImage,
   pickupAddress,
+  pickup,
+  driverNote,
   passengerCount,
   planTitle,
   durationLabel,
@@ -178,6 +180,12 @@ export const ConfirmRequestStep = ({
                 <p className="text-xs text-gray-500 mt-0.5">
                   Tài xế chuyên trách sẽ đón đúng giờ và liên hệ trước 30 phút xuất phát
                 </p>
+                {pickup?.latitude != null ? (
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Tọa độ: {Number(pickup.latitude).toFixed(6)}, {Number(pickup.longitude).toFixed(6)}
+                  </p>
+                ) : null}
+                {driverNote ? <p className="mt-2 text-xs text-[#14221A]">Ghi chú: {driverNote}</p> : null}
               </div>
             </div>
           </div>

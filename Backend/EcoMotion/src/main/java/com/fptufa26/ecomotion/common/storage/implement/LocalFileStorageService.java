@@ -54,4 +54,17 @@ public class LocalFileStorageService implements FileStorageService {
             throw new FileStorageException("Could not read the stored file", ex);
         }
     }
+
+    @Override
+    public void delete(String storedPath) {
+        Path target = root.resolve(StorageObjectPath.validateStoredPath(storedPath)).normalize();
+        if (!target.startsWith(root)) {
+            throw new FileStorageException("Invalid stored path");
+        }
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException ex) {
+            throw new FileStorageException("Could not delete the uploaded file", ex);
+        }
+    }
 }

@@ -70,12 +70,15 @@ class RenterBookingApiIntegrationTest {
                   "slotCount": 3,
                   "pickupTime": "2026-12-01T01:00:00Z",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
+                  "pickupLatitude": 10.801234,
+                  "pickupLongitude": 106.652345,
+                  "driverNote": "Co tre nho\\r\\nCan cop rong",
                   "passengerCount": 3
                 }
                 """.formatted(vehicleId, daily.get("id").asLong());
 
         long paymentsBefore = paymentTransactionRepository.count();
-        mockMvc.perform(post("/api/renter/bookings")
+        String response = mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -83,7 +86,22 @@ class RenterBookingApiIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("PENDING"))
                 .andExpect(jsonPath("$.data.bookingCode").exists())
                 .andExpect(jsonPath("$.data.baseRental.chargeType").value("BASE_RENTAL"))
-                .andExpect(jsonPath("$.data.baseRental.quantity").value(3));
+                .andExpect(jsonPath("$.data.baseRental.quantity").value(3))
+                .andReturn().getResponse().getContentAsString();
+
+        String bookingCode = read(response).get("data").get("bookingCode").asText();
+        mockMvc.perform(get("/api/renter/bookings/" + bookingCode)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pickupLatitude").value(10.801234))
+                .andExpect(jsonPath("$.data.pickupLongitude").value(106.652345))
+                .andExpect(jsonPath("$.data.driverNote").value("Co tre nho Can cop rong"));
+
+        mockMvc.perform(get("/api/vehicles/" + vehicleId + "/availability")
+                        .param("from", "2026-12-01T00:00:00Z")
+                        .param("to", "2026-12-05T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.occupiedSlots").isEmpty());
 
         assertThat(bookingRepository.count()).isPositive();
         assertThat(bookingChargeRepository.findAll())
@@ -118,6 +136,8 @@ class RenterBookingApiIntegrationTest {
                   "slotCount": 1,
                   "pickupTime": "2035-04-01T01:00:00Z",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
+                  "pickupLatitude": 10.801234,
+                  "pickupLongitude": 106.652345,
                   "passengerCount": %d
                 }
                 """.formatted(vehicle.get("id").asLong(), daily.get("id").asLong(), seatCount);
@@ -127,6 +147,99 @@ class RenterBookingApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("new renter bookings require a complete in-range pickup coordinate pair")
+    void pickupCoordinatesMustBeCompleteAndInRange() throws Exception {
+        String token = login();
+        JsonNode vehicle = firstVehicle(token);
+        JsonNode daily = plan(vehicle, "DAILY");
+        long before = bookingRepository.count();
+
+        String missingLongitude = bookingBody(vehicle, daily, "2035-05-01T01:00:00Z",
+                "\"pickupLatitude\":10.8,");
+        mockMvc.perform(post("/api/renter/bookings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(missingLongitude))
+                .andExpect(status().isBadRequest());
+
+        String invalidLatitude = bookingBody(vehicle, daily, "2035-05-02T01:00:00Z",
+                "\"pickupLatitude\":91,\"pickupLongitude\":106.65,");
+        mockMvc.perform(post("/api/renter/bookings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidLatitude))
+                .andExpect(status().isBadRequest());
+
+        assertThat(bookingRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("generic booking rejects past pickup time and yearly plans")
+    void genericBookingRejectsPastAndYearly() throws Exception {
+        String token = login();
+        JsonNode vehicle = firstVehicle(token);
+        long before = bookingRepository.count();
+
+        mockMvc.perform(post("/api/renter/bookings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bookingBody(vehicle, plan(vehicle, "DAILY"), "2020-01-01T01:00:00Z",
+                                "\"pickupLatitude\":10.8,\"pickupLongitude\":106.65,")))
+                .andExpect(status().isConflict());
+
+        JsonNode yearly = plan(vehicle, "YEARLY");
+        if (yearly != null) {
+            mockMvc.perform(post("/api/renter/bookings")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(bookingBody(vehicle, yearly, "2035-06-01T01:00:00Z",
+                                    "\"pickupLatitude\":10.8,\"pickupLongitude\":106.65,")))
+                    .andExpect(status().isConflict());
+        }
+
+        assertThat(bookingRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("driver note longer than 160 normalized characters is rejected")
+    void driverNoteHasOneLineLimit() throws Exception {
+        String token = login();
+        JsonNode vehicle = firstVehicle(token);
+        JsonNode daily = plan(vehicle, "DAILY");
+        String longNote = "x".repeat(161);
+        String body = bookingBody(vehicle, daily, "2035-07-01T01:00:00Z",
+                "\"pickupLatitude\":10.8,\"pickupLongitude\":106.65,\"driverNote\":\"" + longNote + "\",");
+
+        mockMvc.perform(post("/api/renter/bookings")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    private JsonNode firstVehicle(String token) throws Exception {
+        return read(mockMvc.perform(get("/api/renter/bookings/vehicles")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("data").get(0);
+    }
+
+    private JsonNode plan(JsonNode vehicle, String type) {
+        for (JsonNode candidate : vehicle.get("plans")) {
+            if (type.equals(candidate.get("planType").asText())) return candidate;
+        }
+        return null;
+    }
+
+    private String bookingBody(JsonNode vehicle, JsonNode plan, String pickupTime, String extraFields) {
+        assertThat(plan).isNotNull();
+        return """
+                {"vehicleId":%d,"planId":%d,"slotCount":1,"pickupTime":"%s",
+                 "pickupAddress":"18 Hoang Hoa Tham, Tan Binh",%s"passengerCount":2}
+                """.formatted(vehicle.get("id").asLong(), plan.get("id").asLong(), pickupTime, extraFields);
     }
 
     private String login() throws Exception {
