@@ -466,6 +466,12 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setDriver(driver);
         booking.setStatus(status);
         booking.setPickupAddress(pickupAddress);
+        // Keep one legacy row without coordinates to exercise address-geocoding fallback.
+        if (!PENDING_BOOKING_CODE.equals(bookingCode)) {
+            booking.setPickupLatitude(vehicle.getProvider().getDepotLatitude());
+            booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
+            booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
+        }
         booking.setPickupTime(pickupTime);
         booking.setPassengerCount(passengerCount);
         booking.setTotalAmount(new BigDecimal(totalAmountStr));

@@ -1,17 +1,22 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PickupMap } from './PickupMap';
+import { hasValidPickup } from '../../utils/bookingAvailability';
 
 
 export const PickupStep = ({
   vehicleId,
   vehicleName,
+  vehicleYear,
   plateNumber,
   vehicleImage,
   slots,
   planSummary,
   priceLabel,
-  pickupAddress,
-  setPickupAddress,
+  pickup,
+  setPickup,
+  driverNote,
+  setDriverNote,
   passengerCount,
   setPassengerCount,
   seatCount,
@@ -23,8 +28,8 @@ export const PickupStep = ({
   const [errorMsg, setErrorMsg] = useState(null);
 
   const handleNextClick = () => {
-    if (!pickupAddress.trim()) {
-      setErrorMsg('Vui lòng nhập điểm đón cụ thể để tiếp tục đặt xe.');
+    if (!hasValidPickup(pickup)) {
+      setErrorMsg('Vui lòng chọn một điểm đón hợp lệ trên bản đồ.');
       return;
     }
     setErrorMsg(null);
@@ -55,7 +60,9 @@ export const PickupStep = ({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
-                <h2 className="text-lg font-bold text-[#14221A] truncate">{vehicleName} (2024)</h2>
+                <h2 className="text-lg font-bold text-[#14221A] truncate">
+                  {vehicleName}{vehicleYear ? ` (${vehicleYear})` : ''}
+                </h2>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#EFF4FF] text-[#3D4A42] text-xs font-semibold">
                   {plateNumber}
                 </span>
@@ -127,27 +134,9 @@ export const PickupStep = ({
               <label className="text-sm font-semibold text-[#14221A] flex items-center gap-1" htmlFor="pickup-address">
                 Điểm đón <span className="text-red-600 font-bold">*</span>
               </label>
-              <span className="text-xs text-[#565E74]">{pickupAddress.length}/500 ký tự</span>
+              <span className="text-xs text-[#565E74]">{pickup.address.length}/500 ký tự</span>
             </div>
-            <div className="relative">
-              <div className="absolute left-3.5 top-3.5 text-[#004F35] pointer-events-none">
-                <span className="material-symbols-outlined text-[20px]">location_on</span>
-              </div>
-              <textarea
-                id="pickup-address"
-                rows={2}
-                maxLength={500}
-                value={pickupAddress}
-                onChange={(e) => {
-                  setPickupAddress(e.target.value);
-                  if (e.target.value.trim()) setErrorMsg(null);
-                }}
-                placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
-                className={`w-full pl-10 pr-4 py-3 rounded-[12px] bg-white text-[#14221A] text-sm shadow-xs outline-none transition-all duration-180 resize-none border ${
-                  errorMsg ? 'border-red-500 bg-red-50/20' : 'border-[#BEC9C1] focus:ring-2 focus:ring-[#004F35]'
-                }`}
-              />
-            </div>
+            <PickupMap value={pickup} onChange={(next) => { setPickup(next); setErrorMsg(null) }} onError={setErrorMsg} />
 
             {errorMsg ? (
               <p className="text-xs font-medium text-red-600 flex items-center gap-1">
@@ -161,22 +150,17 @@ export const PickupStep = ({
               </div>
             )}
 
-            {/* Static Map Preview */}
-            <div className="mt-3 pt-1">
-              <div className="relative w-full h-44 rounded-[12px] overflow-hidden shadow-xs bg-[#E5EEFF]">
-                <div
-                  className="w-full h-full bg-cover bg-center"
-                  style={{
-                    backgroundImage: `url('https://lh3.googleusercontent.com/aida-public/AB6AXuCczHXg08KoFcghzMO9YWbUr9POqAkJYOo53snZZ4msyzgdo1d7tyPg3IGjz4k639y6SjBSbd4DkWW2yzppqiH4GwfqvfzEeVVnJXeoLHxgc6KpRy4fNZEnMEw09qMszetf7hdX8RTFzLYD-AQmoYhF_C8Qnti_ftnIZRwYlGnizHB1sDR_L_yDI4vReixXbsSNhp_fKN_OfBblqx6fTVohMssDQwaB1YsOpg5mdYFqVhft765uOsVSJw')`,
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
-                <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-md shadow-xs">
-                  <span className="material-symbols-outlined text-[15px] text-[#004F35]">pin_drop</span>
-                  <span className="text-xs text-[#14221A] font-semibold tracking-wide">Minh họa khu vực đón</span>
-                </div>
-              </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-[#14221A]" htmlFor="driver-note">Ghi chú cho tài xế</label>
+              <span className="text-xs text-[#565E74]">{driverNote.length}/160 ký tự</span>
             </div>
+            <textarea id="driver-note" rows={2} maxLength={160} value={driverNote}
+              onChange={(event) => setDriverNote(event.target.value.replace(/[\r\n]+/g, ' '))}
+              placeholder="Ví dụ: Có người lớn tuổi, cần hỗ trợ hành lý"
+              className="w-full resize-none rounded-xl border border-[#BEC9C1] px-3 py-2.5 text-sm focus:border-[#15803D] focus:outline-none" />
           </div>
 
           {/* Field 2: Số khách */}

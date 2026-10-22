@@ -1,17 +1,6 @@
 import { useState } from 'react';
+import { BOOKING_FILTERS, bookingMatchesFilter, bookingStatusMeta } from '../../utils/bookingStatus';
 
-
-const FILTER_TABS = [
-  { label: 'Tất cả', status: 'ALL' },
-  { label: 'Chờ duyệt', status: 'PENDING' },
-  { label: 'Đã chấp nhận', status: 'ACCEPTED' },
-  { label: 'Đã xác nhận', status: 'CONFIRMED' },
-  { label: 'Đang chạy', status: 'IN_PROGRESS' },
-  { label: 'Chờ quyết toán', status: 'AWAITING_FINAL_PAYMENT' },
-  { label: 'Hoàn thành', status: 'COMPLETED' },
-  { label: 'Đã huỷ', status: 'CANCELLED' },
-  { label: 'Từ chối', status: 'REJECTED' },
-];
 
 export const MyBookingsList = ({
   bookings,
@@ -22,69 +11,12 @@ export const MyBookingsList = ({
   const [activeFilter, setActiveFilter] = useState('ALL');
 
   const filteredBookings = bookings.filter((b) => {
-    if (activeFilter === 'ALL') return true;
-    return b.status === activeFilter;
+    return bookingMatchesFilter(b.status, activeFilter);
   });
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'PENDING':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 whitespace-nowrap">
-            Chờ duyệt
-          </span>
-        );
-      case 'ACCEPTED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#15803D] bg-[#E8F6EE] border border-[#15803D]/25 whitespace-nowrap">
-            Đã chấp nhận
-          </span>
-        );
-      case 'CONFIRMED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 whitespace-nowrap">
-            Đã xác nhận
-          </span>
-        );
-      case 'IN_PROGRESS':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#006948] bg-[#E8F6EE] border border-[#006948]/30 whitespace-nowrap">
-            Đang chạy
-          </span>
-        );
-      case 'COMPLETED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 whitespace-nowrap">
-            Hoàn thành
-          </span>
-        );
-      case 'AWAITING_FINAL_PAYMENT':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-purple-800 bg-purple-50 border border-purple-200 whitespace-nowrap">
-            Chờ quyết toán
-          </span>
-        );
-      case 'AWAITING_EXTRA_CHARGE_CONFIRMATION':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-orange-800 bg-orange-50 border border-orange-200 whitespace-nowrap">
-            Chờ chốt phụ phí
-          </span>
-        );
-      case 'CANCELLED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#B42318] bg-rose-50 border border-[#B42318]/20 whitespace-nowrap">
-            Đã huỷ
-          </span>
-        );
-      case 'REJECTED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#B42318] bg-rose-50 border border-[#B42318]/20 whitespace-nowrap">
-            Từ chối
-          </span>
-        );
-      default:
-        return null;
-    }
+    const meta = bookingStatusMeta(status);
+    return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${meta.badgeClass}`}>{meta.label}</span>;
   };
 
   return (
@@ -100,12 +32,12 @@ export const MyBookingsList = ({
       {/* Filter Chips Bar */}
       <div className="w-full overflow-x-auto pb-2 scrollbar-none">
         <div className="inline-flex items-center gap-2 shrink-0">
-          {FILTER_TABS.map((tab) => {
-            const isActive = activeFilter === tab.status;
+          {BOOKING_FILTERS.map((tab) => {
+            const isActive = activeFilter === tab.id;
             return (
               <button
-                key={tab.status}
-                onClick={() => setActiveFilter(tab.status)}
+                key={tab.id}
+                onClick={() => setActiveFilter(tab.id)}
                 type="button"
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-180 cursor-pointer ${
                   isActive
@@ -171,7 +103,7 @@ export const MyBookingsList = ({
                 <div className="shrink-0">{getStatusBadge(booking.status)}</div>
 
                 {/* Col 6: Contextual Action (if ACCEPTED) */}
-                {['ACCEPTED', 'AWAITING_FINAL_PAYMENT'].includes(booking.status) && (
+                {booking.canPay && (
                   <div className="shrink-0">
                     <button
                       onClick={(e) => {
@@ -181,9 +113,7 @@ export const MyBookingsList = ({
                       className="px-4 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-medium shadow-xs whitespace-nowrap cursor-pointer active:scale-98 transition-all duration-180"
                       type="button"
                     >
-                      {booking.status === 'AWAITING_FINAL_PAYMENT'
-                        ? 'Thanh toán quyết toán'
-                        : `Thanh toán ${booking.planType === 'YEARLY' ? 'trả trước' : 'giữ chỗ'}`}
+                      {bookingStatusMeta(booking.status).action}
                     </button>
                   </div>
                 )}

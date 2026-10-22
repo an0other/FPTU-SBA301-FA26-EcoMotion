@@ -383,9 +383,10 @@ public class DriverTripServiceImpl implements DriverTripService {
         Instant now = clock.instant();
         TripLocationResponse locationResponse = getLatestLocationForBooking(booking.getId());
 
-        Double pickupLat = null;
-        Double pickupLon = null;
-        if (booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
+        Double pickupLat = booking.getPickupLatitude() == null ? null : booking.getPickupLatitude().doubleValue();
+        Double pickupLon = booking.getPickupLongitude() == null ? null : booking.getPickupLongitude().doubleValue();
+        if (pickupLat == null && pickupLon == null
+                && booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
             Optional<MapGeocodingService.GeoPoint> geoOpt = mapGeocodingService.geocodeAddress(booking.getPickupAddress());
             if (geoOpt.isPresent()) {
                 pickupLat = geoOpt.get().latitude();
@@ -684,6 +685,9 @@ public class DriverTripServiceImpl implements DriverTripService {
                 executionStatus,
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPassengerCount() != null ? booking.getPassengerCount() : 1,
                 vehicleSummary,
                 customerSummary,
@@ -762,6 +766,9 @@ public class DriverTripServiceImpl implements DriverTripService {
                 executionStatus,
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPassengerCount() != null ? booking.getPassengerCount() : 1,
                 booking.getContractUrl(),
                 booking.getActualStartAt(),

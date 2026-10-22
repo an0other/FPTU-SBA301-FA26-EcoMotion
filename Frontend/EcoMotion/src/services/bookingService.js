@@ -20,6 +20,11 @@ export async function getMyBooking(bookingCode) {
   return data.data
 }
 
+export async function updateBookingRequestDetails(bookingCode, body) {
+  const { data } = await apiClient.patch(`/renter/bookings/${bookingCode}/request-details`, body)
+  return data.data
+}
+
 export async function cancelMyBooking(bookingCode) {
   const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/cancel`)
   return data.data
