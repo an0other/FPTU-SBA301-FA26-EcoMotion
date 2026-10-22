@@ -44,6 +44,15 @@ function BookingShell({ children }) {
   )
 }
 
+function BookingWizardShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
+      <main className="w-full flex-1">{children}</main>
+    </div>
+  )
+}
+
 export default function App() {
   const navigate = useNavigate()
 
@@ -87,18 +96,18 @@ export default function App() {
         <Route
           path="/renter/bookings/new"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <BookingRequestPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 
         <Route
           path="/renter/bookings/:bookingCode/submitted"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <SubmittedBookingPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 

@@ -24,6 +24,7 @@ import com.fptufa26.ecomotion.finance.dto.request.ReportIssueRequest;
 import com.fptufa26.ecomotion.finance.dto.request.SimulatePaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.SubmitProofRequest;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceResponse;
+import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
 import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
@@ -42,6 +43,7 @@ import com.fptufa26.ecomotion.finance.exception.MissingBankAccountException;
 import com.fptufa26.ecomotion.finance.exception.PaymentRequestNotFoundException;
 import com.fptufa26.ecomotion.finance.repository.PaymentEvidenceRepository;
 import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.common.storage.FileStorageService;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.user.entity.Provider;
@@ -63,6 +65,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -77,6 +82,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -88,6 +94,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     private final PaymentRequestRepository paymentRequestRepository;
     private final PaymentEvidenceRepository paymentEvidenceRepository;
+    private final FileStorageService fileStorageService;
     private final ProviderBankAccountRepository providerBankAccountRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final BookingRepository bookingRepository;
@@ -215,7 +222,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     public PaymentRequestResponse getPaymentRequestDetail(Long paymentRequestId, Long currentUserId) {
-        PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
+        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
         validateAccessToBooking(pr.getBooking(), currentUserId);
@@ -242,6 +249,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new InvalidPaymentOperationException(
                     "Yêu cầu thanh toán hiện không nhận thêm bằng chứng chuyển khoản");
         }
+        validatePayableStage(pr);
 
         PaymentEvidence evidence = new PaymentEvidence();
         evidence.setPaymentRequest(pr);
@@ -264,6 +272,130 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         log.info("Renter {} submitted proof for PaymentRequest #{}", currentUserId, paymentRequestId);
         return toEvidenceResponse(savedEvidence);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentEvidenceFileResponse getPaymentEvidenceFile(Long evidenceId, Long currentUserId) {
+        PaymentEvidence evidence = paymentEvidenceRepository.findById(evidenceId)
+                .orElseThrow(() -> new PaymentRequestNotFoundException(
+                        "Không tìm thấy bằng chứng thanh toán #" + evidenceId));
+        validateAccessToBooking(evidence.getPaymentRequest().getBooking(), currentUserId);
+        String storedPath = evidence.getProofImageUrl();
+        if (!isManagedEvidencePath(storedPath)) {
+            throw new PaymentRequestNotFoundException("Bằng chứng này không được lưu trong hệ thống");
+        }
+        String lower = storedPath.toLowerCase(Locale.ROOT);
+        String contentType = lower.endsWith(".png") ? "image/png"
+                : lower.endsWith(".webp") ? "image/webp" : "image/jpeg";
+        String filename = storedPath.substring(storedPath.lastIndexOf('/') + 1);
+        return new PaymentEvidenceFileResponse(fileStorageService.read(storedPath), contentType, filename);
+    }
+
+    @Override
+    @Transactional
+    public PaymentEvidenceResponse submitPaymentProof(
+            Long paymentRequestId, Long currentUserId, MultipartFile file,
+            BigDecimal transferredAmount, String transactionReference,
+            Instant transferredAt, String note) {
+        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId)
+                .orElseThrow(() -> new PaymentRequestNotFoundException(
+                        "Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
+        if (!pr.getBooking().getRenter().getUser().getId().equals(currentUserId)) {
+            throw new AccessDeniedException(
+                    "Chỉ khách hàng thuê xe mới có quyền gửi bằng chứng thanh toán cho đơn này");
+        }
+        if (!Set.of(PaymentRequestStatus.PENDING, PaymentRequestStatus.REJECTED,
+                PaymentRequestStatus.PARTIALLY_PAID).contains(pr.getStatus())) {
+            throw new InvalidPaymentOperationException(
+                    "Yêu cầu thanh toán hiện không nhận thêm bằng chứng chuyển khoản");
+        }
+        validatePayableStage(pr);
+        if (file == null || file.isEmpty()) {
+            throw new InvalidPaymentOperationException("Ảnh chứng từ không được để trống");
+        }
+        if (file.getSize() > 5L * 1024 * 1024) {
+            throw new InvalidPaymentOperationException("Ảnh chứng từ không được vượt quá 5 MB");
+        }
+        String contentType = file.getContentType();
+        if (!Set.of("image/jpeg", "image/png", "image/webp").contains(contentType)) {
+            throw new InvalidPaymentOperationException("Chỉ chấp nhận ảnh JPG, PNG hoặc WebP");
+        }
+        if (transferredAmount == null || transferredAmount.compareTo(new BigDecimal("1000")) < 0) {
+            throw new InvalidPaymentOperationException("Số tiền đã chuyển tối thiểu 1.000 ₫");
+        }
+        if (transactionReference != null && transactionReference.length() > 100) {
+            throw new InvalidPaymentOperationException("Mã giao dịch ngân hàng tối đa 100 ký tự");
+        }
+        if (note != null && note.length() > 500) {
+            throw new InvalidPaymentOperationException("Ghi chú tối đa 500 ký tự");
+        }
+        try {
+            byte[] bytes = file.getBytes();
+            if (!hasValidImageSignature(bytes, contentType)) {
+                throw new InvalidPaymentOperationException("Nội dung tệp không khớp định dạng ảnh JPG, PNG hoặc WebP");
+            }
+            String extension = switch (contentType) {
+                case "image/jpeg" -> ".jpg";
+                case "image/png" -> ".png";
+                case "image/webp" -> ".webp";
+                default -> throw new InvalidPaymentOperationException("Định dạng ảnh không hợp lệ");
+            };
+            String immutableName = "payment-proof-" + paymentRequestId + "-" + UUID.randomUUID() + extension;
+            String storedPath = fileStorageService.store(
+                    "payment-evidence", currentUserId, immutableName, bytes, contentType);
+            registerRollbackCleanup(storedPath);
+            return submitPaymentProof(paymentRequestId, currentUserId,
+                    new SubmitProofRequest(storedPath, transferredAmount,
+                            transactionReference, transferredAt, note));
+        } catch (java.io.IOException ex) {
+            throw new InvalidPaymentOperationException("Không thể đọc ảnh chứng từ");
+        }
+    }
+
+    private void validatePayableStage(PaymentRequest request) {
+        if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(clock.instant())) {
+            throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã hết hạn");
+        }
+        BookingStatus bookingStatus = request.getBooking().getStatus();
+        boolean valid = request.getPaymentType() == PaymentRequestType.DEPOSIT
+                ? bookingStatus == BookingStatus.ACCEPTED
+                : request.getPaymentType() == PaymentRequestType.FINAL_BALANCE
+                && bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT;
+        if (!valid) {
+            throw new InvalidPaymentOperationException("Yêu cầu thanh toán không thuộc giai đoạn có thể gửi chứng từ");
+        }
+    }
+
+    private boolean hasValidImageSignature(byte[] bytes, String contentType) {
+        if ("image/jpeg".equals(contentType)) {
+            return bytes.length >= 3 && (bytes[0] & 0xff) == 0xff
+                    && (bytes[1] & 0xff) == 0xd8 && (bytes[2] & 0xff) == 0xff;
+        }
+        if ("image/png".equals(contentType)) {
+            byte[] signature = {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+            return bytes.length >= signature.length
+                    && java.util.stream.IntStream.range(0, signature.length)
+                    .allMatch(index -> bytes[index] == signature[index]);
+        }
+        return bytes.length >= 12
+                && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F'
+                && bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P';
+    }
+
+    private void registerRollbackCleanup(String storedPath) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    try {
+                        fileStorageService.delete(storedPath);
+                    } catch (RuntimeException ex) {
+                        log.error("Could not clean up rolled-back payment proof {}", storedPath, ex);
+                    }
+                }
+            }
+        });
     }
 
     @Override
@@ -902,7 +1034,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         return new PaymentEvidenceResponse(
                 e.getId(),
                 e.getPaymentRequest().getId(),
-                e.getProofImageUrl(),
+                evidenceViewUrl(e.getId(), e.getProofImageUrl()),
                 e.getTransferredAmount(),
                 e.getTransactionReference(),
                 e.getTransferredAt(),
@@ -913,6 +1045,22 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 e.getCreatedAt(),
                 e.getReviewedAt()
         );
+    }
+
+    private String evidenceViewUrl(Long evidenceId, String storedPath) {
+        if (isManagedEvidencePath(storedPath)) {
+            return "/api/v1/payment-evidences/" + evidenceId + "/file";
+        }
+        // Legacy external URLs are intentionally not reflected to clients.
+        return null;
+    }
+
+    private boolean isManagedEvidencePath(String storedPath) {
+        if (storedPath == null) {
+            return false;
+        }
+        return storedPath.matches("payment-evidence/[0-9]+/payment-proof-[a-zA-Z0-9._-]+")
+                || storedPath.matches("booking/[0-9]+/payment-proof-[a-zA-Z0-9._-]+");
     }
 
     private ProviderTransactionResponse toTransactionResponse(PaymentTransaction tx) {

@@ -7,6 +7,7 @@ import { createBooking, listVehiclesForBooking } from '../../services/bookingSer
 import { readErrorMessage } from '../../services/apiClient'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
+import { buildBookingPayload } from '../../utils/bookingAvailability'
 
 export function BookingRequestPage() {
   const navigate = useNavigate()
@@ -18,7 +19,8 @@ export function BookingRequestPage() {
   const [slots, setSlots] = useState(3)
   const [startDate, setStartDate] = useState('')
   const [startTime, setStartTime] = useState('')
-  const [pickupAddress, setPickupAddress] = useState('18 Hoàng Hoa Thám, Phường 13, Quận Tân Bình, TP. Hồ Chí Minh')
+  const [pickup, setPickup] = useState({ address: '', latitude: null, longitude: null })
+  const [driverNote, setDriverNote] = useState('')
   const [passengerCount, setPassengerCount] = useState(3)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -55,6 +57,7 @@ export function BookingRequestPage() {
       ? Math.max(1, vehicle.seatCount - 1)
       : vehicle.seatCount
     : 1
+  const effectivePassengerCount = Math.min(passengerCount, maxPassengers)
   const totalAmount = plan ? Number(plan.slotPrice) * slots : 0
   const depositAmount = plan?.planType === 'YEARLY'
     ? Number(plan.upfrontAmount ?? 0)
@@ -76,23 +79,20 @@ export function BookingRequestPage() {
     }).format(end)
   }, [plan, slots, startDate, startTime])
 
-  useEffect(() => {
-    setPassengerCount((current) => Math.min(current, maxPassengers))
-  }, [maxPassengers])
-
   async function handleSubmit() {
     if (!vehicle || !plan) return
     setSubmitting(true)
     setError('')
     try {
-      const created = await createBooking({
+      const created = await createBooking(buildBookingPayload({
         vehicleId: vehicle.id,
         planId: plan.id,
         slotCount: slots,
         pickupTime: new Date(`${startDate}T${startTime}:00+07:00`).toISOString(),
-        pickupAddress,
-        passengerCount,
-      })
+        pickup,
+        passengerCount: effectivePassengerCount,
+        driverNote,
+      }))
       navigate(`/renter/bookings/${created.bookingCode}/submitted`, {
         state: {
           booking: {
@@ -101,12 +101,13 @@ export function BookingRequestPage() {
               name: vehicle.name,
               year: String(vehicle.manufactureYear),
               plateNumber: vehicle.licensePlate,
+              fuelType: vehicle.fuelType,
               image: vehicle.imageUrl,
             },
             slots,
             planType: plan.planType,
             formattedStart: `${startTime}, ${startDate}`,
-            pickupAddress,
+            pickupAddress: pickup.address,
             depositAmount,
             totalAmount: Number(created.totalAmount),
           },
@@ -149,6 +150,10 @@ export function BookingRequestPage() {
           depositAmount={depositAmount}
           depositRatio={Number(vehicle?.depositRatio ?? 0)}
           onNext={() => {
+            if (plan?.planType === 'YEARLY') {
+              navigate(`/renter/yearly-rental?vehicleId=${vehicle.id}&planId=${plan.id}`)
+              return
+            }
             const errs = {}
             if (!startDate) errs.startDate = 'Vui lòng chọn ngày nhận xe'
             if (!startTime) errs.startTime = 'Vui lòng chọn giờ nhận xe'
@@ -167,14 +172,17 @@ export function BookingRequestPage() {
         <PickupStep
           vehicleId={vehicle.id}
           vehicleName={vehicle.name}
+          vehicleYear={vehicle.manufactureYear}
           plateNumber={vehicle.licensePlate}
           vehicleImage={vehicle.imageUrl}
           slots={slots}
           planSummary={plan ? `${planLabel(plan.planType).title} (${slots} slot)` : ''}
           priceLabel={plan ? formatCurrency(plan.slotPrice) : ''}
-          pickupAddress={pickupAddress}
-          setPickupAddress={setPickupAddress}
-          passengerCount={passengerCount}
+          pickup={pickup}
+          setPickup={setPickup}
+          driverNote={driverNote}
+          setDriverNote={setDriverNote}
+          passengerCount={effectivePassengerCount}
           setPassengerCount={setPassengerCount}
           seatCount={vehicle.seatCount}
           driverIncluded={driverIncluded}
@@ -199,8 +207,10 @@ export function BookingRequestPage() {
           depositNote={plan?.planType === 'YEARLY'
             ? 'Trả trước theo hợp đồng'
             : `${formatCurrency(totalAmount)} × ${Math.round(Number(vehicle.depositRatio ?? 0) * 100)}%`}
-          pickupAddress={pickupAddress}
-          passengerCount={passengerCount}
+          pickupAddress={pickup.address}
+          pickup={pickup}
+          driverNote={driverNote}
+          passengerCount={effectivePassengerCount}
           totalAmount={totalAmount}
           depositAmount={depositAmount}
           planType={plan?.planType}
