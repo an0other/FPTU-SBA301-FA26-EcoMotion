@@ -26,6 +26,8 @@ import ProviderHomePage from './pages/provider/ProviderHomePage'
 import ProviderVehicleListPage from './pages/provider/ProviderVehicleListPage'
 import ProviderVehicleCreatePage from './pages/provider/ProviderVehicleCreatePage'
 import ProviderVehicleHubPage from './pages/provider/ProviderVehicleHubPage'
+import ProviderSchedulePage from './pages/provider/ProviderSchedulePage'
+import ProviderDriverPage from './pages/provider/ProviderDriverPage'
 
 import { BookingDetailPage } from './pages/booking/BookingDetailPage'
 import { BookingRequestPage } from './pages/booking/BookingRequestPage'
@@ -165,6 +167,14 @@ export default function App() {
         <Route
           path="/provider/finance"
           element={<ProviderFinancePage />}
+        />
+        <Route
+          path="/provider/schedules"
+          element={<ProviderSchedulePage />}
+        />
+        <Route
+          path="/provider/drivers"
+          element={<ProviderDriverPage />}
         />
       </Route>
 
