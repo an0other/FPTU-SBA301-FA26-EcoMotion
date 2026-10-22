@@ -65,6 +65,13 @@ public class PaymentRequestController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable String bookingCode) {
         Booking booking = bookingRepository.findByBookingCode(bookingCode)
+                .or(() -> {
+                    try {
+                        return bookingRepository.findById(Long.parseLong(bookingCode));
+                    } catch (NumberFormatException e) {
+                        return java.util.Optional.empty();
+                    }
+                })
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + bookingCode));
         return ApiResponse.success(paymentRequestService.getPaymentRequestsByBooking(
                 booking.getId(), principal.getUserId()));
