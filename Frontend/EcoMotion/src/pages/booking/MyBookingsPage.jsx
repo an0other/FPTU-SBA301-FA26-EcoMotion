@@ -23,6 +23,7 @@ function toCard(item) {
     planType: item.planType,
     pickupAddress: item.pickupAddress,
     totalAmount: Number(item.totalAmount),
+    canPay: Boolean(item.canPay),
     formattedStart: formatWhen(item.pickupTime),
     vehicle: {
       name: item.vehicleName,
@@ -59,7 +60,7 @@ export function MyBookingsPage() {
     <MyBookingsList
       bookings={bookings}
       onSelectBooking={(booking) => navigate(`/renter/bookings/${booking.id}`)}
-      onPayDeposit={(booking) => navigate(`/renter/bookings/${booking.id}/checkout`)}
+      onPayDeposit={(booking) => navigate(`/renter/bookings/${booking.id}/payment`)}
       onBookCar={() => navigate('/')}
     />
   )

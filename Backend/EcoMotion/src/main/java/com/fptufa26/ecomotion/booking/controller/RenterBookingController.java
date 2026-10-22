@@ -3,8 +3,10 @@ package com.fptufa26.ecomotion.booking.controller;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest;
+import com.fptufa26.ecomotion.booking.dto.request.UpdateBookingRequestDetails;
 import com.fptufa26.ecomotion.booking.dto.response.BookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
+import com.fptufa26.ecomotion.booking.dto.response.BookingRequestDetailsResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
@@ -25,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -63,18 +66,20 @@ public class RenterBookingController {
     }
 
     @GetMapping("/{bookingCode}/checkout")
-    public ApiResponse<CheckoutPreviewResponse> previewCheckout(
+    public ResponseEntity<ApiResponse<CheckoutPreviewResponse>> previewCheckout(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
-        return ApiResponse.success(bookingService.previewCheckout(user.getUserId(), bookingCode));
+        return ResponseEntity.status(HttpStatus.GONE).body(
+                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR"));
     }
 
     @PostMapping("/{bookingCode}/checkout")
-    public ApiResponse<CheckoutResultResponse> checkout(
+    public ResponseEntity<ApiResponse<CheckoutResultResponse>> checkout(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode,
             @Valid @RequestBody CheckoutRequest request) {
-        return ApiResponse.success(bookingService.checkout(user.getUserId(), bookingCode, request));
+        return ResponseEntity.status(HttpStatus.GONE).body(
+                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR"));
     }
 
     @GetMapping("/{bookingCode}")
@@ -82,6 +87,14 @@ public class RenterBookingController {
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
         return ApiResponse.success(bookingService.detail(user.getUserId(), bookingCode));
+    }
+
+    @PatchMapping("/{bookingCode}/request-details")
+    public ApiResponse<BookingRequestDetailsResponse> updateRequestDetails(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            @Valid @RequestBody UpdateBookingRequestDetails request) {
+        return ApiResponse.success(bookingService.updateRequestDetails(user.getUserId(), bookingCode, request));
     }
 
     @PostMapping("/{bookingCode}/cancel")

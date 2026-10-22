@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel, slotDurationLabel } from '../../utils/planLabels'
 import { vehicleService } from '../../services/vehicleService'
+import { availabilityWindow, overlapsOccupied } from '../../utils/bookingAvailability'
 
 export const ChoosePlanStep = ({
   vehicleId,
@@ -41,6 +42,8 @@ export const ChoosePlanStep = ({
   // Fetch occupied slots when date changes
   const [occupiedSlots, setOccupiedSlots] = useState([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [availabilityError, setAvailabilityError] = useState('')
+  const [availabilityRetry, setAvailabilityRetry] = useState(0)
 
   // Total rental duration in ms based on selected plan
   const rentalDurationMs = useMemo(() => {
@@ -49,24 +52,30 @@ export const ChoosePlanStep = ({
   }, [selected, slots])
 
   useEffect(() => {
-    if (!startDate || !vehicleId) { setOccupiedSlots([]); return }
+    if (!startDate || !vehicleId) return undefined
     let cancelled = false
     ;(async () => {
       setLoadingSlots(true)
+      setAvailabilityError('')
       try {
-        // Query from start of selected day to end of rental range (latest possible start = 23:00 + duration)
-        const fromDate = new Date(startDate + 'T00:00:00+07:00')
         const latestStart = new Date(startDate + 'T23:00:00+07:00')
-        const toDate = new Date(latestStart.getTime() + rentalDurationMs)
-        const from = fromDate.toISOString()
-        const to = toDate.toISOString()
+        const { from, to } = availabilityWindow(
+          new Date(startDate + 'T00:00:00+07:00'),
+          new Date(latestStart.getTime() + rentalDurationMs),
+        )
         const resp = await vehicleService.getAvailability(vehicleId, from, to)
         if (!cancelled) setOccupiedSlots(resp.occupiedSlots ?? [])
-      } catch (err) { console.error('[Availability] error', err); if (!cancelled) setOccupiedSlots([]) }
+      } catch (err) {
+        console.error('[Availability] error', err)
+        if (!cancelled) {
+          setOccupiedSlots([])
+          setAvailabilityError('Chưa kiểm tra được lịch xe. Vui lòng thử lại trước khi tiếp tục.')
+        }
+      }
       finally { if (!cancelled) setLoadingSlots(false) }
     })()
     return () => { cancelled = true }
-  }, [startDate, vehicleId, rentalDurationMs])
+  }, [startDate, vehicleId, rentalDurationMs, availabilityRetry])
 
   // Generate available time slots (hourly), filtering out past hours if today
   // Debug: show rental duration calculation
@@ -81,8 +90,6 @@ export const ChoosePlanStep = ({
         const rentalStart = new Date(startDate + 'T' + value + ':00+07:00')
         const rentalEnd = new Date(rentalStart.getTime() + rentalDurationMs)
         occupied = occupiedSlots.some((os) => {
-          if (h === 0 || h === 1 || h === 3 || h === 4) {
-          }
           const osStart = new Date(os.startAt)
           const osEnd = new Date(os.endAt)
           return rentalStart < osEnd && rentalEnd > osStart
@@ -106,6 +113,27 @@ export const ChoosePlanStep = ({
 
   const [timeOpen, setTimeOpen] = useState(false)
   const timeRef = useRef(null)
+  const selectedRange = useMemo(() => {
+    if (!startDate || !startTime || !rentalDurationMs) return null
+    const start = new Date(`${startDate}T${startTime}:00+07:00`)
+    return { start, end: new Date(start.getTime() + rentalDurationMs) }
+  }, [rentalDurationMs, startDate, startTime])
+  const selectedRangeOccupied = selectedRange
+    ? overlapsOccupied(selectedRange.start, selectedRange.end, occupiedSlots)
+    : false
+
+  const handleContinue = () => {
+    if (loadingSlots) {
+      setAvailabilityError('Đang kiểm tra lịch xe, vui lòng chờ trong giây lát.')
+      return
+    }
+    if (availabilityError) return
+    if (selectedRangeOccupied) {
+      setFieldErrors((current) => ({ ...current, startTime: 'Khung giờ này vừa có lịch. Vui lòng chọn giờ khác.' }))
+      return
+    }
+    onNext()
+  }
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -334,14 +362,9 @@ export const ChoosePlanStep = ({
         </span>
         {startDate && startTime ? (
           (() => {
-            const selH = parseInt(startTime.split(':')[0], 10)
             const selStart = new Date(startDate + 'T' + startTime + ':00+07:00')
             const selEnd = new Date(selStart.getTime() + rentalDurationMs)
-            const conflict = occupiedSlots.some((os) => {
-              const osStart = new Date(os.startAt)
-              const osEnd = new Date(os.endAt)
-              return selStart < osEnd && selEnd > osStart
-            })
+            const conflict = overlapsOccupied(selStart, selEnd, occupiedSlots)
             return conflict
               ? <div className="flex-shrink-0 px-3.5 py-1 text-xs font-semibold text-white rounded-full bg-[#B42318]">Khung giờ này đã có lịch</div>
               : <div className="flex-shrink-0 px-3.5 py-1 text-xs font-semibold text-white rounded-full bg-[#15803D]">Xe còn chỗ trong khung giờ này</div>
@@ -350,6 +373,24 @@ export const ChoosePlanStep = ({
           <div className="flex-shrink-0 px-3.5 py-1 text-xs font-semibold text-gray-500 rounded-full bg-gray-100">Chọn ngày và giờ để kiểm tra</div>
         )}
       </div>
+      {availabilityError ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
+          <p>{availabilityError}</p>
+          <button
+            type="button"
+            onClick={() => setAvailabilityRetry((value) => value + 1)}
+            className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            Kiểm tra lại lịch
+          </button>
+        </div>
+      ) : null}
+
+      {yearly ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Gói năm sử dụng hợp đồng và hồ sơ riêng. Bước tiếp theo sẽ chuyển bạn sang quy trình thuê năm chuyên dụng.
+        </div>
+      ) : null}
 
       {selected && slots > 0 && (
         <div className="w-full rounded-[14px] border border-[#E6EBE8] bg-white p-4 shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
@@ -379,12 +420,12 @@ export const ChoosePlanStep = ({
 
       <div className="flex justify-end pt-2 pb-4">
         <button
-          onClick={onNext}
-          disabled={!selected}
+          onClick={handleContinue}
+          disabled={!selected || loadingSlots || Boolean(availabilityError) || selectedRangeOccupied}
           className="inline-flex items-center gap-2 text-white font-medium px-6 py-3 rounded-[12px] bg-[#15803D] hover:bg-emerald-800 active:scale-[0.98] cursor-pointer disabled:opacity-40"
           type="button"
         >
-          Tiếp tục: Điểm đón
+          {yearly ? 'Tiếp tục sang thuê năm' : 'Tiếp tục: Điểm đón'}
         </button>
       </div>
     </div>

@@ -466,6 +466,12 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setDriver(driver);
         booking.setStatus(status);
         booking.setPickupAddress(pickupAddress);
+        // Keep one legacy row without coordinates to exercise address-geocoding fallback.
+        if (!PENDING_BOOKING_CODE.equals(bookingCode)) {
+            booking.setPickupLatitude(vehicle.getProvider().getDepotLatitude());
+            booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
+            booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
+        }
         booking.setPickupTime(pickupTime);
         booking.setPassengerCount(passengerCount);
         booking.setTotalAmount(new BigDecimal(totalAmountStr));
@@ -551,7 +557,6 @@ public class DevDataSeeder implements ApplicationRunner {
             Vehicle v9 = vehicleRepository.findById(9L).orElseThrow();
             v9.setStatus(VehicleStatus.PENDING);
             vehicleRepository.save(v9);
-
             VehicleDocument doc1 = new VehicleDocument();
             doc1.setVehicle(v9);
             doc1.setDocType(DocumentType.REGISTRATION);
@@ -579,6 +584,10 @@ public class DevDataSeeder implements ApplicationRunner {
             doc3.setStatus(DocumentStatus.PENDING);
             vehicleDocumentRepository.save(doc3);
         }
+        vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(9L).forEach(image -> {
+            image.setImageUrl(image.getImageUrl().replace("/2/9/", "/2/1/"));
+            vehicleImageRepository.save(image);
+        });
 
         // 5. Booking, Charges, Payments, Dispute
         if (bookingRepository.findByBookingCode("BK-ECO-001").isEmpty()) {

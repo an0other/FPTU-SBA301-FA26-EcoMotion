@@ -8,12 +8,16 @@ import com.fptufa26.ecomotion.finance.dto.request.ReportIssueRequest;
 import com.fptufa26.ecomotion.finance.dto.request.SimulatePaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.SubmitProofRequest;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceResponse;
+import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
 import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 
 import java.util.List;
+import java.math.BigDecimal;
+import java.time.Instant;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface PaymentRequestService {
 
@@ -21,11 +25,20 @@ public interface PaymentRequestService {
 
     PaymentRequest createFinalBalancePaymentRequest(Long bookingId);
 
+    BigDecimal calculateRemainingAmount(Long bookingId);
+
     List<PaymentRequestResponse> getPaymentRequestsByBooking(Long bookingId, Long currentUserId);
 
     PaymentRequestResponse getPaymentRequestDetail(Long paymentRequestId, Long currentUserId);
 
     PaymentEvidenceResponse submitPaymentProof(Long paymentRequestId, Long currentUserId, SubmitProofRequest request);
+
+    PaymentEvidenceResponse submitPaymentProof(
+            Long paymentRequestId, Long currentUserId, MultipartFile file,
+            BigDecimal transferredAmount, String transactionReference,
+            Instant transferredAt, String note);
+
+    PaymentEvidenceFileResponse getPaymentEvidenceFile(Long evidenceId, Long currentUserId);
 
     List<ProviderTransactionResponse> getBookingPaymentHistory(Long bookingId, Long currentUserId);
 

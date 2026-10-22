@@ -117,8 +117,13 @@ export const providerFinanceService = {
   // Customer Payment & Proofs
   // ==========================================
 
-  async getPaymentRequestsByBooking(bookingId) {
-    const { data } = await apiClient.get(`/v1/bookings/${bookingId}/payment-requests`)
+  async getPaymentRequestsByBooking(identifier) {
+    if (!identifier) return []
+    const isNumeric = /^\d+$/.test(String(identifier).trim())
+    const url = isNumeric
+      ? `/v1/bookings/${identifier}/payment-requests`
+      : `/v1/renter/bookings/${encodeURIComponent(identifier)}/payment-requests`
+    const { data } = await apiClient.get(url)
     return data?.data ?? []
   },
 
@@ -128,8 +133,19 @@ export const providerFinanceService = {
   },
 
   async submitPaymentProof(id, payload) {
-    const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs`, payload)
+    const form = new FormData()
+    form.append('file', payload.file)
+    form.append('transferredAmount', payload.transferredAmount)
+    if (payload.transactionReference) form.append('transactionReference', payload.transactionReference)
+    if (payload.transferredAt) form.append('transferredAt', payload.transferredAt)
+    if (payload.note) form.append('note', payload.note)
+    const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs/multipart`, form)
     return data?.data
+  },
+
+  async getPaymentEvidenceImage(id) {
+    const { data } = await apiClient.get(`/v1/payment-evidences/${id}/file`, { responseType: 'blob' })
+    return data
   },
 
   async getBookingPaymentHistory(bookingId) {

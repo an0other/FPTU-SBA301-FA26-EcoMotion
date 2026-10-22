@@ -6,6 +6,7 @@ import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
@@ -17,6 +18,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
@@ -81,7 +84,12 @@ class DevDataSeederTest {
         Long providerBId = providerRepository.findByUser_Id(4L).orElseThrow().getId();
         List<Vehicle> byProviderA = vehicleRepository.findByProvider_IdOrderByIdAsc(providerAId);
         List<Vehicle> byProviderB = vehicleRepository.findByProvider_IdOrderByIdAsc(providerBId);
-        assertThat(byProviderA).extracting(Vehicle::getId).containsExactly(1L, 2L, 3L, 4L);
+        assertThat(byProviderA)
+                .filteredOn(vehicle -> vehicle.getStatus() == VehicleStatus.APPROVED)
+                .extracting(Vehicle::getId).containsExactly(1L, 2L, 3L, 4L);
+        assertThat(byProviderA)
+                .filteredOn(vehicle -> vehicle.getStatus() == VehicleStatus.PENDING)
+                .extracting(Vehicle::getId).containsExactly(9L);
         assertThat(byProviderB).extracting(Vehicle::getId).containsExactly(5L, 6L, 7L, 8L);
 
         assertThat(vehicleRepository.findById(1L).orElseThrow().getColor()).isEqualTo("Tr\u1eafng");
@@ -105,7 +113,9 @@ class DevDataSeederTest {
     @Test
     @DisplayName("the fleet is varied: no two cars share a rating or a price")
     void seededFleetIsVaried() {
-        List<Vehicle> fleet = vehicleRepository.findAll();
+        List<Vehicle> fleet = vehicleRepository.findAll().stream()
+                .filter(vehicle -> vehicle.getStatus() == VehicleStatus.APPROVED)
+                .toList();
         assertThat(fleet).hasSize(8);
 
         assertThat(fleet)
@@ -114,10 +124,14 @@ class DevDataSeederTest {
 
         assertThat(fleet).filteredOn(vehicle -> vehicle.getRatingCount() == 0).hasSize(1);
 
+        Set<Long> approvedVehicleIds = fleet.stream()
+                .map(Vehicle::getId)
+                .collect(Collectors.toSet());
         List<RentalPlan> plans = rentalPlanRepository.findAll();
         for (PlanType planType : List.of(PlanType.HOURLY, PlanType.DAILY, PlanType.MONTHLY)) {
             assertThat(plans)
-                    .filteredOn(plan -> plan.getPlanType() == planType)
+                    .filteredOn(plan -> plan.getPlanType() == planType
+                            && approvedVehicleIds.contains(plan.getVehicle().getId()))
                     .extracting(plan -> plan.getSlotPrice().doubleValue())
                     .hasSize(8)
                     .doesNotHaveDuplicates();

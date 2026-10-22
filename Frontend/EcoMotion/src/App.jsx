@@ -26,10 +26,11 @@ import ProviderHomePage from './pages/provider/ProviderHomePage'
 import ProviderVehicleListPage from './pages/provider/ProviderVehicleListPage'
 import ProviderVehicleCreatePage from './pages/provider/ProviderVehicleCreatePage'
 import ProviderVehicleHubPage from './pages/provider/ProviderVehicleHubPage'
+import ProviderSchedulePage from './pages/provider/ProviderSchedulePage'
+import ProviderDriverPage from './pages/provider/ProviderDriverPage'
 
 import { BookingDetailPage } from './pages/booking/BookingDetailPage'
 import { BookingRequestPage } from './pages/booking/BookingRequestPage'
-import { DepositPaymentPage } from './pages/booking/DepositPaymentPage'
 import { MyBookingsPage } from './pages/booking/MyBookingsPage'
 import { SubmittedBookingPage } from './pages/booking/SubmittedBookingPage'
 
@@ -38,6 +39,15 @@ function BookingShell({ children }) {
     <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
       <AppHeader />
       <BookingSubnav />
+      <main className="w-full flex-1">{children}</main>
+    </div>
+  )
+}
+
+function BookingWizardShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
       <main className="w-full flex-1">{children}</main>
     </div>
   )
@@ -86,27 +96,18 @@ export default function App() {
         <Route
           path="/renter/bookings/new"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <BookingRequestPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 
         <Route
           path="/renter/bookings/:bookingCode/submitted"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <SubmittedBookingPage />
-            </BookingShell>
-          }
-        />
-
-        <Route
-          path="/renter/bookings/:bookingCode/checkout"
-          element={
-            <BookingShell>
-              <DepositPaymentPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 
@@ -166,6 +167,14 @@ export default function App() {
         <Route
           path="/provider/finance"
           element={<ProviderFinancePage />}
+        />
+        <Route
+          path="/provider/schedules"
+          element={<ProviderSchedulePage />}
+        />
+        <Route
+          path="/provider/drivers"
+          element={<ProviderDriverPage />}
         />
       </Route>
 

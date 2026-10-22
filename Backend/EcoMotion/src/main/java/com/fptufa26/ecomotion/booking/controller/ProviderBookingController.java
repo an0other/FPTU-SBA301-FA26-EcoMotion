@@ -7,6 +7,7 @@ import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
 import com.fptufa26.ecomotion.booking.service.ProviderBookingService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -114,6 +115,14 @@ public class ProviderBookingController {
             @PathVariable("id") String id,
             @RequestBody @Valid AddChargeRequest request) {
         return ApiResponse.success(providerBookingService.addCharge(principal.getUserId(), id, request));
+    }
+
+    @PostMapping("/{id}/settlement/finalize")
+    @Operation(summary = "Lock charges and create the final VietQR payment request")
+    public ApiResponse<SettlementResultResponse> finalizeSettlement(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("id") String id) {
+        return ApiResponse.success(providerBookingService.finalizeSettlement(principal.getUserId(), id));
     }
 
     @GetMapping("/{id}/tracking")

@@ -8,6 +8,7 @@ import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingDetailResponse
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +36,8 @@ public interface ProviderBookingService {
     List<BookingChargeResponse> getCharges(Long currentUserId, String bookingCodeOrId);
 
     BookingChargeResponse addCharge(Long currentUserId, String bookingCodeOrId, AddChargeRequest request);
+
+    SettlementResultResponse finalizeSettlement(Long currentUserId, String bookingCodeOrId);
 
     List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId);
 

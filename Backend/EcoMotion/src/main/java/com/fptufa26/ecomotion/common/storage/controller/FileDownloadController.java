@@ -35,7 +35,17 @@ public class FileDownloadController {
         }
 
         String storedPath = requestUri.substring(index + prefix.length());
+        if (storedPath.startsWith("download/")) {
+            storedPath = storedPath.substring("download/".length());
+        }
         if (storedPath.isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Payment proofs contain financial data and must only be served by the
+        // booking-authorized payment-evidence endpoint.
+        if (storedPath.startsWith("payment-evidence/")
+                || storedPath.matches("booking/[0-9]+/payment-proof-.*")) {
             return ResponseEntity.notFound().build();
         }
 

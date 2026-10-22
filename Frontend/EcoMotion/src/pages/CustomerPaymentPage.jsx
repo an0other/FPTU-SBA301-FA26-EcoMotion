@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import Toast from '../components/Toast'
 import { providerFinanceService } from '../services/providerFinanceService'
+import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
+import { isPaymentRequestExpired } from '../utils/paymentDisplay'
 
 function formatVnd(amount) {
   if (amount == null || Number.isNaN(Number(amount))) return '0 ₫'
@@ -36,6 +38,13 @@ const STATUS_BADGES = {
   REJECTED: { label: 'Bị từ chối', bg: 'bg-red-50 text-red-800 border-red-200' },
   EXPIRED: { label: 'Hết hạn', bg: 'bg-slate-100 text-slate-700 border-slate-300' },
   REVIEW_REQUIRED: { label: 'Cần đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
+  VOIDED: { label: 'Đã huỷ yêu cầu', bg: 'bg-slate-100 text-slate-700 border-slate-300' },
+}
+
+const EVIDENCE_BADGES = {
+  PENDING: { label: 'Đang chờ đối soát', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
+  ACCEPTED: { label: 'Đã được chấp nhận', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  REJECTED: { label: 'Bị từ chối', bg: 'bg-red-50 text-red-800 border-red-200' },
 }
 
 export default function CustomerPaymentPage() {
@@ -45,14 +54,23 @@ export default function CustomerPaymentPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
 
   // Proof form states
   const [proofModalOpen, setProofModalOpen] = useState(false)
-  const [proofUrl, setProofUrl] = useState('')
+  const [proofFile, setProofFile] = useState(null)
   const [transferredAmount, setTransferredAmount] = useState('')
   const [txRef, setTxRef] = useState('')
   const [proofNote, setProofNote] = useState('')
   const [submittingProof, setSubmittingProof] = useState(false)
+  const proofPreviewUrl = useMemo(
+    () => (proofFile ? URL.createObjectURL(proofFile) : ''),
+    [proofFile],
+  )
+
+  useEffect(() => () => {
+    if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl)
+  }, [proofPreviewUrl])
 
   const fetchPaymentRequests = useCallback(async () => {
     try {
@@ -61,8 +79,13 @@ export default function CustomerPaymentPage() {
       const data = await providerFinanceService.getPaymentRequestsByBooking(bookingId)
       setRequests(data || [])
       if (data && data.length > 0) {
-        setSelectedRequest(data[0])
-        setTransferredAmount(String(data[0].remainingAmount || data[0].amount || ''))
+        const activeFinal = data.find((request) => request.paymentType === 'FINAL_BALANCE'
+          && request.status !== 'VOIDED')
+        const activeDeposit = data.find((request) => request.paymentType === 'DEPOSIT'
+          && request.status !== 'VOIDED')
+        const current = activeFinal || activeDeposit || data[0]
+        setSelectedRequest(current)
+        setTransferredAmount(String(current.remainingAmount || current.amount || ''))
       }
     } catch (err) {
       console.error('Failed to load payment requests:', err)
@@ -74,9 +97,25 @@ export default function CustomerPaymentPage() {
 
   useEffect(() => {
     if (bookingId) {
-      fetchPaymentRequests()
+      const task = window.setTimeout(fetchPaymentRequests, 0)
+      return () => window.clearTimeout(task)
     }
+    return undefined
   }, [bookingId, fetchPaymentRequests])
+
+  useEffect(() => {
+    const expiresAt = selectedRequest?.expiresAt
+      ? new Date(selectedRequest.expiresAt).getTime()
+      : Number.NaN
+    if (!Number.isFinite(expiresAt) || expiresAt <= currentTime) return undefined
+
+    const maximumDelay = 2_147_000_000
+    const timer = window.setTimeout(
+      () => setCurrentTime(Date.now()),
+      Math.min(Math.max(expiresAt - Date.now() + 25, 0), maximumDelay),
+    )
+    return () => window.clearTimeout(timer)
+  }, [currentTime, selectedRequest?.expiresAt])
 
   const handleCopy = (text, label) => {
     if (!text) return
@@ -87,15 +126,21 @@ export default function CustomerPaymentPage() {
   const handleSubmitProof = async (e) => {
     e.preventDefault()
     if (!selectedRequest) return
-    if (!proofUrl.trim()) {
-      setToast({ message: 'Vui lòng nhập đường dẫn ảnh bằng chứng thanh toán', type: 'error' })
+    if (isPaymentRequestExpired(selectedRequest)) {
+      setCurrentTime(Date.now())
+      setProofModalOpen(false)
+      setToast({ message: 'Yêu cầu thanh toán đã hết hạn', type: 'error' })
+      return
+    }
+    if (!proofFile) {
+      setToast({ message: 'Vui lòng chọn ảnh chứng từ thanh toán', type: 'error' })
       return
     }
 
     try {
       setSubmittingProof(true)
       const payload = {
-        proofImageUrl: proofUrl.trim(),
+        file: proofFile,
         transferredAmount: Number(transferredAmount) || selectedRequest.amount,
         transactionReference: txRef.trim() || undefined,
         note: proofNote.trim() || undefined,
@@ -103,6 +148,7 @@ export default function CustomerPaymentPage() {
       await providerFinanceService.submitPaymentProof(selectedRequest.id, payload)
       setToast({ message: 'Gửi bằng chứng thành công! Chủ xe sẽ đối soát và xác nhận đã nhận tiền.', type: 'success' })
       setProofModalOpen(false)
+      setProofFile(null)
       fetchPaymentRequests()
     } catch (err) {
       console.error('Failed to submit proof:', err)
@@ -110,6 +156,15 @@ export default function CustomerPaymentPage() {
     } finally {
       setSubmittingProof(false)
     }
+  }
+
+  const handleOpenProofModal = () => {
+    if (isPaymentRequestExpired(selectedRequest)) {
+      setCurrentTime(Date.now())
+      setToast({ message: 'Yêu cầu thanh toán đã hết hạn', type: 'error' })
+      return
+    }
+    setProofModalOpen(true)
   }
 
   if (loading) {
@@ -150,6 +205,7 @@ export default function CustomerPaymentPage() {
   }
 
   const badge = STATUS_BADGES[selectedRequest.status] || { label: selectedRequest.status, bg: 'bg-slate-100 text-slate-700' }
+  const requestExpired = isPaymentRequestExpired(selectedRequest, currentTime)
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -301,8 +357,8 @@ export default function CustomerPaymentPage() {
 
             <button
               type="button"
-              onClick={() => setProofModalOpen(true)}
-              disabled={selectedRequest.status === 'CONFIRMED'}
+              onClick={handleOpenProofModal}
+              disabled={requestExpired || !['PENDING', 'PARTIALLY_PAID', 'REJECTED'].includes(selectedRequest.status)}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#047857] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Icon name="receipt_long" className="text-lg" />
@@ -310,6 +366,36 @@ export default function CustomerPaymentPage() {
             </button>
           </div>
         </div>
+
+        {selectedRequest.evidences?.length ? (
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-bold text-slate-900">Bằng chứng đã gửi</h2>
+            <p className="mt-1 text-xs text-slate-500">Theo dõi trạng thái đối soát từng biên lai chuyển khoản.</p>
+            <div className="mt-4 space-y-3">
+              {selectedRequest.evidences.map((evidence) => {
+                const evidenceBadge = EVIDENCE_BADGES[evidence.status]
+                  || { label: evidence.status, bg: 'bg-slate-100 text-slate-700 border-slate-200' }
+                return (
+                  <article key={evidence.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row">
+                    <PaymentEvidenceImage evidence={evidence} alt={`Biên lai ${evidence.id}`} className="h-24 w-full shrink-0 rounded-lg border bg-slate-50 object-contain sm:w-32" />
+                    <div className="min-w-0 flex-1 text-xs text-slate-600">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <strong className="text-sm text-slate-900">{formatVnd(evidence.transferredAmount)}</strong>
+                        <span className={`rounded-full border px-2.5 py-1 font-semibold ${evidenceBadge.bg}`}>{evidenceBadge.label}</span>
+                      </div>
+                      <p className="mt-1">Đã chuyển: {formatDateTime(evidence.transferredAt)}</p>
+                      {evidence.transactionReference ? <p>Mã giao dịch: <span className="font-mono">{evidence.transactionReference}</span></p> : null}
+                      {evidence.note ? <p className="mt-1 text-slate-700">Ghi chú: {evidence.note}</p> : null}
+                      {evidence.reviewedAt ? <p>Đối soát: {formatDateTime(evidence.reviewedAt)}</p> : null}
+                      {evidence.status === 'REJECTED' && selectedRequest.rejectionReason
+                        ? <p className="mt-1 font-medium text-red-700">Lý do: {selectedRequest.rejectionReason}</p> : null}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        ) : null}
 
         {/* Proof Submission Modal */}
         {proofModalOpen && (
@@ -328,16 +414,22 @@ export default function CustomerPaymentPage() {
 
               <form onSubmit={handleSubmitProof} className="mt-4 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700">Đường dẫn ảnh biên lai (URL) *</label>
+                  <label className="block text-xs font-semibold text-slate-700">Ảnh biên lai chuyển khoản *</label>
                   <input
-                    type="url"
+                    type="file"
                     required
-                    value={proofUrl}
-                    onChange={(e) => setProofUrl(e.target.value)}
-                    placeholder="https://example.com/receipt.jpg"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
                     className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden focus:ring-1 focus:ring-[#059669]"
                   />
-                  <span className="text-[11px] text-slate-400">Bạn có thể dán link ảnh biên lai chụp từ ứng dụng ngân hàng.</span>
+                  <span className="text-[11px] text-slate-400">JPG, PNG hoặc WebP, tối đa 5 MB. {proofFile ? `Đã chọn: ${proofFile.name}` : ''}</span>
+                  {proofFile ? (
+                    <img
+                      src={proofPreviewUrl}
+                      alt="Xem trước chứng từ"
+                      className="mt-2 h-32 w-full rounded-lg border border-slate-200 object-contain bg-slate-50"
+                    />
+                  ) : null}
                 </div>
 
                 <div>
@@ -384,7 +476,7 @@ export default function CustomerPaymentPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={submittingProof}
+                    disabled={submittingProof || requestExpired}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-[#059669] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#047857] disabled:opacity-50"
                   >
                     {submittingProof ? <Icon name="sync" className="animate-spin text-sm" /> : <Icon name="send" className="text-sm" />}

@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.schedule.repository;
 
 import com.fptufa26.ecomotion.schedule.entity.VehicleSchedule;
 import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
+import com.fptufa26.ecomotion.schedule.enums.ScheduleType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,8 +27,83 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             WHERE s.vehicle.provider.id = :providerId
               AND s.type IN ('BLOCKED', 'MAINTENANCE')
               AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.endAt > :now
             """)
-    long countActiveBlocksByProviderId(@Param("providerId") Long providerId);
+    long countActiveBlocksByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
+
+    @Query("""
+            SELECT COUNT(s) FROM VehicleSchedule s
+            WHERE s.vehicle.provider.id = :providerId
+              AND s.type = com.fptufa26.ecomotion.schedule.enums.ScheduleType.MAINTENANCE
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.endAt > :now
+            """)
+    long countActiveMaintenanceByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
+
+    @Query("""
+            SELECT COUNT(s) FROM VehicleSchedule s
+            WHERE s.vehicle.provider.id = :providerId
+              AND s.type = com.fptufa26.ecomotion.schedule.enums.ScheduleType.BLOCKED
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.endAt > :now
+            """)
+    long countActiveBlockedByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
+
+    @Query("""
+            SELECT COUNT(s) FROM VehicleSchedule s
+            WHERE s.vehicle.provider.id = :providerId
+              AND s.type = com.fptufa26.ecomotion.schedule.enums.ScheduleType.BOOKED
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.startAt >= :now
+            """)
+    long countUpcomingBookingsByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
+
+    @Query("""
+            SELECT COUNT(DISTINCT s.vehicle.id) FROM VehicleSchedule s
+            WHERE s.vehicle.provider.id = :providerId
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.type IN (com.fptufa26.ecomotion.schedule.enums.ScheduleType.BLOCKED, com.fptufa26.ecomotion.schedule.enums.ScheduleType.MAINTENANCE)
+              AND s.startAt <= :now
+              AND s.endAt > :now
+            """)
+    long countCurrentlyBlockedVehiclesByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
+
+    @Query("""
+            SELECT s FROM VehicleSchedule s
+            JOIN FETCH s.vehicle v
+            LEFT JOIN FETCH s.booking b
+            WHERE v.provider.id = :providerId
+            ORDER BY s.startAt DESC
+            """)
+    List<VehicleSchedule> findByProviderIdOrderDesc(@Param("providerId") Long providerId);
+
+    @Query("""
+            SELECT COUNT(s) > 0 FROM VehicleSchedule s
+            WHERE s.vehicle.id = :vehicleId
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.type = com.fptufa26.ecomotion.schedule.enums.ScheduleType.BOOKED
+              AND s.startAt < :endAt
+              AND s.endAt > :startAt
+            """)
+    boolean existsActiveBookingOverlap(
+            @Param("vehicleId") Long vehicleId,
+            @Param("startAt") Instant startAt,
+            @Param("endAt") Instant endAt
+    );
+
+    @Query("""
+            SELECT COUNT(s) > 0 FROM VehicleSchedule s
+            WHERE s.vehicle.id = :vehicleId
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND s.type IN (com.fptufa26.ecomotion.schedule.enums.ScheduleType.BLOCKED, com.fptufa26.ecomotion.schedule.enums.ScheduleType.MAINTENANCE)
+              AND s.startAt < :endAt
+              AND s.endAt > :startAt
+            """)
+    boolean existsActiveBlockOverlap(
+            @Param("vehicleId") Long vehicleId,
+            @Param("startAt") Instant startAt,
+            @Param("endAt") Instant endAt
+    );
 
     @Query("""
             select count(s) > 0 from VehicleSchedule s
