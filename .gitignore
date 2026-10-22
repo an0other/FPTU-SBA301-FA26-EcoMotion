@@ -136,9 +136,11 @@ GUIDE_FOR_BEGINNERS.md
 *.orig
 *.rej
 docs/phat
+docs/superpowers
 
 # Uploaded files
 uploads/
+upload/
 **/uploads/*
 !**/uploads/sample/
 !**/uploads/sample/**

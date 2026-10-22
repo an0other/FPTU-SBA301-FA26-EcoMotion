@@ -265,6 +265,8 @@ springdoc.packages-to-scan=com.fptufa26.ecomotion
 # ===============================
 app.map.reverse-url=https://nominatim.openstreetmap.org/reverse
 app.map.search-url=https://nominatim.openstreetmap.org/search
+app.map.fallback-reverse-url=https://photon.komoot.io/reverse
+app.map.fallback-search-url=https://photon.komoot.io/api/
 app.map.user-agent=EcoMotion-localhost/1.0 (https://github.com/an0other/FPTU-SBA301-FA26-EcoMotion)
 app.map.connect-timeout=5s
 app.map.request-timeout=8s
