@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Collection;
 
 @Repository
 public interface DisputeRepository extends JpaRepository<Dispute, Long> {
@@ -31,4 +32,6 @@ public interface DisputeRepository extends JpaRepository<Dispute, Long> {
     boolean existsByBooking_IdAndCategoryAndStatusAndChargeIsNull(Long bookingId,
                                                                   DisputeCategory category,
                                                                   DisputeStatus status);
+
+    boolean existsByBooking_IdAndStatusIn(Long bookingId, Collection<DisputeStatus> statuses);
 }

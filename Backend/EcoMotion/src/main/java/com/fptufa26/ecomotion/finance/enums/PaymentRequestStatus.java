@@ -7,5 +7,6 @@ public enum PaymentRequestStatus {
     CONFIRMED,
     REJECTED,
     EXPIRED,
-    REVIEW_REQUIRED
+    REVIEW_REQUIRED,
+    VOIDED
 }

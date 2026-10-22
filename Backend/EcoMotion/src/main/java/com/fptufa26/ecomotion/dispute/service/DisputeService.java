@@ -6,6 +6,7 @@ import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.dispute.entity.Dispute;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
+import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import com.fptufa26.ecomotion.user.entity.User;
 
 import java.util.List;
@@ -19,7 +20,8 @@ public interface DisputeService {
 
     Optional<Dispute> getDisputeById(Long disputeId);
 
-    Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status, String resolution);
+    Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
+                           DisputeResolutionDecision decision, String resolution);
 
     long countOpenOrInReview();
 

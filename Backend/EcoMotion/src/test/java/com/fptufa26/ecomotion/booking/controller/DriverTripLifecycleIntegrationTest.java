@@ -74,7 +74,7 @@ class DriverTripLifecycleIntegrationTest {
                 .findFirst().orElseThrow();
 
         booking.setDriver(driverNam);
-        booking.setStatus(BookingStatus.ACCEPTED);
+        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
         booking.setAssignedAt(Instant.now().minusSeconds(1800));
         booking.setDriverConfirmedAt(null);
         booking.setActualArrivedAt(null);
@@ -177,13 +177,13 @@ class DriverTripLifecycleIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"))
                 .andExpect(jsonPath("$.data.actualEndAt").exists());
 
         mockMvc.perform(get("/api/provider/bookings/{id}", tripId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"))
                 .andExpect(jsonPath("$.data.trip.status").value("COMPLETED"));
 
         mockMvc.perform(post("/api/v1/driver/trips/{tripId}/finish", tripId)
@@ -243,6 +243,9 @@ class DriverTripLifecycleIntegrationTest {
         Driver driverNam = driverRepository.findAll().stream()
                 .filter(d -> d.getUser().getEmail().equalsIgnoreCase("driver.nam@ecomotion.vn"))
                 .findFirst().orElseThrow();
+
+        booking.setStatus(BookingStatus.CONFIRMED);
+        bookingRepository.saveAndFlush(booking);
 
         mockMvc.perform(put("/api/v1/provider/bookings/{id}/driver", tripId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken)

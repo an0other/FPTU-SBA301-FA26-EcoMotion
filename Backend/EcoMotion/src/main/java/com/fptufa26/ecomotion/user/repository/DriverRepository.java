@@ -30,6 +30,8 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
 
     long countByProvider_Id(Long providerId);
 
+    long countByProvider_IdAndStatus(Long providerId, DriverStatus status);
+
     Optional<Driver> findByIdAndProvider_Id(Long id, Long providerId);
 
     boolean existsByLicenseNoIgnoreCase(String licenseNo);

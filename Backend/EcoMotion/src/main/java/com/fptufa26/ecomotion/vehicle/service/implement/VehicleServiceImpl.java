@@ -6,14 +6,6 @@ import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
-import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.booking.entity.BookingCharge;
-import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
-import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.enums.ChargeType;
-import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
-import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
-import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleMapResponse;
@@ -29,8 +21,6 @@ import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -59,15 +49,6 @@ public class VehicleServiceImpl implements VehicleService {
     @Autowired private com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository vehicleDocumentRepository;
     // Availability dependencies are field-injected to keep the catalog service constructor boundary small.
     @Autowired private VehicleScheduleRepository vehicleScheduleRepository;
-    @Autowired private BookingRepository bookingRepository;
-    @Autowired private BookingPolicySnapshotRepository snapshotRepository;
-    @Autowired private BookingChargeRepository chargeRepository;
-
-    private static final Set<BookingStatus> BLOCKING_STATUSES = EnumSet.of(
-            BookingStatus.PENDING, BookingStatus.ACCEPTED,
-            BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED,
-            BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
-    private static final long BUFFER_MINUTES = 60;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -367,13 +348,14 @@ public class VehicleServiceImpl implements VehicleService {
     @Override
     public VehicleAvailabilityResponse getAvailability(Long vehicleId, Instant from, Instant to) {
         // Verify vehicle exists and is approved
-        vehicleRepository.findByIdAndStatus(vehicleId, VehicleStatus.APPROVED)
+        Vehicle vehicle = vehicleRepository.findByIdAndStatus(vehicleId, VehicleStatus.APPROVED)
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
 
         List<VehicleAvailabilityResponse.OccupiedSlot> result = new ArrayList<>();
 
         // Expand query range by buffer so edge bookings are not missed
-        Duration buffer = Duration.ofMinutes(BUFFER_MINUTES);
+        Duration buffer = Duration.ofMinutes(Math.max(0,
+                vehicle.getMaintenanceBufferMinutes() == null ? 0 : vehicle.getMaintenanceBufferMinutes()));
         Instant expandedFrom = from.minus(buffer);
         Instant expandedTo = to.plus(buffer);
 
@@ -384,32 +366,8 @@ public class VehicleServiceImpl implements VehicleService {
                     s.getStartAt().minus(buffer), s.getEndAt().plus(buffer), s.getType().name()));
         }
 
-        // 2. Booking-based slots (PENDING/ACCEPTED that don't yet have a schedule row)
-        var blockingBookings = bookingRepository.findByVehicle_IdAndStatusIn(vehicleId, BLOCKING_STATUSES);
-        for (Booking b : blockingBookings) {
-            Instant bookingEnd = computeBookingEnd(b);
-            // Only include if it overlaps the requested range and isn't already covered by a schedule
-            if (bookingEnd != null && b.getPickupTime().isBefore(expandedTo) && bookingEnd.isAfter(expandedFrom)) {
-                boolean alreadyCovered = schedules.stream().anyMatch(s ->
-                        s.getBooking() != null && s.getBooking().getId().equals(b.getId()));
-                if (!alreadyCovered) {
-                    result.add(new VehicleAvailabilityResponse.OccupiedSlot(
-                            b.getPickupTime().minus(buffer), bookingEnd.plus(buffer), "BOOKED"));
-                }
-            }
-        }
-
         result.sort(Comparator.comparing(VehicleAvailabilityResponse.OccupiedSlot::startAt));
         return new VehicleAvailabilityResponse(vehicleId, result);
-    }
-
-    private Instant computeBookingEnd(Booking booking) {
-        BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
-        if (snapshot == null) return null;
-        int slots = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
-                .map(BookingCharge::getQuantity)
-                .orElse(1);
-        return booking.getPickupTime().plus(Duration.ofMinutes((long) snapshot.getSlotLengthMinutes() * slots));
     }
 
     private PlanType parsePlanType(String planType) {

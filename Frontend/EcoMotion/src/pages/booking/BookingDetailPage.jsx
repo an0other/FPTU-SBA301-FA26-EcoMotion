@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { cancelMyBooking, confirmTripEnd, getMyBooking, openDispute } from '../../services/bookingService'
+import { cancelMyBooking, confirmTripEnd, getMyBooking, openDispute, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 
@@ -41,6 +41,7 @@ function toCard(detail) {
   const deposit = (detail.charges ?? []).find((charge) => charge.chargeType === 'DEPOSIT')
   return {
     id: detail.bookingCode,
+    vehicleId: detail.vehicleId,
     status: detail.status,
     planType: detail.planType,
     planTitle: label.title,
@@ -48,6 +49,9 @@ function toCard(detail) {
     createdAt: formatWhen(detail.createdAt),
     actualStartTime: formatWhen(detail.actualStartAt),
     canConfirmEnd: detail.canConfirmEnd,
+    canCancel: detail.canCancel,
+    canEditRequest: detail.canEditRequest,
+    canPay: detail.canPay,
     depositAmount: deposit ? Number(deposit.amount) : 0,
     refundExplanation: detail.refundPreview?.explanation ?? '',
     disputeCategories: detail.disputeCategories ?? [],
@@ -76,6 +80,11 @@ function toCard(detail) {
       image: detail.imageUrl,
     },
     pickupAddress: detail.pickupAddress,
+    pickupLatitude: detail.pickupLatitude,
+    pickupLongitude: detail.pickupLongitude,
+    driverNote: detail.driverNote,
+    pickupTime: detail.pickupTime,
+    endTime: detail.endTime,
     formattedStart: formatWhen(detail.pickupTime),
     formattedEnd: formatWhen(detail.endTime),
     passengerCount: detail.passengerCount,
@@ -121,7 +130,7 @@ export function BookingDetailPage() {
         booking={booking}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
-        onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/checkout`)}
+        onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
         onCancelBooking={async () => {
           const updated = await cancelMyBooking(booking.id)
           navigate(`/renter/bookings/${updated.bookingCode}`, { replace: true })
@@ -132,6 +141,10 @@ export function BookingDetailPage() {
           setDetail(await getMyBooking(booking.id))
         }}
         onOpenDispute={(body) => openDispute(booking.id, body)}
+        onEditRequest={async (body) => {
+          await updateBookingRequestDetails(booking.id, body)
+          setDetail(await getMyBooking(booking.id))
+        }}
       />
       <p className="max-w-[1120px] mx-auto px-4 pb-8 text-sm">
         <Link to="/renter/bookings" className="text-[#15803D] font-semibold">Về đơn của tôi</Link>

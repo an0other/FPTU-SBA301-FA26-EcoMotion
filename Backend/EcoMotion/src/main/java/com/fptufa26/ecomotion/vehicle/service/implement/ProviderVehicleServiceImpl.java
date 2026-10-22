@@ -80,6 +80,8 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         long hiddenVehicles = vehicleRepository.countByProvider_IdAndStatus(providerId, VehicleStatus.HIDDEN);
         long totalDrivers = userService.countDriversByProviderId(providerId);
         long activeBlocks = providerScheduleService.countActiveBlocksByProviderId(providerId);
+        long currentlyBlocked = providerScheduleService.countCurrentlyBlockedVehiclesByProviderId(providerId);
+        long availableVehicles = Math.max(0, approvedVehicles - currentlyBlocked);
 
         return new ProviderDashboardSummaryResponse(
                 provider.getDisplayName(),
@@ -90,7 +92,8 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 approvedVehicles,
                 hiddenVehicles,
                 totalDrivers,
-                activeBlocks
+                activeBlocks,
+                availableVehicles
         );
     }
 

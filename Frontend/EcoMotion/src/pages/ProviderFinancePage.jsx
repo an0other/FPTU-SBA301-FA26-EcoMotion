@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
 import { providerFinanceService, SUPPORTED_BANKS } from '../services/providerFinanceService'
+import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
 
 function formatVnd(amount) {
   if (amount == null || Number.isNaN(Number(amount))) return '0 ₫'
@@ -62,15 +63,13 @@ export default function ProviderFinancePage() {
 
   // Loading & Error States
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
 
   // Filtering & Pagination
   const [requestStatusFilter, setRequestStatusFilter] = useState('ALL')
   const [txTypeFilter, setTxTypeFilter] = useState('ALL')
-  const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const pageSize = 10
 
   // Modals
   const [isBankModalOpen, setIsBankModalOpen] = useState(false)
@@ -79,7 +78,6 @@ export default function ProviderFinancePage() {
   const [reportIssueModalData, setReportIssueModalData] = useState(null)
   const [viewProofModalData, setViewProofModalData] = useState(null)
   const [breakdownData, setBreakdownData] = useState(null)
-  const [loadingBreakdown, setLoadingBreakdown] = useState(false)
 
   // Form States for Bank Account
   const [formBankCode, setFormBankCode] = useState('VCB')
@@ -104,7 +102,6 @@ export default function ProviderFinancePage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      setError(null)
 
       const [summaryRes, bankRes, commRes] = await Promise.all([
         providerFinanceService.getFinanceSummary().catch(() => null),
@@ -136,14 +133,15 @@ export default function ProviderFinancePage() {
       }
     } catch (err) {
       console.error('Failed to load finance data:', err)
-      setError(err.message || 'Không thể tải dữ liệu tài chính.')
+      setToast({ message: err.message || 'Không thể tải dữ liệu tài chính.', type: 'error' })
     } finally {
       setLoading(false)
     }
   }, [activeTab, requestStatusFilter, txTypeFilter, currentPage, pageSize])
 
   useEffect(() => {
-    fetchData()
+    const timer = window.setTimeout(fetchData, 0)
+    return () => window.clearTimeout(timer)
   }, [fetchData])
 
   // Bank Form Validation
@@ -305,14 +303,11 @@ export default function ProviderFinancePage() {
   // Handle View Financial Breakdown
   const handleViewBreakdown = async (bookingIdOrCode) => {
     try {
-      setLoadingBreakdown(true)
       const data = await providerFinanceService.getBookingBreakdown(bookingIdOrCode)
       setBreakdownData(data)
     } catch (err) {
       console.error('Failed to load breakdown:', err)
       setToast({ message: err.message || 'Không thể tải đối soát tài chính của đơn thuê.', type: 'error' })
-    } finally {
-      setLoadingBreakdown(false)
     }
   }
 
@@ -1175,9 +1170,8 @@ export default function ProviderFinancePage() {
                         )}
                       </div>
                       {ev.note && <div className="text-xs italic text-slate-600 mb-3 bg-white p-2 rounded">"{ev.note}"</div>}
-                      <img
-                        src={ev.proofImageUrl}
-                        alt="Biên lai chuyển khoản"
+                      <PaymentEvidenceImage
+                        evidence={ev}
                         className="w-full max-h-80 object-contain rounded-lg border border-slate-200 bg-white"
                       />
                     </div>

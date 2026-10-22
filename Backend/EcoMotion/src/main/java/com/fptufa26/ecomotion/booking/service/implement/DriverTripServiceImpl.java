@@ -173,6 +173,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getDriverConfirmedAt() != null || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
             throw new TripConflictException("Chuyến đi đã được xác nhận trước đó");
         }
+        if (booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
+            throw new InvalidTripTransitionException("Chỉ có thể xác nhận chuyến đã được nhà cung cấp phân công");
+        }
 
         Instant now = clock.instant();
         booking.setDriverConfirmedAt(now);
@@ -308,7 +311,7 @@ public class DriverTripServiceImpl implements DriverTripService {
 
         Instant now = clock.instant();
         booking.setActualEndAt(now);
-        booking.setStatus(BookingStatus.COMPLETED);
+        booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         if (booking.getProviderConfirmedAt() == null) {
             booking.setProviderConfirmedAt(now);
         }
@@ -380,9 +383,10 @@ public class DriverTripServiceImpl implements DriverTripService {
         Instant now = clock.instant();
         TripLocationResponse locationResponse = getLatestLocationForBooking(booking.getId());
 
-        Double pickupLat = null;
-        Double pickupLon = null;
-        if (booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
+        Double pickupLat = booking.getPickupLatitude() == null ? null : booking.getPickupLatitude().doubleValue();
+        Double pickupLon = booking.getPickupLongitude() == null ? null : booking.getPickupLongitude().doubleValue();
+        if (pickupLat == null && pickupLon == null
+                && booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
             Optional<MapGeocodingService.GeoPoint> geoOpt = mapGeocodingService.geocodeAddress(booking.getPickupAddress());
             if (geoOpt.isPresent()) {
                 pickupLat = geoOpt.get().latitude();
@@ -572,7 +576,7 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
         String clean = status.trim().toUpperCase(Locale.ROOT);
         if ("ASSIGNED".equals(clean)) {
-            return List.of(BookingStatus.ACCEPTED, BookingStatus.CONFIRMED);
+            return List.of(BookingStatus.DRIVER_ASSIGNED);
         }
         try {
             return List.of(BookingStatus.valueOf(clean));
@@ -681,6 +685,9 @@ public class DriverTripServiceImpl implements DriverTripService {
                 executionStatus,
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPassengerCount() != null ? booking.getPassengerCount() : 1,
                 vehicleSummary,
                 customerSummary,
@@ -759,6 +766,9 @@ public class DriverTripServiceImpl implements DriverTripService {
                 executionStatus,
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPassengerCount() != null ? booking.getPassengerCount() : 1,
                 booking.getContractUrl(),
                 booking.getActualStartAt(),

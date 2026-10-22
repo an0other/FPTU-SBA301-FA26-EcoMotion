@@ -1,4 +1,9 @@
-
+const FUEL_LABELS = {
+  EV: 'Thuần điện (EV)',
+  GASOLINE: 'Xăng',
+  DIESEL: 'Dầu',
+  HYBRID: 'Hybrid',
+}
 
 export const RequestSubmitted = ({
   booking,
@@ -78,7 +83,8 @@ export const RequestSubmitted = ({
                 {booking.vehicle.name} ({booking.vehicle.year})
               </span>
               <span className="text-xs text-gray-500 block">
-                Biển số xe: {booking.vehicle.plateNumber} • Thuần điện (BEV)
+                Biển số xe: {booking.vehicle.plateNumber}
+                {booking.vehicle.fuelType ? ` • ${FUEL_LABELS[booking.vehicle.fuelType] ?? booking.vehicle.fuelType}` : ''}
               </span>
             </div>
           </div>
