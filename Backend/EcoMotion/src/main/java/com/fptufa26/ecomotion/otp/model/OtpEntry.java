@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.auth.otp;
+package com.fptufa26.ecomotion.otp.model;
 
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -6,14 +6,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class OtpEntry {
 
     private final String code;
-    private final String phone;
+    private final String recipient;
     private final Instant expiresAt;
     private final AtomicInteger attemptsUsed = new AtomicInteger(0);
     private volatile Instant lastSentAt;
 
-    public OtpEntry(String code, String phone, Instant expiresAt, Instant lastSentAt) {
+    public OtpEntry(String code, String recipient, Instant expiresAt, Instant lastSentAt) {
         this.code = code;
-        this.phone = phone;
+        this.recipient = recipient;
         this.expiresAt = expiresAt;
         this.lastSentAt = lastSentAt;
     }
@@ -22,8 +22,8 @@ public class OtpEntry {
         return code;
     }
 
-    public String getPhone() {
-        return phone;
+    public String getRecipient() {
+        return recipient;
     }
 
     public Instant getExpiresAt() {
