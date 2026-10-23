@@ -7,7 +7,12 @@ import com.fptufa26.ecomotion.auth.dto.response.SendOtpResponse;
 import com.fptufa26.ecomotion.auth.dto.response.VerifyOtpResponse;
 import com.fptufa26.ecomotion.auth.exception.DuplicateEmailException;
 import com.fptufa26.ecomotion.auth.exception.UnsupportedRoleException;
-import com.fptufa26.ecomotion.auth.service.OtpService;
+import com.fptufa26.ecomotion.otp.service.OtpService;
+import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
+import com.fptufa26.ecomotion.otp.dto.request.OtpSendRequest;
+import com.fptufa26.ecomotion.otp.dto.request.OtpVerifyRequest;
+import com.fptufa26.ecomotion.otp.dto.response.OtpChallenge;
+import com.fptufa26.ecomotion.otp.enums.OtpPurpose;
 import com.fptufa26.ecomotion.auth.service.RegistrationService;
 import com.fptufa26.ecomotion.auth.service.TokenService;
 import com.fptufa26.ecomotion.user.enums.Role;
@@ -43,14 +48,15 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new DuplicateEmailException();
         }
 
-        OtpService.OtpChallenge challenge = otpService.send(email);
+        OtpChallenge challenge = otpService.send(new OtpSendRequest(
+                email, email, OtpPurpose.REGISTRATION, NotificationChannel.EMAIL));
         String exposed = exposeOtpInResponse ? challenge.code() : null;
         return new SendOtpResponse(true, challenge.expiresInSeconds(), challenge.resendCooldownSeconds(), exposed);
     }
 
     @Override
     public VerifyOtpResponse verifyOtp(String email, String otp) {
-        otpService.verify(email, otp);
+        otpService.verify(new OtpVerifyRequest(email, otp, OtpPurpose.REGISTRATION));
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
         String token = tokenService.issueRegistration(normalizedEmail);
         return new VerifyOtpResponse(token, tokenService.getRegistrationTtlSeconds());
