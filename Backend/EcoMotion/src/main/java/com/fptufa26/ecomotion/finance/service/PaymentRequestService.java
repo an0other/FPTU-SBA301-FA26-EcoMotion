@@ -13,13 +13,19 @@ import com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
 import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 
 import java.util.List;
+import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface PaymentRequestService {
+
+    Optional<PaymentRequest> findByBookingIdAndPaymentType(Long bookingId, PaymentRequestType paymentType);
+
+    PaymentRequest savePaymentRequest(PaymentRequest paymentRequest);
 
     PaymentRequest createDepositPaymentRequest(Booking booking);
 

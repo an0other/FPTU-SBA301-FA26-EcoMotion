@@ -1086,4 +1086,16 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.getCreatedAt()
         );
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PaymentRequest> findByBookingIdAndPaymentType(Long bookingId, PaymentRequestType paymentType) {
+        return paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, paymentType);
+    }
+
+    @Override
+    @Transactional
+    public PaymentRequest savePaymentRequest(PaymentRequest paymentRequest) {
+        return paymentRequestRepository.save(paymentRequest);
+    }
 }
