@@ -60,6 +60,24 @@ public class PaymentTransaction {
     @Column(name = "gateway_ref", length = 100)
     private String gatewayRef;
 
+    @Column(name = "vnp_txn_ref", length = 100)
+    private String vnpTxnRef;
+
+    @Column(name = "vnp_transaction_no", length = 100)
+    private String vnpTransactionNo;
+
+    @Column(name = "vnp_bank_code", length = 20)
+    private String vnpBankCode;
+
+    @Column(name = "vnp_card_type", length = 50)
+    private String vnpCardType;
+
+    @Column(name = "vnp_pay_date", length = 50)
+    private String vnpPayDate;
+
+    @Column(name = "vnp_response_code", length = 20)
+    private String vnpResponseCode;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PaymentStatus status = PaymentStatus.PENDING;
