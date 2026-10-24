@@ -118,10 +118,11 @@ app.registration-token.ttl=30m
 # Email OTP
 # ===============================
 # OTP is transient (never persisted in the DB).
-# provider=smtp    -> sends a real email; an SMTP rejection fails the request with 502,
-#                     which doubles as the "does this mailbox exist" gate.
-# provider=logging -> writes the code to the app log (local dev / tests).
-app.otp.provider=smtp
+# mode=smtp    -> sends a real email; an SMTP rejection fails the request with 502,
+#                 which doubles as the "does this mailbox exist" gate.
+# mode=logging -> writes the code to the app log (local dev / tests).
+app.notification.external.email.mode=smtp
+app.notification.external.fallback-order=EMAIL,SMS
 app.otp.length=6
 app.otp.ttl=5m
 app.otp.max-attempts=5
@@ -203,10 +204,6 @@ app.ekyc.vnpt.read-timeout=15s
 # of a session and completes the profile on the activation page.
 app.activation-token.ttl=60m
 # Mock phone OTP: no SMS gateway, so the code is returned to the caller.
-app.phone-otp.length=6
-app.phone-otp.ttl=5m
-app.phone-otp.max-attempts=5
-app.phone-otp.resend-cooldown=60s
 
 
 # ===============================
@@ -265,6 +262,8 @@ springdoc.packages-to-scan=com.fptufa26.ecomotion
 # ===============================
 app.map.reverse-url=https://nominatim.openstreetmap.org/reverse
 app.map.search-url=https://nominatim.openstreetmap.org/search
+app.map.fallback-reverse-url=https://photon.komoot.io/reverse
+app.map.fallback-search-url=https://photon.komoot.io/api/
 app.map.user-agent=EcoMotion-localhost/1.0 (https://github.com/an0other/FPTU-SBA301-FA26-EcoMotion)
 app.map.connect-timeout=5s
 app.map.request-timeout=8s

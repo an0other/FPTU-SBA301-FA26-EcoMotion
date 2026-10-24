@@ -101,6 +101,15 @@ public class Booking {
     @Column(name = "pickup_address", nullable = false, length = 500)
     private String pickupAddress;
 
+    @Column(name = "pickup_latitude", precision = 9, scale = 6)
+    private BigDecimal pickupLatitude;
+
+    @Column(name = "pickup_longitude", precision = 9, scale = 6)
+    private BigDecimal pickupLongitude;
+
+    @Column(name = "driver_note", length = 160)
+    private String driverNote;
+
     @Column(name = "pickup_time", nullable = false)
     private Instant pickupTime;
 

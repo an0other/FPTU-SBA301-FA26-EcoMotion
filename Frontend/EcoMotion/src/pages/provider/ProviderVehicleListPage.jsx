@@ -304,8 +304,8 @@ export default function ProviderVehicleListPage() {
       {/* Header */}
       <ProviderHeader
         activeTab="vehicles"
-        providerName={providerName}
-        depotAddress={depotAddress}
+        providerName={summary?.providerName}
+        depotAddress={summary?.depotAddress}
       />
 
       {/* Main Content Area */}

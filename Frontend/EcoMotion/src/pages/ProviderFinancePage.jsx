@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { providerFinanceService, SUPPORTED_BANKS } from '../services/providerFinanceService'
+import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
 
 function formatVnd(amount) {
   if (amount == null || Number.isNaN(Number(amount))) return '0 ₫'
@@ -84,8 +86,27 @@ export default function ProviderFinancePage() {
 
   // Global State
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
+
+  // Modals
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false)
+  const [confirmModalData, setConfirmModalData] = useState(null)
+  const [rejectModalData, setRejectModalData] = useState(null)
+  const [reportIssueModalData, setReportIssueModalData] = useState(null)
+  const [viewProofModalData, setViewProofModalData] = useState(null)
+  const [breakdownData, setBreakdownData] = useState(null)
+
+  // Form States for Confirmation
+  const [receivedAmountInput, setReceivedAmountInput] = useState('')
+  const [bankRefInput, setBankRefInput] = useState('')
+  const [confirmNoteInput, setConfirmNoteInput] = useState('')
+  const [isConfirming, setIsConfirming] = useState(false)
+
+  // Form States for Reject & Issue
+  const [rejectReasonInput, setRejectReasonInput] = useState('')
+  const [isRejecting, setIsRejecting] = useState(false)
+  const [issueNoteInput, setIssueNoteInput] = useState('')
+  const [isReportingIssue, setIsReportingIssue] = useState(false)
 
   // Realtime Sync Hook
   useRealtimeSync({
@@ -121,7 +142,9 @@ export default function ProviderFinancePage() {
       }
       if (refundsRes.status === 'fulfilled') setRefunds(refundsRes.value || [])
     } catch (err) {
+      console.error('Failed to load finance data:', err)
       setError(err?.response?.data?.message || err?.message || 'Không thể tải thông tin tài chính.')
+      setToast({ message: err?.message || 'Không thể tải dữ liệu tài chính.', type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -221,6 +244,110 @@ export default function ProviderFinancePage() {
       setPayoutList((prev) => [mockItem, ...prev])
       setToast({ message: '[SANDBOX MOCK] Đã tạo lệnh yêu cầu đối soát rút tiền thử nghiệm!', type: 'info' })
     }, 600)
+  }
+
+  // Handle Confirm Payment
+  const handleOpenConfirmModal = (pr) => {
+    setConfirmModalData(pr)
+    setReceivedAmountInput(String(pr.remainingAmount || pr.amount || ''))
+    setBankRefInput('')
+    setConfirmNoteInput('')
+  }
+
+  const handleConfirmPayment = async (e) => {
+    e.preventDefault()
+    if (!confirmModalData || isConfirming) return
+
+    try {
+      setIsConfirming(true)
+      const payload = {
+        receivedAmount: Number(receivedAmountInput) || confirmModalData.amount,
+        bankTransactionRef: bankRefInput.trim() || undefined,
+        note: confirmNoteInput.trim() || undefined,
+      }
+      await providerFinanceService.confirmPayment(confirmModalData.id, payload)
+      setToast({ message: 'Xác nhận đã nhận tiền thành công! Giao dịch tài chính đã được cập nhật.', type: 'success' })
+      setConfirmModalData(null)
+      fetchFinanceData()
+    } catch (err) {
+      console.error('Failed to confirm payment:', err)
+      setToast({ message: err.message || 'Xác nhận nhận tiền thất bại.', type: 'error' })
+    } finally {
+      setIsConfirming(false)
+    }
+  }
+
+  // Handle Reject Payment Proof
+  const handleOpenRejectModal = (pr) => {
+    setRejectModalData(pr)
+    setRejectReasonInput('')
+  }
+
+  const handleRejectPayment = async (e) => {
+    e.preventDefault()
+    if (!rejectModalData || isRejecting) return
+    if (!rejectReasonInput.trim()) {
+      setToast({ message: 'Vui lòng nhập lý do từ chối biên lai', type: 'error' })
+      return
+    }
+
+    try {
+      setIsRejecting(true)
+      await providerFinanceService.rejectPayment(rejectModalData.id, { reason: rejectReasonInput.trim() })
+      setToast({ message: 'Đã từ chối biên lai thanh toán.', type: 'success' })
+      setRejectModalData(null)
+      fetchFinanceData()
+    } catch (err) {
+      console.error('Failed to reject proof:', err)
+      setToast({ message: err.message || 'Từ chối thất bại.', type: 'error' })
+    } finally {
+      setIsRejecting(false)
+    }
+  }
+
+  // Handle Report Issue
+  const handleOpenReportIssueModal = (pr) => {
+    setReportIssueModalData(pr)
+    setIssueNoteInput('')
+  }
+
+  const handleReportIssue = async (e) => {
+    e.preventDefault()
+    if (!reportIssueModalData || isReportingIssue) return
+    if (!issueNoteInput.trim()) {
+      setToast({ message: 'Vui lòng mô tả sai lệch hoặc vấn đề cần đối soát', type: 'error' })
+      return
+    }
+
+    try {
+      setIsReportingIssue(true)
+      await providerFinanceService.reportIssue(reportIssueModalData.id, { issueNote: issueNoteInput.trim() })
+      setToast({ message: 'Đã báo cáo sai lệch giao dịch thành công. Trạng thái đã chuyển sang Cần đối soát.', type: 'success' })
+      setReportIssueModalData(null)
+      fetchFinanceData()
+    } catch (err) {
+      console.error('Failed to report issue:', err)
+      setToast({ message: err.message || 'Báo cáo sai lệch thất bại.', type: 'error' })
+    } finally {
+      setIsReportingIssue(false)
+    }
+  }
+
+  // Handle View Financial Breakdown
+  const handleViewBreakdown = async (bookingIdOrCode) => {
+    try {
+      const data = await providerFinanceService.getBookingBreakdown(bookingIdOrCode)
+      setBreakdownData(data)
+    } catch (err) {
+      console.error('Failed to load breakdown:', err)
+      setToast({ message: err.message || 'Không thể tải đối soát tài chính của đơn thuê.', type: 'error' })
+    }
+  }
+
+  const handleCopy = (text, label) => {
+    if (!text) return
+    navigator.clipboard.writeText(text)
+    setToast({ message: `Đã sao chép ${label}`, type: 'success' })
   }
 
   return (
@@ -915,6 +1042,345 @@ export default function ProviderFinancePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ======================================================== */}
+      {/* MODAL 2: CONFIRM PAYMENT (SCREEN C)                      */}
+      {/* ======================================================== */}
+      {confirmModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Xác nhận đã nhận tiền chuyển khoản</h3>
+              <button
+                type="button"
+                onClick={() => setConfirmModalData(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <Icon name="close" className="text-lg" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmPayment} className="mt-4 space-y-4">
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800">
+                <div className="font-semibold">Đơn thuê #{confirmModalData.bookingCode}</div>
+                <div>Nội dung tham chiếu: <span className="font-mono font-bold">{confirmModalData.transferReference}</span></div>
+                <div>Số tiền yêu cầu: <span className="font-bold">{formatVnd(confirmModalData.amount)}</span></div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Số tiền thực tế bạn đã nhận (VND) *</label>
+                <input
+                  type="number"
+                  required
+                  min="1000"
+                  value={receivedAmountInput}
+                  onChange={(e) => setReceivedAmountInput(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden"
+                />
+                <span className="text-[11px] text-slate-500">Nếu khách chuyển thiếu, hệ thống sẽ ghi nhận thanh toán một phần.</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng (Tùy chọn)</label>
+                <input
+                  type="text"
+                  value={bankRefInput}
+                  onChange={(e) => setBankRefInput(e.target.value)}
+                  placeholder="FT24..."
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Ghi chú đối soát (Tùy chọn)</label>
+                <textarea
+                  rows={2}
+                  value={confirmNoteInput}
+                  onChange={(e) => setConfirmNoteInput(e.target.value)}
+                  placeholder="Ghi chú nội bộ..."
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setConfirmModalData(null)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isConfirming}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#059669] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#047857]"
+                >
+                  {isConfirming && <Icon name="sync" className="animate-spin text-sm" />}
+                  Xác nhận đã nhận tiền
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 3: REJECT PAYMENT PROOF (SCREEN C)                 */}
+      {/* ======================================================== */}
+      {rejectModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-red-600">Từ chối biên lai thanh toán</h3>
+              <button
+                type="button"
+                onClick={() => setRejectModalData(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <Icon name="close" className="text-lg" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRejectPayment} className="mt-4 space-y-4">
+              <p className="text-xs text-slate-600">
+                Bạn đang từ chối biên lai thanh toán của đơn thuê <span className="font-bold">#{rejectModalData.bookingCode}</span>. Khách hàng sẽ nhận được thông báo để gửi lại biên lai chính xác.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Lý do từ chối *</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={rejectReasonInput}
+                  onChange={(e) => setRejectReasonInput(e.target.value)}
+                  placeholder="Ví dụ: Chưa nhận được biến động số dư trong tài khoản, ảnh biên lai mờ..."
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-red-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setRejectModalData(null)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRejecting}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-700"
+                >
+                  {isRejecting && <Icon name="sync" className="animate-spin text-sm" />}
+                  Xác nhận từ chối
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 4: REPORT DISCREPANCY / ISSUE (SCREEN C)           */}
+      {/* ======================================================== */}
+      {reportIssueModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-purple-700">Báo cáo sai lệch / Cần đối soát</h3>
+              <button
+                type="button"
+                onClick={() => setReportIssueModalData(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <Icon name="close" className="text-lg" />
+              </button>
+            </div>
+
+            <form onSubmit={handleReportIssue} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Mô tả sai lệch hoặc tranh chấp *</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={issueNoteInput}
+                  onChange={(e) => setIssueNoteInput(e.target.value)}
+                  placeholder="Ví dụ: Khách hàng chuyển sai mã tham chiếu, số tiền chuyển không khớp..."
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-purple-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setReportIssueModalData(null)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isReportingIssue}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-700 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-purple-800"
+                >
+                  {isReportingIssue && <Icon name="sync" className="animate-spin text-sm" />}
+                  Gửi báo cáo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 5: VIEW PROOF IMAGE (SCREEN C)                     */}
+      {/* ======================================================== */}
+      {viewProofModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Biên lai thanh toán của khách hàng</h3>
+              <button
+                type="button"
+                onClick={() => setViewProofModalData(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <Icon name="close" className="text-lg" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {viewProofModalData.evidences && viewProofModalData.evidences.length > 0 ? (
+                viewProofModalData.evidences.map((ev) => (
+                  <div key={ev.id} className="rounded-xl border border-slate-200 p-4 bg-slate-50">
+                    <div className="flex justify-between items-center text-xs mb-2">
+                      <span className="font-semibold text-slate-800">Người gửi: {ev.submittedByName || 'Khách hàng'}</span>
+                      <span className="text-slate-500">{formatDateTime(ev.createdAt)}</span>
+                    </div>
+                    <div className="text-xs mb-3 text-slate-600">
+                      Số tiền khai báo: <span className="font-bold text-emerald-700">{formatVnd(ev.transferredAmount)}</span>
+                      {ev.transactionReference && (
+                        <span className="ml-3 font-mono text-[11px]">Mã GD: {ev.transactionReference}</span>
+                      )}
+                    </div>
+                    {ev.note && <div className="text-xs italic text-slate-600 mb-3 bg-white p-2 rounded">"{ev.note}"</div>}
+                    <PaymentEvidenceImage
+                      evidence={ev}
+                      className="w-full max-h-80 object-contain rounded-lg border border-slate-200 bg-white"
+                    />
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 text-center text-xs text-slate-500">Chưa có ảnh bằng chứng nào được tải lên.</div>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewProofModalData(null)}
+                className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 6: FINANCIAL BREAKDOWN (SCREEN C)                  */}
+      {/* ======================================================== */}
+      {breakdownData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Đối soát tài chính đơn #{breakdownData.bookingCode}
+                </h3>
+                <span className="text-xs text-slate-500">Trạng thái chuyến: <span className="font-bold">{breakdownData.bookingStatus}</span></span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBreakdownData(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <Icon name="close" className="text-lg" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-6">
+              {/* Financial Summary Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+                <div>
+                  <span className="text-slate-500">Giá thuê gốc:</span>
+                  <div className="font-bold text-slate-900">{formatVnd(breakdownData.baseRental)}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Phụ phí chốt:</span>
+                  <div className="font-bold text-blue-700">+{formatVnd(breakdownData.approvedCharges)}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Đã thanh toán:</span>
+                  <div className="font-bold text-emerald-700">{formatVnd(breakdownData.netConfirmedPayments)}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Còn thiếu:</span>
+                  <div className="font-bold text-red-600">{formatVnd(breakdownData.remainingAmount)}</div>
+                </div>
+              </div>
+
+              {/* Surcharges list */}
+              {breakdownData.charges && breakdownData.charges.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 mb-2 uppercase tracking-wider">Khoản mục phụ phí</h4>
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg text-xs overflow-hidden">
+                    {breakdownData.charges.map((c) => (
+                      <div key={c.id} className="p-3 flex justify-between items-center bg-white">
+                        <div>
+                          <span className="font-semibold text-slate-800">{c.description}</span>
+                          <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 font-mono">{c.chargeType}</span>
+                        </div>
+                        <span className="font-bold text-slate-900">{formatVnd(c.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Payment Timeline */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 mb-2 uppercase tracking-wider">Lịch sử giao dịch tiền</h4>
+                {breakdownData.transactions && breakdownData.transactions.length > 0 ? (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg text-xs overflow-hidden">
+                    {breakdownData.transactions.map((tx) => (
+                      <div key={tx.id} className="p-3 flex justify-between items-center bg-white">
+                        <div>
+                          <div className="font-semibold text-slate-800">{tx.type} • {tx.method}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">{tx.gatewayRef || '—'} • {formatDateTime(tx.paidAt)}</div>
+                        </div>
+                        <span className="font-bold text-emerald-700">+{formatVnd(tx.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-400 border border-dashed rounded-lg">Chưa có giao dịch tiền nào được ghi nhận.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setBreakdownData(null)}
+                className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

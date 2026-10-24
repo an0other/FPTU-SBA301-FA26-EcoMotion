@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
+import { bookingStatusMeta } from '../../utils/bookingStatus';
+import { PickupLocationCard } from './PickupLocationCard';
+import { EditBookingRequestModal } from './EditBookingRequestModal';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
@@ -17,12 +20,15 @@ export const BookingDetail = ({
   onCancelBooking,
   onCompleteBooking,
   onOpenDispute,
+  onEditRequest,
 }) => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [complaintCategory, setComplaintCategory] = useState('');
   const [complaintCharge, setComplaintCharge] = useState('');
   const [actionError, setActionError] = useState('');
   const [disputeNote, setDisputeNote] = useState('');
+  const [editing, setEditing] = useState(false);
+  const statusMeta = bookingStatusMeta(booking.status);
 
   const handleComplaintSubmit = async (e) => {
     e.preventDefault();
@@ -58,60 +64,7 @@ export const BookingDetail = ({
               {booking.id}
             </h1>
 
-            {booking.status === 'IN_PROGRESS' && (
-              <span className="px-3 py-1 text-xs font-semibold rounded-full inline-flex items-center gap-1.5 bg-[#E8F6EE] text-[#15803D]">
-                <span className="w-2 h-2 rounded-full bg-[#15803D]"></span>
-                Đang chạy
-              </span>
-            )}
-
-            {booking.status === 'REJECTED' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#FEE4E2] text-[#B42318]">
-                Từ chối
-              </span>
-            )}
-
-            {booking.status === 'CONFIRMED' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#E8F6EE] text-[#15803D]">
-                Đã xác nhận
-              </span>
-            )}
-
-            {booking.status === 'ACCEPTED' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#E8F6EE] text-[#15803D]">
-                Đã chấp nhận
-              </span>
-            )}
-
-            {booking.status === 'PENDING' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-900">
-                Chờ duyệt
-              </span>
-            )}
-
-            {booking.status === 'CANCELLED' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">
-                Đã huỷ
-              </span>
-            )}
-
-            {booking.status === 'COMPLETED' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">
-                Hoàn thành
-              </span>
-            )}
-
-            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
-                Chờ chốt phụ phí
-              </span>
-            )}
-
-            {booking.status === 'AWAITING_FINAL_PAYMENT' && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-                Chờ thanh toán quyết toán
-              </span>
-            )}
+            <span className={`px-3 py-1 rounded-full border text-xs font-semibold ${statusMeta.badgeClass}`}>{statusMeta.label}</span>
           </div>
 
           <div className="text-xs sm:text-sm text-gray-600">
@@ -156,13 +109,14 @@ export const BookingDetail = ({
                 <h2 className="text-base font-bold text-[#14221A]">Đơn đang chờ chủ xe</h2>
                 <p className="text-xs text-gray-600 mt-1">Chưa thu cọc. Bạn có thể huỷ yêu cầu.</p>
               </div>
-              <button
+              {booking.canCancel ? <button
                 onClick={() => setIsCancelModalOpen(true)}
                 type="button"
                 className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
               >
                 Huỷ đơn
-              </button>
+              </button> : null}
+              {booking.canEditRequest ? <button onClick={() => setEditing(true)} type="button" className="px-4 py-2 text-[#15803D] border border-[#15803D] text-xs font-semibold rounded-[12px]">Chỉnh sửa yêu cầu</button> : null}
             </div>
           )}
 
@@ -205,9 +159,9 @@ export const BookingDetail = ({
                 <h2 className="text-base font-bold text-purple-900">Đã chốt quyết toán</h2>
                 <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư qua cổng thanh toán VNPAY để hoàn tất đơn thuê.</p>
               </div>
-              <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
+              {booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
                 Thanh toán số dư
-              </button>
+              </button> : null}
             </div>
           )}
 
@@ -223,20 +177,21 @@ export const BookingDetail = ({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
+                {booking.canCancel ? <button
                   onClick={() => setIsCancelModalOpen(true)}
                   type="button"
                   className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
                 >
                   Huỷ đơn
-                </button>
-                <button
+                </button> : null}
+                {booking.canEditRequest ? <button onClick={() => setEditing(true)} type="button" className="px-4 py-2 bg-white text-[#15803D] border border-[#15803D] text-xs font-semibold rounded-[12px]">Chỉnh sửa</button> : null}
+                {booking.canPay ? <button
                   onClick={() => onPayDeposit(booking)}
                   type="button"
                   className="px-6 py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm rounded-[12px] shadow-sm transition-all cursor-pointer whitespace-nowrap"
                 >
                   {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán giữ chỗ ngay'}
-                </button>
+                </button> : null}
               </div>
             </div>
           )}
@@ -252,13 +207,13 @@ export const BookingDetail = ({
                     : `Lịch xe đã khóa thành công. ${booking.driver?.name ? `Tài xế ${booking.driver.name} sẽ đón bạn đúng giờ.` : 'Tài xế sẽ được phân công trước giờ đón.'}`}
                 </p>
               </div>
-              <button
+              {booking.canCancel ? <button
                 onClick={() => setIsCancelModalOpen(true)}
                 type="button"
                 className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
               >
                 Huỷ đơn
-              </button>
+              </button> : null}
             </div>
           )}
 
@@ -349,6 +304,9 @@ export const BookingDetail = ({
             <div className="pt-2 border-t border-[#E6EBE8] text-xs font-medium text-[#6D7A72]">
               Kết thúc dự kiến: {booking.formattedEnd}
             </div>
+            <PickupLocationCard pickupAddress={booking.pickupAddress}
+              pickupLatitude={booking.pickupLatitude} pickupLongitude={booking.pickupLongitude}
+              driverNote={booking.driverNote} />
           </div>
 
           {/* CARD: DRIVER (if assigned) */}
@@ -548,6 +506,7 @@ export const BookingDetail = ({
           }
         }}
       />
+      {editing ? <EditBookingRequestModal booking={booking} onClose={() => setEditing(false)} onSave={onEditRequest} /> : null}
     </div>
   );
 };

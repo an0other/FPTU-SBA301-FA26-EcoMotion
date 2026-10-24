@@ -89,7 +89,7 @@ public interface BookingMapper {
     @Mapping(target = "endTime", source = "endTime")
     CheckoutResultResponse toCheckoutResult(Booking booking, PaymentTransaction payment, Instant endTime);
 
-    default BookingSummaryResponse toSummary(Booking booking, PlanType planType, String imageUrl) {
+    default BookingSummaryResponse toSummary(Booking booking, PlanType planType, String imageUrl, boolean canPay) {
         Vehicle vehicle = booking.getVehicle();
         return new BookingSummaryResponse(
                 booking.getBookingCode(),
@@ -100,9 +100,13 @@ public interface BookingMapper {
                 vehicle.getLicensePlate(),
                 imageUrl,
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPickupTime(),
                 booking.getPassengerCount(),
-                booking.getTotalAmount());
+                booking.getTotalAmount(),
+                canPay);
     }
 
     default BookingDetailResponse toDetail(Booking booking,
@@ -113,6 +117,9 @@ public interface BookingMapper {
                                            List<BookingChargeLineResponse> charges,
                                            List<TimelineStepResponse> timeline,
                                            RefundPreviewResponse refundPreview,
+                                           boolean canCancel,
+                                           boolean canEditRequest,
+                                           boolean canPay,
                                            boolean canConfirmEnd,
                                            List<DisputeCategory> disputeCategories) {
         Vehicle vehicle = booking.getVehicle();
@@ -127,11 +134,15 @@ public interface BookingMapper {
                 booking.getBookingCode(),
                 booking.getStatus(),
                 planType,
+                vehicle.getId(),
                 vehicle.getBrand() + " " + vehicle.getModel(),
                 vehicle.getManufactureYear(),
                 vehicle.getLicensePlate(),
                 imageUrl,
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPickupTime(),
                 endTime,
                 booking.getPassengerCount(),
@@ -148,6 +159,9 @@ public interface BookingMapper {
                 charges,
                 timeline,
                 refundPreview,
+                canCancel,
+                canEditRequest,
+                canPay,
                 canConfirmEnd,
                 disputeCategories,
                 providerName);

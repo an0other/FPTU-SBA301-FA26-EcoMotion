@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-        "app.otp.provider=logging",
+        "app.notification.external.email.mode=logging",
         "app.otp.expose-in-response=true",
         "app.otp.resend-cooldown=60s",
         "app.otp.max-attempts=5"

@@ -23,6 +23,7 @@ function toCard(item) {
     planType: item.planType,
     pickupAddress: item.pickupAddress,
     totalAmount: Number(item.totalAmount),
+    canPay: Boolean(item.canPay),
     formattedStart: formatWhen(item.pickupTime),
     vehicle: {
       name: item.vehicleName,

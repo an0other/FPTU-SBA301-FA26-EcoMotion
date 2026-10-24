@@ -97,6 +97,9 @@ public class RenterYearlyBookingDataSeeder {
         booking.setStatus(BookingStatus.PENDING);
         booking.setPickupAddress(
                 vehicle.getProvider().getDepotAddress());
+        booking.setPickupLatitude(vehicle.getProvider().getDepotLatitude());
+        booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
+        booking.setDriverNote("Nhận xe theo lịch hẹn hợp đồng năm");
         booking.setPickupTime(pickupTime);
         booking.setPassengerCount(1);
         booking.setTotalAmount(

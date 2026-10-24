@@ -5,7 +5,8 @@ import com.fptufa26.ecomotion.auth.dto.response.SendPhoneOtpResponse;
 import com.fptufa26.ecomotion.auth.exception.AccountAlreadyActiveException;
 import com.fptufa26.ecomotion.auth.exception.ActivationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.PhoneAlreadyExistsException;
-import com.fptufa26.ecomotion.auth.service.OtpService;
+import com.fptufa26.ecomotion.otp.service.OtpService;
+import com.fptufa26.ecomotion.otp.dto.response.OtpChallenge;
 import com.fptufa26.ecomotion.auth.service.TokenService;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.entity.Renter;
@@ -66,7 +67,7 @@ class ActivationServiceImplTest {
         assertThatThrownBy(() -> service.sendPhoneOtp(new SendPhoneOtpRequest(TOKEN, "0909999999")))
                 .isInstanceOf(PhoneAlreadyExistsException.class);
 
-        verify(otpService, never()).sendPhone(anyString(), anyString());
+        verify(otpService, never()).send(any());
     }
 
     @Test
@@ -78,8 +79,7 @@ class ActivationServiceImplTest {
         when(tokenService.verifyActivation(TOKEN))
                 .thenReturn(new TokenService.ActivationPrincipal(USER_ID, "a@ecomotion.vn", Role.RENTER));
         when(userService.findById(USER_ID)).thenReturn(Optional.of(user));
-        when(otpService.sendPhone(String.valueOf(USER_ID), "0901234567"))
-                .thenReturn(new OtpService.PhoneOtpChallenge("123456", 300, 60));
+        when(otpService.send(any())).thenReturn(new OtpChallenge("123456", 300, 60));
 
         SendPhoneOtpResponse response = service.sendPhoneOtp(new SendPhoneOtpRequest(TOKEN, "0901234567"));
 
