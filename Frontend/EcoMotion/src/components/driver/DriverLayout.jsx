@@ -20,10 +20,10 @@ export default function DriverLayout({ activeTab = 'schedule', children }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
       {/* Top Header */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-xs backdrop-blur-md sm:px-6">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white px-4 py-3 shadow-xs sm:px-6">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <Link to="/driver/schedule" className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm shadow-brand-600/30">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white shadow-xs">
               <Icon name="commute" className="text-[20px]" />
             </span>
             <div>
@@ -75,7 +75,7 @@ export default function DriverLayout({ activeTab = 'schedule', children }) {
       {/* Mobile Bottom Navigation Bar */}
       <nav
         aria-label="Điều hướng tài xế di động"
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-2 backdrop-blur-md sm:hidden"
+        className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white px-4 py-2 sm:hidden shadow-xs"
       >
         <div className="flex items-center justify-around">
           <Link

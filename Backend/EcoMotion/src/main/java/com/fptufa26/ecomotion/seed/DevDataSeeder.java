@@ -472,6 +472,17 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setActualStartAt(actualStartAt);
         booking.setActualEndAt(actualEndAt);
 
+        if (driver != null && (status == BookingStatus.CONFIRMED
+                || status == BookingStatus.DRIVER_ASSIGNED
+                || status == BookingStatus.DRIVER_CONFIRMED
+                || status == BookingStatus.DRIVER_ARRIVED
+                || status == BookingStatus.IN_PROGRESS
+                || status == BookingStatus.COMPLETED)) {
+            booking.setDriverConfirmedAt(actualStartAt != null
+                    ? actualStartAt.minus(30, ChronoUnit.MINUTES)
+                    : pickupTime.minus(2, ChronoUnit.HOURS));
+        }
+
         if (status == BookingStatus.CANCELLED) {
             User cancelledBy = userRepository
                     .findById(cancelledByUserId != null ? cancelledByUserId : renterUserId)
@@ -482,6 +493,38 @@ public class DevDataSeeder implements ApplicationRunner {
         }
 
         bookingRepository.save(booking);
+
+        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
+        snapshot.setBooking(booking);
+        snapshot.setSlotPrice(plan.getSlotPrice());
+        snapshot.setSlotLengthMinutes(plan.getSlotLengthMinutes());
+        snapshot.setPlanType(plan.getPlanType());
+        snapshot.setDepositRatio(vehicle.getProvider() != null && vehicle.getProvider().getDepositRatio() != null
+                ? vehicle.getProvider().getDepositRatio()
+                : new BigDecimal("0.30"));
+        snapshot.setUpfrontAmount(plan.getUpfrontAmount());
+        snapshot.setAllowedOvertimeMinutes(plan.getAllowedOvertimeMinutes());
+        snapshot.setOvertimeSurchargeRatio(plan.getOvertimeSurchargeRatio());
+        snapshot.setWaitingFreeMinutes(plan.getWaitingFreeMinutes());
+        snapshot.setWaitingRate(plan.getWaitingRate());
+        snapshot.setWeekendSurchargeRatio(plan.getWeekendSurchargeRatio());
+        snapshot.setFreeRadiusKm(plan.getFreeRadiusKm());
+        snapshot.setOutOfRadiusRate(plan.getOutOfRadiusRate());
+        snapshot.setHourlyToDailyThresholdMinutes(plan.getHourlyToDailyThresholdMinutes());
+        snapshotRepository.save(snapshot);
+
+        if (!"BK-4A2K91".equals(bookingCode)) {
+            BookingCharge charge = new BookingCharge();
+            charge.setBooking(booking);
+            charge.setChargeType(ChargeType.BASE_RENTAL);
+            charge.setDescription("Thuê " + passengerCount + " hành khách (" + plan.getPlanType() + ")");
+            charge.setQuantity(1);
+            charge.setUnitPrice(plan.getSlotPrice());
+            charge.setAmount(new BigDecimal(totalAmountStr));
+            charge.setCreatedBy(renter.getUser());
+            charge.setWaived(false);
+            chargeRepository.save(charge);
+        }
     }
 
     private void seedAdminDemonstrationData(Provider providerA, Provider providerB) {

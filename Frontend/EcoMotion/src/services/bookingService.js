@@ -1,4 +1,4 @@
-import { apiClient } from './apiClient'
+import { apiClient } from './apiClient.js'
 
 export async function listMyBookings() {
   const { data } = await apiClient.get('/renter/bookings')
@@ -20,6 +20,8 @@ export async function getMyBooking(bookingCode) {
   return data.data
 }
 
+export const getBookingDetail = getMyBooking
+
 export async function cancelMyBooking(bookingCode) {
   const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/cancel`)
   return data.data
@@ -36,6 +38,17 @@ export async function openDispute(bookingCode, body) {
 }
 
 export const bookingService = {
+  // Renter methods
+  getMyBooking,
+  getBookingDetail: getMyBooking,
+  listMyBookings,
+  listVehiclesForBooking,
+  createBooking,
+  cancelMyBooking,
+  confirmTripEnd,
+  openDispute,
+
+  // Provider methods
   async getProviderBookings(status) {
     const params = {}
     if (status && status !== 'ALL') {

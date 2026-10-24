@@ -35,6 +35,7 @@ public record BookingDetailResponse(
         List<TimelineStepResponse> timeline,
         RefundPreviewResponse refundPreview,
         boolean canConfirmEnd,
-        List<DisputeCategory> disputeCategories
+        List<DisputeCategory> disputeCategories,
+        String providerName
 ) {
 }

@@ -70,11 +70,11 @@ export default function AssignDriverModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+      <div className="relative w-full max-w-lg rounded-lg bg-white p-5 shadow-md border border-slate-200 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3 shrink-0">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
             <IconUser className="h-6 w-6" />
           </div>
           <div>
