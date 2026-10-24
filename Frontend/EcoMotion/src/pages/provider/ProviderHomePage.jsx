@@ -37,6 +37,8 @@ export default function ProviderHomePage() {
   const totalDrivers = summary?.totalDrivers || 0
   const totalVehicles = summary?.totalVehicles || 0
   const approvedCount = summary?.approvedVehicles || 0
+  const availableCount = summary?.availableVehicles ?? approvedCount
+  const isPartiallyBlocked = availableCount < approvedCount
   const rejectedCount = Math.max(0, totalVehicles - pendingCount - approvedCount - hiddenCount)
 
   const notices = []
@@ -89,7 +91,7 @@ export default function ProviderHomePage() {
     })
   }
 
-  if (activeBlocks > 0) {
+    if (activeBlocks > 0) {
     notices.push({
       id: 'blocks',
       icon: 'event_busy',
@@ -100,7 +102,7 @@ export default function ProviderHomePage() {
       linkColor: 'text-sky-800',
       title: `${activeBlocks} lịch chặn / bảo trì đang kích hoạt`,
       description: 'Đội xe đang có khung giờ chặn lịch (BLOCKED / MAINTENANCE) để bảo dưỡng hoặc nghỉ ngơi.',
-      linkTo: '/provider/vehicles',
+      linkTo: '/provider/schedules',
       actionText: 'Xem lịch trình xe',
     })
   }
@@ -242,11 +244,15 @@ export default function ProviderHomePage() {
                 <div>
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-[28px] font-bold text-emerald-700">
-                      {loading ? '—' : (summary?.approvedVehicles ?? 0)}
+                      {loading ? '—' : availableCount}
                     </span>
-                    <span className="text-[13px] text-slate-500">xe</span>
+                    <span className="text-[13px] text-slate-500">/{approvedCount} xe</span>
                   </div>
-                  <p className="text-[11px] font-medium text-slate-500 mt-1">Sẵn sàng nhận khách</p>
+                  <p className="text-[11px] font-medium text-slate-500 mt-1">
+                    {isPartiallyBlocked
+                      ? `${approvedCount - availableCount} xe đang bảo dưỡng / bận`
+                      : 'Sẵn sàng nhận khách'}
+                  </p>
                 </div>
               </div>
 
@@ -289,10 +295,13 @@ export default function ProviderHomePage() {
               </div>
 
               {/* Card 6: Lịch đang chặn */}
-              <div className="bg-white rounded-xl p-5 shadow-xs border border-slate-200 flex flex-col justify-between hover:shadow-md transition-shadow">
+              <Link
+                to="/provider/schedules"
+                className="bg-white rounded-xl p-5 shadow-xs border border-slate-200 flex flex-col justify-between hover:shadow-md hover:border-rose-200 transition-all cursor-pointer group"
+              >
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-[12px] font-medium text-slate-500">Lịch đang chặn</span>
-                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center">
+                  <span className="text-[12px] font-medium text-slate-500 group-hover:text-rose-700 transition-colors">Lịch đang chặn</span>
+                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-105 transition-transform">
                     <span className="material-symbols-outlined text-[22px]">event_busy</span>
                   </div>
                 </div>
@@ -305,7 +314,7 @@ export default function ProviderHomePage() {
                   </div>
                   <p className="text-[11px] font-medium text-slate-500 mt-1">Bảo dưỡng hoặc bận</p>
                 </div>
-              </div>
+              </Link>
             </section>
 
             {/* Attention & Action Center: Left (7 Cols) and Right (5 Cols) */}
@@ -432,7 +441,7 @@ export default function ProviderHomePage() {
 
                   {/* Shortcut 3: Chặn lịch xe */}
                   <Link
-                    to="/provider/vehicles"
+                    to="/provider/schedules"
                     className="group p-4 rounded-xl bg-slate-50 hover:bg-slate-100/80 transition-colors flex items-center justify-between gap-4 border border-slate-100"
                   >
                     <div className="flex items-center gap-3.5">

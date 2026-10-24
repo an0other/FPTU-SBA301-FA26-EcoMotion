@@ -22,6 +22,11 @@ export async function getMyBooking(bookingCode) {
 
 export const getBookingDetail = getMyBooking
 
+export async function updateBookingRequestDetails(bookingCode, body) {
+  const { data } = await apiClient.patch(`/renter/bookings/${bookingCode}/request-details`, body)
+  return data.data
+}
+
 export async function cancelMyBooking(bookingCode) {
   const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/cancel`)
   return data.data
@@ -44,6 +49,7 @@ export const bookingService = {
   listMyBookings,
   listVehiclesForBooking,
   createBooking,
+  updateBookingRequestDetails,
   cancelMyBooking,
   confirmTripEnd,
   openDispute,

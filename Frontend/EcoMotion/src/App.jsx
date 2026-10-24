@@ -27,6 +27,8 @@ import ProviderHomePage from './pages/provider/ProviderHomePage'
 import ProviderVehicleListPage from './pages/provider/ProviderVehicleListPage'
 import ProviderVehicleCreatePage from './pages/provider/ProviderVehicleCreatePage'
 import ProviderVehicleHubPage from './pages/provider/ProviderVehicleHubPage'
+import ProviderSchedulePage from './pages/provider/ProviderSchedulePage'
+import ProviderDriverPage from './pages/provider/ProviderDriverPage'
 
 import { BookingDetailPage } from './pages/booking/BookingDetailPage'
 import { BookingRequestPage } from './pages/booking/BookingRequestPage'
@@ -38,6 +40,15 @@ function BookingShell({ children }) {
     <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
       <AppHeader />
       <BookingSubnav />
+      <main className="w-full flex-1">{children}</main>
+    </div>
+  )
+}
+
+function BookingWizardShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
       <main className="w-full flex-1">{children}</main>
     </div>
   )
@@ -87,18 +98,18 @@ export default function App() {
         <Route
           path="/renter/bookings/new"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <BookingRequestPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 
         <Route
           path="/renter/bookings/:bookingCode/submitted"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <SubmittedBookingPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 
@@ -158,6 +169,14 @@ export default function App() {
         <Route
           path="/provider/finance"
           element={<ProviderFinancePage />}
+        />
+        <Route
+          path="/provider/schedules"
+          element={<ProviderSchedulePage />}
+        />
+        <Route
+          path="/provider/drivers"
+          element={<ProviderDriverPage />}
         />
       </Route>
 

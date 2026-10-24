@@ -6,14 +6,14 @@ import com.fptufa26.ecomotion.auth.exception.AccountPendingException;
 import com.fptufa26.ecomotion.auth.exception.ActivationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.CaptchaInvalidException;
 import com.fptufa26.ecomotion.auth.exception.DuplicateEmailException;
-import com.fptufa26.ecomotion.auth.exception.EmailDeliveryException;
+import com.fptufa26.ecomotion.notification.external.exception.NotificationDeliveryException;
 import com.fptufa26.ecomotion.auth.exception.InvalidCredentialsException;
 import com.fptufa26.ecomotion.auth.exception.InvalidRefreshTokenException;
 import com.fptufa26.ecomotion.auth.exception.NoPendingActivationException;
-import com.fptufa26.ecomotion.auth.exception.OtpAttemptsExceededException;
-import com.fptufa26.ecomotion.auth.exception.OtpExpiredException;
-import com.fptufa26.ecomotion.auth.exception.OtpInvalidException;
-import com.fptufa26.ecomotion.auth.exception.OtpResendTooSoonException;
+import com.fptufa26.ecomotion.otp.exception.OtpAttemptsExceededException;
+import com.fptufa26.ecomotion.otp.exception.OtpExpiredException;
+import com.fptufa26.ecomotion.otp.exception.OtpInvalidException;
+import com.fptufa26.ecomotion.otp.exception.OtpResendTooSoonException;
 import com.fptufa26.ecomotion.auth.exception.PhoneAlreadyExistsException;
 import com.fptufa26.ecomotion.auth.exception.PhoneNotVerifiedException;
 import com.fptufa26.ecomotion.auth.exception.RegistrationTokenInvalidException;
@@ -284,9 +284,9 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), request);
     }
 
-    @ExceptionHandler(EmailDeliveryException.class)
+    @ExceptionHandler(NotificationDeliveryException.class)
     public ResponseEntity<ErrorResponse> handleEmailDelivery(
-            EmailDeliveryException ex,
+            NotificationDeliveryException ex,
             HttpServletRequest request) {
         log.error("Email delivery failed on {} {}",
                 request.getMethod(), request.getRequestURI(), ex);
@@ -368,7 +368,6 @@ public class GlobalExceptionHandler {
                         message,
                         request.getRequestURI()));
     }
-
     private ResponseEntity<ErrorResponse> build(
             HttpStatus status,
             String errorCode,
