@@ -102,6 +102,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final com.fptufa26.ecomotion.finance.service.PaymentRequestService paymentRequestService;
     private final DisputeRepository disputeRepository;
     private final ScheduleService scheduleService;
+    private final com.fptufa26.ecomotion.booking.service.DriverOptimizationService driverOptimizationService;
+    private final com.fptufa26.ecomotion.booking.repository.TripIncidentRepository tripIncidentRepository;
+    private final com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository tripEvidenceRepository;
     private final Clock clock;
 
     @Override
@@ -401,8 +404,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         }
 
         booking.setStatus(BookingStatus.REJECTED);
-        booking.setCancelledAt(Instant.now());
-        booking.setCancelledBy(provider.getUser());
+        booking.setCancelledAt(null);
+        booking.setCancelledBy(null);
+        booking.setCancelReason(null);
         bookingRepository.save(booking);
 
         Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(booking.getVehicle().getId()));
@@ -415,43 +419,75 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
 
-        BookingStatus oldStatus = booking.getStatus();
-        if (oldStatus != BookingStatus.CONFIRMED) {
-            throw new ConflictException("Chỉ có thể phân công tài xế sau khi khoản cọc đã được xác nhận");
+        Driver driver = driverOptimizationService.manualAssign(booking.getId(), driverId, provider.getId());
+        Booking refreshed = bookingRepository.findById(booking.getId()).orElse(booking);
+
+        Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(refreshed.getVehicle().getId()));
+        return toResponse(refreshed, coverUrls.get(refreshed.getVehicle().getId()));
+    }
+
+    @Override
+    public List<com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        return driverOptimizationService.evaluateCandidates(booking.getId(), provider.getId());
+    }
+
+    @Override
+    public com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        return driverOptimizationService.suggestDriver(booking.getId(), provider.getId());
+    }
+
+    @Override
+    @Transactional
+    public ProviderBookingResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBooking(provider, bookingCodeOrId);
+
+        Driver driver = driverOptimizationService.autoAssign(booking.getId());
+        if (driver == null) {
+            throw new ConflictException("Không tìm thấy tài xế phù hợp để phân công tự động");
         }
 
-        Driver driver = driverRepository.findByIdAndProvider_Id(driverId, provider.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Tài xế không tồn tại hoặc không thuộc nhà cung cấp"));
+        Booking refreshed = bookingRepository.findById(booking.getId()).orElse(booking);
+        Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(refreshed.getVehicle().getId()));
+        return toResponse(refreshed, coverUrls.get(refreshed.getVehicle().getId()));
+    }
 
-        if (driver.getStatus() != DriverStatus.APPROVED) {
-            throw new IllegalArgumentException("Tài xế chưa được phê duyệt hoặc không ở trạng thái sẵn sàng");
+    @Override
+    @Transactional
+    public void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest request) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBooking(provider, bookingCodeOrId);
+
+        com.fptufa26.ecomotion.booking.entity.TripIncident incident = tripIncidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy sự cố: " + incidentId));
+
+        if (!incident.getBooking().getId().equals(booking.getId())) {
+            throw new IllegalArgumentException("Sự cố không thuộc đơn thuê này");
         }
 
-        log.info(
-                "Provider {} assigning driver {} to booking {}, oldStatus={}",
-                provider.getId(),
-                driver.getId(),
-                booking.getBookingCode(),
-                oldStatus
-        );
+        incident.setStatus(request.status());
+        incident.setResolutionNote(request.resolutionNote());
+        incident.setResolvedBy(provider.getUser());
+        incident.setResolvedAt(clock.instant());
+        tripIncidentRepository.save(incident);
+    }
 
-        booking.setDriver(driver);
-        booking.setAssignedAt(clock.instant());
-        booking.setDriverConfirmedAt(null);
-        booking.setActualArrivedAt(null);
-        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
-        Booking saved = bookingRepository.saveAndFlush(booking);
+    @Override
+    public List<com.fptufa26.ecomotion.booking.entity.TripIncident> getBookingIncidents(Long currentUserId, String bookingCodeOrId) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        return tripIncidentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId());
+    }
 
-        log.info(
-                "Booking assigned: bookingId={}, bookingCode={}, driverId={}, status={}",
-                saved.getId(),
-                saved.getBookingCode(),
-                driver.getId(),
-                saved.getStatus()
-        );
-
-        Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(saved.getVehicle().getId()));
-        return toResponse(saved, coverUrls.get(saved.getVehicle().getId()));
+    @Override
+    public List<com.fptufa26.ecomotion.booking.entity.TripEvidence> getBookingEvidence(Long currentUserId, String bookingCodeOrId) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        return tripEvidenceRepository.findByBooking_IdOrderByRecordedAtAsc(booking.getId());
     }
 
     @Override

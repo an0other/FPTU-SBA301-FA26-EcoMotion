@@ -18,6 +18,7 @@ import com.fptufa26.ecomotion.auth.exception.PhoneAlreadyExistsException;
 import com.fptufa26.ecomotion.auth.exception.PhoneNotVerifiedException;
 import com.fptufa26.ecomotion.auth.exception.RegistrationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.UnsupportedRoleException;
+import com.fptufa26.ecomotion.common.cloudinary.CloudinaryInfrastructureException;
 import com.fptufa26.ecomotion.booking.exception.BookingAccessDeniedException;
 import com.fptufa26.ecomotion.booking.exception.BookingContractNotAllowedException;
 import com.fptufa26.ecomotion.booking.exception.BookingContractNotFoundException;
@@ -97,7 +98,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAccessDenied(
             AccessDeniedException ex,
             HttpServletRequest request) {
-        return build(HttpStatus.FORBIDDEN, "Access denied", request);
+        String message = (ex.getMessage() != null && !ex.getMessage().isBlank()) ? ex.getMessage() : "Access denied";
+        return build(HttpStatus.FORBIDDEN, "FORBIDDEN", message, request);
     }
 
     @ExceptionHandler(CaptchaInvalidException.class)
@@ -325,6 +327,19 @@ public class GlobalExceptionHandler {
                 request);
     }
 
+    @ExceptionHandler(CloudinaryInfrastructureException.class)
+    public ResponseEntity<ErrorResponse> handleCloudinaryInfrastructure(
+            CloudinaryInfrastructureException ex,
+            HttpServletRequest request) {
+        log.error("Cloudinary infrastructure failure on {} {}: {}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return build(
+                HttpStatus.BAD_GATEWAY,
+                "CLOUDINARY_SERVICE_ERROR",
+                "Dịch vụ lưu trữ hình ảnh Cloudinary tạm thời không khả dụng. Vui lòng thử lại sau.",
+                request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(
             Exception ex,
@@ -334,6 +349,7 @@ public class GlobalExceptionHandler {
 
         return build(
                 HttpStatus.INTERNAL_SERVER_ERROR,
+                "INTERNAL_SERVER_ERROR",
                 "Internal server error",
                 request);
     }
@@ -349,6 +365,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status)
                 .body(ErrorResponse.of(
                         status,
+                        message,
+                        request.getRequestURI()));
+    }
+
+    private ResponseEntity<ErrorResponse> build(
+            HttpStatus status,
+            String errorCode,
+            String message,
+            HttpServletRequest request) {
+        return ResponseEntity.status(status)
+                .body(ErrorResponse.of(
+                        status,
+                        errorCode,
                         message,
                         request.getRequestURI()));
     }

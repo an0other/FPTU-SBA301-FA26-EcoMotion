@@ -63,6 +63,11 @@ apiClient.interceptors.response.use(
         if (!currentToken || request.headers.Authorization === `Bearer ${currentToken}`) {
           await refreshAccessToken()
         }
+        const newToken = getAccessToken()
+        if (newToken) {
+          request.headers = request.headers || {}
+          request.headers.Authorization = `Bearer ${newToken}`
+        }
         return await apiClient(request)
       } catch (retryError) {
         if (retryError.original) return Promise.reject(retryError)

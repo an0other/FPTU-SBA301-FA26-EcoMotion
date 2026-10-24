@@ -116,6 +116,13 @@ public interface BookingMapper {
                                            boolean canConfirmEnd,
                                            List<DisputeCategory> disputeCategories) {
         Vehicle vehicle = booking.getVehicle();
+        String providerName = null;
+        if (vehicle != null && vehicle.getProvider() != null) {
+            providerName = vehicle.getProvider().getDisplayName();
+            if ((providerName == null || providerName.isBlank()) && vehicle.getProvider().getUser() != null) {
+                providerName = vehicle.getProvider().getUser().getFullName();
+            }
+        }
         return new BookingDetailResponse(
                 booking.getBookingCode(),
                 booking.getStatus(),
@@ -142,7 +149,8 @@ public interface BookingMapper {
                 timeline,
                 refundPreview,
                 canConfirmEnd,
-                disputeCategories);
+                disputeCategories,
+                providerName);
     }
 
     @Mapping(target = "bookingCode", source = "booking.bookingCode")

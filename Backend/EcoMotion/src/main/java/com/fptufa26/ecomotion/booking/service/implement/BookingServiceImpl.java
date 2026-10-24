@@ -36,6 +36,7 @@ import com.fptufa26.ecomotion.common.exception.BadRequestException;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
@@ -44,6 +45,7 @@ import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
+import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.service.UserService;
@@ -191,13 +193,13 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public CheckoutPreviewResponse previewCheckout(Long userId, String bookingCode) {
-        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR");
+        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox");
     }
 
     @Override
     @Transactional
     public CheckoutResultResponse checkout(Long userId, String bookingCode, CheckoutRequest request) {
-        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR");
+        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox");
     }
 
     @Override
@@ -493,11 +495,18 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {
-        Booking booking = bookingRepository.findByBookingCode(bookingCode)
-                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        Optional<Booking> opt = bookingRepository.findByBookingCode(bookingCode);
+        if (opt.isEmpty()) {
+            try {
+                Long id = Long.parseLong(bookingCode);
+                opt = bookingRepository.findById(id);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        Booking booking = opt.orElseThrow(() -> new NotFoundException("Booking not found"));
         Long ownerId = booking.getRenter().getUser().getUserId();
         if (!ownerId.equals(userId)) {
-            throw new NotFoundException("Booking not found");
+            throw new AccessDeniedException("Bạn không có quyền truy cập đơn thuê này");
         }
         return booking;
     }
@@ -512,13 +521,58 @@ public class BookingServiceImpl implements BookingService {
 
     private BookingPolicySnapshot requireSnapshot(Booking booking) {
         return snapshotRepository.findByBooking_Id(booking.getId())
-                .orElseThrow(() -> new NotFoundException("Booking snapshot not found"));
+                .orElseGet(() -> createFallbackSnapshot(booking));
+    }
+
+    private BookingPolicySnapshot createFallbackSnapshot(Booking booking) {
+        RentalPlan plan = booking.getPlan();
+        Provider provider = (booking.getVehicle() != null) ? booking.getVehicle().getProvider() : null;
+        BigDecimal depositRatio = (provider != null && provider.getDepositRatio() != null)
+                ? provider.getDepositRatio()
+                : new BigDecimal("0.30");
+
+        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
+        snapshot.setBooking(booking);
+        if (plan != null) {
+            snapshot.setSlotPrice(plan.getSlotPrice());
+            snapshot.setSlotLengthMinutes(plan.getSlotLengthMinutes());
+            snapshot.setPlanType(plan.getPlanType());
+            snapshot.setDepositRatio(plan.getPlanType() == PlanType.YEARLY ? null : depositRatio);
+            snapshot.setUpfrontAmount(plan.getUpfrontAmount());
+            snapshot.setAllowedOvertimeMinutes(plan.getAllowedOvertimeMinutes());
+            snapshot.setOvertimeSurchargeRatio(plan.getOvertimeSurchargeRatio());
+            snapshot.setWaitingFreeMinutes(plan.getWaitingFreeMinutes());
+            snapshot.setWaitingRate(plan.getWaitingRate());
+            snapshot.setWeekendSurchargeRatio(plan.getWeekendSurchargeRatio());
+            snapshot.setFreeRadiusKm(plan.getFreeRadiusKm());
+            snapshot.setOutOfRadiusRate(plan.getOutOfRadiusRate());
+            snapshot.setHourlyToDailyThresholdMinutes(plan.getHourlyToDailyThresholdMinutes());
+        } else {
+            BigDecimal price = booking.getTotalAmount() != null ? booking.getTotalAmount() : BigDecimal.ZERO;
+            snapshot.setSlotPrice(price);
+            snapshot.setSlotLengthMinutes(1440);
+            snapshot.setPlanType(PlanType.DAILY);
+            snapshot.setDepositRatio(depositRatio);
+        }
+        return snapshotRepository.save(snapshot);
     }
 
     private int baseSlots(Booking booking) {
         return chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
                 .map(BookingCharge::getQuantity)
-                .orElseThrow(() -> new NotFoundException("Base rental charge not found"));
+                .orElseGet(() -> {
+                    RentalPlan plan = booking.getPlan();
+                    if (plan != null && plan.getSlotPrice() != null && plan.getSlotPrice().compareTo(BigDecimal.ZERO) > 0
+                            && booking.getTotalAmount() != null) {
+                        try {
+                            int calculated = booking.getTotalAmount().divideToIntegralValue(plan.getSlotPrice()).intValue();
+                            return Math.max(calculated, 1);
+                        } catch (Exception ignored) {
+                            return 1;
+                        }
+                    }
+                    return 1;
+                });
     }
 
     private Instant endOf(Booking booking, BookingPolicySnapshot snapshot, int slots) {

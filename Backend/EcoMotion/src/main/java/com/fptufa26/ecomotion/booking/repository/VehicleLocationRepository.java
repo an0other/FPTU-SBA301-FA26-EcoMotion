@@ -13,6 +13,8 @@ public interface VehicleLocationRepository extends JpaRepository<VehicleLocation
 
     Optional<VehicleLocation> findFirstByBooking_IdOrderByReceivedAtDesc(Long bookingId);
 
+    Optional<VehicleLocation> findFirstByDriver_IdOrderByReceivedAtDesc(Long driverId);
+
     List<VehicleLocation> findByBooking_IdOrderByReceivedAtDesc(Long bookingId, Pageable pageable);
 
     long countByBooking_Id(Long bookingId);
