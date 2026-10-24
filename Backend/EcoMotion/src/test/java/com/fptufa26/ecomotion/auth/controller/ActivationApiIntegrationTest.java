@@ -38,11 +38,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-        "app.otp.provider=logging",
+        "app.notification.external.email.mode=logging",
         "app.otp.expose-in-response=true",
         "app.ekyc.provider=mock",
         "app.ekyc.mock.force-fail=false",
-        "app.phone-otp.resend-cooldown=60s",
         "app.upload.dir=target/test-uploads"
 })
 class ActivationApiIntegrationTest {
