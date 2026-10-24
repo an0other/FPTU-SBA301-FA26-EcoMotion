@@ -36,14 +36,20 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse;
+import com.fptufa26.ecomotion.finance.dto.response.VnpayPaymentUrlResponse;
+import com.fptufa26.ecomotion.finance.service.VnpayService;
+import jakarta.servlet.http.HttpServletRequest;
+
 @RestController
-@RequestMapping("/api/renter/bookings")
+@RequestMapping({"/api/v1/renter/bookings", "/api/renter/bookings"})
 @RequiredArgsConstructor
 @Tag(name = "renter-bookings")
 public class RenterBookingController {
 
     private final BookingService bookingService;
     private final VehicleCatalogService vehicleCatalogService;
+    private final VnpayService vnpayService;
 
     @GetMapping
     public ApiResponse<List<BookingSummaryResponse>> listMine(
@@ -70,7 +76,7 @@ public class RenterBookingController {
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
         return ResponseEntity.status(HttpStatus.GONE).body(
-                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR"));
+                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox"));
     }
 
     @PostMapping("/{bookingCode}/checkout")
@@ -79,7 +85,7 @@ public class RenterBookingController {
             @PathVariable String bookingCode,
             @Valid @RequestBody CheckoutRequest request) {
         return ResponseEntity.status(HttpStatus.GONE).body(
-                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR"));
+                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox"));
     }
 
     @GetMapping("/{bookingCode}")
@@ -118,4 +124,30 @@ public class RenterBookingController {
             @Valid @RequestBody OpenDisputeRequest request) {
         return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
     }
+
+    @GetMapping({"/{bookingCode}/settlement", "/{bookingCode}/settlements"})
+    public ApiResponse<RenterSettlementResponse> getSettlement(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(vnpayService.getSettlementDetails(user.getUserId(), bookingCode));
+    }
+
+    @PostMapping({"/{bookingCode}/payments/final/create", "/{bookingCode}/payments/settlement/create"})
+    public ApiResponse<VnpayPaymentUrlResponse> createFinalPayment(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            HttpServletRequest servletRequest) {
+        String clientIp = resolveClientIp(servletRequest);
+        return ApiResponse.success(vnpayService.createFinalPaymentUrl(user.getUserId(), bookingCode, clientIp));
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        if (request == null) return "127.0.0.1";
+        String xf = request.getHeader("X-Forwarded-For");
+        if (xf != null && !xf.isBlank()) {
+            return xf.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
 }
+

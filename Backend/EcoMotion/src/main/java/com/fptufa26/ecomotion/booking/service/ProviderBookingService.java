@@ -46,4 +46,16 @@ public interface ProviderBookingService {
     TripTrackingResponse getTripTracking(Long currentUserId, String bookingCodeOrId);
 
     TripLocationResponse getTripLocation(Long currentUserId, String bookingCodeOrId);
+
+    List<com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId);
+
+    com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId);
+
+    ProviderBookingResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId);
+
+    void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest request);
+
+    List<com.fptufa26.ecomotion.booking.entity.TripIncident> getBookingIncidents(Long currentUserId, String bookingCodeOrId);
+
+    List<com.fptufa26.ecomotion.booking.entity.TripEvidence> getBookingEvidence(Long currentUserId, String bookingCodeOrId);
 }

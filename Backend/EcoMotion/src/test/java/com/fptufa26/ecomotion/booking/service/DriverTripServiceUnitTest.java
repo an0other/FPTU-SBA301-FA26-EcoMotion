@@ -7,7 +7,11 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.TripView;
 import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
+import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
+import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
 import com.fptufa26.ecomotion.booking.repository.VehicleLocationRepository;
+import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.booking.service.implement.DriverTripServiceImpl;
 import com.fptufa26.ecomotion.common.config.ClockConfig;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -64,6 +68,18 @@ class DriverTripServiceUnitTest {
     private VehicleLocationRepository vehicleLocationRepository;
 
     @Mock
+    private DriverAssignmentRepository driverAssignmentRepository;
+
+    @Mock
+    private TripIncidentRepository tripIncidentRepository;
+
+    @Mock
+    private TripEvidenceRepository tripEvidenceRepository;
+
+    @Mock
+    private DriverOptimizationService driverOptimizationService;
+
+    @Mock
     private UserService userService;
 
     @Mock
@@ -86,6 +102,10 @@ class DriverTripServiceUnitTest {
         driverTripService = new DriverTripServiceImpl(
                 bookingRepository,
                 vehicleLocationRepository,
+                driverAssignmentRepository,
+                tripIncidentRepository,
+                tripEvidenceRepository,
+                driverOptimizationService,
                 userService,
                 vehicleService,
                 mapGeocodingService,

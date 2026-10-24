@@ -20,6 +20,7 @@ import ProviderFinancePage from './pages/ProviderFinancePage'
 import RegisterPage from './pages/RegisterPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import VehicleListPage from './pages/VehicleListPage'
+import VnpayCallbackPage from './pages/VnpayCallbackPage'
 import YearlyRentalPage from './pages/YearlyRentalPage'
 
 import ProviderHomePage from './pages/provider/ProviderHomePage'
@@ -65,6 +66,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/activate" element={<ActivatePage />} />
+      <Route path="/payment/vnpay/callback" element={<VnpayCallbackPage />} />
 
       <Route
         path="/policy"
