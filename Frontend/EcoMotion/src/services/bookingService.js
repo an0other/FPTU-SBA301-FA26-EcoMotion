@@ -20,12 +20,12 @@ export async function getMyBooking(bookingCode) {
   return data.data
 }
 
+export const getBookingDetail = getMyBooking
+
 export async function updateBookingRequestDetails(bookingCode, body) {
   const { data } = await apiClient.patch(`/renter/bookings/${bookingCode}/request-details`, body)
   return data.data
 }
-
-export const getBookingDetail = getMyBooking
 
 export async function cancelMyBooking(bookingCode) {
   const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/cancel`)
@@ -42,6 +42,11 @@ export async function openDispute(bookingCode, body) {
   return data.data
 }
 
+export async function createVnpayPaymentUrl(payload) {
+  const { data } = await apiClient.post('/v1/payment/vnpay/create-url', payload)
+  return data?.data
+}
+
 export const bookingService = {
   // Renter methods
   getMyBooking,
@@ -49,9 +54,11 @@ export const bookingService = {
   listMyBookings,
   listVehiclesForBooking,
   createBooking,
+  updateBookingRequestDetails,
   cancelMyBooking,
   confirmTripEnd,
   openDispute,
+  createVnpayPaymentUrl,
 
   // Provider methods
   async getProviderBookings(status) {

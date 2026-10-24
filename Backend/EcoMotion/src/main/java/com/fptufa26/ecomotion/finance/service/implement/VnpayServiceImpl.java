@@ -57,6 +57,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -104,6 +105,17 @@ public class VnpayServiceImpl implements VnpayService {
             if (booking.getStatus() != BookingStatus.ACCEPTED && booking.getStatus() != BookingStatus.PENDING) {
                 throw new InvalidPaymentOperationException("Chỉ có thể đặt cọc khi đơn thuê ở trạng thái chờ duyệt hoặc đã chấp nhận (Hiện tại: " + booking.getStatus() + ")");
             }
+
+            Optional<PaymentRequest> depositPr = paymentRequestRepository
+                    .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT);
+            if (depositPr.isPresent() && depositPr.get().getExpiresAt() != null
+                    && !depositPr.get().getExpiresAt().isAfter(clock.instant())) {
+                throw new InvalidPaymentOperationException("Thời hạn thanh toán tiền cọc cho đơn thuê này đã hết hạn");
+            }
+            if (booking.getPickupTime() != null && booking.getPickupTime().isBefore(clock.instant())) {
+                throw new InvalidPaymentOperationException("Thời hạn đón xe đã trôi qua, không thể thanh toán đặt cọc");
+            }
+
             amount = calculateDepositAmount(booking);
             paymentType = PaymentType.DEPOSIT_PAY;
         } else {
@@ -150,26 +162,38 @@ public class VnpayServiceImpl implements VnpayService {
         }
 
         Instant now = clock.instant();
-        String prefix = isFinalPayment ? "VNP" + booking.getBookingCode() + "F" : "VNP" + booking.getBookingCode();
-        String vnpTxnRef = prefix + System.currentTimeMillis();
+        PaymentTransaction transaction = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .filter(tx -> tx.getType() == paymentType
+                        && tx.getStatus() == PaymentStatus.PENDING
+                        && tx.getMethod() == PaymentMethod.VNPAY
+                        && tx.getVnpTxnRef() != null
+                        && tx.getAmount() != null
+                        && tx.getAmount().compareTo(amount) == 0
+                        && tx.getCreatedAt() != null
+                        && tx.getCreatedAt().isAfter(now.minus(Duration.ofMinutes(14))))
+                .max(Comparator.comparing(PaymentTransaction::getCreatedAt))
+                .orElseGet(() -> {
+                    String prefix = isFinalPayment ? "VNP" + booking.getBookingCode() + "F" : "VNP" + booking.getBookingCode();
+                    String vnpTxnRef = prefix + System.currentTimeMillis();
+                    PaymentTransaction newTx = new PaymentTransaction();
+                    newTx.setBooking(booking);
+                    newTx.setType(paymentType);
+                    newTx.setDirection(PaymentDirection.IN);
+                    newTx.setMethod(PaymentMethod.VNPAY);
+                    newTx.setAmount(amount);
+                    newTx.setStatus(PaymentStatus.PENDING);
+                    newTx.setVnpTxnRef(vnpTxnRef);
+                    newTx.setGatewayRef(vnpTxnRef);
+                    newTx.setCreatedAt(now);
+                    newTx.setUpdatedAt(now);
+                    return paymentTransactionRepository.save(newTx);
+                });
 
-        PaymentTransaction transaction = new PaymentTransaction();
-        transaction.setBooking(booking);
-        transaction.setType(paymentType);
-        transaction.setDirection(PaymentDirection.IN);
-        transaction.setMethod(PaymentMethod.VNPAY);
-        transaction.setAmount(amount);
-        transaction.setStatus(PaymentStatus.PENDING);
-        transaction.setVnpTxnRef(vnpTxnRef);
-        transaction.setGatewayRef(vnpTxnRef);
-        transaction.setCreatedAt(now);
-        transaction.setUpdatedAt(now);
-        paymentTransactionRepository.save(transaction);
-
-        long vnpAmount = amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).longValue();
-        String vnpCreateDate = VNP_DATE_FORMATTER.format(now);
-        Instant expireTime = now.plus(Duration.ofMinutes(15));
+        String vnpTxnRef = transaction.getVnpTxnRef();
+        Instant expireTime = transaction.getCreatedAt().plus(Duration.ofMinutes(15));
+        String vnpCreateDate = VNP_DATE_FORMATTER.format(transaction.getCreatedAt());
         String vnpExpireDate = VNP_DATE_FORMATTER.format(expireTime);
+        long vnpAmount = amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).longValue();
 
         Map<String, String> vnpParams = new HashMap<>();
         vnpParams.put("vnp_Version", vnpayConfig.getVersion());
@@ -379,6 +403,14 @@ public class VnpayServiceImpl implements VnpayService {
                 scheduleService.book(vehicle, booking, booking.getPickupTime(), end);
                 booking.setStatus(BookingStatus.CONFIRMED);
                 bookingRepository.save(booking);
+
+                paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
+                        .ifPresent(pr -> {
+                            pr.setStatus(PaymentRequestStatus.CONFIRMED);
+                            pr.setPaidAmount(transaction.getAmount());
+                            pr.setConfirmedAt(clock.instant());
+                            paymentRequestRepository.save(pr);
+                        });
 
                 if (booking.getDriver() == null) {
                     try {

@@ -32,16 +32,7 @@ function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
 }
 
-const STATUS_BADGES = {
-  PENDING: { label: 'Chờ thanh toán', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
-  PROOF_SUBMITTED: { label: 'Đã gửi bằng chứng', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
-  PARTIALLY_PAID: { label: 'Thanh toán một phần', bg: 'bg-orange-50 text-orange-800 border-orange-200' },
-  CONFIRMED: { label: 'Đã xác nhận thanh toán', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-  REJECTED: { label: 'Bị từ chối', bg: 'bg-red-50 text-red-800 border-red-200' },
-  EXPIRED: { label: 'Hết hạn', bg: 'bg-slate-100 text-slate-700 border-slate-300' },
-  REVIEW_REQUIRED: { label: 'Cần đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
-  VOIDED: { label: 'Đã huỷ yêu cầu', bg: 'bg-slate-100 text-slate-700 border-slate-300' },
-}
+
 
 const EVIDENCE_BADGES = {
   PENDING: { label: 'Đang chờ đối soát', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
@@ -60,10 +51,9 @@ export default function CustomerPaymentPage() {
   const [fetchError, setFetchError] = useState(null)
   const [inlineError, setInlineError] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
-  const [currentTime, setCurrentTime] = useState(() => Date.now())
 
   // Direct transfer / VietQR request states
-  const [requests, setRequests] = useState([])
+  const [, setRequests] = useState([])
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [proofModalOpen, setProofModalOpen] = useState(false)
   const [proofFile, setProofFile] = useState(null)
@@ -71,6 +61,7 @@ export default function CustomerPaymentPage() {
   const [txRef, setTxRef] = useState('')
   const [proofNote, setProofNote] = useState('')
   const [submittingProof, setSubmittingProof] = useState(false)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
   const proofPreviewUrl = useMemo(
     () => (proofFile ? URL.createObjectURL(proofFile) : ''),
     [proofFile],
@@ -132,11 +123,55 @@ export default function CustomerPaymentPage() {
   }, [bookingId])
 
   useEffect(() => {
-    if (bookingId) {
-      fetchBooking()
-      fetchPaymentRequests()
+    let ignore = false
+    if (!bookingId) return undefined
+    const fetchFn = getMyBooking || bookingService.getMyBooking || bookingService.getBookingDetail
+    fetchFn(bookingId)
+      .then(async (data) => {
+        if (ignore) return
+        setBooking(data)
+        if (data?.status === 'AWAITING_FINAL_PAYMENT') {
+          try {
+            const sett = await paymentService.getSettlement(data.bookingCode || bookingId)
+            if (!ignore) setSettlement(sett)
+          } catch (settErr) {
+            console.warn('Failed to load settlement details:', settErr)
+          }
+        }
+      })
+      .catch((err) => {
+        if (ignore) return
+        const status = err?.status || err?.original?.response?.status || err?.response?.status
+        const message =
+          err?.response?.data?.message ||
+          err?.original?.response?.data?.message ||
+          err?.message ||
+          'Không thể tải thông tin đơn thuê.'
+        setFetchError({ status, message })
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+
+    providerFinanceService
+      .getPaymentRequestsByBooking(bookingId)
+      .then((data) => {
+        if (ignore) return
+        setRequests(data || [])
+        if (data && data.length > 0) {
+          const activeFinal = data.find((request) => request.paymentType === 'FINAL_BALANCE' && request.status !== 'VOIDED')
+          const activeDeposit = data.find((request) => request.paymentType === 'DEPOSIT' && request.status !== 'VOIDED')
+          const current = activeFinal || activeDeposit || data[0]
+          setSelectedRequest(current)
+          setTransferredAmount(String(current.remainingAmount || current.amount || ''))
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      ignore = true
     }
-  }, [bookingId, fetchBooking, fetchPaymentRequests])
+  }, [bookingId])
 
   useEffect(() => {
     const expiresAt = selectedRequest?.expiresAt
@@ -152,11 +187,6 @@ export default function CustomerPaymentPage() {
     return () => window.clearTimeout(timer)
   }, [currentTime, selectedRequest?.expiresAt])
 
-  const handleCopy = (text, label) => {
-    if (!text) return
-    navigator.clipboard.writeText(text)
-    setToast({ message: `Đã sao chép ${label}`, type: 'success' })
-  }
 
   const handleSubmitProof = async (e) => {
     e.preventDefault()
@@ -253,7 +283,6 @@ export default function CustomerPaymentPage() {
     }
     setProofModalOpen(true)
   }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -325,7 +354,6 @@ export default function CustomerPaymentPage() {
     )
   }
 
-  const badge = selectedRequest ? (STATUS_BADGES[selectedRequest.status] || { label: selectedRequest.status, bg: 'bg-slate-100 text-slate-700' }) : null
   const requestExpired = selectedRequest ? isPaymentRequestExpired(selectedRequest, currentTime) : false
   const isSettled = booking?.status === 'COMPLETED' || settlement?.isSettled === true
   const isDepositPaid = ['CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking?.status)

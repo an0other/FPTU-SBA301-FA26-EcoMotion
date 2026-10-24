@@ -190,7 +190,7 @@ export const BookingDetail = ({
                   type="button"
                   className="px-6 py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm rounded-[12px] shadow-sm transition-all cursor-pointer whitespace-nowrap"
                 >
-                  {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán giữ chỗ ngay'}
+                  {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán cọc'}
                 </button> : null}
               </div>
             </div>
