@@ -129,6 +129,10 @@ class VnpayPaymentFlowIntegrationTest {
         assertThat(res.paymentUrl()).contains("vnp_TmnCode=" + vnpayConfig.getTmnCode());
         assertThat(res.bookingCode()).isEqualTo(booking.getBookingCode());
         assertThat(res.amount()).isGreaterThan(BigDecimal.ZERO);
+
+        // Idempotency: calling again within 14 minutes reuses the active PENDING transaction
+        VnpayPaymentUrlResponse res2 = vnpayService.createPaymentUrl(renterUserId, request, "127.0.0.1");
+        assertThat(res2.vnpTxnRef()).isEqualTo(res.vnpTxnRef());
     }
 
     @Test
