@@ -44,13 +44,13 @@ public class MapLocationServiceImpl implements MapLocationService {
     private long lastRequestNanos;
 
     public MapLocationServiceImpl(ObjectMapper objectMapper,
-                                  @Value("${app.map.reverse-url}") String reverseUrl,
-                                  @Value("${app.map.search-url}") String searchUrl,
+                                  @Value("${app.map.reverse-url:https://nominatim.openstreetmap.org/reverse}") String reverseUrl,
+                                  @Value("${app.map.search-url:https://nominatim.openstreetmap.org/search}") String searchUrl,
                                   @Value("${app.map.fallback-reverse-url:https://photon.komoot.io/reverse}") String fallbackReverseUrl,
                                   @Value("${app.map.fallback-search-url:https://photon.komoot.io/api/}") String fallbackSearchUrl,
-                                  @Value("${app.map.user-agent}") String userAgent,
-                                  @Value("${app.map.connect-timeout}") Duration connectTimeout,
-                                  @Value("${app.map.request-timeout}") Duration requestTimeout) {
+                                  @Value("${app.map.user-agent:EcoMotion-localhost/1.0}") String userAgent,
+                                  @Value("${app.map.connect-timeout:5s}") Duration connectTimeout,
+                                  @Value("${app.map.request-timeout:8s}") Duration requestTimeout) {
         this.objectMapper = objectMapper;
         this.reverseUrl = reverseUrl;
         this.searchUrl = searchUrl;

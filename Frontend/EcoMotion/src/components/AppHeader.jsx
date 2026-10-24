@@ -67,10 +67,10 @@ export default function AppHeader({ filters, onSearchSubmit, showViewSwitch = fa
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-xs backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-xs">
       <div className="mx-auto flex h-20 max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6">
         <Link to="/" className="flex shrink-0 items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white shadow-md shadow-brand-600/25">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-white shadow-xs">
             <IconZap className="h-5 w-5" />
           </span>
           <span className="hidden sm:block">
