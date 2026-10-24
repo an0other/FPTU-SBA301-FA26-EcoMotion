@@ -157,7 +157,7 @@ export const BookingDetail = ({
             <div className="p-5 bg-purple-50 border border-purple-200 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-purple-900">Đã chốt quyết toán</h2>
-                <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư bằng VietQR để hoàn tất đơn thuê.</p>
+                <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư qua cổng thanh toán VNPAY để hoàn tất đơn thuê.</p>
               </div>
               {booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
                 Thanh toán số dư

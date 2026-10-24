@@ -1,4 +1,4 @@
-import apiClient from './apiClient'
+import apiClient from './apiClient.js'
 
 // Fallback bank list matching Backend SupportedBank enum
 export const SUPPORTED_BANKS = [
@@ -164,6 +164,25 @@ export const providerFinanceService = {
 
   async seedSandbox() {
     const { data } = await apiClient.post('/v1/admin/sandbox/seed')
+    return data?.data
+  },
+
+  // ==========================================
+  // Refunds Management (TV5)
+  // ==========================================
+
+  async listRefunds() {
+    const { data } = await apiClient.get('/v1/provider/finance/refunds')
+    return data?.data ?? []
+  },
+
+  async createRefund(payload) {
+    const { data } = await apiClient.post('/v1/provider/finance/refunds', payload)
+    return data?.data
+  },
+
+  async reviewRefund(refundId, payload) {
+    const { data } = await apiClient.post(`/v1/provider/finance/refunds/${refundId}/review`, payload)
     return data?.data
   },
 
