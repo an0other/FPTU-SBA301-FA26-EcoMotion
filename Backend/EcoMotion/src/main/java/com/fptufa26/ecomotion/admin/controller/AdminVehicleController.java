@@ -4,11 +4,12 @@ import com.fptufa26.ecomotion.admin.dto.request.VehicleApprovalRequest;
 import com.fptufa26.ecomotion.admin.dto.response.AdminVehicleDto;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.user.entity.Provider;
+import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleDocument;
-import com.fptufa26.ecomotion.vehicle.entity.VehicleImage;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
-import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
+import com.fptufa26.ecomotion.vehicle.service.RentalPlanService;
+import com.fptufa26.ecomotion.vehicle.service.VehicleImageService;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,7 +35,8 @@ import java.util.List;
 public class AdminVehicleController {
 
     private final VehicleService vehicleService;
-    private final VehicleImageRepository vehicleImageRepository;
+    private final VehicleImageService vehicleImageService;
+    private final RentalPlanService rentalPlanService;
 
     @GetMapping
     @Operation(summary = "Danh sách xe cần duyệt hoặc tất cả xe (lọc theo status, keyword)")
@@ -68,7 +70,8 @@ public class AdminVehicleController {
     private AdminVehicleDto mapVehicleDto(Vehicle v) {
         Provider p = v.getProvider();
         List<VehicleDocument> docs = vehicleService.getVehicleDocuments(v.getId());
-        List<VehicleImage> images = vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(v.getId());
+        List<String> imgUrls = vehicleImageService.findImageUrls(v.getId());
+        List<RentalPlanData> plans = rentalPlanService.findActivePlans(v.getId());
 
         List<AdminVehicleDto.DocumentDto> docDtos = docs.stream()
                 .map(d -> AdminVehicleDto.DocumentDto.builder()
@@ -80,8 +83,6 @@ public class AdminVehicleController {
                         .status(d.getStatus())
                         .build())
                 .toList();
-
-        List<String> imgUrls = images.stream().map(VehicleImage::getImageUrl).toList();
 
         return AdminVehicleDto.builder()
                 .id(v.getId())
@@ -105,6 +106,7 @@ public class AdminVehicleController {
                 .ratingCount(v.getRatingCount())
                 .imageUrls(imgUrls)
                 .documents(docDtos)
+                .rentalPlans(plans)
                 .createdAt(v.getCreatedAt())
                 .build();
     }
