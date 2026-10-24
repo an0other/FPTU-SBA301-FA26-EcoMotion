@@ -697,14 +697,46 @@ public class BookingServiceImpl implements BookingService {
                 && booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
             return false;
         }
-        PaymentRequestType type = booking.getStatus() == BookingStatus.ACCEPTED
-                ? PaymentRequestType.DEPOSIT
-                : PaymentRequestType.FINAL_BALANCE;
-        return paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), type)
-                .filter(request -> request.getExpiresAt() == null || request.getExpiresAt().isAfter(Instant.now()))
-                .map(request -> request.getStatus() == PaymentRequestStatus.PENDING
-                        || request.getStatus() == PaymentRequestStatus.REJECTED)
-                .orElse(false);
+
+        if (booking.getStatus() == BookingStatus.ACCEPTED) {
+            boolean alreadyPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                    .anyMatch(tx -> tx.getType() == PaymentType.DEPOSIT_PAY && tx.getStatus() == PaymentStatus.PAID);
+            if (alreadyPaid) {
+                return false;
+            }
+            Optional<PaymentRequest> depositReqOpt = paymentRequestRepository
+                    .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT);
+            if (depositReqOpt.isPresent()) {
+                PaymentRequest request = depositReqOpt.get();
+                if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(Instant.now())) {
+                    return false;
+                }
+                return request.getStatus() == PaymentRequestStatus.PENDING
+                        || request.getStatus() == PaymentRequestStatus.REJECTED;
+            }
+            if (booking.getPickupTime() != null && booking.getPickupTime().isBefore(Instant.now())) {
+                return false;
+            }
+            return true;
+        }
+
+        // AWAITING_FINAL_PAYMENT
+        boolean alreadySettled = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .anyMatch(tx -> tx.getType() == PaymentType.SETTLEMENT && tx.getStatus() == PaymentStatus.PAID);
+        if (alreadySettled) {
+            return false;
+        }
+        Optional<PaymentRequest> finalReqOpt = paymentRequestRepository
+                .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
+        if (finalReqOpt.isPresent()) {
+            PaymentRequest request = finalReqOpt.get();
+            if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(Instant.now())) {
+                return false;
+            }
+            return request.getStatus() == PaymentRequestStatus.PENDING
+                    || request.getStatus() == PaymentRequestStatus.REJECTED;
+        }
+        return true;
     }
 
     private Instant endOf(Booking booking) {

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import AppHeader from './components/AppHeader'
 import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
+import ErrorBoundary from './components/ErrorBoundary'
 
 import ActivatePage from './pages/ActivatePage'
 import AdminDashboard from './pages/AdminDashboard'
@@ -58,7 +59,8 @@ export default function App() {
   const navigate = useNavigate()
 
   return (
-    <Routes>
+    <ErrorBoundary>
+      <Routes>
       <Route path="/" element={<VehicleListPage />} />
       <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
       <Route path="/renter" element={<Navigate to="/" replace />} />
@@ -201,5 +203,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </ErrorBoundary>
   )
 }

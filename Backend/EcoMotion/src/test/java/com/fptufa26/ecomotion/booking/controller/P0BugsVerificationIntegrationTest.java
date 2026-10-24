@@ -34,12 +34,14 @@ class P0BugsVerificationIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    private static final String DEFAULT_PASSWORD = "EcoMotion@123";
+
     private String loginAs(String email) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","password":"%s"}
-                                """.formatted(email, DevDataSeeder.DEFAULT_PASSWORD)))
+                                """.formatted(email, DEFAULT_PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -64,6 +66,7 @@ class P0BugsVerificationIntegrationTest {
         assertThat(data.get("status").asText()).isEqualTo("ACCEPTED");
         assertThat(data.get("totalAmount").asDouble()).isEqualTo(1400000.0);
         assertThat(data.has("charges")).isTrue();
+        assertThat(data.get("canPay").asBoolean()).isTrue();
     }
 
     @Test

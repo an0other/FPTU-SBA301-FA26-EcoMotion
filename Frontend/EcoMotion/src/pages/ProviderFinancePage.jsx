@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
@@ -41,6 +40,16 @@ const TX_STATUS_CONFIG = {
   REFUNDED: { label: 'Đã hoàn tiền', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
 }
 
+const REQUEST_STATUS_CONFIG = {
+  PENDING: { label: 'Chờ thanh toán', bg: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  PROOF_SUBMITTED: { label: 'Đã gửi biên lai', bg: 'bg-blue-50 text-blue-800 border-blue-200', dot: 'bg-blue-500' },
+  PARTIALLY_PAID: { label: 'Thanh toán một phần', bg: 'bg-orange-50 text-orange-800 border-orange-200', dot: 'bg-orange-500' },
+  CONFIRMED: { label: 'Đã xác nhận đủ', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500' },
+  REJECTED: { label: 'Đã từ chối', bg: 'bg-red-50 text-red-800 border-red-200', dot: 'bg-red-500' },
+  EXPIRED: { label: 'Hết hạn', bg: 'bg-slate-100 text-slate-700 border-slate-300', dot: 'bg-slate-400' },
+  REVIEW_REQUIRED: { label: 'Cần đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200', dot: 'bg-purple-500' },
+}
+
 const REFUND_STATUS_CONFIG = {
   PENDING: { label: 'Chờ duyệt', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
   APPROVED: { label: 'Đã chấp thuận', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
@@ -49,7 +58,7 @@ const REFUND_STATUS_CONFIG = {
 }
 
 export default function ProviderFinancePage() {
-  const [activeTab, setActiveTab] = useState('transactions') // transactions | refunds | bankAccounts | payout
+  const [activeTab, setActiveTab] = useState('transactions') // transactions | incoming | refunds | bankAccounts | payout
 
   // Summary & Core Metrics
   const [summary, setSummary] = useState(null)
@@ -60,10 +69,16 @@ export default function ProviderFinancePage() {
   const [transactions, setTransactions] = useState([])
   const [totalTransactions, setTotalTransactions] = useState(0)
   const [txTypeFilter, setTxTypeFilter] = useState('ALL')
-  const [txStatusFilter, setTxStatusFilter] = useState('ALL')
   const [txPage, setTxPage] = useState(1)
-  const [txPageSize, setTxPageSize] = useState(10)
+  const txPageSize = 10
   const [selectedTxDetail, setSelectedTxDetail] = useState(null)
+
+  // Incoming Payment Requests State
+  const [paymentRequests, setPaymentRequests] = useState([])
+  const [totalPaymentRequests, setTotalPaymentRequests] = useState(0)
+  const [requestStatusFilter, setRequestStatusFilter] = useState('ALL')
+  const [requestPage, setRequestPage] = useState(1)
+  const requestPageSize = 10
 
   // Refunds State
   const [refunds, setRefunds] = useState([])
@@ -86,10 +101,10 @@ export default function ProviderFinancePage() {
 
   // Global State
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
 
   // Modals
-  const [isBankModalOpen, setIsBankModalOpen] = useState(false)
   const [confirmModalData, setConfirmModalData] = useState(null)
   const [rejectModalData, setRejectModalData] = useState(null)
   const [reportIssueModalData, setReportIssueModalData] = useState(null)
@@ -108,21 +123,6 @@ export default function ProviderFinancePage() {
   const [issueNoteInput, setIssueNoteInput] = useState('')
   const [isReportingIssue, setIsReportingIssue] = useState(false)
 
-  // Realtime Sync Hook
-  useRealtimeSync({
-    handlers: {
-      [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
-        fetchFinanceData()
-        setToast({ message: 'Thông báo tài chính: Giao dịch thanh toán VNPAY vừa được xác minh!', type: 'success' })
-      },
-      [TV5_REALTIME_EVENTS.REFUND_UPDATED]: () => {
-        fetchFinanceData()
-        setToast({ message: 'Thông báo: Yêu cầu hoàn tiền đã có cập nhật mới.', type: 'info' })
-      },
-    },
-    onResync: () => fetchFinanceData(),
-  })
-
   // Fetch summary and bank accounts
   const fetchFinanceData = useCallback(async () => {
     try {
@@ -134,13 +134,30 @@ export default function ProviderFinancePage() {
         providerFinanceService.listRefunds(),
       ])
 
-      if (sumRes.status === 'fulfilled') setSummary(sumRes.value)
+      if (sumRes.status === 'fulfilled') {
+        setSummary(sumRes.value)
+      } else {
+        console.error('Failed to load finance summary:', sumRes.reason)
+        const errMsg =
+          sumRes.reason?.response?.data?.message ||
+          sumRes.reason?.message ||
+          'Không thể tải dữ liệu tổng quan tài chính.'
+        setError(errMsg)
+      }
+
       if (banksRes.status === 'fulfilled') {
         const list = banksRes.value || []
         setBankAccounts(list)
         setActiveBank(list.find((b) => b.isActive) || list[0] || null)
+      } else {
+        console.error('Failed to load bank accounts:', banksRes.reason)
       }
-      if (refundsRes.status === 'fulfilled') setRefunds(refundsRes.value || [])
+
+      if (refundsRes.status === 'fulfilled') {
+        setRefunds(refundsRes.value || [])
+      } else {
+        console.error('Failed to load refunds:', refundsRes.reason)
+      }
     } catch (err) {
       console.error('Failed to load finance data:', err)
       setError(err?.response?.data?.message || err?.message || 'Không thể tải thông tin tài chính.')
@@ -158,22 +175,133 @@ export default function ProviderFinancePage() {
         offset: (txPage - 1) * txPageSize,
         limit: txPageSize,
       })
-      setTransactions(res.items || [])
-      setTotalTransactions(res.total || 0)
+      setTransactions(res?.items || [])
+      setTotalTransactions(res?.total || 0)
     } catch {
       // Quiet fail
     }
   }, [txTypeFilter, txPage, txPageSize])
 
-  useEffect(() => {
-    fetchFinanceData()
-  }, [fetchFinanceData])
+  // Fetch incoming payment requests with pagination
+  const fetchPaymentRequests = useCallback(async () => {
+    try {
+      const res = await providerFinanceService.listProviderPaymentRequests({
+        status: requestStatusFilter !== 'ALL' ? requestStatusFilter : undefined,
+        offset: (requestPage - 1) * requestPageSize,
+        limit: requestPageSize,
+      })
+      setPaymentRequests(res?.items || [])
+      setTotalPaymentRequests(res?.total || 0)
+    } catch {
+      // Quiet fail
+    }
+  }, [requestStatusFilter, requestPage, requestPageSize])
+
+  // Realtime Sync Hook
+  useRealtimeSync({
+    handlers: {
+      [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
+        fetchFinanceData()
+        fetchTransactions()
+        fetchPaymentRequests()
+        setToast({ message: 'Thông báo tài chính: Giao dịch thanh toán VNPAY vừa được xác minh!', type: 'success' })
+      },
+      [TV5_REALTIME_EVENTS.REFUND_UPDATED]: () => {
+        fetchFinanceData()
+        setToast({ message: 'Thông báo: Yêu cầu hoàn tiền đã có cập nhật mới.', type: 'info' })
+      },
+    },
+    onResync: () => {
+      fetchFinanceData()
+      fetchTransactions()
+      fetchPaymentRequests()
+    },
+  })
 
   useEffect(() => {
-    if (activeTab === 'transactions') {
-      fetchTransactions()
+    let active = true
+    Promise.allSettled([
+      providerFinanceService.getFinanceSummary(),
+      providerFinanceService.listBankAccounts(),
+      providerFinanceService.listRefunds(),
+    ])
+      .then(([sumRes, banksRes, refundsRes]) => {
+        if (!active) return
+        setLoading(false)
+        if (sumRes.status === 'fulfilled') {
+          setSummary(sumRes.value)
+        } else {
+          const errMsg =
+            sumRes.reason?.response?.data?.message ||
+            sumRes.reason?.message ||
+            'Không thể tải dữ liệu tổng quan tài chính.'
+          setError(errMsg)
+        }
+
+        if (banksRes.status === 'fulfilled') {
+          const list = banksRes.value || []
+          setBankAccounts(list)
+          setActiveBank(list.find((b) => b.isActive) || list[0] || null)
+        }
+
+        if (refundsRes.status === 'fulfilled') {
+          setRefunds(refundsRes.value || [])
+        }
+      })
+      .catch((err) => {
+        if (!active) return
+        setLoading(false)
+        setError(err?.response?.data?.message || err?.message || 'Không thể tải thông tin tài chính.')
+      })
+
+    return () => {
+      active = false
     }
-  }, [activeTab, fetchTransactions])
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    if (activeTab === 'transactions') {
+      providerFinanceService
+        .listTransactions({
+          type: txTypeFilter !== 'ALL' ? txTypeFilter : undefined,
+          offset: (txPage - 1) * txPageSize,
+          limit: txPageSize,
+        })
+        .then((res) => {
+          if (active) {
+            setTransactions(res?.items || [])
+            setTotalTransactions(res?.total || 0)
+          }
+        })
+        .catch(() => {})
+    }
+    return () => {
+      active = false
+    }
+  }, [activeTab, txTypeFilter, txPage, txPageSize])
+
+  useEffect(() => {
+    let active = true
+    if (activeTab === 'incoming') {
+      providerFinanceService
+        .listProviderPaymentRequests({
+          status: requestStatusFilter !== 'ALL' ? requestStatusFilter : undefined,
+          offset: (requestPage - 1) * requestPageSize,
+          limit: requestPageSize,
+        })
+        .then((res) => {
+          if (active) {
+            setPaymentRequests(res?.items || [])
+            setTotalPaymentRequests(res?.total || 0)
+          }
+        })
+        .catch(() => {})
+    }
+    return () => {
+      active = false
+    }
+  }, [activeTab, requestStatusFilter, requestPage, requestPageSize])
 
   // Handle Review Refund
   const handleReviewRefundSubmit = async (e) => {
@@ -210,7 +338,7 @@ export default function ProviderFinancePage() {
     setSubmittingBank(true)
     setBankFormError(null)
     try {
-      const created = await providerFinanceService.createBankAccount({
+      await providerFinanceService.createBankAccount({
         bankCode: formBankCode,
         accountNumber: formAccountNumber.trim(),
         accountHolderName: formAccountHolder.trim().toUpperCase(),
@@ -269,6 +397,7 @@ export default function ProviderFinancePage() {
       setToast({ message: 'Xác nhận đã nhận tiền thành công! Giao dịch tài chính đã được cập nhật.', type: 'success' })
       setConfirmModalData(null)
       fetchFinanceData()
+      fetchPaymentRequests()
     } catch (err) {
       console.error('Failed to confirm payment:', err)
       setToast({ message: err.message || 'Xác nhận nhận tiền thất bại.', type: 'error' })
@@ -297,6 +426,7 @@ export default function ProviderFinancePage() {
       setToast({ message: 'Đã từ chối biên lai thanh toán.', type: 'success' })
       setRejectModalData(null)
       fetchFinanceData()
+      fetchPaymentRequests()
     } catch (err) {
       console.error('Failed to reject proof:', err)
       setToast({ message: err.message || 'Từ chối thất bại.', type: 'error' })
@@ -325,6 +455,7 @@ export default function ProviderFinancePage() {
       setToast({ message: 'Đã báo cáo sai lệch giao dịch thành công. Trạng thái đã chuyển sang Cần đối soát.', type: 'success' })
       setReportIssueModalData(null)
       fetchFinanceData()
+      fetchPaymentRequests()
     } catch (err) {
       console.error('Failed to report issue:', err)
       setToast({ message: err.message || 'Báo cáo sai lệch thất bại.', type: 'error' })
@@ -377,7 +508,11 @@ export default function ProviderFinancePage() {
             </span>
             <button
               type="button"
-              onClick={fetchFinanceData}
+              onClick={() => {
+                fetchFinanceData()
+                fetchTransactions()
+                fetchPaymentRequests()
+              }}
               disabled={loading}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
             >
@@ -388,9 +523,27 @@ export default function ProviderFinancePage() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 flex items-start gap-2">
-            <Icon name="error" className="text-red-600 text-[18px] shrink-0 mt-0.5" />
-            <span>{error}</span>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-start gap-2">
+              <Icon name="error" className="text-red-600 text-[18px] shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-red-900">Không thể tải dữ liệu tài chính</p>
+                <p className="text-red-700 mt-0.5">{error}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                fetchFinanceData()
+                fetchTransactions()
+                fetchPaymentRequests()
+              }}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-red-700 transition cursor-pointer disabled:opacity-50"
+            >
+              <Icon name="refresh" className={`text-[15px] ${loading ? 'animate-spin' : ''}`} />
+              <span>Thử lại</span>
+            </button>
           </div>
         )}
 
@@ -404,9 +557,13 @@ export default function ProviderFinancePage() {
                 <Icon name="account_balance_wallet" className="text-lg" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-slate-900">
-              {formatVnd(summary?.totalRevenue || summary?.totalVolume || 0)}
-            </div>
+            {loading && !summary ? (
+              <div className="h-8 w-32 animate-pulse rounded bg-slate-200 my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold font-mono text-slate-900">
+                {formatVnd(summary?.totalRevenue || summary?.totalVolume || 0)}
+              </div>
+            )}
             <div className="text-[11px] text-slate-500">
               Tích lũy từ tất cả các đơn đặt xe hoàn tất
             </div>
@@ -420,9 +577,13 @@ export default function ProviderFinancePage() {
                 <Icon name="lock" className="text-lg" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-blue-900">
-              {formatVnd(summary?.depositCollected || summary?.totalDeposit || 0)}
-            </div>
+            {loading && !summary ? (
+              <div className="h-8 w-28 animate-pulse rounded bg-blue-100 my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold font-mono text-blue-900">
+                {formatVnd(summary?.depositCollected || summary?.totalDeposit || 0)}
+              </div>
+            )}
             <div className="text-[11px] text-slate-500">
               Đang giữ đảm bảo thực hiện hợp đồng
             </div>
@@ -436,9 +597,13 @@ export default function ProviderFinancePage() {
                 <Icon name="hourglass_top" className="text-lg" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-amber-900">
-              {formatVnd(summary?.pendingSettlement || summary?.pendingBalance || 0)}
-            </div>
+            {loading && !summary ? (
+              <div className="h-8 w-28 animate-pulse rounded bg-amber-100 my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold font-mono text-amber-900">
+                {formatVnd(summary?.pendingSettlement || summary?.pendingBalance || 0)}
+              </div>
+            )}
             <div className="text-[11px] text-slate-500">
               Chờ quyết toán cuối chuyến &amp; phụ phí
             </div>
@@ -452,9 +617,13 @@ export default function ProviderFinancePage() {
                 <Icon name="replay" className="text-lg" />
               </span>
             </div>
-            <div className="text-2xl font-bold font-mono text-purple-900">
-              {formatVnd(summary?.totalRefunded || 0)}
-            </div>
+            {loading && !summary ? (
+              <div className="h-8 w-28 animate-pulse rounded bg-purple-100 my-0.5" />
+            ) : (
+              <div className="text-2xl font-bold font-mono text-purple-900">
+                {formatVnd(summary?.totalRefunded || 0)}
+              </div>
+            )}
             <div className="text-[11px] text-slate-500">
               {refunds.length} yêu cầu hoàn tiền ghi nhận
             </div>
@@ -474,6 +643,19 @@ export default function ProviderFinancePage() {
           >
             <Icon name="receipt_long" className="text-[16px]" />
             <span>Lịch sử giao dịch ({totalTransactions})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('incoming')}
+            className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+              activeTab === 'incoming'
+                ? 'border-brand-700 text-brand-800'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Icon name="payments" className="text-[16px]" />
+            <span>Yêu cầu thanh toán ({totalPaymentRequests})</span>
           </button>
 
           <button
@@ -561,10 +743,22 @@ export default function ProviderFinancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {transactions.length === 0 ? (
+                  {loading && transactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
+                          <span className="text-xs font-medium">Đang tải lịch sử giao dịch...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : transactions.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-12 text-center text-slate-400">
-                        Chưa có giao dịch tài chính nào trong bộ lọc này
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Icon name="receipt_long" className="text-3xl text-slate-300" />
+                          <span>Chưa có giao dịch tài chính nào trong bộ lọc này</span>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -647,7 +841,188 @@ export default function ProviderFinancePage() {
           </div>
         )}
 
-        {/* TAB 2: REFUNDS TABLE */}
+        {/* TAB 2: INCOMING PAYMENT REQUESTS */}
+        {activeTab === 'incoming' && (
+          <div className="rounded-lg border border-slate-200 bg-white shadow-xs overflow-hidden">
+            {/* Toolbar */}
+            <div className="p-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-slate-500">Trạng thái:</label>
+                <select
+                  value={requestStatusFilter}
+                  onChange={(e) => {
+                    setRequestStatusFilter(e.target.value)
+                    setRequestPage(1)
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 focus:border-brand-600 focus:outline-none"
+                >
+                  <option value="ALL">Tất cả trạng thái</option>
+                  <option value="PENDING">Chờ thanh toán</option>
+                  <option value="PROOF_SUBMITTED">Đã gửi biên lai</option>
+                  <option value="PARTIALLY_PAID">Thanh toán một phần</option>
+                  <option value="CONFIRMED">Đã xác nhận đủ</option>
+                  <option value="REVIEW_REQUIRED">Cần đối soát</option>
+                  <option value="REJECTED">Đã từ chối</option>
+                </select>
+              </div>
+
+              <span className="text-xs text-slate-500">
+                Hiển thị trang {requestPage} • Tổng số {totalPaymentRequests} yêu cầu
+              </span>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[950px] border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                    <th className="px-4 py-3">Mã đơn</th>
+                    <th className="px-4 py-3">Phân loại</th>
+                    <th className="px-4 py-3 text-right">Số tiền yêu cầu</th>
+                    <th className="px-4 py-3 text-right">Đã nhận</th>
+                    <th className="px-4 py-3">Mã tham chiếu</th>
+                    <th className="px-4 py-3">Trạng thái</th>
+                    <th className="px-4 py-3">Ngày tạo</th>
+                    <th className="px-4 py-3 text-center">Thao tác duyệt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading && paymentRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
+                          <span className="text-xs font-medium">Đang tải danh sách yêu cầu thanh toán...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : paymentRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Icon name="payments" className="text-3xl text-slate-300" />
+                          <span>Chưa có yêu cầu thanh toán nào trong bộ lọc này</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    paymentRequests.map((pr) => {
+                      const statusMeta = REQUEST_STATUS_CONFIG[pr.status] || {
+                        label: pr.status,
+                        bg: 'bg-slate-100 text-slate-700 border-slate-200',
+                        dot: 'bg-slate-400',
+                      }
+                      const hasProof = pr.evidences && pr.evidences.length > 0
+
+                      return (
+                        <tr key={pr.id} className="hover:bg-slate-50/80">
+                          <td className="px-4 py-3 font-mono font-bold text-brand-800">
+                            <button
+                              type="button"
+                              onClick={() => handleViewBreakdown(pr.bookingId || pr.bookingCode)}
+                              className="hover:underline font-bold"
+                              title="Xem đối soát chi tiết đơn này"
+                            >
+                              #{pr.bookingCode}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 font-medium text-slate-700">
+                            {pr.paymentType === 'DEPOSIT' ? 'Tiền cọc (DEPOSIT)' : 'Quyết toán (SETTLEMENT)'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                            {formatVnd(pr.amount)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">
+                            {formatVnd(pr.paidAmount || 0)}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[11px] font-semibold text-slate-600">
+                            {pr.transferReference || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusMeta.bg}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
+                              {statusMeta.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-500 font-mono text-[11px]">
+                            {formatDateTime(pr.createdAt)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              {hasProof && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewProofModalData(pr)}
+                                  className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                                  title="Xem biên lai khách tải lên"
+                                >
+                                  Biên lai
+                                </button>
+                              )}
+                              {pr.status !== 'CONFIRMED' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenConfirmModal(pr)}
+                                    className="rounded bg-brand-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-brand-800"
+                                    title="Xác nhận đã nhận tiền"
+                                  >
+                                    Xác nhận nhận
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenRejectModal(pr)}
+                                    className="rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                                    title="Từ chối biên lai"
+                                  >
+                                    Từ chối
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenReportIssueModal(pr)}
+                                    className="rounded border border-purple-200 bg-white px-2 py-1 text-[11px] font-semibold text-purple-700 hover:bg-purple-50"
+                                    title="Báo cáo sai lệch"
+                                  >
+                                    Báo lệch
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              <span>Trang {requestPage}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setRequestPage((p) => Math.max(1, p - 1))}
+                  disabled={requestPage <= 1}
+                  className="rounded border border-slate-200 bg-white px-3 py-1 font-semibold hover:bg-slate-100 disabled:opacity-40"
+                >
+                  Trước
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRequestPage((p) => p + 1)}
+                  disabled={paymentRequests.length < requestPageSize}
+                  className="rounded border border-slate-200 bg-white px-3 py-1 font-semibold hover:bg-slate-100 disabled:opacity-40"
+                >
+                  Sau
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: REFUNDS TABLE */}
         {activeTab === 'refunds' && (
           <div className="rounded-lg border border-slate-200 bg-white shadow-xs overflow-hidden space-y-4 p-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -671,10 +1046,22 @@ export default function ProviderFinancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {refunds.length === 0 ? (
+                  {loading && refunds.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-slate-400">
-                        Chưa có yêu cầu hoàn tiền nào được ghi nhận
+                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
+                          <span className="text-xs font-medium">Đang tải danh sách hoàn tiền...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : refunds.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Icon name="assignment_return" className="text-3xl text-slate-300" />
+                          <span>Chưa có yêu cầu hoàn tiền nào được ghi nhận</span>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -749,37 +1136,61 @@ export default function ProviderFinancePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {bankAccounts.map((b) => (
-                <div
-                  key={b.id}
-                  className={`rounded-lg border p-4 space-y-2 transition ${
-                    b.isActive
-                      ? 'border-brand-500 bg-brand-50/40 ring-2 ring-brand-500/20'
-                      : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="rounded bg-slate-900 px-2 py-0.5 text-xs font-bold text-white font-mono">
-                      {b.bankCode}
-                    </span>
-                    {b.isActive && (
-                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                        Đang kích hoạt nhận tiền
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-slate-500 block uppercase">Số tài khoản</span>
-                    <span className="font-mono text-lg font-bold text-slate-900 tracking-wider">
-                      {b.accountNumber}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-slate-500 block uppercase">Chủ tài khoản</span>
-                    <span className="font-bold text-slate-800 text-sm">{b.accountHolderName}</span>
+              {loading && bankAccounts.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-slate-500">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
+                    <span className="text-xs font-medium">Đang tải tài khoản ngân hàng...</span>
                   </div>
                 </div>
-              ))}
+              ) : bankAccounts.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-slate-400">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <Icon name="account_balance" className="text-3xl text-slate-300" />
+                    <span className="text-xs">Chưa có tài khoản ngân hàng nào được thiết lập</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddBankModal(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 border border-brand-200 px-3 py-1.5 text-xs font-bold text-brand-800 hover:bg-brand-100"
+                    >
+                      <Icon name="add" className="text-[14px]" />
+                      <span>Thêm tài khoản ngay</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                bankAccounts.map((b) => (
+                  <div
+                    key={b.id}
+                    className={`rounded-lg border p-4 space-y-2 transition ${
+                      b.isActive
+                        ? 'border-brand-500 bg-brand-50/40 ring-2 ring-brand-500/20'
+                        : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="rounded bg-slate-900 px-2 py-0.5 text-xs font-bold text-white font-mono">
+                        {b.bankCode}
+                      </span>
+                      {b.isActive && (
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                          Đang kích hoạt nhận tiền
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-500 block uppercase">Số tài khoản</span>
+                      <span className="font-mono text-lg font-bold text-slate-900 tracking-wider">
+                        {b.accountNumber}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-500 block uppercase">Chủ tài khoản</span>
+                      <span className="font-bold text-slate-800 text-sm">{b.accountHolderName}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -859,13 +1270,23 @@ export default function ProviderFinancePage() {
             </div>
 
             <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500">Mã giao dịch:</span>
-                <span className="font-mono font-bold text-slate-900">{selectedTxDetail.transactionCode || selectedTxDetail.id}</span>
+                <span className="font-mono font-bold text-slate-900 inline-flex items-center gap-1.5">
+                  {selectedTxDetail.transactionCode || selectedTxDetail.id}
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(selectedTxDetail.transactionCode || selectedTxDetail.id, 'mã giao dịch')}
+                    className="text-slate-400 hover:text-slate-600"
+                    title="Sao chép mã giao dịch"
+                  >
+                    <Icon name="content_copy" className="text-[14px]" />
+                  </button>
+                </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500">Đơn thuê:</span>
-                <span className="font-mono font-bold text-brand-800">#{selectedTxDetail.bookingCode}</span>
+                <span className="font-mono font-bold text-brand-800">#{selectedTxDetail.bookingCode || '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Số tiền:</span>
@@ -879,9 +1300,21 @@ export default function ProviderFinancePage() {
                 <span className="text-slate-500">Cổng thanh toán:</span>
                 <span className="font-semibold text-emerald-800">VNPAY Sandbox</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500">Mã tham chiếu ngân hàng:</span>
-                <span className="font-mono text-slate-700">{selectedTxDetail.gatewayTxnRef || 'VNPAY-REF'}</span>
+                <span className="font-mono text-slate-700 inline-flex items-center gap-1.5">
+                  {selectedTxDetail.gatewayTxnRef || 'VNPAY-REF'}
+                  {selectedTxDetail.gatewayTxnRef && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(selectedTxDetail.gatewayTxnRef, 'mã tham chiếu')}
+                      className="text-slate-400 hover:text-slate-600"
+                      title="Sao chép mã tham chiếu"
+                    >
+                      <Icon name="content_copy" className="text-[14px]" />
+                    </button>
+                  )}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Thời gian ghi nhận:</span>
@@ -889,11 +1322,21 @@ export default function ProviderFinancePage() {
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex items-center justify-between gap-2">
+              {selectedTxDetail.bookingCode && (
+                <button
+                  type="button"
+                  onClick={() => handleViewBreakdown(selectedTxDetail.bookingCode)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-bold text-brand-800 hover:bg-brand-100"
+                >
+                  <Icon name="receipt_long" className="text-[15px]" />
+                  <span>Đối soát đơn #{selectedTxDetail.bookingCode}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSelectedTxDetail(null)}
-                className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                className="ml-auto rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
               >
                 Đóng
               </button>
