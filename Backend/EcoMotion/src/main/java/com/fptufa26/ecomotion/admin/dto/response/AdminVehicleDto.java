@@ -41,6 +41,7 @@ public class AdminVehicleDto {
     private Integer ratingCount;
     private List<String> imageUrls;
     private List<DocumentDto> documents;
+    private List<com.fptufa26.ecomotion.vehicle.dto.RentalPlanData> rentalPlans;
     private Instant createdAt;
 
     @Data

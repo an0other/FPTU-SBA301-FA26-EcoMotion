@@ -123,6 +123,7 @@ export default function ProviderFinancePage() {
   const [issueNoteInput, setIssueNoteInput] = useState('')
   const [isReportingIssue, setIsReportingIssue] = useState(false)
 
+
   // Fetch summary and bank accounts
   const fetchFinanceData = useCallback(async () => {
     try {

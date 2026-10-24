@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import Toast from '../components/Toast'
+import { providerFinanceService } from '../services/providerFinanceService'
 import { paymentService } from '../services/paymentService'
 import { getMyBooking, bookingService } from '../services/bookingService'
+import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
+import { isPaymentRequestExpired } from '../utils/paymentDisplay'
 
 function formatVnd(amount) {
   if (amount == null || Number.isNaN(Number(amount))) return '0 ₫'
@@ -29,6 +32,14 @@ function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
 }
 
+
+
+const EVIDENCE_BADGES = {
+  PENDING: { label: 'Đang chờ đối soát', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
+  ACCEPTED: { label: 'Đã được chấp nhận', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  REJECTED: { label: 'Bị từ chối', bg: 'bg-red-50 text-red-800 border-red-200' },
+}
+
 export default function CustomerPaymentPage() {
   const { bookingId } = useParams()
   const navigate = useNavigate()
@@ -40,6 +51,41 @@ export default function CustomerPaymentPage() {
   const [fetchError, setFetchError] = useState(null)
   const [inlineError, setInlineError] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
+
+  // Direct transfer / VietQR request states
+  const [, setRequests] = useState([])
+  const [selectedRequest, setSelectedRequest] = useState(null)
+  const [proofModalOpen, setProofModalOpen] = useState(false)
+  const [proofFile, setProofFile] = useState(null)
+  const [transferredAmount, setTransferredAmount] = useState('')
+  const [txRef, setTxRef] = useState('')
+  const [proofNote, setProofNote] = useState('')
+  const [submittingProof, setSubmittingProof] = useState(false)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
+  const proofPreviewUrl = useMemo(
+    () => (proofFile ? URL.createObjectURL(proofFile) : ''),
+    [proofFile],
+  )
+
+  useEffect(() => () => {
+    if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl)
+  }, [proofPreviewUrl])
+
+  const fetchPaymentRequests = useCallback(async () => {
+    try {
+      const data = await providerFinanceService.getPaymentRequestsByBooking(bookingId)
+      setRequests(data || [])
+      if (data && data.length > 0) {
+        const activeFinal = data.find((request) => request.paymentType === 'FINAL_BALANCE' && request.status !== 'VOIDED')
+        const activeDeposit = data.find((request) => request.paymentType === 'DEPOSIT' && request.status !== 'VOIDED')
+        const current = activeFinal || activeDeposit || data[0]
+        setSelectedRequest(current)
+        setTransferredAmount(String(current.remainingAmount || current.amount || ''))
+      }
+    } catch {
+      // quiet fail if no payment request exists yet
+    }
+  }, [bookingId])
 
   // Fetch Booking Details reusing existing single-booking detail API
   const fetchBooking = useCallback(async () => {
@@ -107,10 +153,75 @@ export default function CustomerPaymentPage() {
         if (!ignore) setLoading(false)
       })
 
+    providerFinanceService
+      .getPaymentRequestsByBooking(bookingId)
+      .then((data) => {
+        if (ignore) return
+        setRequests(data || [])
+        if (data && data.length > 0) {
+          const activeFinal = data.find((request) => request.paymentType === 'FINAL_BALANCE' && request.status !== 'VOIDED')
+          const activeDeposit = data.find((request) => request.paymentType === 'DEPOSIT' && request.status !== 'VOIDED')
+          const current = activeFinal || activeDeposit || data[0]
+          setSelectedRequest(current)
+          setTransferredAmount(String(current.remainingAmount || current.amount || ''))
+        }
+      })
+      .catch(() => {})
+
     return () => {
       ignore = true
     }
   }, [bookingId])
+
+  useEffect(() => {
+    const expiresAt = selectedRequest?.expiresAt
+      ? new Date(selectedRequest.expiresAt).getTime()
+      : Number.NaN
+    if (!Number.isFinite(expiresAt) || expiresAt <= currentTime) return undefined
+
+    const maximumDelay = 2_147_000_000
+    const timer = window.setTimeout(
+      () => setCurrentTime(Date.now()),
+      Math.min(Math.max(expiresAt - Date.now() + 25, 0), maximumDelay),
+    )
+    return () => window.clearTimeout(timer)
+  }, [currentTime, selectedRequest?.expiresAt])
+
+
+  const handleSubmitProof = async (e) => {
+    e.preventDefault()
+    if (!selectedRequest) return
+    if (isPaymentRequestExpired(selectedRequest, currentTime)) {
+      setCurrentTime(Date.now())
+      setProofModalOpen(false)
+      setToast({ message: 'Yêu cầu thanh toán đã hết hạn', type: 'error' })
+      return
+    }
+    if (!proofFile) {
+      setToast({ message: 'Vui lòng chọn ảnh chứng từ thanh toán', type: 'error' })
+      return
+    }
+
+    try {
+      setSubmittingProof(true)
+      const payload = {
+        file: proofFile,
+        transferredAmount: Number(transferredAmount) || selectedRequest.amount,
+        transactionReference: txRef.trim() || undefined,
+        note: proofNote.trim() || undefined,
+      }
+      await providerFinanceService.submitPaymentProof(selectedRequest.id, payload)
+      setToast({ message: 'Gửi bằng chứng thành công! Chủ xe sẽ đối soát và xác nhận đã nhận tiền.', type: 'success' })
+      setProofModalOpen(false)
+      setProofFile(null)
+      fetchPaymentRequests()
+    } catch (err) {
+      console.error('Failed to submit proof:', err)
+      setToast({ message: err?.message || 'Không thể gửi bằng chứng thanh toán.', type: 'error' })
+    } finally {
+      setSubmittingProof(false)
+    }
+  }
 
   const isFinalPayment = booking?.status === 'AWAITING_FINAL_PAYMENT'
 
@@ -164,6 +275,14 @@ export default function CustomerPaymentPage() {
     }
   }
 
+  const handleOpenProofModal = () => {
+    if (selectedRequest && isPaymentRequestExpired(selectedRequest, currentTime)) {
+      setCurrentTime(Date.now())
+      setToast({ message: 'Yêu cầu thanh toán đã hết hạn', type: 'error' })
+      return
+    }
+    setProofModalOpen(true)
+  }
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -235,6 +354,7 @@ export default function CustomerPaymentPage() {
     )
   }
 
+  const requestExpired = selectedRequest ? isPaymentRequestExpired(selectedRequest, currentTime) : false
   const isSettled = booking?.status === 'COMPLETED' || settlement?.isSettled === true
   const isDepositPaid = ['CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking?.status)
   const isCancelledOrRejected = ['CANCELLED', 'REJECTED'].includes(booking?.status)
@@ -357,44 +477,27 @@ export default function CustomerPaymentPage() {
                 ) : (
                   <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
                     <Icon name="pending" className="text-[14px]" />
-                    Chờ đặt cọc (DEPOSIT PENDING)
+                    Chờ đặt cọc 30% (AWAITING DEPOSIT)
                   </span>
                 )}
               </span>
             </div>
 
-            {/* Vehicle Details */}
-            <div className="flex justify-between items-start border-b border-slate-200 pb-2 gap-3">
-              <span className="text-slate-500 shrink-0">Thông tin xe:</span>
-              <div className="text-right">
-                <div className="font-bold text-slate-900 text-sm">
-                  {booking?.vehicleName || `${booking?.vehicle?.brand || ''} ${booking?.vehicle?.model || ''}`}
-                </div>
-                {(booking?.licensePlate || booking?.manufactureYear) && (
-                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                    {booking?.licensePlate && <span>{booking.licensePlate}</span>}
-                    {booking?.licensePlate && booking?.manufactureYear && <span> • </span>}
-                    {booking?.manufactureYear && <span>Đời {booking.manufactureYear}</span>}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Provider */}
+            {/* Vehicle & Trip Info */}
             <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-              <span className="text-slate-500">Nhà cung cấp (Provider):</span>
+              <span className="text-slate-500">Xe thuê:</span>
               <span className="font-semibold text-slate-800">
-                {booking?.providerName || booking?.provider?.displayName || 'Đối tác EcoMotion'}
+                {booking?.vehicle?.model || booking?.vehicleName || 'Xe điện VinFast'} •{' '}
+                <span className="font-mono text-slate-600 font-bold">{booking?.vehicle?.plateNumber || booking?.plateNumber || '—'}</span>
               </span>
             </div>
 
-            {/* Rental Duration */}
-            <div className="flex justify-between items-start border-b border-slate-200 pb-2 gap-3">
-              <span className="text-slate-500 shrink-0">Thời gian thuê:</span>
-              <div className="text-right space-y-0.5">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+              <span className="text-slate-500">Thời gian thuê:</span>
+              <div className="text-right">
                 <div>
-                  <span className="text-slate-400 text-[10px]">Nhận xe: </span>
-                  <strong className="text-slate-800">{formatDateTime(booking?.pickupTime || booking?.scheduledPickupAt)}</strong>
+                  <span className="text-slate-400 text-[10px]">Bắt đầu: </span>
+                  <strong className="text-slate-800">{formatDateTime(booking?.pickupTime || booking?.startTime)}</strong>
                 </div>
                 {booking?.endTime && (
                   <div>
@@ -702,9 +805,145 @@ export default function CustomerPaymentPage() {
               </div>
             </div>
           )}
+
+          {/* Alternative VietQR Direct Transfer Action */}
+          {selectedRequest && ['PENDING', 'PARTIALLY_PAID', 'REJECTED'].includes(selectedRequest.status) && !isDepositPaid && !isSettled && (
+            <div className="pt-2 border-t border-slate-100 text-center">
+              <button
+                type="button"
+                onClick={handleOpenProofModal}
+                disabled={requestExpired}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-white px-5 py-2.5 text-xs font-bold text-emerald-700 shadow-xs hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="receipt_long" className="text-base" />
+                Hoặc chuyển khoản trực tiếp & Gửi biên lai
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Submitted Evidences for VietQR Payment Request */}
+        {selectedRequest?.evidences?.length ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+            <h2 className="text-base font-bold text-slate-900">Bằng chứng đã gửi</h2>
+            <p className="mt-1 text-xs text-slate-500">Theo dõi trạng thái đối soát từng biên lai chuyển khoản.</p>
+            <div className="mt-4 space-y-3">
+              {selectedRequest.evidences.map((evidence) => {
+                const evidenceBadge = EVIDENCE_BADGES[evidence.status]
+                  || { label: evidence.status, bg: 'bg-slate-100 text-slate-700 border-slate-200' }
+                return (
+                  <article key={evidence.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row">
+                    <PaymentEvidenceImage evidence={evidence} alt={`Biên lai ${evidence.id}`} className="h-24 w-full shrink-0 rounded-lg border bg-slate-50 object-contain sm:w-32" />
+                    <div className="min-w-0 flex-1 text-xs text-slate-600">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <strong className="text-sm text-slate-900">{formatVnd(evidence.transferredAmount)}</strong>
+                        <span className={`rounded-full border px-2.5 py-1 font-semibold ${evidenceBadge.bg}`}>{evidenceBadge.label}</span>
+                      </div>
+                      <p className="mt-1">Đã chuyển: {formatDateTime(evidence.transferredAt)}</p>
+                      {evidence.transactionReference ? <p>Mã giao dịch: <span className="font-mono">{evidence.transactionReference}</span></p> : null}
+                      {evidence.note ? <p className="mt-1 text-slate-700">Ghi chú: {evidence.note}</p> : null}
+                      {evidence.reviewedAt ? <p>Đối soát: {formatDateTime(evidence.reviewedAt)}</p> : null}
+                      {evidence.status === 'REJECTED' && selectedRequest.rejectionReason
+                        ? <p className="mt-1 font-medium text-red-700">Lý do: {selectedRequest.rejectionReason}</p> : null}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        {/* Proof Submission Modal */}
+        {proofModalOpen && selectedRequest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900">Gửi bằng chứng chuyển khoản</h3>
+                <button
+                  type="button"
+                  onClick={() => setProofModalOpen(false)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+                >
+                  <Icon name="close" className="text-lg" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitProof} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700">Ảnh biên lai chuyển khoản *</label>
+                  <input
+                    type="file"
+                    required
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+                    className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden focus:ring-1 focus:ring-[#059669]"
+                  />
+                  <span className="text-[11px] text-slate-400">JPG, PNG hoặc WebP, tối đa 5 MB. {proofFile ? `Đã chọn: ${proofFile.name}` : ''}</span>
+                  {proofFile ? (
+                    <img
+                      src={proofPreviewUrl}
+                      alt="Xem trước chứng từ"
+                      className="mt-2 h-32 w-full rounded-lg border border-slate-200 object-contain bg-slate-50"
+                    />
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700">Số tiền thực tế đã chuyển (VND) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1000"
+                    value={transferredAmount}
+                    onChange={(e) => setTransferredAmount(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden focus:ring-1 focus:ring-[#059669]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng (Tùy chọn)</label>
+                  <input
+                    type="text"
+                    value={txRef}
+                    onChange={(e) => setTxRef(e.target.value)}
+                    placeholder="FT24..."
+                    className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden focus:ring-1 focus:ring-[#059669]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700">Ghi chú thêm (Tùy chọn)</label>
+                  <textarea
+                    rows={2}
+                    value={proofNote}
+                    onChange={(e) => setProofNote(e.target.value)}
+                    placeholder="Ví dụ: Đã chuyển từ tài khoản Techcombank..."
+                    className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden focus:ring-1 focus:ring-[#059669]"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setProofModalOpen(false)}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingProof || requestExpired}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#059669] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#047857] disabled:opacity-50"
+                  >
+                    {submittingProof ? <Icon name="sync" className="animate-spin text-sm" /> : <Icon name="send" className="text-sm" />}
+                    Xác nhận đã chuyển
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
 }
-

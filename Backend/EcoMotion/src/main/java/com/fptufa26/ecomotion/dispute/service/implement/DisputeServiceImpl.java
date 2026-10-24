@@ -3,7 +3,7 @@ package com.fptufa26.ecomotion.dispute.service.implement;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.service.BookingService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
@@ -14,11 +14,10 @@ import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
-import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,14 +28,23 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 public class DisputeServiceImpl implements DisputeService {
 
     private final DisputeRepository disputeRepository;
-    private final UserRepository userRepository;
-    private final BookingRepository bookingRepository;
-    private final PaymentRequestRepository paymentRequestRepository;
+    private final UserService userService;
+    private final BookingService bookingService;
     private final PaymentRequestService paymentRequestService;
+
+    public DisputeServiceImpl(
+            DisputeRepository disputeRepository,
+            UserService userService,
+            @org.springframework.context.annotation.Lazy BookingService bookingService,
+            PaymentRequestService paymentRequestService) {
+        this.disputeRepository = disputeRepository;
+        this.userService = userService;
+        this.bookingService = bookingService;
+        this.paymentRequestService = paymentRequestService;
+    }
 
     @Override
     @Transactional
@@ -94,7 +102,7 @@ public class DisputeServiceImpl implements DisputeService {
         }
 
         if (adminUserId != null) {
-            User admin = userRepository.findById(adminUserId).orElse(null);
+            User admin = userService.findById(adminUserId).orElse(null);
             dispute.setHandledBy(admin);
         }
 
@@ -111,8 +119,8 @@ public class DisputeServiceImpl implements DisputeService {
         BookingCharge charge = Optional.ofNullable(dispute.getCharge())
                 .orElseThrow(() -> new ConflictException("Tranh chấp không liên kết với phụ phí"));
         Booking booking = dispute.getBooking();
-        Optional<PaymentRequest> finalRequest = paymentRequestRepository
-                .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
+        Optional<PaymentRequest> finalRequest = paymentRequestService
+                .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
         finalRequest.ifPresent(request -> {
             if (request.getStatus() == PaymentRequestStatus.CONFIRMED
                     || request.getPaidAmount().signum() > 0) {
@@ -139,8 +147,9 @@ public class DisputeServiceImpl implements DisputeService {
                 request.setStatus(PaymentRequestStatus.PENDING);
                 booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
             }
+            paymentRequestService.savePaymentRequest(request);
         });
-        bookingRepository.save(booking);
+        bookingService.saveBooking(booking);
     }
 
     @Override
