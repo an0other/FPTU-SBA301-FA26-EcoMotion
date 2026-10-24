@@ -12,7 +12,12 @@ import com.fptufa26.ecomotion.auth.exception.ActivationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.NoPendingActivationException;
 import com.fptufa26.ecomotion.auth.exception.PhoneAlreadyExistsException;
 import com.fptufa26.ecomotion.auth.service.ActivationService;
-import com.fptufa26.ecomotion.auth.service.OtpService;
+import com.fptufa26.ecomotion.otp.service.OtpService;
+import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
+import com.fptufa26.ecomotion.otp.dto.request.OtpSendRequest;
+import com.fptufa26.ecomotion.otp.dto.request.OtpVerifyRequest;
+import com.fptufa26.ecomotion.otp.dto.response.OtpChallenge;
+import com.fptufa26.ecomotion.otp.enums.OtpPurpose;
 import com.fptufa26.ecomotion.auth.service.TokenService;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
@@ -43,8 +48,11 @@ public class ActivationServiceImpl implements ActivationService {
             throw new PhoneAlreadyExistsException();
         }
 
-        OtpService.PhoneOtpChallenge challenge =
-                otpService.sendPhone(String.valueOf(user.getUserId()), phone);
+        OtpChallenge challenge = otpService.send(new OtpSendRequest(
+                String.valueOf(user.getUserId()),
+                phone,
+                OtpPurpose.PHONE_VERIFICATION,
+                NotificationChannel.SMS));
         return new SendPhoneOtpResponse(
                 true, challenge.code(), challenge.expiresInSeconds(), challenge.resendCooldownSeconds());
     }
@@ -54,7 +62,10 @@ public class ActivationServiceImpl implements ActivationService {
         User user = resolve(request.activationToken());
         requirePending(user);
 
-        String phone = otpService.verifyPhone(String.valueOf(user.getUserId()), request.otp());
+        String phone = otpService.verify(new OtpVerifyRequest(
+                String.valueOf(user.getUserId()),
+                request.otp(),
+                OtpPurpose.PHONE_VERIFICATION)).recipient();
         userService.assignPhone(user.getUserId(), phone);
         return new VerifyPhoneOtpResponse(true, phone);
     }
@@ -82,7 +93,11 @@ public class ActivationServiceImpl implements ActivationService {
     @Override
     public SendOtpResponse requestResumeOtp(String email) {
         User user = findResumableUser(email);
-        OtpService.OtpChallenge challenge = otpService.send(user.getEmail());
+        OtpChallenge challenge = otpService.send(new OtpSendRequest(
+                user.getEmail(),
+                user.getEmail(),
+                OtpPurpose.ACTIVATION_RESUME,
+                NotificationChannel.EMAIL));
         String exposed = exposeOtpInResponse ? challenge.code() : null;
         return new SendOtpResponse(
                 true, challenge.expiresInSeconds(), challenge.resendCooldownSeconds(), exposed);
@@ -90,7 +105,7 @@ public class ActivationServiceImpl implements ActivationService {
 
     @Override
     public ResumeActivationResponse resume(String email, String otp) {
-        otpService.verify(email, otp);
+        otpService.verify(new OtpVerifyRequest(email, otp, OtpPurpose.ACTIVATION_RESUME));
 
         User user = findResumableUser(email);
         String activationToken = tokenService.issueActivation(user.getUserId(), user.getEmail(), user.getRole());

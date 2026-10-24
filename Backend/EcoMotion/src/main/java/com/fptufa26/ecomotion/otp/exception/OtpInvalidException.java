@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.auth.exception;
+package com.fptufa26.ecomotion.otp.exception;
 
 public class OtpInvalidException extends RuntimeException {
 

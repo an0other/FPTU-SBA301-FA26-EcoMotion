@@ -758,6 +758,18 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Booking> findByBookingCode(String bookingCode) {
+        return bookingRepository.findByBookingCode(bookingCode);
+    }
+
+    @Override
+    @Transactional
+    public Booking saveBooking(Booking booking) {
+        return bookingRepository.save(booking);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public BigDecimal sumTotalRevenue() {
         return paymentTransactionRepository.sumTotalPaidIn();
     }
