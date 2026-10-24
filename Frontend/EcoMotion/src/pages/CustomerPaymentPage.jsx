@@ -77,8 +77,40 @@ export default function CustomerPaymentPage() {
   }, [bookingId])
 
   useEffect(() => {
-    fetchBooking()
-  }, [fetchBooking])
+    let ignore = false
+    if (!bookingId) return undefined
+    const fetchFn = getMyBooking || bookingService.getMyBooking || bookingService.getBookingDetail
+    fetchFn(bookingId)
+      .then(async (data) => {
+        if (ignore) return
+        setBooking(data)
+        if (data?.status === 'AWAITING_FINAL_PAYMENT') {
+          try {
+            const sett = await paymentService.getSettlement(data.bookingCode || bookingId)
+            if (!ignore) setSettlement(sett)
+          } catch (settErr) {
+            console.warn('Failed to load settlement details:', settErr)
+          }
+        }
+      })
+      .catch((err) => {
+        if (ignore) return
+        const status = err?.status || err?.original?.response?.status || err?.response?.status
+        const message =
+          err?.response?.data?.message ||
+          err?.original?.response?.data?.message ||
+          err?.message ||
+          'Không thể tải thông tin đơn thuê.'
+        setFetchError({ status, message })
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [bookingId])
 
   const isFinalPayment = booking?.status === 'AWAITING_FINAL_PAYMENT'
 
