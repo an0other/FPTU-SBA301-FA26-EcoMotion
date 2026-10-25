@@ -11,10 +11,7 @@ import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
-import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
-import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
-import com.fptufa26.ecomotion.booking.repository.BookingRepository;
-import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
+import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
@@ -49,12 +46,11 @@ import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.Role;
-import com.fptufa26.ecomotion.user.repository.ProviderRepository;
-import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
@@ -96,14 +92,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private final PaymentEvidenceRepository paymentEvidenceRepository;
     private final FileStorageService fileStorageService;
     private final ProviderBankAccountRepository providerBankAccountRepository;
-    private final PaymentTransactionRepository paymentTransactionRepository;
-    private final BookingRepository bookingRepository;
-    private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
-    private final BookingChargeRepository bookingChargeRepository;
-    private final VehicleRepository vehicleRepository;
+    private final BookingQueryService bookingQueryService;
+    private final VehicleService vehicleService;
     private final ScheduleService scheduleService;
-    private final ProviderRepository providerRepository;
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final Clock clock;
     private final Environment environment;
 
@@ -162,7 +154,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     @Override
     @Transactional
     public PaymentRequest createFinalBalancePaymentRequest(Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingQueryService.findBookingById(bookingId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy đơn thuê #" + bookingId));
 
         // Check if FINAL_BALANCE request already exists
@@ -209,7 +201,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     public List<PaymentRequestResponse> getPaymentRequestsByBooking(Long bookingId, Long currentUserId) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingQueryService.findBookingById(bookingId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy đơn thuê #" + bookingId));
 
         validateAccessToBooking(booking, currentUserId);
@@ -236,7 +228,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
-        User user = userRepository.findById(currentUserId)
+        User user = userService.findById(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng không tồn tại"));
 
         // Only the renter of this booking can submit proof
@@ -400,12 +392,12 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     public List<ProviderTransactionResponse> getBookingPaymentHistory(Long bookingId, Long currentUserId) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingQueryService.findBookingById(bookingId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy đơn thuê #" + bookingId));
 
         validateAccessToBooking(booking, currentUserId);
 
-        List<PaymentTransaction> transactions = paymentTransactionRepository.findByBooking_IdOrderByCreatedAtAsc(bookingId);
+        List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingIdOrderByCreatedAtAsc(bookingId);
         return transactions.stream()
                 .map(this::toTransactionResponse)
                 .toList();
@@ -467,7 +459,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 ? request.bankTransactionRef().trim()
                 : pr.getTransferReference() + "-" + System.currentTimeMillis();
 
-        if (paymentTransactionRepository.existsByGatewayRef(bankRef)) {
+        if (bookingQueryService.existsTransactionByGatewayRef(bankRef)) {
             throw new BankAccountConflictException("Mã tham chiếu ngân hàng '" + bankRef + "' đã tồn tại trên hệ thống");
         }
 
@@ -503,11 +495,11 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                     throw new InvalidPaymentOperationException("Đơn thuê chưa ở bước thanh toán quyết toán");
                 }
                 booking.setStatus(BookingStatus.COMPLETED);
-                bookingRepository.save(booking);
+                bookingQueryService.saveBooking(booking);
             }
         }
 
-        paymentTransactionRepository.save(tx);
+        bookingQueryService.saveTransaction(tx);
 
         pr.setPaidAmount(newPaidTotal);
         pr.setConfirmedBy(provider.getUser());
@@ -601,7 +593,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         // Enforce Sandbox restrictions
         validateSandboxEnvironment();
 
-        User admin = userRepository.findById(adminUserId)
+        User admin = userService.findById(adminUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng quản trị không tồn tại"));
 
         PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
@@ -638,7 +630,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setBankNameSnapshot(pr.getBankNameSnapshot());
                 tx.setBankAccountNoSnapshot(maskAccountNumber(pr.getAccountNumberSnapshot()));
                 tx.setBankAccountHolderSnapshot(pr.getAccountHolderSnapshot());
-                PaymentTransaction savedTx = paymentTransactionRepository.save(tx);
+                PaymentTransaction savedTx = bookingQueryService.saveTransaction(tx);
 
                 pr.setPaidAmount(amount);
                 pr.setStatus(PaymentRequestStatus.CONFIRMED);
@@ -649,7 +641,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 Booking booking = pr.getBooking();
                 if (pr.getPaymentType() == PaymentRequestType.DEPOSIT && booking.getStatus() == BookingStatus.ACCEPTED) {
                     booking.setStatus(BookingStatus.CONFIRMED);
-                    bookingRepository.save(booking);
+                    bookingQueryService.saveBooking(booking);
                 }
                 paymentRequestRepository.save(pr);
 
@@ -670,7 +662,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
                 tx.setConfirmedBy(admin);
                 tx.setPaymentRequest(pr);
-                PaymentTransaction savedTx = paymentTransactionRepository.save(tx);
+                PaymentTransaction savedTx = bookingQueryService.saveTransaction(tx);
 
                 pr.setPaidAmount(half);
                 pr.setStatus(PaymentRequestStatus.PARTIALLY_PAID);
@@ -694,7 +686,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
                 tx.setConfirmedBy(admin);
                 tx.setPaymentRequest(pr);
-                PaymentTransaction savedTx = paymentTransactionRepository.save(tx);
+                PaymentTransaction savedTx = bookingQueryService.saveTransaction(tx);
 
                 pr.setPaidAmount(extra);
                 pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
@@ -713,7 +705,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             }
 
             case "DUPLICATE": {
-                if (paymentTransactionRepository.existsByGatewayRef(ref)) {
+                if (bookingQueryService.existsTransactionByGatewayRef(ref)) {
                     throw new BankAccountConflictException("Mã giao dịch mô phỏng đã bị trùng lặp: " + ref);
                 }
                 // Save one transaction then throw conflict
@@ -727,7 +719,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setPaidAt(clock.instant());
                 tx.setGatewayRef(ref);
                 tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
-                paymentTransactionRepository.save(tx);
+                bookingQueryService.saveTransaction(tx);
 
                 throw new BankAccountConflictException("Mô phỏng phát hiện mã tham chiếu trùng lặp: " + ref);
             }
@@ -766,14 +758,14 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     public void seedSandboxData(Long adminUserId) {
         validateSandboxEnvironment();
 
-        List<Provider> providers = providerRepository.findAll();
+        List<Provider> providers = userService.findAllProviders();
         for (Provider provider : providers) {
             if (provider.getBankAccountNo() == null || provider.getBankAccountNo().isBlank()) {
                 provider.setBankCode("VCB");
                 provider.setBankName("Vietcombank");
                 provider.setBankAccountNo("0123456789");
                 provider.setBankAccountHolder(provider.getDisplayName() != null ? provider.getDisplayName().toUpperCase(Locale.ROOT) : "ECO PROVIDER");
-                providerRepository.save(provider);
+                userService.saveProvider(provider);
             }
 
             if (!providerBankAccountRepository.existsByProvider_IdAndStatus(provider.getId(), BankAccountStatus.ACTIVE)) {
@@ -801,7 +793,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     }
 
     private Provider resolveProvider(Long currentUserId) {
-        return providerRepository.findByUser_Id(currentUserId)
+        return userService.findProviderProfile(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng hiện tại không có hồ sơ nhà cung cấp"));
     }
 
@@ -837,14 +829,14 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new InvalidPaymentOperationException("Đơn thuê không còn ở trạng thái chờ xác nhận cọc");
         }
 
-        Vehicle lockedVehicle = vehicleRepository.findByIdForUpdate(booking.getVehicle().getId())
+        Vehicle lockedVehicle = vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId())
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy xe của đơn thuê"));
-        BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
+        BookingPolicySnapshot snapshot = bookingQueryService.findPolicySnapshotByBookingId(booking.getId())
                 .orElse(null);
         int slotLengthMinutes = snapshot != null
                 ? snapshot.getSlotLengthMinutes()
                 : booking.getPlan().getSlotLengthMinutes();
-        int slots = bookingChargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
+        int slots = bookingQueryService.findChargeByBookingIdAndType(booking.getId(), ChargeType.BASE_RENTAL)
                 .map(BookingCharge::getQuantity)
                 .orElse(1);
         Instant end = booking.getPickupTime().plus(
@@ -856,8 +848,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new ConflictException("Xe vừa được khóa bởi lịch khác; chưa thể xác nhận khoản cọc");
         }
 
-        BookingCharge deposit = bookingChargeRepository
-                .findByBooking_IdAndChargeType(booking.getId(), ChargeType.DEPOSIT)
+        BookingCharge deposit = bookingQueryService
+                .findChargeByBookingIdAndType(booking.getId(), ChargeType.DEPOSIT)
                 .orElseGet(() -> {
                     BookingCharge charge = new BookingCharge();
                     charge.setBooking(booking);
@@ -870,19 +862,19 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                     charge.setAmount(transaction.getPaymentRequest().getAmount());
                     charge.setCreatedBy(booking.getRenter().getUser());
                     charge.setWaived(false);
-                    return bookingChargeRepository.save(charge);
+                    return bookingQueryService.saveCharge(charge);
                 });
 
         transaction.setCharge(deposit);
         scheduleService.book(lockedVehicle, booking, booking.getPickupTime(), end);
         booking.setStatus(BookingStatus.CONFIRMED);
-        bookingRepository.save(booking);
+        bookingQueryService.saveBooking(booking);
         log.info("Booking {} transitioned to CONFIRMED and its schedule was locked after DEPOSIT confirmation",
                 booking.getBookingCode());
     }
 
     private BigDecimal calculateDepositAmount(Booking booking) {
-        BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
+        BookingPolicySnapshot snapshot = bookingQueryService.findPolicySnapshotByBookingId(booking.getId()).orElse(null);
         PlanType planType = snapshot != null ? snapshot.getPlanType() : booking.getPlan().getPlanType();
         BigDecimal upfrontAmount = snapshot != null
                 ? snapshot.getUpfrontAmount()
@@ -905,7 +897,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     public BigDecimal calculateRemainingAmount(Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingQueryService.findBookingById(bookingId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy đơn thuê #" + bookingId));
         return calculateRemainingAmount(booking);
     }
@@ -913,7 +905,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private BigDecimal calculateRemainingAmount(Booking booking) {
         BigDecimal baseRental = booking.getTotalAmount() != null ? booking.getTotalAmount() : BigDecimal.ZERO;
 
-        List<BookingCharge> charges = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId());
+        List<BookingCharge> charges = bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(booking.getId());
         BigDecimal approvedCharges = charges.stream()
                 .filter(c -> !c.isWaived()
                         && c.getChargeType() != ChargeType.DEPOSIT
@@ -923,7 +915,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         BigDecimal totalPayable = baseRental.add(approvedCharges).max(BigDecimal.ZERO);
 
-        List<PaymentTransaction> transactions = paymentTransactionRepository.findByBooking_Id(booking.getId());
+        List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingId(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .map(PaymentTransaction::getAmount)
@@ -939,7 +931,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     }
 
     private void validateAccessToBooking(Booking booking, Long currentUserId) {
-        User user = userRepository.findById(currentUserId)
+        User user = userService.findById(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng không tồn tại"));
 
         if (user.getRole() == Role.ADMIN) {

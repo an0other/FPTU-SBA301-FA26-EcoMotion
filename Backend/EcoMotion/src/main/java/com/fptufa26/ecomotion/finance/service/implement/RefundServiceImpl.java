@@ -6,8 +6,7 @@ import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
-import com.fptufa26.ecomotion.booking.repository.BookingRepository;
-import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
+import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest;
 import com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest;
@@ -18,10 +17,9 @@ import com.fptufa26.ecomotion.finance.exception.InvalidPaymentOperationException
 import com.fptufa26.ecomotion.finance.repository.RefundRequestRepository;
 import com.fptufa26.ecomotion.finance.service.RefundService;
 import com.fptufa26.ecomotion.user.entity.Provider;
-import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.Role;
-import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -39,19 +37,17 @@ import java.util.List;
 public class RefundServiceImpl implements RefundService {
 
     private final RefundRequestRepository refundRequestRepository;
-    private final BookingRepository bookingRepository;
-    private final PaymentTransactionRepository paymentTransactionRepository;
-    private final UserRepository userRepository;
-    private final ProviderRepository providerRepository;
+    private final BookingQueryService bookingQueryService;
+    private final UserService userService;
     private final Clock clock;
 
     @Override
     @Transactional
     public RefundResponse createRefundRequest(Long currentUserId, CreateRefundRequest request) {
-        User user = userRepository.findById(currentUserId)
+        User user = userService.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
-        Booking booking = bookingRepository.findByBookingCode(request.bookingCode())
+        Booking booking = bookingQueryService.findBookingByCode(request.bookingCode())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn thuê: " + request.bookingCode()));
 
         boolean isRenter = booking.getRenter().getUser().getId().equals(currentUserId);
@@ -62,7 +58,7 @@ public class RefundServiceImpl implements RefundService {
             throw new AccessDeniedException("Bạn không có quyền yêu cầu hoàn tiền cho đơn thuê này");
         }
 
-        List<PaymentTransaction> incomingPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+        List<PaymentTransaction> incomingPaid = bookingQueryService.findTransactionsByBookingId(booking.getId()).stream()
                 .filter(tx -> tx.getStatus() == PaymentStatus.PAID && tx.getDirection() == PaymentDirection.IN)
                 .toList();
 
@@ -102,7 +98,7 @@ public class RefundServiceImpl implements RefundService {
     @Override
     @Transactional
     public RefundResponse reviewRefundRequest(Long currentUserId, Long refundRequestId, ReviewRefundRequest request) {
-        User reviewer = userRepository.findById(currentUserId)
+        User reviewer = userService.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         RefundRequest refund = refundRequestRepository.findById(refundRequestId)
@@ -141,7 +137,7 @@ public class RefundServiceImpl implements RefundService {
             refundTx.setConfirmedBy(reviewer);
             refundTx.setCreatedAt(now);
             refundTx.setUpdatedAt(now);
-            PaymentTransaction savedTx = paymentTransactionRepository.save(refundTx);
+            PaymentTransaction savedTx = bookingQueryService.saveTransaction(refundTx);
 
             refund.setPaymentTransaction(savedTx);
             refund.setGatewayRefundRef(gatewayRef);
@@ -172,7 +168,7 @@ public class RefundServiceImpl implements RefundService {
     @Override
     @Transactional(readOnly = true)
     public List<RefundResponse> listRefundsForProvider(Long currentUserId) {
-        Provider provider = providerRepository.findByUser_Id(currentUserId)
+        Provider provider = userService.findProviderProfile(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng không phải là nhà cung cấp hợp lệ"));
 
         return refundRequestRepository.findByBooking_Vehicle_Provider_IdOrderByCreatedAtDesc(provider.getId()).stream()
@@ -183,11 +179,11 @@ public class RefundServiceImpl implements RefundService {
     private Booking resolveBooking(String bookingCodeOrId) {
         try {
             Long id = Long.parseLong(bookingCodeOrId);
-            return bookingRepository.findById(id)
-                    .or(() -> bookingRepository.findByBookingCode(bookingCodeOrId))
+            return bookingQueryService.findBookingById(id)
+                    .or(() -> bookingQueryService.findBookingByCode(bookingCodeOrId))
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn thuê: " + bookingCodeOrId));
         } catch (NumberFormatException e) {
-            return bookingRepository.findByBookingCode(bookingCodeOrId)
+            return bookingQueryService.findBookingByCode(bookingCodeOrId)
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn thuê: " + bookingCodeOrId));
         }
     }

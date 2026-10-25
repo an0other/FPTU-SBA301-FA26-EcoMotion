@@ -11,10 +11,7 @@ import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
-import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
-import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
-import com.fptufa26.ecomotion.booking.repository.BookingRepository;
-import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
+import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.finance.dto.request.CreateBankAccountRequest;
 import com.fptufa26.ecomotion.finance.dto.request.PatchBankAccountRequest;
@@ -47,7 +44,7 @@ import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.finance.service.ProviderFinanceService;
 import com.fptufa26.ecomotion.user.entity.Provider;
-import com.fptufa26.ecomotion.user.repository.ProviderRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -79,13 +76,10 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     private static final Pattern ACCOUNT_HOLDER_PATTERN = Pattern.compile("^[a-zA-ZÀ-ỹA-Z0-9\\s.'-]+$");
     private static final String DEFAULT_CURRENCY = "VND";
 
-    private final ProviderRepository providerRepository;
+    private final UserService userService;
     private final ProviderBankAccountRepository providerBankAccountRepository;
-    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final BookingQueryService bookingQueryService;
     private final PaymentRequestRepository paymentRequestRepository;
-    private final BookingRepository bookingRepository;
-    private final BookingChargeRepository bookingChargeRepository;
-    private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
 
     @Override
     public ProviderBankAccountResponse getBankAccount(Long currentUserId) {
@@ -170,7 +164,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         provider.setBankName(bank.getShortName());
         provider.setBankAccountNo(cleanNumber);
         provider.setBankAccountHolder(cleanHolder);
-        providerRepository.save(provider);
+        userService.saveProvider(provider);
 
         log.info("Provider {} created active bank account #{} ({})", provider.getId(), saved.getId(), bank.getCode());
         return toBankAccountResponse(saved, true);
@@ -234,7 +228,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
             provider.setBankName(saved.getBankName());
             provider.setBankAccountNo(saved.getAccountNumber());
             provider.setBankAccountHolder(saved.getAccountHolderName());
-            providerRepository.save(provider);
+            userService.saveProvider(provider);
         }
 
         log.info("Provider {} patched bank account #{}", provider.getId(), saved.getId());
@@ -255,7 +249,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         Long providerId = provider.getId();
 
         // 1. Confirmed incoming payments
-        List<PaymentTransaction> allTx = paymentTransactionRepository.findByBooking_Vehicle_Provider_Id(providerId);
+        List<PaymentTransaction> allTx = bookingQueryService.findTransactionsByProviderId(providerId);
         BigDecimal confirmedIncoming = allTx.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .map(PaymentTransaction::getAmount)
@@ -279,10 +273,10 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 4. Approved Surcharges across bookings
-        List<Booking> providerBookings = bookingRepository.findByVehicle_Provider_Id(providerId, Pageable.unpaged()).getContent();
+        List<Booking> providerBookings = bookingQueryService.findBookingsByProviderId(providerId);
         BigDecimal approvedSurcharges = BigDecimal.ZERO;
         for (Booking b : providerBookings) {
-            List<BookingCharge> charges = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(b.getId());
+            List<BookingCharge> charges = bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(b.getId());
             BigDecimal bookingCharges = charges.stream()
                     .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.DEPOSIT)
                     .map(BookingCharge::getAmount)
@@ -325,9 +319,9 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         Page<PaymentTransaction> page;
         if (filterType != null) {
-            page = paymentTransactionRepository.findByBooking_Vehicle_Provider_IdAndType(provider.getId(), filterType, pageable);
+            page = bookingQueryService.findTransactionsByProviderIdAndType(provider.getId(), filterType, pageable);
         } else {
-            page = paymentTransactionRepository.findByBooking_Vehicle_Provider_Id(provider.getId(), pageable);
+            page = bookingQueryService.findTransactionsByProviderId(provider.getId(), pageable);
         }
 
         List<ProviderTransactionResponse> items = page.getContent().stream()
@@ -345,7 +339,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         BigDecimal baseRental = booking.getTotalAmount() != null ? booking.getTotalAmount() : BigDecimal.ZERO;
 
-        BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
+        BookingPolicySnapshot snapshot = bookingQueryService.findPolicySnapshotByBookingId(booking.getId()).orElse(null);
         BigDecimal depositRatio = snapshot != null && snapshot.getDepositRatio() != null
                 ? snapshot.getDepositRatio()
                 : (provider.getDepositRatio() != null ? provider.getDepositRatio() : new BigDecimal("0.3000"));
@@ -354,7 +348,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 ? snapshot.getUpfrontAmount()
                 : baseRental.multiply(depositRatio).setScale(0, RoundingMode.HALF_UP);
 
-        List<BookingCharge> charges = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId());
+        List<BookingCharge> charges = bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(booking.getId());
         BigDecimal approvedCharges = charges.stream()
                 .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.DEPOSIT)
                 .map(BookingCharge::getAmount)
@@ -367,7 +361,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         BigDecimal totalPayable = baseRental.add(approvedCharges).subtract(approvedReductions).max(BigDecimal.ZERO);
 
-        List<PaymentTransaction> transactions = paymentTransactionRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId());
+        List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingIdOrderByCreatedAtAsc(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .map(PaymentTransaction::getAmount)
@@ -424,8 +418,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         Provider provider = resolveProvider(currentUserId);
         BigDecimal rate = provider.getCommissionRate() != null ? provider.getCommissionRate() : BigDecimal.ZERO;
 
-        List<Booking> completedBookings = bookingRepository.findByVehicle_Provider_Id(provider.getId(), Pageable.unpaged())
-                .getContent().stream()
+        List<Booking> completedBookings = bookingQueryService.findBookingsByProviderId(provider.getId()).stream()
                 .filter(b -> b.getStatus() == BookingStatus.COMPLETED)
                 .toList();
 
@@ -434,7 +427,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         for (Booking b : completedBookings) {
             BigDecimal base = b.getTotalAmount() != null ? b.getTotalAmount() : BigDecimal.ZERO;
-            List<PaymentTransaction> txList = paymentTransactionRepository.findByBooking_Id(b.getId());
+            List<PaymentTransaction> txList = bookingQueryService.findTransactionsByBookingId(b.getId());
             BigDecimal confirmedRev = txList.stream()
                     .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                     .map(PaymentTransaction::getAmount)
@@ -480,10 +473,10 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         Page<PaymentTransaction> page;
         if (filterStatus != null) {
-            page = paymentTransactionRepository.findByBooking_Vehicle_Provider_IdAndTypeAndStatus(
+            page = bookingQueryService.findTransactionsByProviderIdAndTypeAndStatus(
                     provider.getId(), PaymentType.PAYOUT, filterStatus, pageable);
         } else {
-            page = paymentTransactionRepository.findByBooking_Vehicle_Provider_IdAndType(
+            page = bookingQueryService.findTransactionsByProviderIdAndType(
                     provider.getId(), PaymentType.PAYOUT, pageable);
         }
 
@@ -499,7 +492,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     public ProviderPayoutDetailResponse getPayoutDetail(Long currentUserId, Long payoutId) {
         Provider provider = resolveProvider(currentUserId);
 
-        PaymentTransaction pt = paymentTransactionRepository.findByIdAndBooking_Vehicle_Provider_Id(payoutId, provider.getId())
+        PaymentTransaction pt = bookingQueryService.findTransactionByIdAndProviderId(payoutId, provider.getId())
                 .filter(tx -> tx.getType() == PaymentType.PAYOUT)
                 .orElseThrow(() -> new PayoutNotFoundException("Không tìm thấy thông tin chi trả #" + payoutId));
 
@@ -509,14 +502,14 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     @Override
     @Transactional
     public PaymentTransaction createMockPayout(Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingQueryService.findBookingById(bookingId)
                 .orElseThrow(() -> new PayoutIneligibleException("Không tìm thấy đơn thuê #" + bookingId));
 
         if (booking.getStatus() != BookingStatus.COMPLETED) {
             throw new PayoutIneligibleException("Chỉ đơn thuê đã hoàn tất (COMPLETED) mới đủ điều kiện quyết toán chi trả");
         }
 
-        boolean hasSuccessfulCustomerPayment = paymentTransactionRepository.findByBooking_Id(bookingId).stream()
+        boolean hasSuccessfulCustomerPayment = bookingQueryService.findTransactionsByBookingId(bookingId).stream()
                 .anyMatch(tx -> tx.getStatus() == PaymentStatus.PAID
                         && (tx.getType() == PaymentType.DEPOSIT_PAY
                         || tx.getType() == PaymentType.UPFRONT_PAY
@@ -531,8 +524,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
             throw new PayoutIneligibleException("Nhà cung cấp chưa cấu hình tài khoản ngân hàng nhận tiền");
         }
 
-        if (paymentTransactionRepository.existsByBooking_IdAndType(bookingId, PaymentType.PAYOUT)) {
-            return paymentTransactionRepository.findByBooking_IdAndType(bookingId, PaymentType.PAYOUT).orElseThrow();
+        if (bookingQueryService.existsTransactionByBookingIdAndType(bookingId, PaymentType.PAYOUT)) {
+            return bookingQueryService.findTransactionByBookingIdAndType(bookingId, PaymentType.PAYOUT).orElseThrow();
         }
 
         BigDecimal grossAmount = calculateGrossAmount(booking);
@@ -568,7 +561,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         payout.setBankAccountNoSnapshot(maskAccountNumber(provider.getBankAccountNo()));
         payout.setBankAccountHolderSnapshot(provider.getBankAccountHolder());
 
-        return paymentTransactionRepository.save(payout);
+        return bookingQueryService.saveTransaction(payout);
     }
 
     // ==========================================
@@ -576,17 +569,17 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     // ==========================================
 
     private Provider resolveProvider(Long currentUserId) {
-        return providerRepository.findByUser_Id(currentUserId)
+        return userService.findProviderProfile(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng hiện tại không có hồ sơ nhà cung cấp"));
     }
 
     private Booking resolveBooking(Provider provider, String bookingCodeOrId) {
         if (bookingCodeOrId.matches("^\\d+$")) {
             Long id = Long.valueOf(bookingCodeOrId);
-            return bookingRepository.findByIdAndVehicle_Provider_Id(id, provider.getId())
+            return bookingQueryService.findBookingByIdAndProviderId(id, provider.getId())
                     .orElseThrow(() -> new AccessDeniedException("Không tìm thấy đơn thuê hoặc bạn không có quyền truy cập"));
         } else {
-            return bookingRepository.findByBookingCodeAndVehicle_Provider_Id(bookingCodeOrId, provider.getId())
+            return bookingQueryService.findBookingByCodeAndProviderId(bookingCodeOrId, provider.getId())
                     .orElseThrow(() -> new AccessDeniedException("Không tìm thấy đơn thuê hoặc bạn không có quyền truy cập"));
         }
     }
@@ -796,7 +789,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     }
 
     private BigDecimal calculateGrossAmount(Booking booking) {
-        List<BookingCharge> charges = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId());
+        List<BookingCharge> charges = bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(booking.getId());
         BigDecimal sum = charges.stream()
                 .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.DEPOSIT)
                 .map(BookingCharge::getAmount)
