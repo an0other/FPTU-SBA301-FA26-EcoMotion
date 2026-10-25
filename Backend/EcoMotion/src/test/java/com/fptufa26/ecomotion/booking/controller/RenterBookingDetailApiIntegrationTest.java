@@ -262,12 +262,12 @@ class RenterBookingDetailApiIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
                 .andExpect(jsonPath("$.data.completed").value(false));
 
-        String code = createBooking(token, "DAILY", 1, "2026-11-02T01:00:00Z");
+        String code = createBooking(token, "DAILY", 1, "2026-11-03T01:00:00Z");
         accept(code);
         checkout(token, code, "CASH");
         Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
         booking.setStatus(BookingStatus.IN_PROGRESS);
-        booking.setProviderConfirmedAt(Instant.parse("2026-11-03T01:00:00Z"));
+        booking.setProviderConfirmedAt(Instant.parse("2026-11-04T01:00:00Z"));
         bookingRepository.saveAndFlush(booking);
 
         mockMvc.perform(post("/api/renter/bookings/" + code + "/confirm-end")

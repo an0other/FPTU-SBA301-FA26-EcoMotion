@@ -46,7 +46,7 @@ import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus;
-import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.Renter;
@@ -99,7 +99,7 @@ public class BookingServiceImpl implements BookingService {
     private final VehicleCatalogService vehicleCatalogService;
     private final ScheduleService scheduleService;
     private final DisputeService disputeService;
-    private final PaymentRequestRepository paymentRequestRepository;
+    private final PaymentRequestService paymentRequestService;
 
     private static final Set<BookingStatus> CANCELLABLE = EnumSet.of(
             BookingStatus.PENDING,
@@ -126,24 +126,24 @@ public class BookingServiceImpl implements BookingService {
                 ? vehicle.getSeatCount()
                 : vehicle.getSeatCount() - 1;
         if (passengerLimit < 1 || request.passengerCount() > passengerLimit) {
-            throw new ConflictException("Passenger count exceeds seat count");
+            throw new ConflictException("Số lượng hành khách vượt quá số chỗ ngồi khả dụng của xe (tối đa " + passengerLimit + " khách)");
         }
 
         Instant start = request.pickupTime();
         if (!start.isAfter(Instant.now())) {
-            throw new ConflictException("Pickup time must be in the future");
+            throw new ConflictException("Thời gian đón phải ở tương lai");
         }
         Instant end = start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
         if (!end.isAfter(start)) {
-            throw new ConflictException("Rental range is empty");
+            throw new ConflictException("Khoảng thời gian thuê không hợp lệ");
         }
         // Apply buffer for vehicle preparation time between bookings
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, end);
         if (!scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
-            throw new ConflictException("Vehicle is not free in the selected range (including maintenance buffer)");
+            throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn (bao gồm thời gian dọn xe giữa các chuyến). Vui lòng chọn xe khác hoặc khung giờ khác.");
         }
         if (renterOverlaps(renter.getId(), start, end)) {
-            throw new ConflictException("Renter already has a booking in the selected range");
+            throw new ConflictException("Bạn đang có một đơn đặt xe khác trùng khung giờ này. Vui lòng kiểm tra lại đơn của bạn.");
         }
 
         BigDecimal total = plan.getSlotPrice().multiply(BigDecimal.valueOf(request.slotCount()));
@@ -245,11 +245,11 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Booking request details can no longer be edited");
         }
         if (!request.pickupTime().isAfter(Instant.now())) {
-            throw new ConflictException("Pickup time must be in the future");
+            throw new ConflictException("Thời gian đón phải ở tương lai");
         }
         int passengerLimit = Math.max(0, booking.getVehicle().getSeatCount() - 1);
         if (request.passengerCount() > passengerLimit) {
-            throw new ConflictException("Passenger count exceeds seat count");
+            throw new ConflictException("Số lượng hành khách vượt quá số chỗ ngồi khả dụng của xe (tối đa " + passengerLimit + " khách)");
         }
 
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
@@ -259,10 +259,10 @@ public class BookingServiceImpl implements BookingService {
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
                 booking.getVehicle(), request.pickupTime(), end);
         if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
-            throw new ConflictException("Vehicle is not free in the selected range (including maintenance buffer)");
+            throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn (bao gồm thời gian dọn xe giữa các chuyến). Vui lòng chọn xe khác hoặc khung giờ khác.");
         }
         if (renterOverlaps(booking.getRenter().getId(), request.pickupTime(), end, booking.getId())) {
-            throw new ConflictException("Renter already has a booking in the selected range");
+            throw new ConflictException("Bạn đang có một đơn đặt xe khác trùng khung giờ này. Vui lòng kiểm tra lại đơn của bạn.");
         }
 
         booking.setPickupTime(request.pickupTime());
@@ -347,8 +347,8 @@ public class BookingServiceImpl implements BookingService {
         requireDisputeAllowed(booking, request.category());
         PaymentRequest finalRequest = null;
         if (request.category() == DisputeCategory.CHARGE) {
-            finalRequest = paymentRequestRepository
-                    .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
+            finalRequest = paymentRequestService
+                    .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
                     .orElse(null);
             if (finalRequest != null && (finalRequest.getStatus() == PaymentRequestStatus.CONFIRMED
                     || finalRequest.getPaidAmount().signum() > 0)) {
@@ -360,6 +360,7 @@ public class BookingServiceImpl implements BookingService {
         if (finalRequest != null) {
             finalRequest.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
             finalRequest.setIssueNote("Payment held while a charge dispute is reviewed");
+            paymentRequestService.savePaymentRequest(finalRequest);
         }
         return response;
     }
@@ -668,11 +669,22 @@ public class BookingServiceImpl implements BookingService {
 
     private boolean renterOverlaps(Long renterId, Instant start, Instant end, Long excludeBookingId) {
         List<Booking> existing = bookingRepository.findByRenter_IdAndStatusIn(renterId, BLOCKING);
+        Instant now = Instant.now();
         for (Booking booking : existing) {
             if (excludeBookingId != null && excludeBookingId.equals(booking.getId())) {
                 continue;
             }
+            // Ignore stale PENDING bookings whose pickup time has already passed
+            if (booking.getStatus() == BookingStatus.PENDING
+                    && booking.getPickupTime() != null
+                    && booking.getPickupTime().isBefore(now)) {
+                continue;
+            }
             Instant otherEnd = endOf(booking);
+            // Ignore bookings that have already completely concluded in the past
+            if (otherEnd != null && otherEnd.isBefore(now)) {
+                continue;
+            }
             if (start.isBefore(otherEnd) && booking.getPickupTime().isBefore(end)) {
                 return true;
             }
@@ -684,8 +696,8 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.ACCEPTED) {
             return false;
         }
-        return paymentRequestRepository
-                .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
+        return paymentRequestService
+                .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
                 .stream()
                 .flatMap(request -> request.getEvidences().stream())
                 .noneMatch(evidence -> evidence.getStatus() == PaymentEvidenceStatus.PENDING
@@ -704,8 +716,8 @@ public class BookingServiceImpl implements BookingService {
             if (alreadyPaid) {
                 return false;
             }
-            Optional<PaymentRequest> depositReqOpt = paymentRequestRepository
-                    .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT);
+            Optional<PaymentRequest> depositReqOpt = paymentRequestService
+                    .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT);
             if (depositReqOpt.isPresent()) {
                 PaymentRequest request = depositReqOpt.get();
                 if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(Instant.now())) {
@@ -726,8 +738,8 @@ public class BookingServiceImpl implements BookingService {
         if (alreadySettled) {
             return false;
         }
-        Optional<PaymentRequest> finalReqOpt = paymentRequestRepository
-                .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
+        Optional<PaymentRequest> finalReqOpt = paymentRequestService
+                .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
         if (finalReqOpt.isPresent()) {
             PaymentRequest request = finalReqOpt.get();
             if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(Instant.now())) {
@@ -742,6 +754,12 @@ public class BookingServiceImpl implements BookingService {
     private Instant endOf(Booking booking) {
         BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         if (snapshot == null) {
+            if (booking.getPlan() != null && booking.getPlan().getSlotLengthMinutes() != null) {
+                int slots = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
+                        .map(BookingCharge::getQuantity)
+                        .orElse(1);
+                return booking.getPickupTime().plus(Duration.ofMinutes((long) booking.getPlan().getSlotLengthMinutes() * slots));
+            }
             return booking.getPickupTime();
         }
         int slots = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
