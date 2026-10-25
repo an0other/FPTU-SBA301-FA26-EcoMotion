@@ -16,9 +16,7 @@ import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.Role;
-import com.fptufa26.ecomotion.user.repository.DriverRepository;
-import com.fptufa26.ecomotion.user.repository.ProviderRepository;
-import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,9 +46,7 @@ class TripEvidenceServiceUnitTest {
     @Mock private BookingRepository bookingRepository;
     @Mock private TripEvidenceRepository tripEvidenceRepository;
     @Mock private CloudinaryService cloudinaryService;
-    @Mock private UserRepository userRepository;
-    @Mock private DriverRepository driverRepository;
-    @Mock private ProviderRepository providerRepository;
+    @Mock private UserService userService;
 
     private TripEvidenceServiceImpl evidenceService;
 
@@ -64,9 +60,7 @@ class TripEvidenceServiceUnitTest {
                 bookingRepository,
                 tripEvidenceRepository,
                 cloudinaryService,
-                userRepository,
-                driverRepository,
-                providerRepository
+                userService
         );
 
         driverUser = new User();
@@ -101,7 +95,7 @@ class TripEvidenceServiceUnitTest {
     void uploadEvidence_bookingNotFound_throws404() {
         MockMultipartFile file = new MockMultipartFile("file", "pickup.jpg", "image/jpeg", "image-content".getBytes());
 
-        when(userRepository.findById(10L)).thenReturn(Optional.of(driverUser));
+        when(userService.findById(10L)).thenReturn(Optional.of(driverUser));
         when(bookingRepository.findByBookingCode("UNKNOWN")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> evidenceService.uploadEvidence(
@@ -118,9 +112,9 @@ class TripEvidenceServiceUnitTest {
         otherDriver.setId(99L);
         otherDriver.setUser(driverUser);
 
-        when(userRepository.findById(10L)).thenReturn(Optional.of(driverUser));
+        when(userService.findById(10L)).thenReturn(Optional.of(driverUser));
         when(bookingRepository.findByBookingCode("BK-TEST01")).thenReturn(Optional.of(booking));
-        when(driverRepository.findByUser_Id(10L)).thenReturn(Optional.of(otherDriver));
+        when(userService.findDriverProfile(10L)).thenReturn(Optional.of(otherDriver));
 
         assertThatThrownBy(() -> evidenceService.uploadEvidence(
                 10L, Role.DRIVER, "BK-TEST01", file, TripEvidenceType.PICKUP_ARRIVAL, "Note"
@@ -133,9 +127,9 @@ class TripEvidenceServiceUnitTest {
         MockMultipartFile file = new MockMultipartFile("file", "pickup.jpg", "image/jpeg", "image-content".getBytes());
         booking.setStatus(BookingStatus.CANCELLED);
 
-        when(userRepository.findById(10L)).thenReturn(Optional.of(driverUser));
+        when(userService.findById(10L)).thenReturn(Optional.of(driverUser));
         when(bookingRepository.findByBookingCode("BK-TEST01")).thenReturn(Optional.of(booking));
-        when(driverRepository.findByUser_Id(10L)).thenReturn(Optional.of(driver));
+        when(userService.findDriverProfile(10L)).thenReturn(Optional.of(driver));
 
         assertThatThrownBy(() -> evidenceService.uploadEvidence(
                 10L, Role.DRIVER, "BK-TEST01", file, TripEvidenceType.PICKUP_ARRIVAL, "Note"
@@ -148,9 +142,9 @@ class TripEvidenceServiceUnitTest {
     void uploadEvidence_success() {
         MockMultipartFile file = new MockMultipartFile("file", "pickup.jpg", "image/jpeg", "image-data".getBytes());
 
-        when(userRepository.findById(10L)).thenReturn(Optional.of(driverUser));
+        when(userService.findById(10L)).thenReturn(Optional.of(driverUser));
         when(bookingRepository.findByBookingCode("BK-TEST01")).thenReturn(Optional.of(booking));
-        when(driverRepository.findByUser_Id(10L)).thenReturn(Optional.of(driver));
+        when(userService.findDriverProfile(10L)).thenReturn(Optional.of(driver));
 
         CloudinaryUploadResult uploadResult = new CloudinaryUploadResult(
                 "https://res.cloudinary.com/ecomotion/image/upload/v1/ecomotion/trip-evidence/100/xyz.jpg",
@@ -188,9 +182,9 @@ class TripEvidenceServiceUnitTest {
     void uploadEvidence_dbSaveFails_cleansUpCloudinaryImage() {
         MockMultipartFile file = new MockMultipartFile("file", "pickup.jpg", "image/jpeg", "image-data".getBytes());
 
-        when(userRepository.findById(10L)).thenReturn(Optional.of(driverUser));
+        when(userService.findById(10L)).thenReturn(Optional.of(driverUser));
         when(bookingRepository.findByBookingCode("BK-TEST01")).thenReturn(Optional.of(booking));
-        when(driverRepository.findByUser_Id(10L)).thenReturn(Optional.of(driver));
+        when(userService.findDriverProfile(10L)).thenReturn(Optional.of(driver));
 
         CloudinaryUploadResult uploadResult = new CloudinaryUploadResult(
                 "https://res.cloudinary.com/ecomotion/image/upload/v1/ecomotion/trip-evidence/100/orphan.jpg",
@@ -220,9 +214,9 @@ class TripEvidenceServiceUnitTest {
         evidence.setUploadedBy(driverUser);
         evidence.setCloudinaryPublicId("ecomotion/trip-evidence/100/to-delete");
 
-        when(userRepository.findById(10L)).thenReturn(Optional.of(driverUser));
+        when(userService.findById(10L)).thenReturn(Optional.of(driverUser));
         when(bookingRepository.findByBookingCode("BK-TEST01")).thenReturn(Optional.of(booking));
-        when(driverRepository.findByUser_Id(10L)).thenReturn(Optional.of(driver));
+        when(userService.findDriverProfile(10L)).thenReturn(Optional.of(driver));
         when(tripEvidenceRepository.findByIdAndBooking_Id(77L, 100L)).thenReturn(Optional.of(evidence));
 
         evidenceService.deleteEvidence(10L, Role.DRIVER, "BK-TEST01", 77L);
