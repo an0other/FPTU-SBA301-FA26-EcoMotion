@@ -9,9 +9,9 @@ import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
 import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
-import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
 import com.fptufa26.ecomotion.booking.repository.VehicleLocationRepository;
 import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
+import com.fptufa26.ecomotion.booking.service.TripIncidentService;
 import com.fptufa26.ecomotion.booking.service.implement.DriverTripServiceImpl;
 import com.fptufa26.ecomotion.common.config.ClockConfig;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -71,7 +71,7 @@ class DriverTripServiceUnitTest {
     private DriverAssignmentRepository driverAssignmentRepository;
 
     @Mock
-    private TripIncidentRepository tripIncidentRepository;
+    private TripIncidentService tripIncidentService;
 
     @Mock
     private TripEvidenceRepository tripEvidenceRepository;
@@ -103,7 +103,7 @@ class DriverTripServiceUnitTest {
                 bookingRepository,
                 vehicleLocationRepository,
                 driverAssignmentRepository,
-                tripIncidentRepository,
+                tripIncidentService,
                 tripEvidenceRepository,
                 driverOptimizationService,
                 userService,
