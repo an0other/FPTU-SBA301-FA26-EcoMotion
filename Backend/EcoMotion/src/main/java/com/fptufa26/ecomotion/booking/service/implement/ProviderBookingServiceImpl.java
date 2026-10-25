@@ -21,17 +21,24 @@ import com.fptufa26.ecomotion.booking.service.ProviderBookingService;
 import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 import com.fptufa26.ecomotion.booking.specification.BookingSpecification;
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
+import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
+import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
+import com.fptufa26.ecomotion.booking.entity.TripEvidence;
+import com.fptufa26.ecomotion.booking.entity.TripIncident;
+import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
+import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
+import com.fptufa26.ecomotion.booking.service.TripIncidentService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
-import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
-import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
+import com.fptufa26.ecomotion.dispute.service.DisputeService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
-import com.fptufa26.ecomotion.user.repository.DriverRepository;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
@@ -94,17 +101,16 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final BookingChargeRepository bookingChargeRepository;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
-    private final DriverRepository driverRepository;
     private final VehicleLocationRepository vehicleLocationRepository;
     private final UserService userService;
     private final VehicleService vehicleService;
     private final MapGeocodingService mapGeocodingService;
-    private final com.fptufa26.ecomotion.finance.service.PaymentRequestService paymentRequestService;
-    private final DisputeRepository disputeRepository;
+    private final PaymentRequestService paymentRequestService;
+    private final DisputeService disputeService;
     private final ScheduleService scheduleService;
-    private final com.fptufa26.ecomotion.booking.service.DriverOptimizationService driverOptimizationService;
-    private final com.fptufa26.ecomotion.booking.repository.TripIncidentRepository tripIncidentRepository;
-    private final com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository tripEvidenceRepository;
+    private final DriverOptimizationService driverOptimizationService;
+    private final TripIncidentService tripIncidentService;
+    private final TripEvidenceRepository tripEvidenceRepository;
     private final Clock clock;
 
     @Override
@@ -430,14 +436,14 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     @Override
-    public List<com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId) {
+    public List<DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
         return driverOptimizationService.evaluateCandidates(booking.getId(), provider.getId());
     }
 
     @Override
-    public com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId) {
+    public AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
         return driverOptimizationService.suggestDriver(booking.getId(), provider.getId());
@@ -461,33 +467,17 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
     @Override
     @Transactional
-    public void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest request) {
-        Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
-
-        com.fptufa26.ecomotion.booking.entity.TripIncident incident = tripIncidentRepository.findById(incidentId)
-                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy sự cố: " + incidentId));
-
-        if (!incident.getBooking().getId().equals(booking.getId())) {
-            throw new IllegalArgumentException("Sự cố không thuộc đơn thuê này");
-        }
-
-        incident.setStatus(request.status());
-        incident.setResolutionNote(request.resolutionNote());
-        incident.setResolvedBy(provider.getUser());
-        incident.setResolvedAt(clock.instant());
-        tripIncidentRepository.save(incident);
+    public void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, ResolveIncidentRequest request) {
+        tripIncidentService.resolveIncident(currentUserId, bookingCodeOrId, incidentId, request);
     }
 
     @Override
-    public List<com.fptufa26.ecomotion.booking.entity.TripIncident> getBookingIncidents(Long currentUserId, String bookingCodeOrId) {
-        Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
-        return tripIncidentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId());
+    public List<TripIncident> getBookingIncidents(Long currentUserId, String bookingCodeOrId) {
+        return tripIncidentService.getBookingIncidentsForProvider(currentUserId, bookingCodeOrId);
     }
 
     @Override
-    public List<com.fptufa26.ecomotion.booking.entity.TripEvidence> getBookingEvidence(Long currentUserId, String bookingCodeOrId) {
+    public List<TripEvidence> getBookingEvidence(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
         return tripEvidenceRepository.findByBooking_IdOrderByRecordedAtAsc(booking.getId());
@@ -553,8 +543,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         if (booking.getProviderConfirmedAt() == null || booking.getRenterConfirmedAt() == null) {
             throw new ConflictException("Cần xác nhận kết thúc từ cả tài xế và người thuê trước khi chốt quyết toán");
         }
-        if (disputeRepository.existsByBooking_IdAndStatusIn(
-                booking.getId(), List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW))) {
+        if (disputeService.hasActiveDispute(booking.getId())) {
             throw new ConflictException("Không thể chốt quyết toán khi đơn thuê đang có tranh chấp");
         }
 
@@ -579,7 +568,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     @Override
     public List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId) {
         Provider provider = resolveProvider(currentUserId);
-        List<Driver> drivers = driverRepository.findByProvider_IdAndStatus(provider.getId(), DriverStatus.APPROVED);
+        List<Driver> drivers = userService.findDriversByProviderIdAndStatus(provider.getId(), DriverStatus.APPROVED);
 
         List<BookingStatus> activeStatuses = List.of(BookingStatus.ACCEPTED, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
 
@@ -724,9 +713,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 ? renterUser.getFullName()
                 : renterUser.getEmail();
 
+        Long driverId = null;
         String driverName = null;
-        if (booking.getDriver() != null && booking.getDriver().getUser() != null) {
-            driverName = booking.getDriver().getUser().getFullName();
+        if (booking.getDriver() != null) {
+            driverId = booking.getDriver().getId();
+            if (booking.getDriver().getUser() != null) {
+                driverName = booking.getDriver().getUser().getFullName();
+            }
         }
 
         String rentalType = "Theo ngày";
@@ -751,6 +744,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getPickupLatitude(),
                 booking.getPickupLongitude(),
                 booking.getDriverNote(),
+                driverId,
                 driverName,
                 booking.getStatus(),
                 DriverTripServiceImpl.deriveExecutionStatus(booking),

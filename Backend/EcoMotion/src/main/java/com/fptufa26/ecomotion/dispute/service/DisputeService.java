@@ -26,4 +26,8 @@ public interface DisputeService {
     long countOpenOrInReview();
 
     long countTotalDisputes();
+
+    boolean hasActiveDispute(Long bookingId);
+
+    List<Dispute> getDisputesByBookingId(Long bookingId);
 }
