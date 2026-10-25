@@ -14,7 +14,7 @@ import com.fptufa26.ecomotion.schedule.service.ProviderScheduleService;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +27,7 @@ import java.util.List;
 public class ProviderScheduleServiceImpl implements ProviderScheduleService {
 
     private final VehicleScheduleRepository vehicleScheduleRepository;
-    private final VehicleRepository vehicleRepository;
+    private final VehicleService vehicleService;
     private final UserService userService;
 
     @Override
@@ -122,7 +122,7 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
             throw new BadRequestException("Thời gian kết thúc phải lớn hơn thời gian bắt đầu");
         }
 
-        Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(request.vehicleId(), provider.getId())
+        Vehicle vehicle = vehicleService.findVehicleByIdAndProviderId(request.vehicleId(), provider.getId())
                 .orElseThrow(() -> new NotFoundException("Phương tiện không tồn tại hoặc không thuộc sở hữu của nhà xe"));
 
         // Kiểm tra chống trùng với đơn đặt của khách hàng

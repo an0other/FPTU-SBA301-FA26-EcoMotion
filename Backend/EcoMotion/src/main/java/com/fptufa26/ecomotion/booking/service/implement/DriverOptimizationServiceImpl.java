@@ -27,7 +27,7 @@ import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
-import com.fptufa26.ecomotion.user.repository.DriverRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.Transmission;
 import com.google.ortools.Loader;
@@ -84,7 +84,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private final BookingRepository bookingRepository;
-    private final DriverRepository driverRepository;
+    private final UserService userService;
     private final DriverAssignmentRepository driverAssignmentRepository;
     private final TripIncidentRepository tripIncidentRepository;
     private final VehicleLocationRepository vehicleLocationRepository;
@@ -103,7 +103,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
             throw new IllegalArgumentException("Đơn thuê không thuộc quyền quản lý của nhà cung cấp");
         }
 
-        List<Driver> allDrivers = driverRepository.findByProvider_Id(providerId);
+        List<Driver> allDrivers = userService.findDriversByProviderId(providerId);
         List<Long> rejectedDriverIds = driverAssignmentRepository.findRejectedDriverIdsForBooking(bookingId);
 
         Instant bookingStart = booking.getPickupTime();
@@ -207,7 +207,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         }
 
         Long driverId = suggestion.suggestedDriver().driverId();
-        Driver driver = driverRepository.findById(driverId)
+        Driver driver = userService.findDriverById(driverId)
                 .orElseThrow(() -> new IllegalStateException("Driver not found: " + driverId));
 
         Instant now = clock.instant();
@@ -250,7 +250,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
             throw new ConflictException("Chỉ có thể phân công tài xế khi đơn ở trạng thái Đã cọc (CONFIRMED) hoặc Phân công (DRIVER_ASSIGNED)");
         }
 
-        Driver driver = driverRepository.findByIdAndProvider_Id(driverId, providerId)
+        Driver driver = userService.findDriverByIdAndProviderId(driverId, providerId)
                 .orElseThrow(() -> new IllegalArgumentException("Tài xế không tồn tại hoặc không thuộc nhà cung cấp"));
 
         if (driver.getStatus() != DriverStatus.APPROVED) {

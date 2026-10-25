@@ -16,9 +16,7 @@ import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.Role;
-import com.fptufa26.ecomotion.user.repository.DriverRepository;
-import com.fptufa26.ecomotion.user.repository.ProviderRepository;
-import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -37,9 +35,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
     private final BookingRepository bookingRepository;
     private final TripEvidenceRepository tripEvidenceRepository;
     private final CloudinaryService cloudinaryService;
-    private final UserRepository userRepository;
-    private final DriverRepository driverRepository;
-    private final ProviderRepository providerRepository;
+    private final UserService userService;
 
     @Override
     @Transactional
@@ -58,7 +54,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
             throw new IllegalArgumentException("Phân loại minh chứng không được để trống");
         }
 
-        User currentUser = userRepository.findById(currentUserId)
+        User currentUser = userService.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         Booking booking = resolveBooking(bookingIdOrCode);
@@ -110,7 +106,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
             Role currentUserRole,
             String bookingIdOrCode) {
 
-        User currentUser = userRepository.findById(currentUserId)
+        User currentUser = userService.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         Booking booking = resolveBooking(bookingIdOrCode);
@@ -130,7 +126,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
             String bookingIdOrCode,
             Long evidenceId) {
 
-        User currentUser = userRepository.findById(currentUserId)
+        User currentUser = userService.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         Booking booking = resolveBooking(bookingIdOrCode);
@@ -145,7 +141,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         boolean isUploader = evidence.getUploadedBy() != null && evidence.getUploadedBy().getId().equals(currentUser.getId());
         boolean isProvider = false;
         if (currentUserRole == Role.PROVIDER) {
-            Provider provider = providerRepository.findByUser_Id(currentUserId).orElse(null);
+            Provider provider = userService.findProviderProfile(currentUserId).orElse(null);
             if (provider != null && booking.getVehicle() != null && booking.getVehicle().getProvider() != null) {
                 isProvider = booking.getVehicle().getProvider().getId().equals(provider.getId());
             }
@@ -185,7 +181,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         }
 
         if (currentUserRole == Role.DRIVER) {
-            Driver driver = driverRepository.findByUser_Id(currentUser.getId())
+            Driver driver = userService.findDriverProfile(currentUser.getId())
                     .orElseThrow(() -> new AccessDeniedException("Người dùng chưa có hồ sơ tài xế"));
 
             if (booking.getDriver() == null || !booking.getDriver().getId().equals(driver.getId())) {
@@ -195,7 +191,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         }
 
         if (currentUserRole == Role.PROVIDER) {
-            Provider provider = providerRepository.findByUser_Id(currentUser.getId())
+            Provider provider = userService.findProviderProfile(currentUser.getId())
                     .orElseThrow(() -> new AccessDeniedException("Người dùng chưa có hồ sơ nhà cung cấp"));
 
             boolean ownsVehicle = booking.getVehicle() != null

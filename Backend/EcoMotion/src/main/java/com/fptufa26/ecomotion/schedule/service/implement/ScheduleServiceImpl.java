@@ -48,4 +48,12 @@ public class ScheduleServiceImpl implements ScheduleService {
             }
         }
     }
+
+    @Override
+    public java.util.List<VehicleSchedule> findActiveInRange(Long vehicleId, Instant start, Instant end) {
+        if (vehicleId == null || start == null || end == null) {
+            return java.util.List.of();
+        }
+        return vehicleScheduleRepository.findActiveInRange(vehicleId, start, end);
+    }
 }

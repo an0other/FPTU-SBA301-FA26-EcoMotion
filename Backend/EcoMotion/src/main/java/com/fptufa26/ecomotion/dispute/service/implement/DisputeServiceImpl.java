@@ -3,7 +3,7 @@ package com.fptufa26.ecomotion.dispute.service.implement;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
@@ -28,23 +28,13 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
+@RequiredArgsConstructor
 public class DisputeServiceImpl implements DisputeService {
 
     private final DisputeRepository disputeRepository;
     private final UserService userService;
-    private final BookingService bookingService;
+    private final BookingQueryService bookingQueryService;
     private final PaymentRequestService paymentRequestService;
-
-    public DisputeServiceImpl(
-            DisputeRepository disputeRepository,
-            UserService userService,
-            @org.springframework.context.annotation.Lazy BookingService bookingService,
-            PaymentRequestService paymentRequestService) {
-        this.disputeRepository = disputeRepository;
-        this.userService = userService;
-        this.bookingService = bookingService;
-        this.paymentRequestService = paymentRequestService;
-    }
 
     @Override
     @Transactional
@@ -56,7 +46,7 @@ public class DisputeServiceImpl implements DisputeService {
             }
         } else if (disputeRepository.existsByBooking_IdAndCategoryAndStatusAndChargeIsNull(
                 booking.getId(), category, DisputeStatus.OPEN)) {
-            throw new ConflictException("An open dispute already exists for this category");
+                throw new ConflictException("An open dispute already exists for this category");
         }
 
         Dispute dispute = new Dispute();
@@ -149,7 +139,7 @@ public class DisputeServiceImpl implements DisputeService {
             }
             paymentRequestService.savePaymentRequest(request);
         });
-        bookingService.saveBooking(booking);
+        bookingQueryService.saveBooking(booking);
     }
 
     @Override
@@ -162,5 +152,18 @@ public class DisputeServiceImpl implements DisputeService {
     @Transactional(readOnly = true)
     public long countTotalDisputes() {
         return disputeRepository.count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveDispute(Long bookingId) {
+        return disputeRepository.existsByBooking_IdAndStatusIn(
+                bookingId, List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Dispute> getDisputesByBookingId(Long bookingId) {
+        return disputeRepository.findByBooking_Id(bookingId);
     }
 }

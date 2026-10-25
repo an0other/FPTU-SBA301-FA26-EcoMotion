@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.vehicle.controller;
 
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
+import com.fptufa26.ecomotion.common.storage.FileStorageService;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
@@ -39,10 +40,10 @@ import java.util.List;
 public class ProviderVehicleController {
 
     private final ProviderVehicleService providerVehicleService;
-    private final com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService;
+    private final FileStorageService fileStorageService;
 
     public ProviderVehicleController(ProviderVehicleService providerVehicleService,
-                                     com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService) {
+                                     FileStorageService fileStorageService) {
         this.providerVehicleService = providerVehicleService;
         this.fileStorageService = fileStorageService;
     }

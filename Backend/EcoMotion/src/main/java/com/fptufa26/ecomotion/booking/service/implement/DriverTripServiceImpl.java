@@ -12,14 +12,21 @@ import com.fptufa26.ecomotion.booking.enums.TripView;
 import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.exception.InvalidTripTransitionException;
 import com.fptufa26.ecomotion.booking.exception.TripConflictException;
+import com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest;
+import com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest;
+import com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest;
+import com.fptufa26.ecomotion.booking.entity.DriverAssignment;
+import com.fptufa26.ecomotion.booking.entity.TripEvidence;
+import com.fptufa26.ecomotion.booking.entity.TripIncident;
+import com.fptufa26.ecomotion.booking.enums.AssignmentStatus;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
 import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
-import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
 import com.fptufa26.ecomotion.booking.repository.VehicleLocationRepository;
 import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.booking.service.DriverTripService;
 import com.fptufa26.ecomotion.booking.service.MapGeocodingService;
+import com.fptufa26.ecomotion.booking.service.TripIncidentService;
 import com.fptufa26.ecomotion.booking.specification.BookingSpecification;
 import com.fptufa26.ecomotion.common.config.ClockConfig;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -79,7 +86,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     private final BookingRepository bookingRepository;
     private final VehicleLocationRepository vehicleLocationRepository;
     private final DriverAssignmentRepository driverAssignmentRepository;
-    private final TripIncidentRepository tripIncidentRepository;
+    private final TripIncidentService tripIncidentService;
     private final TripEvidenceRepository tripEvidenceRepository;
     private final DriverOptimizationService driverOptimizationService;
     private final UserService userService;
@@ -191,9 +198,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         Booking saved = bookingRepository.saveAndFlush(booking);
 
         driverAssignmentRepository.findByBooking_IdAndDriver_IdAndStatus(
-                saved.getId(), driver.getId(), com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE
+                saved.getId(), driver.getId(), AssignmentStatus.PENDING_RESPONSE
         ).ifPresent(da -> {
-            da.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.ACCEPTED);
+            da.setStatus(AssignmentStatus.ACCEPTED);
             da.setRespondedAt(now);
             driverAssignmentRepository.save(da);
         });
@@ -466,7 +473,7 @@ public class DriverTripServiceImpl implements DriverTripService {
 
     @Override
     @Transactional
-    public DriverTripDetailResponse rejectTrip(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest request) {
+    public DriverTripDetailResponse rejectTrip(Long currentUserId, String tripIdOrCode, DriverRejectRequest request) {
         Driver driver = resolveDriver(currentUserId);
         Booking booking = resolveDriverBooking(driver, tripIdOrCode);
 
@@ -476,18 +483,18 @@ public class DriverTripServiceImpl implements DriverTripService {
 
         Instant now = clock.instant();
         driverAssignmentRepository.findByBooking_IdAndDriver_IdAndStatus(
-                booking.getId(), driver.getId(), com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE
+                booking.getId(), driver.getId(), AssignmentStatus.PENDING_RESPONSE
         ).ifPresentOrElse(da -> {
-            da.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.REJECTED);
+            da.setStatus(AssignmentStatus.REJECTED);
             da.setRejectionReason(request.rejectionReason());
             da.setRejectionNote(request.rejectionNote());
             da.setRespondedAt(now);
             driverAssignmentRepository.save(da);
         }, () -> {
-            com.fptufa26.ecomotion.booking.entity.DriverAssignment da = new com.fptufa26.ecomotion.booking.entity.DriverAssignment();
+            DriverAssignment da = new DriverAssignment();
             da.setBooking(booking);
             da.setDriver(driver);
-            da.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.REJECTED);
+            da.setStatus(AssignmentStatus.REJECTED);
             da.setRejectionReason(request.rejectionReason());
             da.setRejectionNote(request.rejectionNote());
             da.setAssignedAt(booking.getAssignedAt() != null ? booking.getAssignedAt() : now);
@@ -507,59 +514,22 @@ public class DriverTripServiceImpl implements DriverTripService {
 
     @Override
     @Transactional
-    public com.fptufa26.ecomotion.booking.entity.TripIncident reportIncident(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest request) {
-        Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
-
-        if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
-            throw new InvalidTripTransitionException("Không thể báo sự cố cho chuyến đi đã bị hủy");
-        }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
-            throw new InvalidTripTransitionException("Không thể báo sự cố cho chuyến đi đã hoàn thành");
-        }
-
-        com.fptufa26.ecomotion.booking.entity.TripIncident incident = new com.fptufa26.ecomotion.booking.entity.TripIncident();
-        incident.setBooking(booking);
-        incident.setDriver(driver);
-        incident.setIncidentType(request.incidentType());
-        incident.setDescription(request.description());
-        incident.setUrgency(request.urgency());
-        incident.setStatus(com.fptufa26.ecomotion.booking.enums.TripIncidentStatus.OPEN);
-        incident.setLocationLatitude(request.latitude());
-        incident.setLocationLongitude(request.longitude());
-        incident.setEvidenceUrls(request.evidenceUrls());
-        incident.setCreatedBy(driver.getUser());
-        incident.setCreatedAt(clock.instant());
-
-        com.fptufa26.ecomotion.booking.entity.TripIncident saved = tripIncidentRepository.save(incident);
-
-        if (booking.getStatus() == BookingStatus.DRIVER_ASSIGNED || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
-            if (request.urgency() == com.fptufa26.ecomotion.booking.enums.TripIncidentUrgency.CRITICAL
-                    || request.urgency() == com.fptufa26.ecomotion.booking.enums.TripIncidentUrgency.HIGH) {
-                log.warn("High urgency incident reported before trip for booking {}. Triggering auto reassign.", booking.getBookingCode());
-                driverOptimizationService.triggerAutoReassign(
-                        booking.getId(), driver.getId(), "Sự cố trước chuyến: " + request.description()
-                );
-            }
-        }
-
-        return saved;
+    public TripIncident reportIncident(Long currentUserId, String tripIdOrCode, IncidentReportRequest request) {
+        return tripIncidentService.reportIncident(currentUserId, tripIdOrCode, request);
     }
 
     @Override
-    public java.util.List<com.fptufa26.ecomotion.booking.entity.TripIncident> listIncidents(Long currentUserId, String tripIdOrCode) {
-        Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
-        return tripIncidentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId());
+    public List<TripIncident> listIncidents(Long currentUserId, String tripIdOrCode) {
+        return tripIncidentService.listIncidentsForDriver(currentUserId, tripIdOrCode);
     }
 
     @Override
     @Transactional
-    public com.fptufa26.ecomotion.booking.entity.TripEvidence uploadEvidence(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest request) {
+    public TripEvidence uploadEvidence(Long currentUserId, String tripIdOrCode, TripEvidenceRequest request) {
         Driver driver = resolveDriver(currentUserId);
         Booking booking = resolveDriverBooking(driver, tripIdOrCode);
 
-        com.fptufa26.ecomotion.booking.entity.TripEvidence evidence = new com.fptufa26.ecomotion.booking.entity.TripEvidence();
+        TripEvidence evidence = new TripEvidence();
         evidence.setBooking(booking);
         evidence.setDriver(driver);
         evidence.setEvidenceType(request.evidenceType());
@@ -572,7 +542,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     }
 
     @Override
-    public java.util.List<com.fptufa26.ecomotion.booking.entity.TripEvidence> listEvidence(Long currentUserId, String tripIdOrCode) {
+    public List<TripEvidence> listEvidence(Long currentUserId, String tripIdOrCode) {
         Driver driver = resolveDriver(currentUserId);
         Booking booking = resolveDriverBooking(driver, tripIdOrCode);
         return tripEvidenceRepository.findByBooking_IdOrderByRecordedAtAsc(booking.getId());
