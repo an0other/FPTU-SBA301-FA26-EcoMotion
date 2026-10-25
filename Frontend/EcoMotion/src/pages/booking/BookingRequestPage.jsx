@@ -80,7 +80,7 @@ export function BookingRequestPage() {
   }, [plan, slots, startDate, startTime])
 
   async function handleSubmit() {
-    if (!vehicle || !plan) return
+    if (submitting || !vehicle || !plan) return
     setSubmitting(true)
     setError('')
     try {
@@ -214,6 +214,8 @@ export function BookingRequestPage() {
           totalAmount={totalAmount}
           depositAmount={depositAmount}
           planType={plan?.planType}
+          submitting={submitting}
+          errorMessage={error}
           onBack={() => setStep(2)}
           onSubmit={submitting ? () => {} : handleSubmit}
         />

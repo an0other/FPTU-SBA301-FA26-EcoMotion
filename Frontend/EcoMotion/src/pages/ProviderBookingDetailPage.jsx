@@ -552,9 +552,46 @@ export default function ProviderBookingDetailPage() {
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                      Đã gán cho chuyến
-                    </span>
+                    {(() => {
+                      const isCompleted = Boolean(booking.actualEndAt || booking.status === 'COMPLETED');
+                      const isInProgress = Boolean(booking.actualStartAt || booking.status === 'IN_PROGRESS' || booking.executionStatus === 'IN_PROGRESS');
+                      const isArrived = Boolean(booking.actualArrivedAt || booking.status === 'DRIVER_ARRIVED' || booking.executionStatus === 'ARRIVED');
+                      const isConfirmed = Boolean(booking.driverConfirmedAt || booking.status === 'DRIVER_CONFIRMED' || booking.executionStatus === 'CONFIRMED');
+
+                      if (isCompleted) {
+                        return (
+                          <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-800 border border-slate-200">
+                            Đã hoàn thành chuyến
+                          </span>
+                        );
+                      }
+                      if (isInProgress) {
+                        return (
+                          <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                            Đang thực hiện chuyến
+                          </span>
+                        );
+                      }
+                      if (isArrived) {
+                        return (
+                          <span className="inline-block rounded-full bg-cyan-100 px-2.5 py-0.5 text-[10px] font-bold text-cyan-800 border border-cyan-200">
+                            Đã đến điểm đón
+                          </span>
+                        );
+                      }
+                      if (isConfirmed) {
+                        return (
+                          <span className="inline-block rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-bold text-teal-800 border border-teal-200">
+                            Tài xế đã nhận chuyến
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="inline-block rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-800 border border-blue-200">
+                          Chờ tài xế xác nhận
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : (

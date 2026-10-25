@@ -201,7 +201,9 @@ export default function ProviderBookingQueuePage() {
       } else if (driverFilter === 'UNASSIGNED') {
         if (item.driverName || item.driverId) return false
       } else if (driverFilter === 'PENDING_DRIVER') {
-        if (!item.driverId || item.driverConfirmedAt) return false
+        const hasDriver = Boolean(item.driverId || item.driverName)
+        const isConfirmed = Boolean(item.driverConfirmedAt || item.status === 'DRIVER_CONFIRMED' || ['DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED'].includes(item.status))
+        if (!hasDriver || isConfirmed) return false
       }
 
       // Vehicle
@@ -488,7 +490,13 @@ export default function ProviderBookingQueuePage() {
                   paginatedList.map((item) => {
                     const hasActiveIncident = item.incidentCount > 0 || item.hasIncident
                     const isUnassigned = !item.driverName && !item.driverId
-                    const isPendingConfirmation = Boolean(item.driverId && !item.driverConfirmedAt)
+                    const isDriverConfirmed = Boolean(
+                      item.driverConfirmedAt ||
+                      item.status === 'DRIVER_CONFIRMED' ||
+                      ['DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED'].includes(item.status) ||
+                      ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED'].includes(item.executionStatus)
+                    )
+                    const isPendingConfirmation = Boolean((item.driverId || item.driverName) && !isDriverConfirmed)
 
                     return (
                       <tr
@@ -581,7 +589,9 @@ export default function ProviderBookingQueuePage() {
                                 <Icon name="person" className="text-[14px] text-emerald-600" />
                                 <span>{item.driverName}</span>
                               </div>
-                              <span className="text-[10px] text-emerald-700 font-semibold block">Đã nhận chuyến</span>
+                              <span className="text-[10px] text-emerald-700 font-semibold block">
+                                {isDriverConfirmed ? 'Tài xế đã nhận' : 'Đã phân công'}
+                              </span>
                             </div>
                           )}
                         </td>

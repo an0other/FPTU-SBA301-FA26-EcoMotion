@@ -48,14 +48,23 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
     }
   }, [onError, readOnly])
 
+  const tileErrorReportedRef = useRef(false)
+
   useEffect(() => {
     const initialValue = initialValueRef.current
     const map = L.map(containerRef.current, { scrollWheelZoom: true })
       .setView(initialValue?.latitude != null ? [initialValue.latitude, initialValue.longitude] : DEFAULT_CENTER, initialValue?.latitude != null ? 16 : 13)
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const primaryTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map).on('tileerror', () => onError?.('Bản đồ đang gián đoạn; điểm đã chọn vẫn được giữ lại.'))
+    })
+    primaryTiles.on('tileerror', () => {
+      if (!tileErrorReportedRef.current) {
+        tileErrorReportedRef.current = true
+        onError?.('Bản đồ tạm thời gián đoạn kết nối máy chủ; điểm đón và địa chỉ đã chọn vẫn được giữ nguyên.')
+      }
+    })
+    primaryTiles.addTo(map)
     if (!readOnly) map.on('click', (event) => selectPoint(event.latlng.lat, event.latlng.lng))
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null; markerRef.current = null }

@@ -21,17 +21,22 @@ export const ConfirmRequestStep = ({
   totalAmount,
   depositAmount,
   planType,
+  submitting = false,
+  errorMessage = '',
   onBack,
   onSubmit,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isPending = submitting || isSubmitting;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isPending) return;
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      await onSubmit();
+    } finally {
       setIsSubmitting(false);
-      onSubmit();
-    }, 600);
+    }
   };
 
   return (
@@ -253,6 +258,17 @@ export const ConfirmRequestStep = ({
         </div>
       </div>
 
+      {/* Error Alert */}
+      {errorMessage && (
+        <div className="p-4 rounded-[12px] bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-3">
+          <span className="material-symbols-outlined text-[20px] text-red-600 shrink-0">error</span>
+          <div className="flex-1">
+            <strong className="block font-semibold">Không thể tạo yêu cầu đặt xe</strong>
+            <span>{errorMessage}</span>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-4 pt-2">
         <button
@@ -266,11 +282,11 @@ export const ConfirmRequestStep = ({
 
         <button
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isPending}
           className="w-full sm:w-auto min-w-[220px] px-7 py-3 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all duration-180 cursor-pointer disabled:opacity-70"
           type="button"
         >
-          {isSubmitting ? (
+          {isPending ? (
             <>
               <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
               <span>Đang gửi...</span>
