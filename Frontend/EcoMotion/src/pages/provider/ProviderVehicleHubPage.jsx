@@ -54,6 +54,7 @@ export default function ProviderVehicleHubPage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingCoverImage, setUploadingCoverImage] = useState(false)
   const [toast, setToast] = useState(null)
   const [showRuleModal, setShowRuleModal] = useState(false)
   const [vehicle, setVehicle] = useState(null)
@@ -329,6 +330,43 @@ export default function ProviderVehicleHubPage() {
     if (initialData) {
       setForm({ ...initialData })
       setToast({ type: 'info', message: 'Đã hủy các thay đổi chưa lưu' })
+    }
+  }
+
+  async function handleCoverImageFileSelected(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp']
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const validExts = ['jpg', 'jpeg', 'png', 'webp']
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+      setToast({ type: 'error', message: 'Hệ thống chỉ chấp nhận hình ảnh định dạng JPG, PNG hoặc WEBP.' })
+      e.target.value = ''
+      return
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setToast({ type: 'error', message: 'Dung lượng ảnh tối đa là 8MB.' })
+      e.target.value = ''
+      return
+    }
+
+    try {
+      setUploadingCoverImage(true)
+      const res = await providerService.uploadVehicleImage(file)
+      if (res?.imageUrl) {
+        setForm(prev => ({ ...prev, coverImageUrl: res.imageUrl }))
+        setToast({ type: 'success', message: `Tải ảnh lên thành công: ${file.name}` })
+      }
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Lỗi khi tải ảnh lên máy chủ'
+      })
+    } finally {
+      setUploadingCoverImage(false)
+      e.target.value = ''
     }
   }
 
@@ -1201,23 +1239,62 @@ export default function ProviderVehicleHubPage() {
                       <span className="material-symbols-outlined text-xs">photo_camera</span>
                       ẢNH BÌA CHÍNH THỨC · 16:9
                     </span>
+                    {uploadingCoverImage && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white z-10 gap-2">
+                        <div className="w-8 h-8 rounded-full border-3 border-emerald-400 border-t-transparent animate-spin"></div>
+                        <span className="text-xs font-semibold">Đang tải ảnh lên máy chủ...</span>
+                      </div>
+                    )}
                     <div className="absolute bottom-2.5 left-2.5 right-2.5 text-white">
                       <div className="text-xs font-bold">{form.brand} {form.model} {form.manufactureYear}</div>
                       <div className="text-[10px] text-slate-300">Hiển thị làm ảnh đại diện trên ứng dụng thuê xe</div>
                     </div>
                   </div>
 
-                  <div className="md:col-span-7 flex flex-col justify-center space-y-2 p-4 bg-slate-50/70 border border-slate-200 rounded-xl">
-                    <label className="text-xs font-bold text-slate-700">Đường dẫn ảnh bìa (Image URL):</label>
-                    <input
-                      type="url"
-                      value={form.coverImageUrl}
-                      onChange={(e) => setForm(prev => ({ ...prev, coverImageUrl: e.target.value }))}
-                      placeholder="https://example.com/car-image.jpg"
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
+                  <div className="md:col-span-7 flex flex-col justify-center space-y-3 p-4 bg-slate-50/70 border border-slate-200 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700">Tải ảnh bìa mới từ máy tính:</label>
+                      <button
+                        type="button"
+                        disabled={uploadingCoverImage}
+                        onClick={() => document.getElementById("hubCoverImageInput")?.click()}
+                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                      >
+                        {uploadingCoverImage ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>Đang tải...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-sm">cloud_upload</span>
+                            <span>Chọn tệp ảnh</span>
+                          </>
+                        )}
+                      </button>
+                      <input
+                        id="hubCoverImageInput"
+                        type="file"
+                        accept="image/png, image/jpeg, image/webp"
+                        className="hidden"
+                        disabled={uploadingCoverImage}
+                        onChange={handleCoverImageFileSelected}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Đường dẫn ảnh bìa (Image URL):</label>
+                      <input
+                        type="url"
+                        value={form.coverImageUrl}
+                        onChange={(e) => setForm(prev => ({ ...prev, coverImageUrl: e.target.value }))}
+                        placeholder="https://example.com/car-image.jpg"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+
                     <p className="text-[11px] text-slate-500">
-                      Hỗ trợ định dạng WEBP, PNG, JPG. Khuyến nghị ảnh chụp thực tế góc 3/4 mặt trước với tỷ lệ 16:9.
+                      Hỗ trợ định dạng WEBP, PNG, JPG (tối đa 8MB). Khuyến nghị ảnh chụp thực tế góc 3/4 mặt trước với tỷ lệ 16:9.
                     </p>
                   </div>
                 </div>

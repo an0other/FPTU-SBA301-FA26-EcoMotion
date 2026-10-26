@@ -15,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ import java.util.Random;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -178,5 +180,27 @@ class ProviderVehicleApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payload))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("provider can upload vehicle cover image and receives valid file URL")
+    void uploadVehicleImageSuccessfully() throws Exception {
+        User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        String token = jwtService.generateAccessToken(providerUser);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "vinfast_vf8.jpg",
+                MediaType.IMAGE_JPEG_VALUE,
+                "fake image content for testing".getBytes()
+        );
+
+        mockMvc.perform(multipart("/api/provider/vehicles/images/upload")
+                        .file(file)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.imageUrl").value(org.hamcrest.Matchers.startsWith("/api/files/vehicle/")))
+                .andExpect(jsonPath("$.data.fileName").value("vinfast_vf8.jpg"));
     }
 }
