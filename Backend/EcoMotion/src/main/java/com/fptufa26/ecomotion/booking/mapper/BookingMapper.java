@@ -16,6 +16,7 @@ import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
+import com.fptufa26.ecomotion.booking.enums.BookingActionKind;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
@@ -109,7 +110,12 @@ public interface BookingMapper {
             String imageUrl,
             boolean canPay,
             boolean atRisk,
-            String riskMessage
+            String riskMessage,
+            Instant holdExpiresAt,
+            Instant endTime,
+            BigDecimal depositAmount,
+            String driverName,
+            BookingActionKind actionKind
     ) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
@@ -143,7 +149,12 @@ public interface BookingMapper {
                 booking.getTotalAmount(),
                 canPay,
                 atRisk,
-                riskMessage);
+                riskMessage,
+                holdExpiresAt,
+                endTime,
+                depositAmount,
+                driverName,
+                actionKind);
     }
 
     default BookingDetailResponse toDetail(Booking booking,
@@ -159,7 +170,8 @@ public interface BookingMapper {
                                            boolean canPay,
                                            boolean canConfirmStart,
                                            boolean canConfirmEnd,
-                                           List<DisputeCategory> disputeCategories) {
+                                           List<DisputeCategory> disputeCategories,
+                                           Instant holdExpiresAt) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
         String vehicleName = !vehicleReplaced && snapshot.getVehicleName() != null
@@ -217,7 +229,8 @@ public interface BookingMapper {
                 canConfirmStart,
                 canConfirmEnd,
                 disputeCategories,
-                providerName);
+                providerName,
+                holdExpiresAt);
     }
 
     @Mapping(target = "bookingCode", source = "booking.bookingCode")

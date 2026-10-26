@@ -178,6 +178,12 @@ export default function VehicleListPage() {
     setDraftFilters(EMPTY_FILTERS)
   }
 
+  const filtersDirty =
+    draftFilters.fuelType !== appliedFilters.fuelType
+    || draftFilters.planType !== appliedFilters.planType
+    || draftFilters.maxPrice !== appliedFilters.maxPrice
+    || draftFilters.sortBy !== appliedFilters.sortBy
+
   const handleApplyFilters = () => {
     setAppliedFilters((prev) => ({
       ...prev,
@@ -217,6 +223,7 @@ export default function VehicleListPage() {
               onChange={handleFiltersChange}
               onReset={handleReset}
               onApply={handleApplyFilters}
+              dirty={filtersDirty}
             />
           </div>
 
@@ -332,6 +339,9 @@ export default function VehicleListPage() {
 
             {!error && !loading && vehicles.length > 0 && (
               <>
+                <p className="mb-4 text-sm font-medium text-[#14221A]">
+                  {total} xe phù hợp
+                </p>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
                   {vehicles.map((vehicle) => (
                     <VehicleCard

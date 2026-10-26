@@ -32,6 +32,36 @@ export function hasValidPickup(pickup) {
     && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
 }
 
+export function pickupAfterAddressEdit(current, nextAddress) {
+  const address = String(nextAddress ?? '')
+  if (address === (current?.address ?? '')) {
+    return current ?? { address, latitude: null, longitude: null }
+  }
+  return { address, latitude: null, longitude: null }
+}
+
+export function estimateBookingTotals({
+  slotPrice,
+  slots,
+  depositRatio,
+  minimumDepositAmount,
+  planType,
+  upfrontAmount,
+}) {
+  const totalAmount = Number(slotPrice) * Number(slots)
+  if (planType === 'YEARLY') {
+    return { totalAmount, depositAmount: Number(upfrontAmount ?? 0) }
+  }
+  const depositAmount = Math.min(
+    totalAmount,
+    Math.max(
+      Math.round(totalAmount * Number(depositRatio ?? 0)),
+      Number(minimumDepositAmount ?? 0),
+    ),
+  )
+  return { totalAmount, depositAmount }
+}
+
 export function buildBookingPayload({ vehicleId, planId, slotCount, pickupTime,
   pickup, passengerCount, driverNote }) {
   return {

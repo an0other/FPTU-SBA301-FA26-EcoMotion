@@ -233,6 +233,14 @@ export function IconChevronRight({ className }) {
   )
 }
 
+export function IconChevronDown({ className }) {
+  return (
+    <Svg className={className}>
+      <path d="m6 9 6 6 6-6" />
+    </Svg>
+  )
+}
+
 export function IconArrowLeft({ className }) {
   return (
     <Svg className={className}>

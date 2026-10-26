@@ -1,4 +1,5 @@
 import { IconShield } from '../icons/Icons'
+import { PLAN_PRICE_SUFFIX } from '../../utils/planLabels'
 
 const FUEL_OPTIONS = [
   { value: '', label: 'Tất cả' },
@@ -63,12 +64,12 @@ function PillGroup({ options, value, onChange }) {
   )
 }
 
-export default function FilterSidebar({ filters, onChange, onReset, onApply }) {
+export default function FilterSidebar({ filters, onChange, onReset, onApply, dirty = false }) {
   const set = (patch) => onChange({ ...filters, ...patch })
 
   const range = PLAN_PRICE_RANGES[filters.planType] ?? PLAN_PRICE_RANGES['']
   const planLabel = PLAN_OPTIONS.find((option) => option.value === filters.planType)?.label
-  const suffix = filters.planType ? '/slot' : ''
+  const suffix = PLAN_PRICE_SUFFIX[filters.planType] ?? ''
   const formatPrice = (value) => new Intl.NumberFormat('vi-VN').format(value)
 
   return (
@@ -142,7 +143,11 @@ export default function FilterSidebar({ filters, onChange, onReset, onApply }) {
       <button
         type="button"
         onClick={onApply}
-        className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className={`w-full rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
+          dirty
+            ? 'bg-brand-800 ring-2 ring-brand-500 ring-offset-2 hover:bg-brand-900'
+            : 'bg-brand-600 hover:bg-brand-700'
+        }`}
       >
         Áp dụng bộ lọc
       </button>
