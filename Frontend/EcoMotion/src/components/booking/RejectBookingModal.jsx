@@ -84,7 +84,7 @@ export default function RejectBookingModal({
           </div>
 
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-            Hành động này sẽ cập nhật trạng thái đơn thành <strong>Từ chối (REJECTED)</strong> và không thể hoàn tác.
+            Hành động này sẽ cập nhật trạng thái đơn thành <strong>Đã từ chối</strong> và không thể hoàn tác.
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">

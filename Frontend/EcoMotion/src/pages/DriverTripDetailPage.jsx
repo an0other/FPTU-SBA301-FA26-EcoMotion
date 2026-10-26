@@ -26,6 +26,8 @@ export default function DriverTripDetailPage() {
   const [actionError, setActionError] = useState(null)
   const [successToast, setSuccessToast] = useState(null)
   const [gpsEnabled, setGpsEnabled] = useState(true)
+  const [showIssueModal, setShowIssueModal] = useState(false)
+  const [issueReason, setIssueReason] = useState('')
 
   const executionStatus = useMemo(() => deriveExecutionStatus(trip), [trip])
   const statusConfig = useMemo(
@@ -34,7 +36,28 @@ export default function DriverTripDetailPage() {
   )
 
   const isActionable = Boolean(statusConfig?.actionLabel)
-  const isTripActive = ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(executionStatus)
+  const isTripActive = ['CONFIRMED', 'ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS'].includes(executionStatus)
+  const canReportUnavailable = ['ASSIGNED', 'CONFIRMED', 'ARRIVED', 'AWAITING_START_CONFIRMATION'].includes(executionStatus)
+
+  const submitDriverIssue = async () => {
+    if (!issueReason.trim()) {
+      setActionError('Vui lòng nhập lý do không thể tiếp tục chuyến.')
+      return
+    }
+    setActionLoading(true)
+    setActionError(null)
+    try {
+      await driverTripService.reportUnavailable(trip.tripId, issueReason.trim())
+      setShowIssueModal(false)
+      setIssueReason('')
+      setSuccessToast('Đã báo sự cố. Nhà cung cấp sẽ phân công tài xế thay thế.')
+      await refetch()
+    } catch (err) {
+      setActionError(err.response?.data?.message || err.message || 'Không thể báo sự cố')
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   // Geolocation tracking hook
   const {
@@ -230,6 +253,14 @@ export default function DriverTripDetailPage() {
               )}
             </div>
           )}
+
+          {canReportUnavailable ? (
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setShowIssueModal(true)} className="rounded-xl border border-rose-200 bg-white px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50">
+                Báo sự cố / không thể tiếp tục chuyến
+              </button>
+            </div>
+          ) : null}
 
           {/* Foreground GPS Tracking Control Bar */}
           {isTripActive && (
@@ -690,6 +721,21 @@ export default function DriverTripDetailPage() {
                 {actionLoading && <Icon name="progress_activity" className="animate-spin text-[16px]" />}
                 <span>Xác nhận thực hiện</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showIssueModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900">Báo sự cố tài xế</h3>
+            <p className="mt-1 text-xs text-slate-500">Chỉ dùng khi bạn không thể tiếp tục chuyến. Nhà cung cấp sẽ nhận cảnh báo để đổi tài xế.</p>
+            <textarea value={issueReason} onChange={(event) => setIssueReason(event.target.value)} maxLength={500} rows={4} placeholder="Mô tả sự cố..." className="mt-4 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-rose-400" />
+            {actionError ? <p className="mt-2 text-xs font-semibold text-rose-700">{actionError}</p> : null}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowIssueModal(false)} disabled={actionLoading} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold">Đóng</button>
+              <button type="button" onClick={submitDriverIssue} disabled={actionLoading} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Gửi báo cáo</button>
             </div>
           </div>
         </div>

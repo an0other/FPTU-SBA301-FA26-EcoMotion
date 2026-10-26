@@ -11,10 +11,19 @@ import { providerBookingService } from '../services/providerBookingService'
 
 const STATUS_TAB_DEFINITIONS = [
   { value: 'ALL', label: 'Tất cả' },
-  { value: 'PENDING', label: 'Chờ duyệt' },
-  { value: 'ACCEPTED', label: 'Đã chấp nhận' },
+  { value: 'AWAITING_DEPOSIT', label: 'Chờ đặt cọc' },
+  { value: 'PENDING', label: 'Chờ duyệt (đơn cũ)' },
+  { value: 'ACCEPTED', label: 'Đã duyệt (đơn cũ)' },
   { value: 'CONFIRMED', label: 'Đã xác nhận' },
+  { value: 'DRIVER_ASSIGNED', label: 'Đã phân tài xế' },
+  { value: 'DRIVER_CONFIRMED', label: 'Tài xế đã xác nhận' },
+  { value: 'DRIVER_ARRIVED', label: 'Tài xế đã đến' },
+  { value: 'AWAITING_START_CONFIRMATION', label: 'Chờ xác nhận bắt đầu' },
   { value: 'IN_PROGRESS', label: 'Đang chạy' },
+  { value: 'AWAITING_END_CONFIRMATION', label: 'Chờ xác nhận kết thúc' },
+  { value: 'AWAITING_EXTRA_CHARGE_CONFIRMATION', label: 'Chờ chốt phụ phí' },
+  { value: 'AWAITING_FINAL_PAYMENT', label: 'Chờ quyết toán' },
+  { value: 'CANCELLATION_REVIEW', label: 'Đang đối soát huỷ' },
   { value: 'COMPLETED', label: 'Hoàn tất' },
   { value: 'REJECTED', label: 'Từ chối' },
   { value: 'CANCELLED', label: 'Đã hủy' },
@@ -69,13 +78,18 @@ function Icon({ name, className = '' }) {
 
 const STATUS_LEFT_BORDER = {
   PENDING: 'border-l-4 border-l-amber-500',
+  AWAITING_DEPOSIT: 'border-l-4 border-l-amber-500',
   ACCEPTED: 'border-l-4 border-l-blue-500',
   CONFIRMED: 'border-l-4 border-l-teal-500',
   DRIVER_ASSIGNED: 'border-l-4 border-l-blue-600',
   DRIVER_CONFIRMED: 'border-l-4 border-l-indigo-600',
   DRIVER_ARRIVED: 'border-l-4 border-l-cyan-600',
+  AWAITING_START_CONFIRMATION: 'border-l-4 border-l-cyan-600',
   IN_PROGRESS: 'border-l-4 border-l-[#10b981]',
+  AWAITING_END_CONFIRMATION: 'border-l-4 border-l-orange-500',
   AWAITING_EXTRA_CHARGE_CONFIRMATION: 'border-l-4 border-l-orange-500',
+  AWAITING_FINAL_PAYMENT: 'border-l-4 border-l-purple-500',
+  CANCELLATION_REVIEW: 'border-l-4 border-l-orange-400',
   COMPLETED: 'border-l-4 border-l-slate-400',
   REJECTED: 'border-l-4 border-l-red-400',
   CANCELLED: 'border-l-4 border-l-slate-300',
@@ -147,9 +161,10 @@ export default function ProviderBookingQueuePage() {
   // Calculate live counts per status
   const statusCounts = useMemo(() => {
     if (summary && summary.total > 0) {
-      return {
+      const counts = {
         ALL: summary.total,
         PENDING: summary.pending,
+        AWAITING_DEPOSIT: summary.awaitingDeposit,
         ACCEPTED: summary.accepted,
         CONFIRMED: summary.confirmed,
         IN_PROGRESS: summary.inProgress,
@@ -157,6 +172,10 @@ export default function ProviderBookingQueuePage() {
         REJECTED: summary.rejected,
         CANCELLED: summary.cancelled,
       }
+      if (selectedTab !== 'ALL' && counts[selectedTab] == null) {
+        counts[selectedTab] = (apiBookings || []).filter((item) => item.status === selectedTab).length
+      }
+      return counts
     }
     const list = apiBookings || []
     const counts = { ALL: list.length }
@@ -170,7 +189,7 @@ export default function ProviderBookingQueuePage() {
       }
     }
     return counts
-  }, [summary, apiBookings])
+  }, [summary, apiBookings, selectedTab])
 
   // Extract distinct vehicles for dropdown filter
   const vehicleOptions = useMemo(() => {
@@ -382,30 +401,30 @@ export default function ProviderBookingQueuePage() {
 
         {/* 4 KPI Summary Cards (Real Backend API Data) */}
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Card 1: Chờ duyệt */}
+          {/* Card 1: Chờ đặt cọc */}
           <div
-            onClick={() => handleTabChange('PENDING')}
+            onClick={() => handleTabChange('AWAITING_DEPOSIT')}
             className={`cursor-pointer relative rounded-xl border p-4.5 shadow-2xs transition hover:shadow-xs ${
-              selectedTab === 'PENDING'
+              selectedTab === 'AWAITING_DEPOSIT'
                 ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20'
                 : 'border-amber-200/80 bg-white hover:border-amber-300'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-slate-800">Chờ duyệt</span>
+              <span className="text-sm font-bold text-slate-800">Chờ đặt cọc</span>
               <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
-                PENDING
+                Chưa thanh toán
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-black tracking-tight text-slate-900">
-                {String(statusCounts.PENDING || 0).padStart(2, '0')}
+                {String(statusCounts.AWAITING_DEPOSIT || 0).padStart(2, '0')}
               </span>
-              <span className="text-xs font-medium text-slate-500">yêu cầu mới</span>
+              <span className="text-xs font-medium text-slate-500">đơn đang giữ lịch</span>
             </div>
             <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
               <Icon name="warning" className="text-[16px] text-amber-600" />
-              <span>Cần duyệt hoặc từ chối</span>
+              <span>Chờ khách gửi minh chứng VietQR</span>
             </div>
           </div>
 
@@ -419,9 +438,9 @@ export default function ProviderBookingQueuePage() {
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-slate-800">Đã chấp nhận</span>
+              <span className="text-sm font-bold text-slate-800">Đã duyệt (đơn cũ)</span>
               <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-800">
-                ACCEPTED
+                Tương thích cũ
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
@@ -448,7 +467,7 @@ export default function ProviderBookingQueuePage() {
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-slate-800">Sắp chạy</span>
               <span className="rounded bg-teal-100 px-2 py-0.5 text-[11px] font-bold text-teal-800">
-                CONFIRMED
+                Đã đặt cọc
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
@@ -475,7 +494,7 @@ export default function ProviderBookingQueuePage() {
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-slate-800">Đang chạy</span>
               <span className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
-                IN_PROGRESS
+                Đang thực hiện
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
@@ -745,6 +764,7 @@ export default function ProviderBookingQueuePage() {
                             )}
                             <div>
                               <div className="font-bold text-slate-900 leading-snug">{item.vehicleName}</div>
+                              {item.atRisk && <div className="mt-1 text-[11px] font-bold text-amber-700">⚠ Xe chưa về, đơn kế tiếp có nguy cơ trễ</div>}
                               <span className="inline-block rounded bg-slate-100 px-1 py-0.2 font-mono text-[10px] font-semibold text-slate-600">
                                 {item.licensePlate}
                               </span>

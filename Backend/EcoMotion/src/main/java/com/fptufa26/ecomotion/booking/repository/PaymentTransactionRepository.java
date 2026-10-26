@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Optional;
 import java.util.List;
 
@@ -64,6 +63,8 @@ public interface PaymentTransactionRepository
     Optional<PaymentTransaction> findByGatewayRef(String gatewayRef);
 
     boolean existsByGatewayRef(String gatewayRef);
+
+    boolean existsByReceivingBankAccount_IdAndGatewayRef(Long receivingBankAccountId, String gatewayRef);
 
     boolean existsByCharge_IdAndStatus(Long chargeId, PaymentStatus status);
     @EntityGraph(attributePaths = "booking")

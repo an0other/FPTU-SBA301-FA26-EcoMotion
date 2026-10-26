@@ -15,6 +15,7 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,9 @@ class ProviderScheduleServiceTest {
 
     @Mock
     private VehicleRepository vehicleRepository;
+
+    @Mock
+    private VehicleCatalogService vehicleCatalogService;
 
     @Mock
     private UserService userService;
@@ -200,7 +204,7 @@ class ProviderScheduleServiceTest {
     @DisplayName("createBlockSchedule - Throws ConflictException when customer booking overlaps")
     void createBlockSchedule_ThrowsConflict_WhenBookingOverlaps() {
         when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
-        when(vehicleRepository.findByIdAndProvider_Id(vehicleId, providerId)).thenReturn(Optional.of(mockVehicle));
+        when(vehicleCatalogService.requireOwnedByProvider(vehicleId, providerId)).thenReturn(mockVehicle);
 
         Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
         Instant end = start.plus(4, ChronoUnit.HOURS);
@@ -212,18 +216,19 @@ class ProviderScheduleServiceTest {
                 "Bảo dưỡng định kỳ"
         );
 
-        when(vehicleScheduleRepository.existsActiveBookingOverlap(vehicleId, start, end)).thenReturn(true);
+        when(vehicleScheduleRepository.existsActiveOverlap(eq(vehicleId), any(Instant.class), any(Instant.class)))
+                .thenReturn(true);
 
         assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("Xe đã có đơn đặt của khách hàng trong khoảng thời gian này");
+                .hasMessageContaining("Không thể chặn lịch");
     }
 
     @Test
     @DisplayName("createBlockSchedule - Throws ConflictException when existing block overlaps")
     void createBlockSchedule_ThrowsConflict_WhenBlockOverlaps() {
         when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
-        when(vehicleRepository.findByIdAndProvider_Id(vehicleId, providerId)).thenReturn(Optional.of(mockVehicle));
+        when(vehicleCatalogService.requireOwnedByProvider(vehicleId, providerId)).thenReturn(mockVehicle);
 
         Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
         Instant end = start.plus(4, ChronoUnit.HOURS);
@@ -235,19 +240,19 @@ class ProviderScheduleServiceTest {
                 "Bận việc riêng"
         );
 
-        when(vehicleScheduleRepository.existsActiveBookingOverlap(vehicleId, start, end)).thenReturn(false);
-        when(vehicleScheduleRepository.existsActiveBlockOverlap(vehicleId, start, end)).thenReturn(true);
+        when(vehicleScheduleRepository.existsActiveOverlap(eq(vehicleId), any(Instant.class), any(Instant.class)))
+                .thenReturn(true);
 
         assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("Xe đã có một lịch bảo dưỡng hoặc chặn bận khác đang hiệu lực");
+                .hasMessageContaining("Không thể chặn lịch");
     }
 
     @Test
     @DisplayName("createBlockSchedule - Successfully saves schedule when valid")
     void createBlockSchedule_Success() {
         when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
-        when(vehicleRepository.findByIdAndProvider_Id(vehicleId, providerId)).thenReturn(Optional.of(mockVehicle));
+        when(vehicleCatalogService.requireOwnedByProvider(vehicleId, providerId)).thenReturn(mockVehicle);
 
         Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
         Instant end = start.plus(4, ChronoUnit.HOURS);
@@ -258,9 +263,6 @@ class ProviderScheduleServiceTest {
                 end,
                 "Bảo dưỡng pin định kỳ 10.000km"
         );
-
-        when(vehicleScheduleRepository.existsActiveBookingOverlap(vehicleId, start, end)).thenReturn(false);
-        when(vehicleScheduleRepository.existsActiveBlockOverlap(vehicleId, start, end)).thenReturn(false);
 
         VehicleSchedule savedSchedule = new VehicleSchedule();
         savedSchedule.setId(101L);

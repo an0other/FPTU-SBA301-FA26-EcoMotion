@@ -49,6 +49,9 @@ public class PaymentTransaction {
     @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;
 
+    @Column(name = "applied_amount", precision = 14, scale = 2)
+    private BigDecimal appliedAmount = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 3)
     private PaymentDirection direction;
@@ -77,6 +80,13 @@ public class PaymentTransaction {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "payment_request_id")
     private com.fptufa26.ecomotion.finance.entity.PaymentRequest paymentRequest;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receiving_bank_account_id")
+    private com.fptufa26.ecomotion.finance.entity.ProviderBankAccount receivingBankAccount;
+
+    @Column(name = "processing_note", length = 500)
+    private String processingNote;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "confirmed_by_id")
@@ -114,6 +124,9 @@ public class PaymentTransaction {
         }
         if (verificationMethod == null) {
             verificationMethod = com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED;
+        }
+        if (appliedAmount == null) {
+            appliedAmount = BigDecimal.ZERO;
         }
     }
 

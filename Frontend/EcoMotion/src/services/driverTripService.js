@@ -63,6 +63,12 @@ export function createDriverTripService(client = apiClient) {
       return data?.data
     },
 
+    async reportUnavailable(tripId, reason) {
+      if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
+      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/report-unavailable`, { reason })
+      return data?.data
+    },
+
     async sendLocation(tripId, locationPayload) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/locations`, locationPayload)

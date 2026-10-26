@@ -3,7 +3,7 @@ package com.fptufa26.ecomotion.dispute.service.implement;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
@@ -14,11 +14,10 @@ import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.repository.UserRepository;
+import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
-import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,9 +32,8 @@ import java.util.Optional;
 public class DisputeServiceImpl implements DisputeService {
 
     private final DisputeRepository disputeRepository;
-    private final UserRepository userRepository;
-    private final BookingRepository bookingRepository;
-    private final PaymentRequestRepository paymentRequestRepository;
+    private final UserService userService;
+    private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
 
     @Override
@@ -94,7 +92,7 @@ public class DisputeServiceImpl implements DisputeService {
         }
 
         if (adminUserId != null) {
-            User admin = userRepository.findById(adminUserId).orElse(null);
+            User admin = userService.findById(adminUserId).orElse(null);
             dispute.setHandledBy(admin);
         }
 
@@ -111,8 +109,8 @@ public class DisputeServiceImpl implements DisputeService {
         BookingCharge charge = Optional.ofNullable(dispute.getCharge())
                 .orElseThrow(() -> new ConflictException("Tranh chấp không liên kết với phụ phí"));
         Booking booking = dispute.getBooking();
-        Optional<PaymentRequest> finalRequest = paymentRequestRepository
-                .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
+        Optional<PaymentRequest> finalRequest = paymentRequestService
+                .findPaymentRequest(booking.getId(), PaymentRequestType.FINAL_BALANCE);
         finalRequest.ifPresent(request -> {
             if (request.getStatus() == PaymentRequestStatus.CONFIRMED
                     || request.getPaidAmount().signum() > 0) {
@@ -140,13 +138,19 @@ public class DisputeServiceImpl implements DisputeService {
                 booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
             }
         });
-        bookingRepository.save(booking);
+        bookingPaymentLedgerService.saveBooking(booking);
     }
 
     @Override
     @Transactional(readOnly = true)
     public long countOpenOrInReview() {
         return disputeRepository.countOpenOrInReview();
+    }
+
+    @Override
+    public boolean hasOpenDispute(Long bookingId) {
+        return disputeRepository.existsByBooking_IdAndStatusIn(
+                bookingId, java.util.List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
     }
 
     @Override

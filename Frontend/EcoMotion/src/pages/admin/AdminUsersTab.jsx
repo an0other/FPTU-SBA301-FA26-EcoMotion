@@ -1,14 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { adminService } from '../../services/adminService'
 import {
   IconUsers,
   IconShield,
   IconSearch,
   IconCheckCircle,
-  IconLock,
-  IconAlertTriangle,
   IconX,
-  IconEye,
 } from '../../components/icons/Icons'
 
 const ROLE_LABELS = {
@@ -56,17 +53,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
   const [ekycStatus, setEkycStatus] = useState(initialFilter.status || 'ALL')
   const [previewImage, setPreviewImage] = useState(null)
 
-  // Sync initialSubTab if props change
-  useEffect(() => {
-    if (initialSubTab) setSubTab(initialSubTab)
-  }, [initialSubTab])
-
-  // Load data based on subTab
-  useEffect(() => {
-    loadData()
-  }, [subTab, userFilters, providerStatus, driverStatus, ekycStatus])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true)
     setMessage(null)
     try {
@@ -88,7 +75,11 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
     } finally {
       setLoading(false)
     }
-  }
+  }, [subTab, userFilters, providerStatus, driverStatus, ekycStatus])
+
+  useEffect(() => {
+    queueMicrotask(loadData)
+  }, [loadData])
 
   // Handle User Status toggle (ACTIVE <-> LOCKED)
   async function handleToggleUserStatus(user) {

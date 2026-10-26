@@ -15,6 +15,7 @@ import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 
 import java.util.List;
+import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,7 +30,13 @@ public interface PaymentRequestService {
 
     List<PaymentRequestResponse> getPaymentRequestsByBooking(Long bookingId, Long currentUserId);
 
+    List<PaymentRequestResponse> getPaymentRequestsByBookingCode(String bookingCode, Long currentUserId);
+
     PaymentRequestResponse getPaymentRequestDetail(Long paymentRequestId, Long currentUserId);
+
+    PaymentRequestResponse reissuePaymentRequest(Long paymentRequestId, Long currentUserId);
+
+    PaymentRequestResponse reissueDepositByBookingCode(String bookingCode, Long currentUserId);
 
     PaymentEvidenceResponse submitPaymentProof(Long paymentRequestId, Long currentUserId, SubmitProofRequest request);
 
@@ -53,4 +60,8 @@ public interface PaymentRequestService {
     SimulatePaymentResponse simulatePayment(Long paymentRequestId, Long adminUserId, SimulatePaymentRequest request);
 
     void seedSandboxData(Long adminUserId);
+
+    boolean expireDepositWithoutProof(Long bookingId);
+
+    Optional<PaymentRequest> findPaymentRequest(Long bookingId, com.fptufa26.ecomotion.finance.enums.PaymentRequestType type);
 }

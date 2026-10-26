@@ -23,7 +23,6 @@ export default function DriverSchedulePage() {
     trips,
     activeTrip,
     total,
-    hasMore,
     loading,
     error,
     setView,

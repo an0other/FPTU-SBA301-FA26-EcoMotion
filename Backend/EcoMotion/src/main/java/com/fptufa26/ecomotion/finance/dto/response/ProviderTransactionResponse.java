@@ -24,6 +24,8 @@ public record ProviderTransactionResponse(
         String bankName,
         String accountNumberMasked,
         String accountHolder,
+        String receiptUrl,
+        String processingNote,
         Instant paidAt,
         Instant createdAt
 ) {

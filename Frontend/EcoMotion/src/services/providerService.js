@@ -26,6 +26,11 @@ export const providerService = {
     return data?.data
   },
 
+  async getVehicleLicensePlateHistory(id) {
+    const { data } = await apiClient.get(`/provider/vehicles/${id}/license-plate-history`)
+    return data?.data ?? []
+  },
+
   async updateVehicle(id, payload) {
     const { data } = await apiClient.put(`/provider/vehicles/${id}`, payload)
     return data?.data
@@ -38,6 +43,16 @@ export const providerService = {
 
   async updateVehicleRentalPlans(id, payload) {
     const { data } = await apiClient.put(`/provider/vehicles/${id}/plans`, payload)
+    return data?.data
+  },
+
+  async getVehicleDepositPolicy(id) {
+    const { data } = await apiClient.get(`/provider/vehicles/${id}/deposit-policy`)
+    return data?.data
+  },
+
+  async updateVehicleDepositPolicy(id, payload) {
+    const { data } = await apiClient.patch(`/provider/vehicles/${id}/deposit-policy`, payload)
     return data?.data
   },
 

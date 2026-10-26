@@ -43,11 +43,14 @@ public class ProviderDriverController {
     private final ProviderDriverService providerDriverService;
     private final FileStorageService fileStorageService;
 
-    @GetMapping(value = "/available", params = "!bookingId")
+    @GetMapping("/available")
     @Operation(summary = "Get available drivers for booking assignment")
     public ApiResponse<List<AvailableDriverResponse>> getAvailableDrivers(
-            @AuthenticationPrincipal SecurityUser principal) {
-        return ApiResponse.success(providerBookingService.getAvailableDrivers(principal.getUserId()));
+            @AuthenticationPrincipal SecurityUser principal,
+            @RequestParam(required = false) String bookingCode) {
+        return ApiResponse.success(bookingCode == null || bookingCode.isBlank()
+                ? providerBookingService.getAvailableDrivers(principal.getUserId())
+                : providerBookingService.getAvailableDrivers(principal.getUserId(), bookingCode));
     }
 
     @GetMapping

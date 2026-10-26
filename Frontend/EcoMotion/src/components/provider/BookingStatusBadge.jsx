@@ -9,6 +9,11 @@ const BOOKING_STATUS_META = {
     className: 'bg-tertiary-fixed text-tertiary',
     dot: 'bg-tertiary',
   },
+  AWAITING_DEPOSIT: {
+    label: 'Chờ khách đặt cọc',
+    className: 'bg-amber-100 text-amber-900',
+    dot: 'bg-amber-600 animate-pulse',
+  },
   CONFIRMED: {
     label: 'Đã xác nhận',
     className: 'bg-secondary-fixed text-secondary',
@@ -29,10 +34,25 @@ const BOOKING_STATUS_META = {
     className: 'bg-cyan-100 text-cyan-800',
     dot: 'bg-cyan-600 animate-pulse',
   },
+  AWAITING_START_CONFIRMATION: {
+    label: 'Chờ xác nhận bắt đầu',
+    className: 'bg-cyan-100 text-cyan-800',
+    dot: 'bg-cyan-600 animate-pulse',
+  },
   IN_PROGRESS: {
     label: 'Đang chạy',
     className: 'bg-primary-fixed text-primary',
     dot: 'bg-primary animate-ping',
+  },
+  AWAITING_END_CONFIRMATION: {
+    label: 'Chờ xác nhận kết thúc',
+    className: 'bg-orange-100 text-orange-800',
+    dot: 'bg-orange-600 animate-pulse',
+  },
+  CANCELLATION_REVIEW: {
+    label: 'Đang đối soát huỷ',
+    className: 'bg-orange-100 text-orange-800',
+    dot: 'bg-orange-600 animate-pulse',
   },
   AWAITING_EXTRA_CHARGE_CONFIRMATION: {
     label: 'Chờ duyệt phụ phí',
@@ -63,7 +83,7 @@ const BOOKING_STATUS_META = {
 
 export default function BookingStatusBadge({ status }) {
   const meta = BOOKING_STATUS_META[status] ?? {
-    label: status ?? '—',
+    label: 'Trạng thái chưa xác định',
     className: 'bg-surface-container text-on-surface-variant',
     dot: 'bg-outline',
   }

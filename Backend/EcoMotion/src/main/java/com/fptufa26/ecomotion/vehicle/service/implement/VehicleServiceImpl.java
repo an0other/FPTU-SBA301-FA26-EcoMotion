@@ -2,7 +2,7 @@ package com.fptufa26.ecomotion.vehicle.service.implement;
 
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleAvailabilityResponse;
-import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
@@ -45,10 +45,9 @@ public class VehicleServiceImpl implements VehicleService {
     private final VehicleImageService vehicleImageService;
     private final RentalPlanService rentalPlanService;
     private final UserService userService;
+    private final ScheduleService scheduleService;
 
     @Autowired private com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository vehicleDocumentRepository;
-    // Availability dependencies are field-injected to keep the catalog service constructor boundary small.
-    @Autowired private VehicleScheduleRepository vehicleScheduleRepository;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -347,23 +346,20 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     public VehicleAvailabilityResponse getAvailability(Long vehicleId, Instant from, Instant to) {
-        // Verify vehicle exists and is approved
         Vehicle vehicle = vehicleRepository.findByIdAndStatus(vehicleId, VehicleStatus.APPROVED)
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
 
         List<VehicleAvailabilityResponse.OccupiedSlot> result = new ArrayList<>();
 
-        // Expand query range by buffer so edge bookings are not missed
         Duration buffer = Duration.ofMinutes(Math.max(0,
                 vehicle.getMaintenanceBufferMinutes() == null ? 0 : vehicle.getMaintenanceBufferMinutes()));
         Instant expandedFrom = from.minus(buffer);
         Instant expandedTo = to.plus(buffer);
 
-        // 1. Schedule-based slots (CONFIRMED bookings, maintenance, blocked)
-        var schedules = vehicleScheduleRepository.findActiveInRange(vehicleId, expandedFrom, expandedTo);
+        var schedules = scheduleService.occupiedWindows(vehicleId, expandedFrom, expandedTo);
         for (var s : schedules) {
             result.add(new VehicleAvailabilityResponse.OccupiedSlot(
-                    s.getStartAt().minus(buffer), s.getEndAt().plus(buffer), s.getType().name()));
+                    s.startAt().minus(buffer), s.endAt().plus(buffer), s.type().name()));
         }
 
         result.sort(Comparator.comparing(VehicleAvailabilityResponse.OccupiedSlot::startAt));
@@ -501,5 +497,20 @@ public class VehicleServiceImpl implements VehicleService {
     @Override
     public long countTotalVehicles() {
         return vehicleRepository.count();
+    }
+
+    @Override
+    @Transactional
+    public Vehicle requireApprovedProviderVehicleForUpdate(Long vehicleId, Long providerId) {
+        Vehicle vehicle = vehicleRepository.findByIdForUpdate(vehicleId)
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+        if (vehicle.getProvider() == null || !providerId.equals(vehicle.getProvider().getId())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Xe thay thế không thuộc nhà cung cấp hiện tại");
+        }
+        if (vehicle.getStatus() != VehicleStatus.APPROVED) {
+            throw new IllegalArgumentException("Xe thay thế phải ở trạng thái đã duyệt");
+        }
+        return vehicle;
     }
 }

@@ -9,6 +9,7 @@ public record CreateBookingResponse(
         String bookingCode,
         BookingStatus status,
         BigDecimal totalAmount,
+        BigDecimal depositAmount,
         Instant pickupTime,
         Instant endTime,
         BookingChargeResponse baseRental

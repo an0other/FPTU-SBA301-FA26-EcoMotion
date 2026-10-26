@@ -1,5 +1,5 @@
 export const CancelBookingModal = ({
-  bookingId,
+  bookingCode,
   isOpen,
   onClose,
   onConfirmCancel,
@@ -34,7 +34,7 @@ export const CancelBookingModal = ({
 
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E8F6EE] text-[#15803D] font-mono text-xs font-semibold w-max mb-3">
           <span className="w-1.5 h-1.5 rounded-full bg-[#15803D]"></span>
-          {bookingId}
+          {bookingCode}
         </div>
 
         <p className="text-sm text-[#14221A]/70 mb-5 leading-relaxed">
@@ -50,7 +50,7 @@ export const CancelBookingModal = ({
             Giữ đơn
           </button>
           <button
-            onClick={() => onConfirmCancel(bookingId)}
+            onClick={() => onConfirmCancel(bookingCode)}
             className="flex-1 h-[44px] rounded-[12px] bg-[#B42318] text-white text-sm font-semibold hover:bg-red-700 transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-98"
             type="button"
           >

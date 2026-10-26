@@ -47,6 +47,22 @@ const TX_VERIFICATION_LABELS = {
   MANUAL_UNVERIFIED: 'Chưa xác minh độc lập',
 }
 
+const TX_TYPE_LABELS = {
+  DEPOSIT_PAY: 'Thanh toán cọc', UPFRONT_PAY: 'Trả trước', SETTLEMENT: 'Quyết toán', REFUND: 'Hoàn tiền', PAYOUT: 'Chi trả nhà cung cấp',
+}
+const TX_METHOD_LABELS = { BANK_TRANSFER: 'Chuyển khoản', CASH: 'Tiền mặt', CARD: 'Thẻ', E_WALLET: 'Ví điện tử' }
+const BOOKING_STATUS_LABELS = {
+  AWAITING_DEPOSIT: 'Chờ đặt cọc', CONFIRMED: 'Đã xác nhận', DRIVER_ASSIGNED: 'Đã gán tài xế',
+  DRIVER_CONFIRMED: 'Tài xế đã nhận', DRIVER_ARRIVED: 'Tài xế đã đến', AWAITING_START_CONFIRMATION: 'Chờ xác nhận bắt đầu',
+  IN_PROGRESS: 'Đang thực hiện', AWAITING_END_CONFIRMATION: 'Chờ xác nhận kết thúc',
+  AWAITING_EXTRA_CHARGE_CONFIRMATION: 'Chờ chốt phụ phí', AWAITING_FINAL_PAYMENT: 'Chờ quyết toán',
+  CANCELLATION_REVIEW: 'Đang đối soát huỷ', COMPLETED: 'Hoàn thành', CANCELLED: 'Đã huỷ', REJECTED: 'Đã từ chối',
+}
+const CHARGE_LABELS = {
+  BASE_RENTAL: 'Tiền thuê', DEPOSIT: 'Tiền cọc', OVERTIME: 'Phụ phí quá giờ', WAITING: 'Phụ phí chờ',
+  WEEKEND: 'Phụ phí cuối tuần', OUT_OF_RADIUS: 'Phụ phí ngoài bán kính',
+}
+
 const ACCOUNT_HOLDER_REGEX = /^[a-zA-ZÀ-ỹA-Z0-9\s.'-]+$/
 
 export default function ProviderFinancePage() {
@@ -78,6 +94,11 @@ export default function ProviderFinancePage() {
   const [reportIssueModalData, setReportIssueModalData] = useState(null)
   const [viewProofModalData, setViewProofModalData] = useState(null)
   const [breakdownData, setBreakdownData] = useState(null)
+  const [refundModalData, setRefundModalData] = useState(null)
+  const [refundProofFile, setRefundProofFile] = useState(null)
+  const [refundBankReference, setRefundBankReference] = useState('')
+  const [refundNote, setRefundNote] = useState('')
+  const [submittingRefund, setSubmittingRefund] = useState(false)
 
   // Form States for Bank Account
   const [formBankCode, setFormBankCode] = useState('VCB')
@@ -143,6 +164,33 @@ export default function ProviderFinancePage() {
     const timer = window.setTimeout(fetchData, 0)
     return () => window.clearTimeout(timer)
   }, [fetchData])
+
+  async function handleCompleteRefund(event) {
+    event.preventDefault()
+    if (!refundProofFile || !refundBankReference.trim()) return
+    if (refundProofFile.size > 5 * 1024 * 1024) {
+      setToast({ message: 'Minh chứng hoàn tiền không được vượt quá 5 MB.', type: 'error' })
+      return
+    }
+    try {
+      setSubmittingRefund(true)
+      await providerFinanceService.completeRefund(refundModalData.id, {
+        file: refundProofFile,
+        bankReference: refundBankReference.trim(),
+        note: refundNote.trim(),
+      })
+      setRefundModalData(null)
+      setRefundProofFile(null)
+      setRefundBankReference('')
+      setRefundNote('')
+      setToast({ message: 'Đã ghi nhận hoàn tiền kèm minh chứng.', type: 'success' })
+      await fetchData()
+    } catch (err) {
+      setToast({ message: err.message || 'Không thể ghi nhận hoàn tiền.', type: 'error' })
+    } finally {
+      setSubmittingRefund(false)
+    }
+  }
 
   // Bank Form Validation
   const validateBankForm = useCallback(() => {
@@ -526,7 +574,7 @@ export default function ProviderFinancePage() {
                             {bankAccount.bankCode}
                           </span>
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                            Đang hoạt động (ACTIVE)
+                            Đang hoạt động
                           </span>
                         </div>
 
@@ -648,7 +696,7 @@ export default function ProviderFinancePage() {
                               </button>
                             </td>
                             <td className="px-4 py-4 font-semibold text-slate-700">
-                              {pr.paymentType === 'DEPOSIT' ? 'Tiền cọc (DEPOSIT)' : 'Quyết toán (FINAL BALANCE)'}
+                              {pr.paymentType === 'DEPOSIT' ? 'Tiền cọc' : 'Quyết toán cuối chuyến'}
                             </td>
                             <td className="px-4 py-4 text-right font-bold text-slate-900">
                               {formatVnd(pr.amount)}
@@ -742,9 +790,9 @@ export default function ProviderFinancePage() {
                     className="rounded-lg border border-slate-300 bg-slate-50 py-1.5 px-3 text-xs font-semibold text-slate-700 focus:border-[#059669] focus:outline-hidden"
                   >
                     <option value="ALL">Tất cả loại giao dịch</option>
-                    <option value="DEPOSIT_PAY">Tiền cọc (DEPOSIT_PAY)</option>
-                    <option value="SETTLEMENT">Quyết toán (SETTLEMENT)</option>
-                    <option value="REFUND">Hoàn tiền (REFUND)</option>
+                    <option value="DEPOSIT_PAY">Tiền cọc</option>
+                    <option value="SETTLEMENT">Quyết toán</option>
+                    <option value="REFUND">Hoàn tiền</option>
                   </select>
                 </div>
               </div>
@@ -769,6 +817,7 @@ export default function ProviderFinancePage() {
                         <th className="px-4 py-3.5">Mã tham chiếu</th>
                         <th className="px-4 py-3.5">Phương thức xác minh</th>
                         <th className="px-4 py-3.5">Thời gian nhận</th>
+                        <th className="px-4 py-3.5">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -784,7 +833,7 @@ export default function ProviderFinancePage() {
                               {tx.bookingCode}
                             </button>
                           </td>
-                          <td className="px-4 py-4 font-semibold text-slate-700">{tx.type}</td>
+                          <td className="px-4 py-4 font-semibold text-slate-700">{TX_TYPE_LABELS[tx.type] || 'Giao dịch'}</td>
                           <td className="px-4 py-4 text-right font-bold text-[#059669]">
                             {tx.direction === 'OUT' ? '-' : '+'}{formatVnd(tx.amount)}
                           </td>
@@ -795,6 +844,13 @@ export default function ProviderFinancePage() {
                             </span>
                           </td>
                           <td className="px-4 py-4 text-slate-500 whitespace-nowrap">{formatDateTime(tx.paidAt || tx.createdAt)}</td>
+                          <td className="px-4 py-4">
+                            {tx.type === 'REFUND' && tx.status === 'PENDING' ? (
+                              <button type="button" onClick={() => setRefundModalData(tx)} className="rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-bold text-white">Hoàn tiền</button>
+                            ) : tx.type === 'REFUND' && tx.receiptUrl ? (
+                              <a href={tx.receiptUrl} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-emerald-700 hover:underline">Xem minh chứng</a>
+                            ) : '—'}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -804,6 +860,26 @@ export default function ProviderFinancePage() {
             </div>
           </section>
         )}
+
+        {refundModalData ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+            <form onSubmit={handleCompleteRefund} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+              <h3 className="text-base font-bold text-slate-900">Xác nhận đã hoàn tiền</h3>
+              <p className="mt-1 text-xs text-slate-500">Đơn {refundModalData.bookingCode} · {formatVnd(refundModalData.amount)}</p>
+              <label className="mt-4 block text-xs font-bold text-slate-700">Mã giao dịch ngân hàng *</label>
+              <input required value={refundBankReference} onChange={(event) => setRefundBankReference(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+              <label className="mt-3 block text-xs font-bold text-slate-700">Minh chứng hoàn tiền *</label>
+              <input required type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setRefundProofFile(event.target.files?.[0] ?? null)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" />
+              <p className="mt-1 text-[10px] text-slate-400">JPG, PNG, WebP hoặc PDF tối đa 5 MB.</p>
+              <label className="mt-3 block text-xs font-bold text-slate-700">Ghi chú</label>
+              <textarea value={refundNote} onChange={(event) => setRefundNote(event.target.value)} maxLength={500} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" />
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" onClick={() => setRefundModalData(null)} disabled={submittingRefund} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold">Đóng</button>
+                <button type="submit" disabled={submittingRefund} className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{submittingRefund ? 'Đang lưu...' : 'Xác nhận hoàn tiền'}</button>
+              </div>
+            </form>
+          </div>
+        ) : null}
 
         {/* TAB 4: COMMISSIONS OVERVIEW (SCREEN F) */}
         {activeTab === 'commissions' && (
@@ -846,7 +922,7 @@ export default function ProviderFinancePage() {
                           <td className="px-4 py-3.5 text-right font-bold text-purple-700">{formatVnd(c.commissionAmount)}</td>
                           <td className="px-4 py-3.5">
                             <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                              Cần thanh toán (DUE)
+                              Cần thanh toán
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-slate-500">{formatDateTime(c.bookingDate)}</td>
@@ -1205,7 +1281,7 @@ export default function ProviderFinancePage() {
                   <h3 className="text-base font-bold text-slate-900">
                     Đối soát tài chính đơn #{breakdownData.bookingCode}
                   </h3>
-                  <span className="text-xs text-slate-500">Trạng thái chuyến: <span className="font-bold">{breakdownData.bookingStatus}</span></span>
+                  <span className="text-xs text-slate-500">Trạng thái chuyến: <span className="font-bold">{BOOKING_STATUS_LABELS[breakdownData.bookingStatus] || 'Đang xử lý'}</span></span>
                 </div>
                 <button
                   type="button"
@@ -1246,7 +1322,7 @@ export default function ProviderFinancePage() {
                         <div key={c.id} className="p-3 flex justify-between items-center bg-white">
                           <div>
                             <span className="font-semibold text-slate-800">{c.description}</span>
-                            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 font-mono">{c.chargeType}</span>
+                            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{CHARGE_LABELS[c.chargeType] || 'Phụ phí'}</span>
                           </div>
                           <span className="font-bold text-slate-900">{formatVnd(c.amount)}</span>
                         </div>
@@ -1263,7 +1339,7 @@ export default function ProviderFinancePage() {
                       {breakdownData.transactions.map((tx) => (
                         <div key={tx.id} className="p-3 flex justify-between items-center bg-white">
                           <div>
-                            <div className="font-semibold text-slate-800">{tx.type} • {tx.method}</div>
+                            <div className="font-semibold text-slate-800">{TX_TYPE_LABELS[tx.type] || 'Giao dịch'} • {TX_METHOD_LABELS[tx.method] || 'Khác'}</div>
                             <div className="text-[11px] text-slate-400 font-mono">{tx.gatewayRef || '—'} • {formatDateTime(tx.paidAt)}</div>
                           </div>
                           <span className="font-bold text-emerald-700">+{formatVnd(tx.amount)}</span>
