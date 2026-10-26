@@ -44,20 +44,16 @@ export default function LiveMapViewer({
 
   // Derive initial or updated center
   useEffect(() => {
-    if (vehicleLocation?.latitude && vehicleLocation?.longitude) {
-      setCenter({
-        lat: Number(vehicleLocation.latitude),
-        lon: Number(vehicleLocation.longitude),
-      })
-    } else if (pickupLocation?.latitude && pickupLocation?.longitude) {
-      setCenter({
-        lat: Number(pickupLocation.latitude),
-        lon: Number(pickupLocation.longitude),
-      })
-    } else {
-      // Default to Ho Chi Minh City Center
-      setCenter({ lat: 10.776889, lon: 106.700806 })
-    }
+    const timerId = window.setTimeout(() => {
+      if (vehicleLocation?.latitude && vehicleLocation?.longitude) {
+        setCenter({ lat: Number(vehicleLocation.latitude), lon: Number(vehicleLocation.longitude) })
+      } else if (pickupLocation?.latitude && pickupLocation?.longitude) {
+        setCenter({ lat: Number(pickupLocation.latitude), lon: Number(pickupLocation.longitude) })
+      } else {
+        setCenter({ lat: 10.776889, lon: 106.700806 })
+      }
+    }, 0)
+    return () => window.clearTimeout(timerId)
   }, [
     vehicleLocation?.latitude,
     vehicleLocation?.longitude,
@@ -195,19 +191,19 @@ export default function LiveMapViewer({
     : null
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-xs select-none">
+    <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-xs select-none">
       {/* Top Overlay: Status & Timestamps */}
       <div className="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         <div className="flex items-center gap-2 pointer-events-auto">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold shadow-xs backdrop-blur-md ${stateConfig.badgeClass}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold shadow-xs bg-white ${stateConfig.badgeClass}`}
           >
             <span className={`h-2 w-2 rounded-full ${stateConfig.dotClass}`} />
             {stateConfig.label}
           </span>
 
           {vehicleLocation?.receivedAt && (
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-xs border border-slate-200">
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-xs border border-slate-200">
               <Icon name="history" className="text-[13px] text-slate-400" />
               <span>
                 Cập nhật:{' '}
@@ -222,9 +218,9 @@ export default function LiveMapViewer({
             href={navUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-bold text-teal-800 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-teal-900"
+            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 shadow-xs transition hover:bg-slate-50"
           >
-            <Icon name="navigation" className="text-[16px] text-teal-600" />
+            <Icon name="navigation" className="text-[16px] text-brand-700" />
             <span>Mở chỉ đường ngoài</span>
           </a>
         )}
@@ -303,11 +299,11 @@ export default function LiveMapViewer({
                   />
                 )}
 
-                <div className="rounded-lg bg-slate-900/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-bold text-white shadow-md border border-slate-700 whitespace-nowrap mb-1">
+                <div className="rounded-md bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs border border-slate-700 whitespace-nowrap mb-1">
                   {vehicleInfo?.licensePlate || 'Xe phục vụ'}
                 </div>
-                <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-teal-600 text-white shadow-xl border-2 border-white ring-4 ring-teal-200">
-                  <Icon name="directions_car" className="text-[22px]" />
+                <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-brand-700 text-white shadow-sm border-2 border-white">
+                  <Icon name="directions_car" className="text-[20px]" />
                 </div>
               </div>
             )}
@@ -317,7 +313,7 @@ export default function LiveMapViewer({
 
       {/* Zoom & Center Controls */}
       {interactive && (
-        <div className="absolute bottom-6 right-3 z-10 flex flex-col gap-1 shadow-md rounded-xl overflow-hidden border border-slate-200 bg-white">
+        <div className="absolute bottom-6 right-3 z-10 flex flex-col gap-1 shadow-xs rounded-md overflow-hidden border border-slate-200 bg-white">
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(18, z + 1))}
@@ -358,7 +354,7 @@ export default function LiveMapViewer({
       )}
 
       {/* Attribution Footer */}
-      <div className="absolute bottom-1 left-2 z-10 text-[9px] text-slate-500 bg-white/70 px-1.5 py-0.5 rounded backdrop-blur-xs">
+      <div className="absolute bottom-1 left-2 z-10 text-[9px] text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
         © OpenStreetMap contributors
       </div>
     </div>

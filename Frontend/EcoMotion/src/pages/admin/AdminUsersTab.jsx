@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { adminService } from '../../services/adminService'
 import {
   IconUsers,
   IconShield,
   IconSearch,
   IconCheckCircle,
-  IconLock,
-  IconAlertTriangle,
   IconX,
-  IconEye,
 } from '../../components/icons/Icons'
+import ProviderDetailModal from './modals/ProviderDetailModal'
+import DriverDetailModal from './modals/DriverDetailModal'
+import EkycDetailModal from './modals/EkycDetailModal'
+import UserDetailModal from './modals/UserDetailModal'
 
 const ROLE_LABELS = {
   RENTER: 'Khách thuê',
@@ -32,6 +33,12 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [message, setMessage] = useState(null)
+
+  // Inspection Modals
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [selectedProvider, setSelectedProvider] = useState(null)
+  const [selectedDriver, setSelectedDriver] = useState(null)
+  const [selectedEkyc, setSelectedEkyc] = useState(null)
 
   // SubTab 1: Users
   const [users, setUsers] = useState([])
@@ -56,17 +63,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
   const [ekycStatus, setEkycStatus] = useState(initialFilter.status || 'ALL')
   const [previewImage, setPreviewImage] = useState(null)
 
-  // Sync initialSubTab if props change
-  useEffect(() => {
-    if (initialSubTab) setSubTab(initialSubTab)
-  }, [initialSubTab])
-
-  // Load data based on subTab
-  useEffect(() => {
-    loadData()
-  }, [subTab, userFilters, providerStatus, driverStatus, ekycStatus])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true)
     setMessage(null)
     try {
@@ -88,7 +85,11 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
     } finally {
       setLoading(false)
     }
-  }
+  }, [subTab, userFilters, providerStatus, driverStatus, ekycStatus])
+
+  useEffect(() => {
+    queueMicrotask(loadData)
+  }, [loadData])
 
   // Handle User Status toggle (ACTIVE <-> LOCKED)
   async function handleToggleUserStatus(user) {
@@ -346,7 +347,14 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                             {u.status}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-right">
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUser(u)}
+                            className="mr-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                          >
+                            Chi tiết
+                          </button>
                           {u.role !== 'ADMIN' && (
                             <button
                               type="button"
@@ -430,6 +438,13 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                   </div>
 
                   <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProvider(p)}
+                      className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                    >
+                      Xem chi tiết hồ sơ
+                    </button>
                     {p.status !== 'APPROVED' && (
                       <button
                         type="button"
@@ -538,6 +553,13 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                   </div>
 
                   <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDriver(d)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                    >
+                      Xem chi tiết hồ sơ
+                    </button>
                     {d.status !== 'APPROVED' && (
                       <button
                         type="button"
@@ -688,6 +710,13 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
 
                   {/* Actions */}
                   <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/30 px-6 py-3.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEkyc(e)}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                    >
+                      Thẩm định chi tiết
+                    </button>
                     {e.status !== 'VERIFIED' && (
                       <button
                         type="button"
@@ -788,6 +817,60 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
             <img src={previewImage} alt="Xem phóng to" className="max-h-[85vh] max-w-[85vw] object-contain" />
           </div>
         </div>
+      )}
+      {/* Dedicated Inspection Modals */}
+      {selectedUser && (
+        <UserDetailModal
+          user={selectedUser}
+          onClose={() => setSelectedUser(null)}
+          onToggleStatus={async (u) => {
+            await handleToggleUserStatus(u)
+            setSelectedUser(null)
+          }}
+          actionLoading={actionLoading}
+        />
+      )}
+
+      {selectedProvider && (
+        <ProviderDetailModal
+          provider={selectedProvider}
+          onClose={() => setSelectedProvider(null)}
+          onStatusUpdate={async (id, status) => {
+            await handleUpdateProvider(id, status)
+            setSelectedProvider(null)
+          }}
+          actionLoading={actionLoading}
+        />
+      )}
+
+      {selectedDriver && (
+        <DriverDetailModal
+          driver={selectedDriver}
+          onClose={() => setSelectedDriver(null)}
+          onApprove={async (id) => {
+            await handleApproveDriver(id)
+            setSelectedDriver(null)
+          }}
+          onRejectClick={(d) => {
+            setDriverRejectModal(d)
+            setDriverRejectReason('')
+          }}
+          actionLoading={actionLoading}
+          onPreviewImage={(url) => setPreviewImage(url)}
+        />
+      )}
+
+      {selectedEkyc && (
+        <EkycDetailModal
+          ekyc={selectedEkyc}
+          onClose={() => setSelectedEkyc(null)}
+          onStatusUpdate={async (userId, status) => {
+            await handleUpdateEkyc(userId, status)
+            setSelectedEkyc(null)
+          }}
+          actionLoading={actionLoading}
+          onPreviewImage={(url) => setPreviewImage(url)}
+        />
       )}
     </div>
   )

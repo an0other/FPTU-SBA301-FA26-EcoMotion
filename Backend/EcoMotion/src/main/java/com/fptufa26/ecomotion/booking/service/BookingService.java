@@ -11,7 +11,9 @@ import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
+import com.fptufa26.ecomotion.booking.dto.response.ConfirmStartResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
@@ -19,6 +21,7 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
+import com.fptufa26.ecomotion.common.response.PageResponse;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,16 +33,23 @@ public interface BookingService {
 
     List<BookingSummaryResponse> listMine(Long userId, BookingStatus status);
 
+    PageResponse<BookingSummaryResponse> listMinePage(
+            Long userId, BookingStatus status, String group, String keyword, int page, int size);
+
     CheckoutPreviewResponse previewCheckout(Long userId, String bookingCode);
 
     CheckoutResultResponse checkout(Long userId, String bookingCode, CheckoutRequest request);
 
     BookingDetailResponse detail(Long userId, String bookingCode);
 
+    TripTrackingResponse getTripTracking(Long userId, String bookingCode);
+
     BookingRequestDetailsResponse updateRequestDetails(
             Long userId, String bookingCode, UpdateBookingRequestDetails request);
 
     CancelBookingResponse cancel(Long userId, String bookingCode);
+
+    ConfirmStartResponse confirmStart(Long userId, String bookingCode);
 
     ConfirmEndResponse confirmEnd(Long userId, String bookingCode);
 
@@ -61,6 +71,10 @@ public interface BookingService {
     long countBookingsByStatus(BookingStatus status);
 
     long countTotalBookings();
+
+    Optional<Booking> findByBookingCode(String bookingCode);
+
+    Booking saveBooking(Booking booking);
 
     BigDecimal sumTotalRevenue();
 }

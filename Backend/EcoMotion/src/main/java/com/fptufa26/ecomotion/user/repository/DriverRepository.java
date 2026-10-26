@@ -4,6 +4,8 @@ import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -49,6 +51,15 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
             @Param("status") DriverStatus status,
             @Param("currentDate") LocalDate currentDate
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM Driver d JOIN FETCH d.user u WHERE d.id = :driverId " +
+            "AND d.provider.id = :providerId AND d.status = :status AND d.licenseExpiry >= :serviceDate")
+    Optional<Driver> findEligibleByIdAndProviderForUpdate(
+            @Param("driverId") Long driverId,
+            @Param("providerId") Long providerId,
+            @Param("status") DriverStatus status,
+            @Param("serviceDate") LocalDate serviceDate);
 
     @Query("SELECT d FROM Driver d " +
             "JOIN FETCH d.user u " +

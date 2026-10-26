@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
@@ -18,6 +19,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class DriverTripController {
 
     private final DriverTripService driverTripService;
+    private final com.fptufa26.ecomotion.booking.service.TripEvidenceService tripEvidenceService;
 
     @GetMapping
     @Operation(
@@ -135,6 +138,15 @@ public class DriverTripController {
         return ApiResponse.success(response);
     }
 
+    @PostMapping("/{tripId}/report-unavailable")
+    @Operation(summary = "Tài xế báo không thể tiếp tục nhận chuyến do sự cố")
+    public ApiResponse<DriverTripDetailResponse> reportUnavailable(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId,
+            @Valid @RequestBody ReportDriverIssueRequest request) {
+        return ApiResponse.success(driverTripService.reportUnavailable(principal.getUserId(), tripId, request));
+    }
+
     @PostMapping("/{tripId}/locations")
     @Operation(summary = "Driver reports live device geolocation")
     public ApiResponse<TripLocationResponse> recordLocation(
@@ -161,5 +173,77 @@ public class DriverTripController {
             @PathVariable("tripId") String tripId) {
         TripTrackingResponse tracking = driverTripService.getTripTracking(principal.getUserId(), tripId);
         return ApiResponse.success(tracking.latestLocation());
+    }
+
+    @PostMapping("/{tripId}/reject")
+    @Operation(summary = "Driver rejects assignment with mandatory reason")
+    public ApiResponse<DriverTripDetailResponse> rejectTrip(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId,
+            @Valid @RequestBody com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest request) {
+        DriverTripDetailResponse response = driverTripService.rejectTrip(principal.getUserId(), tripId, request);
+        return ApiResponse.success(response);
+    }
+
+    @PostMapping("/{tripId}/incidents")
+    @Operation(summary = "Driver reports an incident during trip lifecycle")
+    public ApiResponse<com.fptufa26.ecomotion.booking.entity.TripIncident> reportIncident(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId,
+            @Valid @RequestBody com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest request) {
+        return ApiResponse.success(driverTripService.reportIncident(principal.getUserId(), tripId, request));
+    }
+
+    @GetMapping("/{tripId}/incidents")
+    @Operation(summary = "Get incidents reported for a trip")
+    public ApiResponse<java.util.List<com.fptufa26.ecomotion.booking.entity.TripIncident>> listIncidents(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId) {
+        return ApiResponse.success(driverTripService.listIncidents(principal.getUserId(), tripId));
+    }
+
+    @PostMapping(value = "/{tripId}/evidence/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Driver uploads trip evidence photo to Cloudinary")
+    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse> uploadEvidenceDirect(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam("type") com.fptufa26.ecomotion.booking.enums.TripEvidenceType type,
+            @RequestParam(value = "note", required = false) String note) {
+        return ApiResponse.success(tripEvidenceService.uploadEvidence(
+                principal.getUserId(),
+                principal.getRole(),
+                tripId,
+                file,
+                type,
+                note
+        ));
+    }
+
+    @DeleteMapping("/{tripId}/evidence/{evidenceId}")
+    @Operation(summary = "Driver deletes uploaded trip evidence")
+    public ApiResponse<String> deleteEvidence(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId,
+            @PathVariable("evidenceId") Long evidenceId) {
+        tripEvidenceService.deleteEvidence(principal.getUserId(), principal.getRole(), tripId, evidenceId);
+        return ApiResponse.success("Đã xóa ảnh minh chứng thành công");
+    }
+
+    @PostMapping("/{tripId}/evidence")
+    @Operation(summary = "Driver uploads trip handover, pickup, or completion evidence")
+    public ApiResponse<com.fptufa26.ecomotion.booking.entity.TripEvidence> uploadEvidence(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId,
+            @Valid @RequestBody com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest request) {
+        return ApiResponse.success(driverTripService.uploadEvidence(principal.getUserId(), tripId, request));
+    }
+
+    @GetMapping("/{tripId}/evidence")
+    @Operation(summary = "Get evidence photos uploaded for a trip")
+    public ApiResponse<java.util.List<com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse>> listEvidence(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId) {
+        return ApiResponse.success(tripEvidenceService.listEvidence(principal.getUserId(), principal.getRole(), tripId));
     }
 }

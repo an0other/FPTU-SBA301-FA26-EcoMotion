@@ -44,7 +44,6 @@ export default function ProviderHeader({
   useEffect(() => {
     if (providerName && providerName !== "Chủ xe" && depotAddress) {
       const info = { name: providerName, address: depotAddress };
-      setDepotInfo(info);
       try {
         sessionStorage.setItem(
           "ecomotion_provider_depot",
@@ -85,12 +84,12 @@ export default function ProviderHeader({
   }
 
   const displayName =
-    (depotInfo.name && depotInfo.name !== "Chủ xe" ? depotInfo.name : null) ||
     (providerName && providerName !== "Chủ xe" ? providerName : null) ||
+    (depotInfo.name && depotInfo.name !== "Chủ xe" ? depotInfo.name : null) ||
     user?.fullName ||
     "EcoMotion Depot";
   const displayAddress =
-    depotInfo.address || depotAddress || "Hệ thống Depot EcoMotion";
+    depotAddress || depotInfo.address || "Hệ thống Depot EcoMotion";
   const initialsSource =
     (user?.fullName && user.fullName !== "Chủ xe" ? user.fullName : null) ||
     (displayName && displayName !== "Chủ xe" ? displayName : null) ||

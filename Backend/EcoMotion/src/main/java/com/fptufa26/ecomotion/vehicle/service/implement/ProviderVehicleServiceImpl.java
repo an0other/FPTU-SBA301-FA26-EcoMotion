@@ -6,6 +6,7 @@ import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDepositPolicyRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
@@ -15,6 +16,7 @@ import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentRespon
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleStatsResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDepositPolicyResponse;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.entity.VehicleDocument;
@@ -31,6 +33,9 @@ import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import com.fptufa26.ecomotion.vehicle.service.ProviderVehicleService;
+import com.fptufa26.ecomotion.vehicle.service.LicensePlatePolicy;
+import com.fptufa26.ecomotion.vehicle.service.LicensePlateHistoryService;
+import com.fptufa26.ecomotion.vehicle.service.VehicleDepositPolicyService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,12 +50,16 @@ import java.util.stream.Collectors;
 @Service
 public class ProviderVehicleServiceImpl implements ProviderVehicleService {
 
+    private static final BigDecimal DEPOSIT_EXAMPLE_TOTAL = new BigDecimal("10000000.00");
+
     private final UserService userService;
     private final VehicleRepository vehicleRepository;
     private final RentalPlanRepository rentalPlanRepository;
     private final VehicleImageRepository vehicleImageRepository;
     private final VehicleDocumentRepository vehicleDocumentRepository;
     private final ProviderScheduleService providerScheduleService;
+    private final VehicleDepositPolicyService vehicleDepositPolicyService;
+    private final LicensePlateHistoryService licensePlateHistoryService;
 
     public ProviderVehicleServiceImpl(
             UserService userService,
@@ -58,7 +67,9 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
             RentalPlanRepository rentalPlanRepository,
             VehicleImageRepository vehicleImageRepository,
             VehicleDocumentRepository vehicleDocumentRepository,
-            ProviderScheduleService providerScheduleService
+            ProviderScheduleService providerScheduleService,
+            VehicleDepositPolicyService vehicleDepositPolicyService,
+            LicensePlateHistoryService licensePlateHistoryService
     ) {
         this.userService = userService;
         this.vehicleRepository = vehicleRepository;
@@ -66,6 +77,8 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         this.vehicleImageRepository = vehicleImageRepository;
         this.vehicleDocumentRepository = vehicleDocumentRepository;
         this.providerScheduleService = providerScheduleService;
+        this.vehicleDepositPolicyService = vehicleDepositPolicyService;
+        this.licensePlateHistoryService = licensePlateHistoryService;
     }
 
     @Override
@@ -213,13 +226,10 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
     public ProviderVehicleDetailResponse createVehicle(Long userId, CreateVehicleRequest request) {
         Provider provider = findProviderByUserId(userId);
 
-        String licensePlate = request.licensePlate().trim().toUpperCase(Locale.ROOT);
+        String licensePlate = LicensePlatePolicy.display(request.licensePlate());
         String chassisNo = request.chassisNo().trim().toUpperCase(Locale.ROOT);
         String engineNo = request.engineNo().trim().toUpperCase(Locale.ROOT);
 
-        if (!licensePlate.matches("^[0-9]{2}[A-Z]{1,2}-([0-9]{3}\\.[0-9]{2}|[0-9]{4,5})$")) {
-            throw new IllegalArgumentException("Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111)");
-        }
         if (!chassisNo.matches("^[A-Z0-9-]{6,50}$")) {
             throw new IllegalArgumentException("Số khung (VIN) không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối)");
         }
@@ -227,7 +237,7 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
             throw new IllegalArgumentException("Số máy không hợp lệ (tối thiểu 4 ký tự chữ, số hoặc gạch nối)");
         }
 
-        if (vehicleRepository.existsByLicensePlateIgnoreCase(licensePlate)) {
+        if (plateExists(licensePlate, null)) {
             throw new IllegalArgumentException("Biển số xe " + licensePlate + " đã tồn tại trên hệ thống");
         }
         if (vehicleRepository.existsByChassisNoIgnoreCase(chassisNo)) {
@@ -340,15 +350,14 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
 
-        String newPlate = request.licensePlate().trim().toUpperCase(Locale.ROOT);
-        if (!newPlate.matches("^[0-9]{2}[A-Z]{1,2}-([0-9]{3}\\.[0-9]{2}|[0-9]{4,5})$")) {
-            throw new IllegalArgumentException("Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111)");
-        }
+        String newPlate = LicensePlatePolicy.display(request.licensePlate());
 
         if (!newPlate.equalsIgnoreCase(vehicle.getLicensePlate())) {
-            if (vehicleRepository.existsByLicensePlateIgnoreCaseAndIdNot(newPlate, vehicleId)) {
+            if (plateExists(newPlate, vehicleId)) {
                 throw new IllegalArgumentException("Biển số xe " + newPlate + " đã tồn tại trên hệ thống");
             }
+            licensePlateHistoryService.recordChange(
+                    vehicle, vehicle.getLicensePlate(), newPlate, provider.getUser());
             vehicle.setLicensePlate(newPlate);
             vehicle.setStatus(VehicleStatus.PENDING);
         }
@@ -415,6 +424,49 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
     }
 
     @Override
+    @Transactional
+    public VehicleDepositPolicyResponse updateDepositPolicy(
+            Long userId,
+            Long vehicleId,
+            UpdateVehicleDepositPolicyRequest request
+    ) {
+        Provider provider = findProviderByUserId(userId);
+        Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+        vehicle.setDepositRatioOverride(request.depositRatioOverride());
+        vehicle.setMinimumDepositAmount(request.minimumDepositAmount() == null
+                ? BigDecimal.ZERO
+                : request.minimumDepositAmount());
+        vehicleRepository.save(vehicle);
+        return depositPolicyResponse(vehicle, provider);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public VehicleDepositPolicyResponse getDepositPolicy(Long userId, Long vehicleId) {
+        Provider provider = findProviderByUserId(userId);
+        Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
+                .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+        return depositPolicyResponse(vehicle, provider);
+    }
+
+    private VehicleDepositPolicyResponse depositPolicyResponse(Vehicle vehicle, Provider provider) {
+        var quote = vehicleDepositPolicyService.resolve(vehicle, DEPOSIT_EXAMPLE_TOTAL);
+        BigDecimal providerRatio = provider.getDepositRatio() == null
+                ? new BigDecimal("0.3000")
+                : provider.getDepositRatio();
+        return new VehicleDepositPolicyResponse(
+                vehicle.getId(),
+                providerRatio,
+                vehicle.getDepositRatioOverride(),
+                quote.minimumAmount(),
+                quote.ratio(),
+                DEPOSIT_EXAMPLE_TOTAL,
+                quote.amount()
+        );
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<ProviderRentalPlanResponse> getVehicleRentalPlans(Long userId, Long vehicleId) {
         Provider provider = findProviderByUserId(userId);
@@ -444,6 +496,15 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
 
             RentalPlan plan = rentalPlanRepository.findByVehicle_IdAndPlanType(vehicle.getId(), item.planType())
                     .orElse(null);
+
+            if (plan != null
+                    && item.slotPrice() != null
+                    && isUnusualPriceChange(plan.getSlotPrice(), item.slotPrice())
+                    && !Boolean.TRUE.equals(request.confirmUnusualPriceChange())) {
+                throw new IllegalArgumentException(
+                        "Mức giá thay đổi bất thường từ 50% trở lên; vui lòng xác nhận trước khi lưu"
+                );
+            }
 
             if (plan == null && item.status() == PlanStatus.INACTIVE && (item.slotPrice() == null || item.slotPrice().compareTo(BigDecimal.ZERO) <= 0)) {
                 continue;
@@ -749,6 +810,9 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
 
         var existingOpt = vehicleDocumentRepository.findByVehicle_IdAndDocType(vehicleId, request.docType());
         VehicleDocument doc;
+        boolean replacingVerifiedDocument = existingOpt
+                .map(existing -> existing.getStatus() == DocumentStatus.VERIFIED)
+                .orElse(false);
         if (existingOpt.isPresent()) {
             doc = existingOpt.get();
             doc.setDocNumber(request.docNumber().trim());
@@ -766,6 +830,10 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         }
 
         VehicleDocument saved = vehicleDocumentRepository.save(doc);
+        if (replacingVerifiedDocument) {
+            vehicle.setStatus(VehicleStatus.PENDING);
+            vehicleRepository.save(vehicle);
+        }
         return mapToDocumentResponse(saved);
     }
 
@@ -781,5 +849,20 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 doc.getCreatedAt(),
                 doc.getUpdatedAt()
         );
+    }
+
+    private boolean plateExists(String plate, Long excludedVehicleId) {
+        String canonical = LicensePlatePolicy.canonical(plate);
+        return vehicleRepository.findAll().stream()
+                .filter(vehicle -> excludedVehicleId == null || !vehicle.getId().equals(excludedVehicleId))
+                .anyMatch(vehicle -> LicensePlatePolicy.canonical(vehicle.getLicensePlate()).equals(canonical));
+    }
+
+    private boolean isUnusualPriceChange(BigDecimal currentPrice, BigDecimal nextPrice) {
+        if (currentPrice == null || currentPrice.signum() <= 0 || nextPrice == null) {
+            return false;
+        }
+        BigDecimal difference = nextPrice.subtract(currentPrice).abs();
+        return difference.compareTo(currentPrice.multiply(new BigDecimal("0.50"))) >= 0;
     }
 }

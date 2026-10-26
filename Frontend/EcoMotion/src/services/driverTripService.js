@@ -63,6 +63,64 @@ export function createDriverTripService(client = apiClient) {
       return data?.data
     },
 
+    async reportUnavailable(tripId, reason) {
+      if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
+      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/report-unavailable`, { reason })
+      return data?.data
+    },
+
+    async rejectTrip(tripId, rejectPayload) {
+      if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
+      const { data } = await client.post(
+        `/v1/driver/trips/${encodeURIComponent(tripId)}/reject`,
+        rejectPayload
+      )
+      return data?.data
+    },
+
+    async reportIncident(tripId, incidentPayload) {
+      if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
+      const { data } = await client.post(
+        `/v1/driver/trips/${encodeURIComponent(tripId)}/incidents`,
+        incidentPayload
+      )
+      return data?.data
+    },
+
+    async listIncidents(tripId) {
+      if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
+      const { data } = await client.get(
+        `/v1/driver/trips/${encodeURIComponent(tripId)}/incidents`
+      )
+      return data?.data ?? []
+    },
+
+    async uploadEvidence(tripId, evidencePayload) {
+      if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
+      const isFormData = typeof FormData !== 'undefined' && evidencePayload instanceof FormData
+      const endpoint = isFormData
+        ? `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence/upload`
+        : `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence`
+      const { data } = await client.post(endpoint, evidencePayload)
+      return data?.data
+    },
+
+    async listEvidence(tripId) {
+      if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
+      const { data } = await client.get(
+        `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence`
+      )
+      return data?.data ?? []
+    },
+
+    async deleteEvidence(tripId, evidenceId) {
+      if (!tripId || !evidenceId) throw new Error('Mã chuyến đi hoặc ID minh chứng không hợp lệ')
+      const { data } = await client.delete(
+        `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence/${encodeURIComponent(evidenceId)}`
+      )
+      return data?.data
+    },
+
     async sendLocation(tripId, locationPayload) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/locations`, locationPayload)
