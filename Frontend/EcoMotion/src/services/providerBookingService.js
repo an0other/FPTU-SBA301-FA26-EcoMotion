@@ -29,39 +29,107 @@ export const providerBookingService = {
     }
   },
 
-  async getBookingDetail(idOrCode) {
-    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}`)
+  async getBookingDetail(bookingCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}`)
     return data?.data
   },
 
-  async acceptBooking(idOrCode) {
-    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/accept`)
+  async getOperationalRisk(bookingCode) {
+    const normalized = encodeURIComponent(String(bookingCode).trim().toUpperCase())
+    const { data } = await apiClient.get(`/provider/bookings/${normalized}/operational-risk`)
     return data?.data
   },
 
-  async denyBooking(idOrCode, reason) {
-    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/deny`, { reason })
+  async resolveOperationalRisk(bookingCode, payload) {
+    const normalized = encodeURIComponent(String(bookingCode).trim().toUpperCase())
+    const { data } = await apiClient.post(`/provider/bookings/${normalized}/operational-resolution`, payload)
     return data?.data
   },
 
-  async assignDriver(idOrCode, driverId) {
-    const { data } = await apiClient.put(`/provider/bookings/${encodeURIComponent(idOrCode)}/driver`, { driverId })
+  async acceptBooking(bookingCode) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/accept`)
     return data?.data
   },
 
-  async getCharges(idOrCode) {
-    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/charges`)
+  async denyBooking(bookingCode, reason) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/deny`, { reason })
+    return data?.data
+  },
+
+  async assignDriver(idOrCode, driverId, mode = 'MANUAL') {
+    const bookingCode = String(idOrCode).trim().toUpperCase()
+    const { data } = await apiClient.put(`/provider/bookings/${encodeURIComponent(bookingCode)}/driver`, { driverId, mode })
+    return data?.data
+  },
+
+  async getCharges(bookingCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/charges`)
     return data?.data ?? []
   },
 
-  async addCharge(idOrCode, chargeData) {
-    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/charges`, chargeData)
+  async addCharge(bookingCode, chargeData) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/charges`, chargeData)
     return data?.data
   },
 
-  async getAvailableDrivers() {
-    const { data } = await apiClient.get('/provider/drivers/available')
+  async finalizeSettlement(bookingCode) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/settlement/finalize`)
+    return data?.data
+  },
+
+  async getAvailableDrivers(bookingCode) {
+    const { data } = await apiClient.get('/provider/drivers/available', {
+      params: bookingCode ? { bookingCode: String(bookingCode).trim().toUpperCase() } : {},
+    })
     return data?.data ?? []
+  },
+
+  async getAssignmentCandidates(idOrCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/assign-candidates`)
+    return data?.data ?? []
+  },
+
+  async suggestDriverAssignment(idOrCode) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/assign-suggest`)
+    return data?.data
+  },
+
+  async autoAssignDriver(idOrCode) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/auto-assign`)
+    return data?.data
+  },
+
+  async getBookingIncidents(idOrCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/incidents`)
+    return data?.data ?? []
+  },
+
+  async resolveIncident(idOrCode, incidentId, payload) {
+    const { data } = await apiClient.post(
+      `/provider/bookings/${encodeURIComponent(idOrCode)}/incidents/${encodeURIComponent(incidentId)}/resolve`,
+      payload
+    )
+    return data?.data
+  },
+
+  async getBookingEvidence(idOrCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/evidence`)
+    return data?.data ?? []
+  },
+
+  async uploadBookingEvidence(idOrCode, formData) {
+    const { data } = await apiClient.post(
+      `/provider/bookings/${encodeURIComponent(idOrCode)}/evidence/upload`,
+      formData
+    )
+    return data?.data
+  },
+
+  async deleteBookingEvidence(idOrCode, evidenceId) {
+    const { data } = await apiClient.delete(
+      `/provider/bookings/${encodeURIComponent(idOrCode)}/evidence/${encodeURIComponent(evidenceId)}`
+    )
+    return data?.data
   },
 
   async exportBookings(status) {
@@ -83,13 +151,13 @@ export const providerBookingService = {
     URL.revokeObjectURL(url)
   },
 
-  async getTripTracking(idOrCode) {
-    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/tracking`)
+  async getTripTracking(bookingCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/tracking`)
     return data?.data
   },
 
-  async getTripLocation(idOrCode) {
-    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/location`)
+  async getTripLocation(bookingCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/location`)
     return data?.data
   },
 }

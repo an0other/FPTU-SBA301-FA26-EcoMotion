@@ -22,8 +22,15 @@ Place code by the use case or business feature it serves, then by its technical 
 │   │   └── implement/
 │   │       └── AuthServiceImpl.java
 │   ├── dto/{request,response}/
-│   ├── captcha/  otp/           support packages used by auth
+│   ├── captcha/                 support packages used by auth
 │   └── entity/  repository/  mapper/  exception/
+├── otp/                        shared OTP generation and verification
+│   ├── service/implement/
+│   └── model/  exception/
+├── notification/
+│   └── external/               email and SMS delivery contracts and implementations
+│       ├── service/implement/
+│       └── dto/  exception/
 ├── verification/
 │   └── ekyc/                   shared identity verification provider port and adapters
 ├── user/
@@ -40,7 +47,7 @@ Before placing a class, answer:
 2. What layer does it belong to within that feature?
 3. Is a new feature package actually useful for finding and maintaining related code?
 
-Start with reasonably broad features such as `auth`, `user`, `vehicle`, and `booking`. Split an oversized feature into subfeatures only when the code and workflows make that useful; a subfeature can have its own `controller/`, `service/`, `service/implement/`, `repository/`, `entity/`, and `dto/` where needed. Helper packages inside a feature (for example `auth/otp/`, `auth/captcha/`) are support components of that feature, not automatically standalone features. Shared identity verification provider integration belongs in `verification/ekyc/`; the provider-neutral file storage port and adapters belong in `common/storage/`. Do not duplicate the same ownership in two places.
+Start with reasonably broad features such as `auth`, `user`, `vehicle`, and `booking`. Split an oversized feature into subfeatures only when the code and workflows make that useful; a subfeature can have its own `controller/`, `service/`, `service/implement/`, `repository/`, `entity/`, and `dto/` where needed. Helper packages inside a feature (for example `auth/captcha/`) are support components of that feature, not automatically standalone features. Shared identity verification provider integration belongs in `verification/ekyc/`; the provider-neutral file storage port and adapters belong in `common/storage/`. Do not duplicate the same ownership in two places.
 
 Do not create empty layers for symmetry. Do not organize the whole application into global `controller/`, `service/`, `repository/`, and `entity/` packages. `common/` is reserved for genuinely shared technical concerns, not misplaced business logic. Do not move files solely to make the tree look uniform.
 
@@ -82,7 +89,7 @@ When modifying an existing service still using `impl/` or a concrete class in `s
 
 A feature may call another feature's service interface when a use case needs it. These are maintainability guidelines for a single deployable application, not strict module boundaries: keep calls clear and avoid dependency cycles. Prefer a small DTO or result specific to the caller's needs; do not make one feature reach into another feature's repository, implementation, or mutable entity. If a cycle appears, inspect which feature owns the workflow before adding a shared abstraction.
 
-A third-party provider is an integration used by a feature, not automatically a new feature. OTP creation and validation belong to `auth`; an email sender delivers the message. `auth` owns the account activation workflow and calls the shared eKYC provider port in `verification/ekyc/`. Future driver license workflows should own their own approval rules and use verification capabilities as needed. Base placement on the actual code and requirements, not a generic example.
+A third-party integration is used by a feature, not automatically a new feature. OTP creation, expiry, cooldown, attempt limits, and verification belong to the shared `otp` feature. Business features such as `auth` call `otp.service.OtpService`; OTP passes only recipient and OTP data to `notification.external.service.ExternalNotificationDispatcherService`. Channel-specific implementations create their own content and deliver it through focused capability interfaces such as `OtpExternalNotificationService`. The dispatcher routes each operation to the configured external channel. Keep `otp` independent of `auth` and retain business workflows in their owning features. External delivery exceptions belong to `notification/external/exception/`. Add a sibling realtime notification package only when realtime delivery is implemented. `auth` owns the account activation workflow and calls the shared eKYC provider port in `verification/ekyc/`. Future driver license workflows should own their own approval rules and use verification capabilities as needed. Base placement on the actual code and requirements, not a generic example.
 
 Only introduce events, queues, retry infrastructure, or a new architectural boundary when current requirements justify them. Preserve transaction and failure behavior during refactoring.
 

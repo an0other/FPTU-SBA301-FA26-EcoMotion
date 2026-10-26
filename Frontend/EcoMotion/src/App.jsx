@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import AppHeader from './components/AppHeader'
 import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
+import ErrorBoundary from './components/ErrorBoundary'
 
 import ActivatePage from './pages/ActivatePage'
 import AdminDashboard from './pages/AdminDashboard'
@@ -20,6 +21,7 @@ import ProviderFinancePage from './pages/ProviderFinancePage'
 import RegisterPage from './pages/RegisterPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import VehicleListPage from './pages/VehicleListPage'
+import VnpayCallbackPage from './pages/VnpayCallbackPage'
 import YearlyRentalPage from './pages/YearlyRentalPage'
 
 import ProviderHomePage from './pages/provider/ProviderHomePage'
@@ -31,7 +33,6 @@ import ProviderDriverPage from './pages/provider/ProviderDriverPage'
 
 import { BookingDetailPage } from './pages/booking/BookingDetailPage'
 import { BookingRequestPage } from './pages/booking/BookingRequestPage'
-import { DepositPaymentPage } from './pages/booking/DepositPaymentPage'
 import { MyBookingsPage } from './pages/booking/MyBookingsPage'
 import { SubmittedBookingPage } from './pages/booking/SubmittedBookingPage'
 
@@ -45,11 +46,21 @@ function BookingShell({ children }) {
   )
 }
 
+function BookingWizardShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
+      <AppHeader />
+      <main className="w-full flex-1">{children}</main>
+    </div>
+  )
+}
+
 export default function App() {
   const navigate = useNavigate()
 
   return (
-    <Routes>
+    <ErrorBoundary>
+      <Routes>
       <Route path="/" element={<VehicleListPage />} />
       <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
       <Route path="/renter" element={<Navigate to="/" replace />} />
@@ -57,6 +68,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/activate" element={<ActivatePage />} />
+      <Route path="/payment/vnpay/callback" element={<VnpayCallbackPage />} />
 
       <Route
         path="/policy"
@@ -77,38 +89,25 @@ export default function App() {
 
       <Route element={<ProtectedRoute allowedRoles={['RENTER']} />}>
         <Route
-          path="/bookings/:bookingId/payment"
-          element={<CustomerPaymentPage />}
-        />
-        <Route
-          path="/renter/bookings/:bookingId/payment"
+          path="/renter/bookings/:bookingCode/payment"
           element={<CustomerPaymentPage />}
         />
 
         <Route
           path="/renter/bookings/new"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <BookingRequestPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 
         <Route
           path="/renter/bookings/:bookingCode/submitted"
           element={
-            <BookingShell>
+            <BookingWizardShell>
               <SubmittedBookingPage />
-            </BookingShell>
-          }
-        />
-
-        <Route
-          path="/renter/bookings/:bookingCode/checkout"
-          element={
-            <BookingShell>
-              <DepositPaymentPage />
-            </BookingShell>
+            </BookingWizardShell>
           }
         />
 
@@ -200,5 +199,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </ErrorBoundary>
   )
 }

@@ -20,6 +20,7 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -31,7 +32,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "payment_request")
+@Table(name = "payment_request", uniqueConstraints =
+        @UniqueConstraint(name = "uk_payment_request_booking_type", columnNames = {"booking_id", "payment_type"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -79,6 +81,16 @@ public class PaymentRequest {
 
     @Column(name = "expires_at")
     private Instant expiresAt;
+
+    @Column(name = "first_proof_at")
+    private Instant firstProofAt;
+
+    @Column(name = "reconciliation_deadline")
+    private Instant reconciliationDeadline;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receiving_bank_account_id")
+    private ProviderBankAccount receivingBankAccount;
 
     @Column(name = "confirmed_at")
     private Instant confirmedAt;

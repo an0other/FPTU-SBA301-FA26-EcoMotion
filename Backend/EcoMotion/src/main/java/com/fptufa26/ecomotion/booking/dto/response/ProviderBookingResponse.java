@@ -19,6 +19,9 @@ public record ProviderBookingResponse(
         String rentalDuration,
         Instant pickupTime,
         String pickupAddress,
+        BigDecimal pickupLatitude,
+        BigDecimal pickupLongitude,
+        String driverNote,
         String driverName,
         BookingStatus status,
         String executionStatus,
@@ -29,7 +32,9 @@ public record ProviderBookingResponse(
         Instant driverConfirmedAt,
         Instant actualArrivedAt,
         Instant actualStartAt,
-        Instant actualEndAt
+        Instant actualEndAt,
+        boolean atRisk,
+        String riskMessage
 ) {
     public ProviderBookingResponse(
             String bookingCode,
@@ -59,6 +64,9 @@ public record ProviderBookingResponse(
                 rentalDuration,
                 pickupTime,
                 pickupAddress,
+                null,
+                null,
+                null,
                 driverName,
                 status,
                 status != null ? status.name() : null,
@@ -69,6 +77,8 @@ public record ProviderBookingResponse(
                 null,
                 null,
                 null,
+                null,
+                false,
                 null
         );
     }

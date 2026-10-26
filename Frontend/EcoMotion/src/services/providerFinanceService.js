@@ -1,4 +1,4 @@
-import apiClient from './apiClient'
+import apiClient from './apiClient.js'
 
 // Fallback bank list matching Backend SupportedBank enum
 export const SUPPORTED_BANKS = [
@@ -81,6 +81,15 @@ export const providerFinanceService = {
     return data?.data
   },
 
+  async completeRefund(transactionId, payload) {
+    const form = new FormData()
+    form.append('file', payload.file)
+    form.append('bankReference', payload.bankReference)
+    if (payload.note) form.append('note', payload.note)
+    const { data } = await apiClient.post(`/v1/payment-transactions/${transactionId}/refund-proof`, form)
+    return data?.data
+  },
+
   // ==========================================
   // Provider Payment Requests & Confirmation
   // ==========================================
@@ -117,8 +126,11 @@ export const providerFinanceService = {
   // Customer Payment & Proofs
   // ==========================================
 
-  async getPaymentRequestsByBooking(bookingId) {
-    const { data } = await apiClient.get(`/v1/bookings/${bookingId}/payment-requests`)
+  async getPaymentRequestsByBooking(identifier) {
+    if (!identifier) return []
+    const bookingCode = String(identifier).trim().toUpperCase()
+    const url = `/v1/renter/bookings/${encodeURIComponent(bookingCode)}/payment-requests`
+    const { data } = await apiClient.get(url)
     return data?.data ?? []
   },
 
@@ -128,8 +140,25 @@ export const providerFinanceService = {
   },
 
   async submitPaymentProof(id, payload) {
-    const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs`, payload)
+    const form = new FormData()
+    form.append('file', payload.file)
+    if (payload.transferredAmount != null) form.append('transferredAmount', payload.transferredAmount)
+    if (payload.transactionReference) form.append('transactionReference', payload.transactionReference)
+    if (payload.transferredAt) form.append('transferredAt', payload.transferredAt)
+    if (payload.note) form.append('note', payload.note)
+    const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs/multipart`, form)
     return data?.data
+  },
+
+  async reissueDepositPayment(bookingCode) {
+    const normalizedCode = String(bookingCode).trim().toUpperCase()
+    const { data } = await apiClient.post(`/renter/bookings/${encodeURIComponent(normalizedCode)}/payment-requests/deposit/reissue`)
+    return data?.data
+  },
+
+  async getPaymentEvidenceImage(id) {
+    const { data } = await apiClient.get(`/v1/payment-evidences/${id}/file`, { responseType: 'blob' })
+    return data
   },
 
   async getBookingPaymentHistory(bookingId) {
@@ -148,6 +177,25 @@ export const providerFinanceService = {
 
   async seedSandbox() {
     const { data } = await apiClient.post('/v1/admin/sandbox/seed')
+    return data?.data
+  },
+
+  // ==========================================
+  // Refunds Management (TV5)
+  // ==========================================
+
+  async listRefunds() {
+    const { data } = await apiClient.get('/v1/provider/finance/refunds')
+    return data?.data ?? []
+  },
+
+  async createRefund(payload) {
+    const { data } = await apiClient.post('/v1/provider/finance/refunds', payload)
+    return data?.data
+  },
+
+  async reviewRefund(refundId, payload) {
+    const { data } = await apiClient.post(`/v1/provider/finance/refunds/${refundId}/review`, payload)
     return data?.data
   },
 

@@ -1,77 +1,24 @@
-import { useState } from 'react';
+import { BOOKING_FILTERS, bookingStatusMeta } from '../../utils/bookingStatus';
 
-
-const FILTER_TABS = [
-  { label: 'Tất cả', status: 'ALL' },
-  { label: 'Chờ duyệt', status: 'PENDING' },
-  { label: 'Đã chấp nhận', status: 'ACCEPTED' },
-  { label: 'Đã xác nhận', status: 'CONFIRMED' },
-  { label: 'Đang chạy', status: 'IN_PROGRESS' },
-  { label: 'Hoàn thành', status: 'COMPLETED' },
-  { label: 'Đã huỷ', status: 'CANCELLED' },
-  { label: 'Từ chối', status: 'REJECTED' },
-];
 
 export const MyBookingsList = ({
   bookings,
+  activeFilter,
+  keyword,
+  page,
+  pageSize,
+  total,
+  hasMore,
+  onFilterChange,
+  onKeywordChange,
+  onPageChange,
   onSelectBooking,
   onPayDeposit,
   onBookCar,
 }) => {
-  const [activeFilter, setActiveFilter] = useState('ALL');
-
-  const filteredBookings = bookings.filter((b) => {
-    if (activeFilter === 'ALL') return true;
-    return b.status === activeFilter;
-  });
-
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'PENDING':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-200 whitespace-nowrap">
-            Chờ duyệt
-          </span>
-        );
-      case 'ACCEPTED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#15803D] bg-[#E8F6EE] border border-[#15803D]/25 whitespace-nowrap">
-            Đã chấp nhận
-          </span>
-        );
-      case 'CONFIRMED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 whitespace-nowrap">
-            Đã xác nhận
-          </span>
-        );
-      case 'IN_PROGRESS':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#006948] bg-[#E8F6EE] border border-[#006948]/30 whitespace-nowrap">
-            Đang chạy
-          </span>
-        );
-      case 'COMPLETED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 whitespace-nowrap">
-            Hoàn thành
-          </span>
-        );
-      case 'CANCELLED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#B42318] bg-rose-50 border border-[#B42318]/20 whitespace-nowrap">
-            Đã huỷ
-          </span>
-        );
-      case 'REJECTED':
-        return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-[#B42318] bg-rose-50 border border-[#B42318]/20 whitespace-nowrap">
-            Từ chối
-          </span>
-        );
-      default:
-        return null;
-    }
+    const meta = bookingStatusMeta(status);
+    return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${meta.badgeClass}`}>{meta.label}</span>;
   };
 
   return (
@@ -84,15 +31,29 @@ export const MyBookingsList = ({
         </p>
       </div>
 
+      <label className="block max-w-xl">
+        <span className="sr-only">Tìm đơn thuê</span>
+        <div className="flex items-center gap-2 rounded-[14px] border border-[#DDE5E0] bg-white px-4 py-3 shadow-sm focus-within:border-[#15803D]">
+          <span className="material-symbols-outlined text-[20px] text-[#14221A]/50">search</span>
+          <input
+            type="search"
+            value={keyword}
+            onChange={(event) => onKeywordChange(event.target.value)}
+            placeholder="Tìm theo mã đơn hoặc tên xe"
+            className="min-w-0 flex-1 bg-transparent text-sm text-[#14221A] outline-none placeholder:text-[#14221A]/45"
+          />
+        </div>
+      </label>
+
       {/* Filter Chips Bar */}
       <div className="w-full overflow-x-auto pb-2 scrollbar-none">
         <div className="inline-flex items-center gap-2 shrink-0">
-          {FILTER_TABS.map((tab) => {
-            const isActive = activeFilter === tab.status;
+          {BOOKING_FILTERS.map((tab) => {
+            const isActive = activeFilter === tab.id;
             return (
               <button
-                key={tab.status}
-                onClick={() => setActiveFilter(tab.status)}
+                key={tab.id}
+                onClick={() => onFilterChange(tab.id)}
                 type="button"
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-180 cursor-pointer ${
                   isActive
@@ -108,9 +69,9 @@ export const MyBookingsList = ({
       </div>
 
       {/* Booking List */}
-      {filteredBookings.length > 0 ? (
+      {bookings.length > 0 ? (
         <div className="flex flex-col gap-3.5 transition-opacity duration-180">
-          {filteredBookings.map((booking) => (
+          {bookings.map((booking) => (
             <article
               key={booking.id}
               onClick={() => onSelectBooking(booking)}
@@ -132,6 +93,7 @@ export const MyBookingsList = ({
                   <h2 className="font-bold text-base text-[#14221A] mt-0.5 truncate">
                     {booking.vehicle.name} ({booking.vehicle.year})
                   </h2>
+                  {booking.atRisk && <p className="mt-1 text-xs font-semibold text-amber-700">⚠ Xe có nguy cơ về trễ</p>}
                 </div>
 
                 {/* Col 2: Pickup Time */}
@@ -158,7 +120,7 @@ export const MyBookingsList = ({
                 <div className="shrink-0">{getStatusBadge(booking.status)}</div>
 
                 {/* Col 6: Contextual Action (if ACCEPTED) */}
-                {booking.status === 'ACCEPTED' && (
+                {booking.canPay && (
                   <div className="shrink-0">
                     <button
                       onClick={(e) => {
@@ -168,7 +130,7 @@ export const MyBookingsList = ({
                       className="px-4 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-medium shadow-xs whitespace-nowrap cursor-pointer active:scale-98 transition-all duration-180"
                       type="button"
                     >
-                      Thanh toán {booking.planType === 'YEARLY' ? 'trả trước' : 'giữ chỗ'}
+                      {bookingStatusMeta(booking.status).action}
                     </button>
                   </div>
                 )}
@@ -193,6 +155,35 @@ export const MyBookingsList = ({
           >
             Khám phá & Đặt xe
           </button>
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="flex flex-col gap-3 rounded-[14px] border border-[#E6EBE8] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-[#14221A]/70">
+            Hiển thị {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} trong {total} đơn
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => onPageChange(Math.max(0, page - 1))}
+              className="rounded-[10px] border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Trang trước
+            </button>
+            <span className="min-w-20 text-center text-sm font-semibold text-[#14221A]">
+              Trang {page + 1}/{Math.max(1, Math.ceil(total / pageSize))}
+            </span>
+            <button
+              type="button"
+              disabled={!hasMore}
+              onClick={() => onPageChange(page + 1)}
+              className="rounded-[10px] border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Trang sau
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -23,12 +23,21 @@ export const CHARGE_TYPE_LABELS = {
 
 export const BOOKING_STATUS_LABELS = {
   PENDING: 'Chờ chấp nhận',
+  AWAITING_DEPOSIT: 'Chờ thanh toán cọc',
   REJECTED: 'Đã từ chối',
   ACCEPTED: 'Chờ thanh toán giữ chỗ',
   CONFIRMED: 'Đã xác nhận',
+  DRIVER_ASSIGNED: 'Đã phân công tài xế',
+  DRIVER_CONFIRMED: 'Tài xế đã xác nhận',
+  DRIVER_ARRIVED: 'Tài xế đã đến',
+  AWAITING_START_CONFIRMATION: 'Chờ hai bên xác nhận bắt đầu',
   IN_PROGRESS: 'Đang diễn ra',
+  AWAITING_END_CONFIRMATION: 'Chờ hai bên xác nhận kết thúc',
+  AWAITING_EXTRA_CHARGE_CONFIRMATION: 'Chờ chốt phụ phí',
+  AWAITING_FINAL_PAYMENT: 'Chờ thanh toán quyết toán',
   COMPLETED: 'Đã hoàn tất',
   CANCELLED: 'Đã hủy',
+  CANCELLATION_REVIEW: 'Đang đối soát huỷ',
 }
 
 const currencyFormatter = new Intl.NumberFormat('vi-VN', {
@@ -76,4 +85,10 @@ export function formatChargeQuantity(charge) {
   }
 
   return `${charge.quantity} ${units[charge.chargeType] ?? ''}`.trim()
+}
+
+export function isPaymentRequestExpired(request, now = Date.now()) {
+  if (!request?.expiresAt) return false
+  const expiresAt = new Date(request.expiresAt).getTime()
+  return Number.isFinite(expiresAt) && expiresAt <= now
 }

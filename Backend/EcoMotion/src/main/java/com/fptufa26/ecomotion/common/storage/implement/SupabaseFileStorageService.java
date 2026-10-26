@@ -91,6 +91,21 @@ public class SupabaseFileStorageService implements FileStorageService {
         }
     }
 
+    @Override
+    public void delete(String storedPath) {
+        String key = StorageObjectPath.validateStoredPath(storedPath);
+        try {
+            restClient.delete()
+                    .uri(objectUri(key, false))
+                    .header("apikey", serviceKey)
+                    .header("Authorization", "Bearer " + serviceKey)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException ex) {
+            throw new FileStorageException("Could not delete the file from Supabase Storage", ex);
+        }
+    }
+
     private URI objectUri(String key, boolean authenticated) {
         String route = authenticated ? "/storage/v1/object/authenticated/" : "/storage/v1/object/";
         return URI.create(baseUrl + route + bucket + "/" + key);

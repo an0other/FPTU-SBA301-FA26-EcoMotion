@@ -24,12 +24,15 @@ public final class BookingStateMachine {
     static {
         ALLOWED_TRANSITIONS.put(BookingStatus.PENDING, Set.of(BookingStatus.ACCEPTED, BookingStatus.REJECTED, BookingStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(BookingStatus.ACCEPTED, Set.of(BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.CANCELLED, BookingStatus.REJECTED));
+        ALLOWED_TRANSITIONS.put(BookingStatus.AWAITING_DEPOSIT, Set.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLATION_REVIEW, BookingStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(BookingStatus.CONFIRMED, Set.of(BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(BookingStatus.DRIVER_ASSIGNED, Set.of(BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(BookingStatus.DRIVER_CONFIRMED, Set.of(BookingStatus.DRIVER_ARRIVED, BookingStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(BookingStatus.DRIVER_ARRIVED, Set.of(BookingStatus.IN_PROGRESS, BookingStatus.CANCELLED));
-        ALLOWED_TRANSITIONS.put(BookingStatus.IN_PROGRESS, Set.of(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION, BookingStatus.COMPLETED, BookingStatus.CANCELLED));
-        ALLOWED_TRANSITIONS.put(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION, Set.of(BookingStatus.COMPLETED, BookingStatus.CANCELLED));
+        ALLOWED_TRANSITIONS.put(BookingStatus.IN_PROGRESS, Set.of(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION, BookingStatus.CANCELLED));
+        ALLOWED_TRANSITIONS.put(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION, Set.of(BookingStatus.AWAITING_FINAL_PAYMENT, BookingStatus.COMPLETED));
+        ALLOWED_TRANSITIONS.put(BookingStatus.AWAITING_FINAL_PAYMENT, Set.of(BookingStatus.COMPLETED));
+        ALLOWED_TRANSITIONS.put(BookingStatus.CANCELLATION_REVIEW, Set.of(BookingStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(BookingStatus.COMPLETED, Set.of());
         ALLOWED_TRANSITIONS.put(BookingStatus.CANCELLED, Set.of());
         ALLOWED_TRANSITIONS.put(BookingStatus.REJECTED, Set.of());
@@ -59,7 +62,7 @@ public final class BookingStateMachine {
         if (current == BookingStatus.REJECTED) {
             throw new InvalidTripTransitionException("Không thể thao tác trên chuyến đi đã bị từ chối");
         }
-        if (current == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
+        if (current == BookingStatus.COMPLETED) {
             throw new InvalidTripTransitionException("Không thể thao tác trên chuyến đi đã hoàn thành");
         }
 

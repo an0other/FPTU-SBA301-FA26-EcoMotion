@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.vehicle.dto.response;
 
+import com.fptufa26.ecomotion.vehicle.enums.FuelType;
+
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -9,8 +11,10 @@ public record BookableVehicleResponse(
         int manufactureYear,
         String licensePlate,
         int seatCount,
+        FuelType fuelType,
         String imageUrl,
         BigDecimal depositRatio,
+        BigDecimal minimumDepositAmount,
         List<RentalPlanResponse> plans
 ) {
 }

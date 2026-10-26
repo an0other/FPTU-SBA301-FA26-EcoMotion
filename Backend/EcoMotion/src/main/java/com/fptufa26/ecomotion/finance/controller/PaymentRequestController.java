@@ -7,8 +7,8 @@ import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.ReportIssueRequest;
 import com.fptufa26.ecomotion.finance.dto.request.SimulatePaymentRequest;
-import com.fptufa26.ecomotion.finance.dto.request.SubmitProofRequest;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceResponse;
+import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
 import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
@@ -25,7 +25,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -47,6 +55,26 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.getPaymentRequestsByBooking(bookingId, principal.getUserId()));
     }
 
+    @GetMapping({"/api/v1/renter/bookings/{bookingCode}/payment-requests", "/api/renter/bookings/{bookingCode}/payment-requests"})
+    @Operation(summary = "Get VietQR requests for a renter booking code")
+    public ApiResponse<List<PaymentRequestResponse>> getPaymentRequestsByBookingCode(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(paymentRequestService.getPaymentRequestsByBookingCode(
+                bookingCode, principal.getUserId()));
+    }
+
+    @PostMapping({"/api/v1/renter/bookings/{bookingCode}/payment-requests/deposit/reissue",
+            "/api/renter/bookings/{bookingCode}/payment-requests/deposit/reissue"})
+    @PreAuthorize("hasRole('RENTER')")
+    @Operation(summary = "Cấp lại yêu cầu đặt cọc đã hết hạn nếu lịch xe vẫn còn trống")
+    public ApiResponse<PaymentRequestResponse> reissueDeposit(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(paymentRequestService.reissueDepositByBookingCode(
+                bookingCode, principal.getUserId()));
+    }
+
     @GetMapping({"/api/v1/payment-requests/{id}", "/api/payment-requests/{id}"})
     @Operation(summary = "Get payment request details and VietQR instructions")
     public ApiResponse<PaymentRequestResponse> getPaymentRequestDetail(
@@ -56,12 +84,40 @@ public class PaymentRequestController {
     }
 
     @PostMapping({"/api/v1/payment-requests/{id}/proofs", "/api/payment-requests/{id}/proofs"})
-    @Operation(summary = "Customer submits proof of bank transfer")
-    public ApiResponse<PaymentEvidenceResponse> submitPaymentProof(
+    @Operation(summary = "Deprecated proof URL submission (disabled; use multipart upload)")
+    public ResponseEntity<Void> rejectLegacyProofUrlSubmission(@PathVariable Long id) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.GONE).build();
+    }
+
+    @PostMapping(value = {"/api/v1/payment-requests/{id}/proofs/multipart",
+            "/api/payment-requests/{id}/proofs/multipart"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Customer uploads an image proof of bank transfer")
+    public ApiResponse<PaymentEvidenceResponse> uploadPaymentProof(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
-            @Valid @RequestBody SubmitProofRequest request) {
-        return ApiResponse.success(paymentRequestService.submitPaymentProof(id, principal.getUserId(), request));
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) BigDecimal transferredAmount,
+            @RequestParam(required = false) String transactionReference,
+            @RequestParam(required = false) Instant transferredAt,
+            @RequestParam(required = false) String note) {
+        return ApiResponse.success(paymentRequestService.submitPaymentProof(
+                id, principal.getUserId(), file, transferredAmount,
+                transactionReference, transferredAt, note));
+    }
+
+    @GetMapping({"/api/v1/payment-evidences/{id}/file", "/api/payment-evidences/{id}/file"})
+    @Operation(summary = "View an authorized payment-evidence image")
+    public ResponseEntity<byte[]> viewPaymentEvidence(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable Long id) {
+        PaymentEvidenceFileResponse file = paymentRequestService.getPaymentEvidenceFile(
+                id, principal.getUserId());
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline().filename(file.filename()).build().toString())
+                .body(file.content());
     }
 
     @GetMapping({"/api/v1/bookings/{bookingId}/payment-history", "/api/bookings/{bookingId}/payment-history"})

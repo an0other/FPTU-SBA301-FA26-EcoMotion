@@ -5,6 +5,7 @@ import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDepositPolicyRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
@@ -13,9 +14,11 @@ import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDepositPolicyResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.service.ProviderVehicleService;
+import com.fptufa26.ecomotion.vehicle.service.LicensePlateHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -40,11 +43,14 @@ public class ProviderVehicleController {
 
     private final ProviderVehicleService providerVehicleService;
     private final com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService;
+    private final LicensePlateHistoryService licensePlateHistoryService;
 
     public ProviderVehicleController(ProviderVehicleService providerVehicleService,
-                                     com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService) {
+                                     com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService,
+                                     LicensePlateHistoryService licensePlateHistoryService) {
         this.providerVehicleService = providerVehicleService;
         this.fileStorageService = fileStorageService;
+        this.licensePlateHistoryService = licensePlateHistoryService;
     }
 
     @GetMapping("/dashboard/summary")
@@ -109,6 +115,13 @@ public class ProviderVehicleController {
         return ApiResponse.success(providerVehicleService.getVehicleDetail(user.getUserId(), id));
     }
 
+    @GetMapping("/vehicles/{id}/license-plate-history")
+    @Operation(summary = "Xem lịch sử thay đổi biển số xe")
+    public ApiResponse<List<com.fptufa26.ecomotion.vehicle.dto.response.VehicleLicensePlateHistoryResponse>>
+    getLicensePlateHistory(@AuthenticationPrincipal SecurityUser user, @PathVariable Long id) {
+        return ApiResponse.success(licensePlateHistoryService.listForProvider(user.getUserId(), id));
+    }
+
     @PutMapping("/vehicles/{id}")
     @Operation(summary = "Update provider vehicle profile (O04)")
     public ApiResponse<ProviderVehicleDetailResponse> updateVehicle(
@@ -117,6 +130,25 @@ public class ProviderVehicleController {
             @Valid @RequestBody UpdateVehicleRequest request
     ) {
         return ApiResponse.success(providerVehicleService.updateVehicle(user.getUserId(), id, request));
+    }
+
+    @PatchMapping("/vehicles/{id}/deposit-policy")
+    @Operation(summary = "Cập nhật chính sách đặt cọc của xe")
+    public ApiResponse<VehicleDepositPolicyResponse> updateDepositPolicy(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateVehicleDepositPolicyRequest request
+    ) {
+        return ApiResponse.success(providerVehicleService.updateDepositPolicy(user.getUserId(), id, request));
+    }
+
+    @GetMapping("/vehicles/{id}/deposit-policy")
+    @Operation(summary = "Xem chính sách đặt cọc của xe")
+    public ApiResponse<VehicleDepositPolicyResponse> getDepositPolicy(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.success(providerVehicleService.getDepositPolicy(user.getUserId(), id));
     }
 
     @GetMapping("/vehicles/{id}/plans")
