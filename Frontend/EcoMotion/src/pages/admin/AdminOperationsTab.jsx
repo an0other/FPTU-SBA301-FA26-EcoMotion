@@ -6,8 +6,6 @@ import {
   IconWallet,
   IconSearch,
   IconX,
-  IconEye,
-  IconCheckCircle,
 } from '../../components/icons/Icons'
 
 function formatVND(amount) {
@@ -57,11 +55,15 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   const [refundForm, setRefundForm] = useState({ bookingId: '', amount: '', reason: '' })
 
   useEffect(() => {
-    if (initialSubTab) setSubTab(initialSubTab)
+    if (!initialSubTab) return undefined
+    const timerId = window.setTimeout(() => setSubTab(initialSubTab), 0)
+    return () => window.clearTimeout(timerId)
   }, [initialSubTab])
 
   useEffect(() => {
     loadData()
+    // loadData reads the selected operation filters represented below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subTab, bookingStatus, disputeStatus])
 
   async function loadData() {
@@ -664,8 +666,8 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                     onChange={(e) => setDisputeForm((prev) => ({ ...prev, decision: e.target.value }))}
                     className="w-full rounded-xl border border-slate-300 p-2.5 outline-none font-semibold"
                   >
-                    <option value="KEEP_CHARGE">KEEP_CHARGE — Giữ nguyên phụ phí</option>
-                    <option value="WAIVE_CHARGE">WAIVE_CHARGE — Miễn toàn bộ phụ phí</option>
+                    <option value="KEEP_CHARGE">Giữ nguyên phụ phí</option>
+                    <option value="WAIVE_CHARGE">Miễn toàn bộ phụ phí</option>
                   </select>
                 </div>
               )}

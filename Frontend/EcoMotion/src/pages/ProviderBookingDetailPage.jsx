@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import BookingStatusBadge from '../components/provider/BookingStatusBadge'
@@ -11,6 +11,7 @@ import LiveMapViewer from '../components/map/LiveMapViewer'
 import { useProviderBookingDetail } from '../hooks/useProviderBookingDetail'
 import { useProviderTripTracking } from '../hooks/useProviderTripTracking'
 import { providerBookingService } from '../services/providerBookingService'
+import { providerService } from '../services/providerService'
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded ${className}`}>{name}</span>
@@ -43,10 +44,21 @@ function initialsOf(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+const CHARGE_LABELS = {
+  BASE_RENTAL: 'Tiền thuê', DEPOSIT: 'Tiền cọc', OVERTIME: 'Phụ phí quá giờ',
+  WAITING: 'Phụ phí chờ', WEEKEND: 'Phụ phí cuối tuần', OUT_OF_RADIUS: 'Phụ phí ngoài bán kính',
+}
+
+const PAYMENT_TYPE_LABELS = {
+  DEPOSIT_PAY: 'Thanh toán cọc', UPFRONT_PAY: 'Trả trước', SETTLEMENT: 'Quyết toán', REFUND: 'Hoàn tiền', PAYOUT: 'Chi trả nhà cung cấp',
+}
+
+const PAYMENT_STATUS_LABELS = { PENDING: 'Chờ xử lý', PAID: 'Đã thanh toán', FAILED: 'Thất bại' }
+
 export default function ProviderBookingDetailPage() {
   const { bookingCode } = useParams()
   const navigate = useNavigate()
-  const { booking, loading, error, refetch } = useProviderBookingDetail(bookingCode)
+  const { booking, loading, error, refetch, operationalRisk } = useProviderBookingDetail(bookingCode)
 
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [showAcceptModal, setShowAcceptModal] = useState(false)
@@ -55,6 +67,12 @@ export default function ProviderBookingDetailPage() {
   const [showAddChargeModal, setShowAddChargeModal] = useState(false)
   const [toast, setToast] = useState({ message: '', type: 'success' })
   const [finalizing, setFinalizing] = useState(false)
+  const [resolution, setResolution] = useState('CHANGE_VEHICLE')
+  const [replacementVehicleId, setReplacementVehicleId] = useState('')
+  const [newPickupTime, setNewPickupTime] = useState('')
+  const [resolutionReason, setResolutionReason] = useState('Xe của chuyến trước chưa về kịp')
+  const [resolvingRisk, setResolvingRisk] = useState(false)
+  const [replacementVehicles, setReplacementVehicles] = useState([])
 
   const isPending = booking?.status === 'PENDING'
   const isRejected = booking?.status === 'REJECTED'
@@ -63,6 +81,38 @@ export default function ProviderBookingDetailPage() {
   const { trackingData, loading: trackingLoading, refetchTracking } = useProviderTripTracking(bookingCode, {
     enabled: Boolean(booking?.driverName && !isCancelled && !isRejected),
   })
+
+  useEffect(() => {
+    if (!operationalRisk?.atRisk) return
+    let active = true
+    providerService.getVehicles({ status: 'APPROVED', size: 100 })
+      .then((result) => {
+        const items = result?.items ?? result?.content ?? result ?? []
+        if (active) setReplacementVehicles(items.filter((vehicle) => vehicle.id !== booking?.vehicleId))
+      })
+      .catch(() => {
+        if (active) setReplacementVehicles([])
+      })
+    return () => { active = false }
+  }, [operationalRisk?.atRisk, booking?.vehicleId])
+
+  const handleResolveOperationalRisk = async () => {
+    setResolvingRisk(true)
+    try {
+      const result = await providerBookingService.resolveOperationalRisk(booking.bookingCode, {
+        resolution,
+        replacementVehicleId: resolution === 'CHANGE_VEHICLE' ? Number(replacementVehicleId) : null,
+        newPickupTime: resolution === 'RESCHEDULE' && newPickupTime ? new Date(newPickupTime).toISOString() : null,
+        reason: resolutionReason,
+      })
+      setToast({ message: result.message, type: 'success' })
+      refetch()
+    } catch (err) {
+      setToast({ message: err.message || 'Không thể xử lý nguy cơ xe về trễ', type: 'error' })
+    } finally {
+      setResolvingRisk(false)
+    }
+  }
 
   const handleActionSuccess = (_, message) => {
     refetch()
@@ -135,6 +185,30 @@ export default function ProviderBookingDetailPage() {
 
   return (
     <ProviderLayout active="Đơn thuê">
+      {operationalRisk?.atRisk && (
+        <div role="alert" className="mx-auto mt-5 max-w-7xl rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-3">
+          <p className="font-bold">Booking có nguy cơ trễ vì xe chưa về</p>
+          <p className="mt-1">{operationalRisk.message}</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <select value={resolution} onChange={(event) => setResolution(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2">
+              <option value="CHANGE_VEHICLE">Đổi xe</option>
+              <option value="RESCHEDULE">Dời giờ nhận xe</option>
+              <option value="CANCEL_AND_REFUND">Hủy và hoàn 100%</option>
+            </select>
+            {resolution === 'CHANGE_VEHICLE' && (
+              <select value={replacementVehicleId} onChange={(event) => setReplacementVehicleId(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2">
+                <option value="">Chọn xe thay thế</option>
+                {replacementVehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.licensePlate} — {vehicle.brand} {vehicle.model}</option>)}
+              </select>
+            )}
+            {resolution === 'RESCHEDULE' && <input type="datetime-local" value={newPickupTime} onChange={(event) => setNewPickupTime(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2" />}
+            <input value={resolutionReason} maxLength={500} onChange={(event) => setResolutionReason(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2" placeholder="Lý do xử lý" />
+          </div>
+          <button type="button" disabled={resolvingRisk || !resolutionReason.trim() || (resolution === 'CHANGE_VEHICLE' && !replacementVehicleId) || (resolution === 'RESCHEDULE' && !newPickupTime)} onClick={handleResolveOperationalRisk} className="rounded-lg bg-amber-700 px-4 py-2 font-bold text-white disabled:opacity-50">
+            {resolvingRisk ? 'Đang xử lý...' : 'Xác nhận phương án'}
+          </button>
+        </div>
+      )}
       <div className="mx-auto max-w-7xl space-y-6">
         <Toast
           message={toast.message}
@@ -195,14 +269,14 @@ export default function ProviderBookingDetailPage() {
               </>
             )}
 
-            {booking.status === 'CONFIRMED' && (
+            {(booking.status === 'CONFIRMED' || booking.executionStatus === 'DRIVER_REPLACEMENT_REQUIRED') && (
               <button
                 type="button"
                 onClick={() => setShowAssignModal(true)}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3.5 text-xs font-bold text-teal-800 shadow-2xs hover:bg-teal-100 transition"
               >
                 <Icon name="badge" className="text-[18px]" />
-                <span>{booking.driverName ? 'Đổi tài xế' : 'Gán tài xế'}</span>
+                <span>{booking.executionStatus === 'DRIVER_REPLACEMENT_REQUIRED' || booking.driverName ? 'Đổi tài xế' : 'Gán tài xế'}</span>
               </button>
             )}
 
@@ -632,7 +706,7 @@ export default function ProviderBookingDetailPage() {
                           <td className="px-4 py-3 font-semibold text-slate-800">
                             <div>{charge.description}</div>
                             <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded inline-block mt-0.5">
-                              {charge.chargeType}
+                              {CHARGE_LABELS[charge.chargeType] || 'Phụ phí'}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-slate-600">{charge.quantity ?? '—'}</td>
@@ -738,12 +812,12 @@ export default function ProviderBookingDetailPage() {
                     {booking.paymentTransactions.map((tx) => (
                       <div key={tx.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-xs flex justify-between items-center">
                         <div>
-                          <div className="font-semibold text-slate-900">{tx.type}</div>
+                          <div className="font-semibold text-slate-900">{PAYMENT_TYPE_LABELS[tx.type] || 'Giao dịch'}</div>
                           <div className="text-[10px] text-slate-400">{formatDateTime(tx.paidAt || tx.createdAt)}</div>
                         </div>
                         <div className="text-right">
                           <div className="font-mono font-bold text-slate-900">{formatVnd(tx.amount)}</div>
-                          <span className="text-[10px] text-emerald-700 font-semibold">{tx.status}</span>
+                          <span className="text-[10px] text-emerald-700 font-semibold">{PAYMENT_STATUS_LABELS[tx.status] || 'Đang xử lý'}</span>
                         </div>
                       </div>
                     ))}

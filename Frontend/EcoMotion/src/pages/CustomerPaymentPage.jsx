@@ -48,7 +48,8 @@ const EVIDENCE_BADGES = {
 }
 
 export default function CustomerPaymentPage() {
-  const { bookingId } = useParams()
+  const { bookingCode } = useParams()
+  const bookingIdentifier = String(bookingCode ?? '').trim().toUpperCase()
   const [requests, setRequests] = useState([])
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -72,11 +73,11 @@ export default function CustomerPaymentPage() {
     if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl)
   }, [proofPreviewUrl])
 
-  const fetchPaymentRequests = useCallback(async () => {
+  const fetchPaymentRequests = useCallback(async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       setError(null)
-      const data = await providerFinanceService.getPaymentRequestsByBooking(bookingId)
+      const data = await providerFinanceService.getPaymentRequestsByBooking(bookingIdentifier)
       setRequests(data || [])
       if (data && data.length > 0) {
         const activeFinal = data.find((request) => request.paymentType === 'FINAL_BALANCE'
@@ -85,23 +86,35 @@ export default function CustomerPaymentPage() {
           && request.status !== 'VOIDED')
         const current = activeFinal || activeDeposit || data[0]
         setSelectedRequest(current)
-        setTransferredAmount(String(current.remainingAmount || current.amount || ''))
+        setTransferredAmount(String(current.remainingAmount ?? current.amount ?? ''))
       }
     } catch (err) {
       console.error('Failed to load payment requests:', err)
       setError(err.message || 'Không thể tải thông tin thanh toán đơn thuê.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }, [bookingId])
+  }, [bookingIdentifier])
 
   useEffect(() => {
-    if (bookingId) {
+    if (bookingIdentifier) {
       const task = window.setTimeout(fetchPaymentRequests, 0)
       return () => window.clearTimeout(task)
     }
     return undefined
-  }, [bookingId, fetchPaymentRequests])
+  }, [bookingIdentifier, fetchPaymentRequests])
+
+  useEffect(() => {
+    const terminal = ['CONFIRMED', 'VOIDED'].includes(selectedRequest?.status)
+    if (!selectedRequest || terminal) return undefined
+    const timer = window.setInterval(() => fetchPaymentRequests(true), 10000)
+    const handleFocus = () => fetchPaymentRequests(true)
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [fetchPaymentRequests, selectedRequest])
 
   useEffect(() => {
     const expiresAt = selectedRequest?.expiresAt
@@ -136,12 +149,16 @@ export default function CustomerPaymentPage() {
       setToast({ message: 'Vui lòng chọn ảnh chứng từ thanh toán', type: 'error' })
       return
     }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(proofFile.type) || proofFile.size > 5 * 1024 * 1024) {
+      setToast({ message: 'Chỉ chấp nhận JPG, PNG hoặc WebP tối đa 5 MB', type: 'error' })
+      return
+    }
 
     try {
       setSubmittingProof(true)
       const payload = {
         file: proofFile,
-        transferredAmount: Number(transferredAmount) || selectedRequest.amount,
+        transferredAmount: Number(transferredAmount) || (selectedRequest.remainingAmount ?? selectedRequest.amount),
         transactionReference: txRef.trim() || undefined,
         note: proofNote.trim() || undefined,
       }
@@ -165,6 +182,17 @@ export default function CustomerPaymentPage() {
       return
     }
     setProofModalOpen(true)
+  }
+
+  const handleReissue = async () => {
+    try {
+      await providerFinanceService.reissueDepositPayment(bookingIdentifier)
+      await fetchPaymentRequests()
+      setCurrentTime(Date.now())
+      setToast({ message: 'Đã cấp lại yêu cầu thanh toán cọc', type: 'success' })
+    } catch (err) {
+      setToast({ message: err.message || 'Không thể cấp lại yêu cầu thanh toán', type: 'error' })
+    }
   }
 
   if (loading) {
@@ -191,6 +219,7 @@ export default function CustomerPaymentPage() {
             <Link to="/" className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200">
               Về trang chủ
             </Link>
+            {bookingIdentifier ? <Link to={`/renter/bookings/${encodeURIComponent(bookingIdentifier)}`} className="rounded-lg border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700">Chi tiết đơn</Link> : null}
             <button
               type="button"
               onClick={fetchPaymentRequests}
@@ -234,13 +263,13 @@ export default function CustomerPaymentPage() {
                 type="button"
                 onClick={() => {
                   setSelectedRequest(r)
-                  setTransferredAmount(String(r.remainingAmount || r.amount))
+                  setTransferredAmount(String(r.remainingAmount ?? r.amount))
                 }}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   selectedRequest.id === r.id ? 'bg-[#064e3b] text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                {r.paymentType === 'DEPOSIT' ? 'Đặt cọc (DEPOSIT)' : 'Quyết toán (FINAL BALANCE)'} • {formatVnd(r.amount)}
+                {r.paymentType === 'DEPOSIT' ? 'Đặt cọc' : 'Quyết toán cuối chuyến'} • {formatVnd(r.amount)}
               </button>
             ))}
           </div>
@@ -309,11 +338,11 @@ export default function CustomerPaymentPage() {
                 <span className="text-xs text-slate-500">Số tiền cần chuyển</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-2xl font-extrabold text-slate-900">
-                    {formatVnd(selectedRequest.remainingAmount || selectedRequest.amount)}
+                    {formatVnd(selectedRequest.remainingAmount ?? selectedRequest.amount)}
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleCopy(String(selectedRequest.remainingAmount || selectedRequest.amount), 'số tiền')}
+                    onClick={() => handleCopy(String(selectedRequest.remainingAmount ?? selectedRequest.amount), 'số tiền')}
                     className="p-1 text-slate-400 hover:text-slate-600 rounded"
                     title="Sao chép số tiền"
                   >
@@ -364,6 +393,11 @@ export default function CustomerPaymentPage() {
               <Icon name="receipt_long" className="text-lg" />
               Tôi đã chuyển khoản & Gửi bằng chứng
             </button>
+            {requestExpired && selectedRequest.paymentType === 'DEPOSIT' && !selectedRequest.evidences?.length ? (
+              <button type="button" onClick={handleReissue} className="w-full sm:w-auto rounded-xl border border-[#059669] px-5 py-2.5 text-sm font-semibold text-[#047857]">
+                Cấp lại yêu cầu thanh toán
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -396,6 +430,10 @@ export default function CustomerPaymentPage() {
             </div>
           </section>
         ) : null}
+
+        <div className="mt-6 text-center">
+          <Link to={`/renter/bookings/${encodeURIComponent(bookingIdentifier)}`} className="text-sm font-semibold text-[#047857] hover:underline">Về chi tiết đơn thuê</Link>
+        </div>
 
         {/* Proof Submission Modal */}
         {proofModalOpen && (

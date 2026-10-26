@@ -85,11 +85,7 @@ export default function App() {
 
       <Route element={<ProtectedRoute allowedRoles={['RENTER']} />}>
         <Route
-          path="/bookings/:bookingId/payment"
-          element={<CustomerPaymentPage />}
-        />
-        <Route
-          path="/renter/bookings/:bookingId/payment"
+          path="/renter/bookings/:bookingCode/payment"
           element={<CustomerPaymentPage />}
         />
 

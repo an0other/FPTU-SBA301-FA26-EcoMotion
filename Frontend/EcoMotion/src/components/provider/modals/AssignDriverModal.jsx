@@ -14,7 +14,8 @@ function initialsOf(name) {
 }
 
 export default function AssignDriverModal({ booking, currentDriverId, isOpen, onClose, onSuccess }) {
-  const { drivers, loading: loadingDrivers, error: driversError } = useAvailableDrivers()
+  const { drivers, loading: loadingDrivers, error: driversError } = useAvailableDrivers(booking?.bookingCode)
+  const [mode, setMode] = useState('MANUAL')
   const [selectedDriverId, setSelectedDriverId] = useState(currentDriverId || null)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -35,7 +36,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
   if (!isOpen || !booking) return null
 
   async function handleConfirm() {
-    if (!selectedDriverId) {
+    if (mode === 'MANUAL' && !selectedDriverId) {
       setError('Vui lòng chọn một tài xế để phân công.')
       return
     }
@@ -43,7 +44,11 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
     setLoading(true)
     setError(null)
     try {
-      const updated = await providerBookingService.assignDriver(booking.bookingCode, selectedDriverId)
+      const updated = await providerBookingService.assignDriver(
+        booking.bookingCode,
+        mode === 'MANUAL' ? selectedDriverId : null,
+        mode,
+      )
       onSuccess?.(updated, 'Đã phân công tài xế thành công!')
       onClose()
     } catch (err) {
@@ -90,6 +95,21 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
             </div>
           )}
 
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+            <button type="button" onClick={() => setMode('AUTO')} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'AUTO' ? 'bg-white text-teal-800 shadow-xs' : 'text-slate-600'}`}>
+              Tự động chọn tài xế
+            </button>
+            <button type="button" onClick={() => setMode('MANUAL')} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'MANUAL' ? 'bg-white text-teal-800 shadow-xs' : 'text-slate-600'}`}>
+              Chọn thủ công
+            </button>
+          </div>
+
+          {mode === 'AUTO' ? (
+            <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">
+              Hệ thống chọn tài xế đã duyệt, không trùng lịch, có ít chuyến hoạt động nhất; sau đó ưu tiên điểm đánh giá.
+            </div>
+          ) : null}
+
           {driversError && (
             <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-800 font-medium">
               <Icon name="warning" className="text-[18px] text-amber-600 shrink-0 mt-0.5" />
@@ -98,7 +118,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
           )}
 
           {/* Search box */}
-          <div className="relative">
+          {mode === 'MANUAL' ? <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
               <Icon name="search" className="text-[18px]" />
             </div>
@@ -109,10 +129,10 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               placeholder="Tìm tài xế theo tên, số điện thoại, số bằng lái..."
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs text-slate-800 placeholder-slate-400 transition focus:border-teal-600 focus:bg-white focus:outline-none"
             />
-          </div>
+          </div> : null}
 
           {/* Driver List */}
-          <div className="space-y-2">
+          {mode === 'MANUAL' ? <div className="space-y-2">
             <label className="block text-xs font-bold text-slate-700">
               Chọn tài xế khả dụng ({filteredDrivers.length}):
             </label>
@@ -190,7 +210,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                 })}
               </div>
             )}
-          </div>
+          </div> : null}
         </div>
 
         {/* Footer */}
@@ -206,7 +226,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={loading || !selectedDriverId}
+            disabled={loading || (mode === 'MANUAL' && !selectedDriverId)}
             className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-teal-800 transition disabled:opacity-50"
           >
             {loading && <Icon name="progress_activity" className="animate-spin text-[16px]" />}

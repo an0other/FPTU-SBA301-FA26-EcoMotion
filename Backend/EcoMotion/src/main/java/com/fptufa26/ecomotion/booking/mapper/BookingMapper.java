@@ -17,6 +17,7 @@ import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
@@ -36,15 +37,28 @@ public interface BookingMapper {
     @Mapping(target = "bookingCode", source = "booking.bookingCode")
     @Mapping(target = "status", source = "booking.status")
     @Mapping(target = "totalAmount", source = "booking.totalAmount")
+    @Mapping(target = "depositAmount", source = "depositAmount")
     @Mapping(target = "pickupTime", source = "booking.pickupTime")
     @Mapping(target = "endTime", source = "endTime")
     @Mapping(target = "baseRental", source = "charge")
-    CreateBookingResponse toCreateBookingResponse(Booking booking, Instant endTime, BookingCharge charge);
+    CreateBookingResponse toCreateBookingResponse(Booking booking, Instant endTime, BookingCharge charge,
+                                                  BigDecimal depositAmount);
 
     @Mapping(target = "createdByName", source = "createdBy.fullName")
     BookingChargeResponse toChargeResponse(BookingCharge charge);
 
-    BookingChargeLineResponse toChargeLine(BookingCharge charge);
+    default BookingChargeLineResponse toChargeLine(BookingCharge charge) {
+        return new BookingChargeLineResponse(
+                charge.getId(),
+                charge.getChargeType(),
+                charge.getDescription(),
+                charge.getQuantity(),
+                charge.getUnitPrice(),
+                charge.getAppliedRate(),
+                charge.getAmount(),
+                charge.isWaived(),
+                charge.isWaived() ? BigDecimal.ZERO : charge.getAmount());
+    }
 
     @Mapping(target = "fullName", source = "user.fullName")
     @Mapping(target = "phone", source = "user.phone")
@@ -89,16 +103,37 @@ public interface BookingMapper {
     @Mapping(target = "endTime", source = "endTime")
     CheckoutResultResponse toCheckoutResult(Booking booking, PaymentTransaction payment, Instant endTime);
 
-    default BookingSummaryResponse toSummary(Booking booking, PlanType planType, String imageUrl, boolean canPay) {
+    default BookingSummaryResponse toSummary(
+            Booking booking,
+            BookingPolicySnapshot snapshot,
+            String imageUrl,
+            boolean canPay,
+            boolean atRisk,
+            String riskMessage
+    ) {
         Vehicle vehicle = booking.getVehicle();
+        boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
+        PlanType planType = snapshot != null ? snapshot.getPlanType() : booking.getPlan().getPlanType();
+        String vehicleName = !vehicleReplaced && snapshot != null && snapshot.getVehicleName() != null
+                ? snapshot.getVehicleName()
+                : vehicle.getBrand() + " " + vehicle.getModel();
+        int manufactureYear = !vehicleReplaced && snapshot != null && snapshot.getVehicleManufactureYear() != null
+                ? snapshot.getVehicleManufactureYear()
+                : vehicle.getManufactureYear();
+        String licensePlate = !vehicleReplaced && snapshot != null && snapshot.getVehicleLicensePlate() != null
+                ? snapshot.getVehicleLicensePlate()
+                : vehicle.getLicensePlate();
+        String snapshotImage = !vehicleReplaced && snapshot != null && snapshot.getVehicleImageUrl() != null
+                ? snapshot.getVehicleImageUrl()
+                : imageUrl;
         return new BookingSummaryResponse(
                 booking.getBookingCode(),
                 booking.getStatus(),
                 planType,
-                vehicle.getBrand() + " " + vehicle.getModel(),
-                vehicle.getManufactureYear(),
-                vehicle.getLicensePlate(),
-                imageUrl,
+                vehicleName,
+                manufactureYear,
+                licensePlate,
+                snapshotImage,
                 booking.getPickupAddress(),
                 booking.getPickupLatitude(),
                 booking.getPickupLongitude(),
@@ -106,11 +141,13 @@ public interface BookingMapper {
                 booking.getPickupTime(),
                 booking.getPassengerCount(),
                 booking.getTotalAmount(),
-                canPay);
+                canPay,
+                atRisk,
+                riskMessage);
     }
 
     default BookingDetailResponse toDetail(Booking booking,
-                                           PlanType planType,
+                                           BookingPolicySnapshot snapshot,
                                            String imageUrl,
                                            Instant endTime,
                                            int slotCount,
@@ -120,18 +157,32 @@ public interface BookingMapper {
                                            boolean canCancel,
                                            boolean canEditRequest,
                                            boolean canPay,
+                                           boolean canConfirmStart,
                                            boolean canConfirmEnd,
                                            List<DisputeCategory> disputeCategories) {
         Vehicle vehicle = booking.getVehicle();
+        boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
+        String vehicleName = !vehicleReplaced && snapshot.getVehicleName() != null
+                ? snapshot.getVehicleName()
+                : vehicle.getBrand() + " " + vehicle.getModel();
+        int manufactureYear = !vehicleReplaced && snapshot.getVehicleManufactureYear() != null
+                ? snapshot.getVehicleManufactureYear()
+                : vehicle.getManufactureYear();
+        String licensePlate = !vehicleReplaced && snapshot.getVehicleLicensePlate() != null
+                ? snapshot.getVehicleLicensePlate()
+                : vehicle.getLicensePlate();
+        String snapshotImage = !vehicleReplaced && snapshot.getVehicleImageUrl() != null
+                ? snapshot.getVehicleImageUrl()
+                : imageUrl;
         return new BookingDetailResponse(
                 booking.getBookingCode(),
                 booking.getStatus(),
-                planType,
+                snapshot.getPlanType(),
                 vehicle.getId(),
-                vehicle.getBrand() + " " + vehicle.getModel(),
-                vehicle.getManufactureYear(),
-                vehicle.getLicensePlate(),
-                imageUrl,
+                vehicleName,
+                manufactureYear,
+                licensePlate,
+                snapshotImage,
                 booking.getPickupAddress(),
                 booking.getPickupLatitude(),
                 booking.getPickupLongitude(),
@@ -141,6 +192,7 @@ public interface BookingMapper {
                 booking.getPassengerCount(),
                 slotCount,
                 booking.getTotalAmount(),
+                snapshot.getDepositAmount(),
                 booking.getCreatedAt(),
                 booking.getActualStartAt(),
                 booking.getActualEndAt(),
@@ -155,6 +207,7 @@ public interface BookingMapper {
                 canCancel,
                 canEditRequest,
                 canPay,
+                canConfirmStart,
                 canConfirmEnd,
                 disputeCategories);
     }
@@ -171,6 +224,8 @@ public interface BookingMapper {
                 booking.getBookingCode(),
                 booking.getStatus(),
                 booking.getRenterConfirmedAt(),
+                booking.getDriverEndConfirmedAt(),
+                booking.getActualEndAt(),
                 booking.getStatus() == BookingStatus.COMPLETED);
     }
 }
