@@ -55,6 +55,8 @@ public interface BookingService {
 
     DisputeOpenedResponse openDispute(Long userId, String bookingCode, OpenDisputeRequest request);
 
+    String uploadDisputeEvidence(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file);
+
     // Admin methods
     List<Booking> listAdminBookings(BookingStatus status, String keyword);
 

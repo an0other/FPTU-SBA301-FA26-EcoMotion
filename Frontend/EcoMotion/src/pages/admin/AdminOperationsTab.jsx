@@ -6,6 +6,9 @@ import {
   IconWallet,
   IconSearch,
   IconX,
+  IconEye,
+  IconCheckCircle,
+  IconImage,
 } from '../../components/icons/Icons'
 import BookingDetailModal from './modals/BookingDetailModal'
 import DisputeDetailModal from './modals/DisputeDetailModal'
@@ -14,6 +17,22 @@ import PaymentDetailModal from './modals/PaymentDetailModal'
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
+}
+
+function countEvidence(urls) {
+  if (!urls) return 0
+  if (Array.isArray(urls)) return urls.filter(Boolean).length
+  if (typeof urls === 'string') {
+    const trimmed = urls.trim()
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) return parsed.filter(Boolean).length
+      } catch {}
+    }
+    return trimmed ? 1 : 0
+  }
+  return 0
 }
 
 const BOOKING_STATUS_BADGES = {
@@ -355,6 +374,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                     <th className="px-5 py-3.5">Đơn hàng (Booking ID)</th>
                     <th className="px-5 py-3.5">Danh mục</th>
                     <th className="px-5 py-3.5">Người khiếu nại</th>
+                    <th className="px-5 py-3.5">Nội dung &amp; Bằng chứng</th>
                     <th className="px-5 py-3.5">Trạng thái</th>
                     <th className="px-5 py-3.5">Phán quyết / Ghi chú</th>
                     <th className="px-5 py-3.5 text-right">Thao tác</th>
@@ -363,7 +383,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                 <tbody className="divide-y divide-slate-100">
                   {disputes.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="py-8 text-center text-slate-400">
+                      <td colSpan="8" className="py-8 text-center text-slate-400">
                         {loading ? 'Đang tải danh sách khiếu nại...' : 'Không có khiếu nại nào ở trạng thái này'}
                       </td>
                     </tr>
@@ -378,6 +398,17 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-slate-600">User #{d.raisedBy}</td>
+                        <td className="px-5 py-3.5 max-w-[240px]">
+                          <p className="line-clamp-2 font-medium text-slate-800" title={d.description || ''}>
+                            {d.description || <span className="text-slate-400 italic font-normal">Chưa có mô tả</span>}
+                          </p>
+                          {countEvidence(d.evidenceUrls) > 0 && (
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200">
+                              <IconImage className="h-3 w-3" />
+                              {countEvidence(d.evidenceUrls)} ảnh bằng chứng
+                            </span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5">
                           <span
                             className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
@@ -387,7 +418,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                             {d.status}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 max-w-[240px] truncate text-slate-700" title={d.resolution}>
+                        <td className="px-5 py-3.5 max-w-[200px] truncate text-slate-700" title={d.resolution}>
                           {d.resolution || <span className="text-slate-400 italic">Chưa có kết luận</span>}
                         </td>
                         <td className="px-5 py-3.5 text-right">
@@ -403,7 +434,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                             }}
                             className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-600"
                           >
-                            Phân xử
+                            Phân xử &amp; Chi tiết
                           </button>
                         </td>
                       </tr>

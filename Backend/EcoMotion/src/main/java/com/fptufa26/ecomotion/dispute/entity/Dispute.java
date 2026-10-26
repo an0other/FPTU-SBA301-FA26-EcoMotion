@@ -58,8 +58,44 @@ public class Dispute {
     @Column(nullable = false, length = 20)
     private DisputeStatus status = DisputeStatus.OPEN;
 
+    @Column(length = 2000)
+    private String description;
+
+    @Column(name = "evidence_urls", columnDefinition = "TEXT")
+    private String evidenceUrls;
+
     @Column(length = 1000)
     private String resolution;
+
+    public java.util.List<String> getEvidenceUrlList() {
+        if (evidenceUrls == null || evidenceUrls.isBlank()) {
+            return java.util.Collections.emptyList();
+        }
+        try {
+            if (evidenceUrls.trim().startsWith("[")) {
+                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                        evidenceUrls, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {});
+            }
+            return java.util.Arrays.stream(evidenceUrls.split("[,;\\n\\r]+"))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        } catch (Exception e) {
+            return java.util.List.of(evidenceUrls.trim());
+        }
+    }
+
+    public void setEvidenceUrlList(java.util.List<String> urls) {
+        if (urls == null || urls.isEmpty()) {
+            this.evidenceUrls = null;
+        } else {
+            try {
+                this.evidenceUrls = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(urls);
+            } catch (Exception e) {
+                this.evidenceUrls = String.join(",", urls);
+            }
+        }
+    }
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

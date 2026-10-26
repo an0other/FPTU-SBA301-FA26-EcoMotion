@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, updateBookingRequestDetails } from '../../services/bookingService'
+import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
@@ -158,6 +158,7 @@ export function BookingDetailPage() {
           setDetail(await getMyBooking(booking.id))
         }}
         onOpenDispute={(body) => openDispute(booking.id, body)}
+        onUploadDisputeEvidence={(file) => uploadDisputeEvidence(booking.id, file)}
         onEditRequest={async (body) => {
           await updateBookingRequestDetails(booking.id, body)
           setDetail(await getMyBooking(booking.id))

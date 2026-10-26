@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 @Data
 @Builder
@@ -28,6 +29,8 @@ public class AdminDisputeDto {
     private String handledByName;
     private DisputeCategory category;
     private DisputeStatus status;
+    private String description;
+    private List<String> evidenceUrls;
     private String resolution;
     private Instant createdAt;
     private Instant updatedAt;

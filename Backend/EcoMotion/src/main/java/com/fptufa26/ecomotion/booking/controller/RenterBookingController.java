@@ -154,6 +154,15 @@ public class RenterBookingController {
         return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
     }
 
+    @PostMapping(value = "/{bookingCode}/disputes/upload-evidence", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<java.util.Map<String, String>> uploadDisputeEvidence(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        String url = bookingService.uploadDisputeEvidence(user.getUserId(), bookingCode, file);
+        return ApiResponse.success(java.util.Map.of("url", url));
+    }
+
     @GetMapping({"/{bookingCode}/settlement", "/{bookingCode}/settlements"})
     public ApiResponse<RenterSettlementResponse> getSettlement(
             @AuthenticationPrincipal SecurityUser user,
