@@ -20,6 +20,7 @@ import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
+import com.fptufa26.ecomotion.booking.enums.BookingActionKind;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
@@ -67,10 +68,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -128,6 +135,28 @@ public class BookingServiceImpl implements BookingService {
             BookingStatus.ACCEPTED,
             BookingStatus.AWAITING_DEPOSIT,
             BookingStatus.CONFIRMED);
+
+    private static final Set<BookingStatus> DRIVER_NAME_STATUSES = EnumSet.of(
+            BookingStatus.DRIVER_ASSIGNED,
+            BookingStatus.DRIVER_CONFIRMED,
+            BookingStatus.DRIVER_ARRIVED,
+            BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION,
+            BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT,
+            BookingStatus.COMPLETED);
+
+    private static final Set<BookingStatus> DEPOSIT_PAYABLE_STATUSES = EnumSet.of(
+            BookingStatus.AWAITING_DEPOSIT, BookingStatus.ACCEPTED);
+
+    private static final Set<BookingStatus> CONFIRM_START_STATUSES = EnumSet.of(
+            BookingStatus.DRIVER_ARRIVED, BookingStatus.AWAITING_START_CONFIRMATION);
+
+    private static final Set<BookingStatus> CONFIRM_END_STATUSES = EnumSet.of(
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION,
+            BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
     private static final Set<BookingStatus> CHARGE_DISPUTE = EnumSet.of(
             BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
             BookingStatus.AWAITING_FINAL_PAYMENT);
@@ -273,19 +302,24 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<BookingSummaryResponse> listMinePage(
-            Long userId, BookingStatus status, String group, String keyword, int page, int size) {
+            Long userId, BookingStatus status, String group, String keyword, String sort, int page, int size) {
         Renter renter = userService.requireRenterByUserId(userId);
         if (page < 0 || size < 1 || size > 50) {
             throw new BadRequestException("Trang phải từ 0 và số dòng phải trong khoảng 1 đến 50");
         }
 
-        Set<BookingStatus> groupedStatuses = resolveStatusGroup(group);
+        String sortKey = resolveListSort(sort);
+        Instant now = clock.instant();
+        boolean actionNeeded = isActionNeededGroup(group);
+        Set<BookingStatus> groupedStatuses = actionNeeded ? Set.of() : resolveStatusGroup(group);
         String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
         Specification<Booking> specification = (root, query, builder) -> {
-            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            List<Predicate> predicates = new ArrayList<>();
             predicates.add(builder.equal(root.get("renter").get("id"), renter.getId()));
             if (status != null) {
                 predicates.add(builder.equal(root.get("status"), status));
+            } else if (actionNeeded) {
+                predicates.add(actionNeededPredicate(root, query, builder, now));
             } else if (!groupedStatuses.isEmpty()) {
                 predicates.add(root.get("status").in(groupedStatuses));
             }
@@ -298,15 +332,156 @@ public class BookingServiceImpl implements BookingService {
                         builder.like(builder.lower(root.get("bookingCode")), pattern),
                         builder.like(vehicleName, pattern)));
             }
-            return builder.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+            if (query != null && !isCountQuery(query)) {
+                applyListSort(root, query, builder, sortKey, now);
+            }
+            return builder.and(predicates.toArray(Predicate[]::new));
         };
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "pickupTime"));
+        Pageable pageable = PageRequest.of(page, size);
         Page<Booking> result = bookingRepository.findAll(specification, pageable);
         int offset = Math.toIntExact(pageable.getOffset());
         return new PageResponse<>(
                 result.getContent().stream().map(this::toSummary).toList(),
                 result.getTotalElements(), offset, size, result.hasNext());
+    }
+
+    private boolean isActionNeededGroup(String group) {
+        return group != null && "ACTION_NEEDED".equalsIgnoreCase(group.trim());
+    }
+
+    private String resolveListSort(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return "PICKUP";
+        }
+        String key = sort.trim().toUpperCase(Locale.ROOT);
+        if (!"PICKUP".equals(key) && !"NEWEST".equals(key)) {
+            throw new BadRequestException("Kiểu sắp xếp đơn thuê không hợp lệ");
+        }
+        return key;
+    }
+
+    private boolean isCountQuery(CriteriaQuery<?> query) {
+        Class<?> resultType = query.getResultType();
+        return resultType == Long.class || resultType == long.class;
+    }
+
+    private void applyListSort(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, String sortKey, Instant now) {
+        if ("NEWEST".equals(sortKey)) {
+            query.orderBy(builder.desc(root.get("createdAt")), builder.desc(root.get("id")));
+            return;
+        }
+        Expression<Integer> upcomingBucket = builder.<Integer>selectCase()
+                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), 0)
+                .otherwise(1);
+        Expression<Instant> upcomingPickup = builder.<Instant>selectCase()
+                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), root.get("pickupTime"))
+                .otherwise(builder.nullLiteral(Instant.class));
+        Expression<Instant> pastPickup = builder.<Instant>selectCase()
+                .when(builder.lessThan(root.get("pickupTime"), now), root.get("pickupTime"))
+                .otherwise(builder.nullLiteral(Instant.class));
+        query.orderBy(
+                builder.asc(upcomingBucket),
+                builder.asc(upcomingPickup),
+                builder.desc(pastPickup),
+                builder.desc(root.get("createdAt")));
+    }
+
+    private Predicate actionNeededPredicate(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        return builder.or(
+                payableDepositPredicate(root, query, builder, now),
+                payableSettlementPredicate(root, query, builder, now),
+                confirmStartPredicate(root, builder),
+                confirmEndPredicate(root, builder));
+    }
+
+    private Predicate payableDepositPredicate(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        Predicate pickupStillOpen = builder.or(
+                builder.isNull(root.get("pickupTime")),
+                builder.greaterThanOrEqualTo(root.get("pickupTime"), now));
+        return builder.and(
+                root.get("status").in(DEPOSIT_PAYABLE_STATUSES),
+                builder.not(builder.exists(paidTransactionExists(root, query, builder, PaymentType.DEPOSIT_PAY))),
+                builder.or(
+                        builder.exists(currentPaymentRequestExists(
+                                root, query, builder, now, PaymentRequestType.DEPOSIT)),
+                        builder.and(
+                                builder.not(builder.exists(anyPaymentRequestExists(
+                                        root, query, builder, PaymentRequestType.DEPOSIT))),
+                                pickupStillOpen)));
+    }
+
+    private Predicate payableSettlementPredicate(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        return builder.and(
+                builder.equal(root.get("status"), BookingStatus.AWAITING_FINAL_PAYMENT),
+                builder.not(builder.exists(paidTransactionExists(root, query, builder, PaymentType.SETTLEMENT))),
+                builder.or(
+                        builder.exists(currentPaymentRequestExists(
+                                root, query, builder, now, PaymentRequestType.FINAL_BALANCE)),
+                        builder.not(builder.exists(anyPaymentRequestExists(
+                                root, query, builder, PaymentRequestType.FINAL_BALANCE)))));
+    }
+
+    private Predicate confirmStartPredicate(Root<Booking> root, CriteriaBuilder builder) {
+        return builder.and(
+                root.get("status").in(CONFIRM_START_STATUSES),
+                builder.isNull(root.get("renterStartConfirmedAt")));
+    }
+
+    private Predicate confirmEndPredicate(Root<Booking> root, CriteriaBuilder builder) {
+        return builder.and(
+                root.get("status").in(CONFIRM_END_STATUSES),
+                builder.isNull(root.get("renterEndConfirmedAt")));
+    }
+
+    private Subquery<Long> currentPaymentRequestExists(
+            Root<Booking> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder builder,
+            Instant now,
+            PaymentRequestType type) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentRequest> request = subquery.from(PaymentRequest.class);
+        Predicate unexpired = builder.or(
+                builder.isNull(request.get("expiresAt")),
+                builder.greaterThan(request.get("expiresAt"), now));
+        subquery.select(request.get("id")).where(
+                builder.equal(request.get("booking").get("id"), root.get("id")),
+                builder.equal(request.get("paymentType"), type),
+                request.get("status").in(PaymentRequestStatus.PENDING, PaymentRequestStatus.REJECTED),
+                unexpired);
+        return subquery;
+    }
+
+    private Subquery<Long> anyPaymentRequestExists(
+            Root<Booking> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder builder,
+            PaymentRequestType type) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentRequest> request = subquery.from(PaymentRequest.class);
+        subquery.select(request.get("id")).where(
+                builder.equal(request.get("booking").get("id"), root.get("id")),
+                builder.equal(request.get("paymentType"), type));
+        return subquery;
+    }
+
+    private Subquery<Long> paidTransactionExists(
+            Root<Booking> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder builder,
+            PaymentType type) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentTransaction> transaction = subquery.from(PaymentTransaction.class);
+        subquery.select(transaction.get("id")).where(
+                builder.equal(transaction.get("booking").get("id"), root.get("id")),
+                builder.equal(transaction.get("type"), type),
+                builder.equal(transaction.get("status"), PaymentStatus.PAID));
+        return subquery;
     }
 
     private Set<BookingStatus> resolveStatusGroup(String group) {
@@ -325,7 +500,8 @@ public class BookingServiceImpl implements BookingService {
             case "SETTLEMENT" -> EnumSet.of(
                     BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION, BookingStatus.AWAITING_FINAL_PAYMENT);
             case "COMPLETED" -> EnumSet.of(BookingStatus.COMPLETED);
-            case "ENDED" -> EnumSet.of(BookingStatus.CANCELLED, BookingStatus.REJECTED);
+            case "ENDED" -> EnumSet.of(
+                    BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.REJECTED);
             default -> throw new BadRequestException("Nhóm trạng thái đơn thuê không hợp lệ");
         };
     }
@@ -565,13 +741,6 @@ public class BookingServiceImpl implements BookingService {
         List<BookingChargeLineResponse> charges = chargeRows.stream().map(bookingMapper::toChargeLine).toList();
         List<PaymentTransaction> payments = paymentTransactionRepository.findByBooking_Id(booking.getId());
         RefundPreviewResponse refundPreview = refundPreview(booking, snapshot, chargeRows, payments, Instant.now());
-        boolean canConfirm = (booking.getStatus() == BookingStatus.IN_PROGRESS
-                || booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
-                || booking.getStatus() == BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION)
-                && booking.getRenterEndConfirmedAt() == null;
-        boolean canConfirmStart = (booking.getStatus() == BookingStatus.DRIVER_ARRIVED
-                || booking.getStatus() == BookingStatus.AWAITING_START_CONFIRMATION)
-                && booking.getRenterStartConfirmedAt() == null;
         boolean canEdit = canEditRequest(booking);
         return bookingMapper.toDetail(
                 booking,
@@ -585,9 +754,10 @@ public class BookingServiceImpl implements BookingService {
                 CANCELLABLE.contains(booking.getStatus()),
                 canEdit,
                 canPay(booking),
-                canConfirmStart,
-                canConfirm,
-                disputeCategories(booking, chargeRows));
+                canConfirmStart(booking),
+                canConfirmEnd(booking),
+                disputeCategories(booking, chargeRows),
+                holdExpiresAt(booking));
     }
 
     private void requireDisputeAllowed(Booking booking, DisputeCategory category) {
@@ -706,8 +876,17 @@ public class BookingServiceImpl implements BookingService {
         }
         if (booking.getStatus() == BookingStatus.REJECTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã từ chối", null, "Không có lý do", true, true));
-        } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
+        } else if (booking.getStatus() == BookingStatus.ACCEPTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã chấp nhận", null, null, true, false));
+        } else if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+            steps.add(new TimelineStepResponse(
+                    "Đang giữ chỗ",
+                    booking.getCreatedAt(),
+                    "Thanh toán cọc trong 15 phút",
+                    true,
+                    false));
+        } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
+            steps.add(new TimelineStepResponse("Đã giữ chỗ", booking.getCreatedAt(), null, true, false));
         }
         payments.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID
@@ -773,8 +952,101 @@ public class BookingServiceImpl implements BookingService {
         BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         String imageUrl = vehicleCatalogService.coverImageUrl(booking.getVehicle().getId());
         var risk = vehicleOperationalRiskService.assess(booking);
+        Instant endTime = summaryEndTime(booking, snapshot);
         return bookingMapper.toSummary(
-                booking, snapshot, imageUrl, canPay(booking), risk.atRisk(), risk.message());
+                booking,
+                snapshot,
+                imageUrl,
+                canPay(booking),
+                risk.atRisk(),
+                risk.message(),
+                holdExpiresAt(booking),
+                endTime,
+                summaryDepositAmount(booking, snapshot),
+                assignedDriverName(booking),
+                actionKind(booking));
+    }
+
+    private Instant summaryEndTime(Booking booking, BookingPolicySnapshot snapshot) {
+        if (booking.getPickupTime() == null || snapshot == null || snapshot.getSlotLengthMinutes() == null) {
+            return null;
+        }
+        return endOf(booking, snapshot, baseSlots(booking));
+    }
+
+    private BigDecimal summaryDepositAmount(Booking booking, BookingPolicySnapshot snapshot) {
+        Optional<PaymentRequest> currentDeposit = currentPayableRequest(booking, PaymentRequestType.DEPOSIT);
+        if (currentDeposit.isPresent()) {
+            return currentDeposit.get().getAmount();
+        }
+        if (snapshot != null && snapshot.getDepositAmount() != null) {
+            return snapshot.getDepositAmount();
+        }
+        if (snapshot != null && snapshot.getDepositRatio() != null && booking.getTotalAmount() != null) {
+            return booking.getTotalAmount()
+                    .multiply(snapshot.getDepositRatio())
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+        return null;
+    }
+
+    private Optional<PaymentRequest> currentPayableRequest(Booking booking, PaymentRequestType type) {
+        Instant now = clock.instant();
+        return paymentRequestService.findPaymentRequest(booking.getId(), type)
+                .filter(request -> request.getStatus() == PaymentRequestStatus.PENDING
+                        || request.getStatus() == PaymentRequestStatus.REJECTED)
+                .filter(request -> request.getExpiresAt() == null || request.getExpiresAt().isAfter(now));
+    }
+
+    private String assignedDriverName(Booking booking) {
+        if (booking.getDriver() == null || !DRIVER_NAME_STATUSES.contains(booking.getStatus())) {
+            return null;
+        }
+        if (booking.getDriver().getUser() == null) {
+            return null;
+        }
+        String name = booking.getDriver().getUser().getFullName();
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        return name.trim();
+    }
+
+    private BookingActionKind actionKind(Booking booking) {
+        if (canConfirmStart(booking)) {
+            return BookingActionKind.CONFIRM_START;
+        }
+        if (canConfirmEnd(booking)) {
+            return BookingActionKind.CONFIRM_END;
+        }
+        if (!canPay(booking)) {
+            return BookingActionKind.NONE;
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT) {
+            return BookingActionKind.PAY_SETTLEMENT;
+        }
+        return BookingActionKind.PAY_DEPOSIT;
+    }
+
+    private boolean canConfirmStart(Booking booking) {
+        return CONFIRM_START_STATUSES.contains(booking.getStatus())
+                && booking.getRenterStartConfirmedAt() == null;
+    }
+
+    private boolean canConfirmEnd(Booking booking) {
+        return CONFIRM_END_STATUSES.contains(booking.getStatus())
+                && booking.getRenterEndConfirmedAt() == null;
+    }
+
+    private Instant holdExpiresAt(Booking booking) {
+        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+            return null;
+        }
+        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
+                .map(PaymentRequest::getExpiresAt)
+                .orElseGet(() -> booking.getCreatedAt() == null
+                        ? null
+                        : booking.getCreatedAt().plus(INITIAL_HOLD_DURATION));
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {

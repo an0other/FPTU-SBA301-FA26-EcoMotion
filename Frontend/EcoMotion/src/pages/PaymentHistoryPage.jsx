@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import AppHeader from '../components/AppHeader'
 import BookingChargeBreakdown from '../components/payments/BookingChargeBreakdown'
 import PaymentHistoryTable from '../components/payments/PaymentHistoryTable'
 import PaymentPagination from '../components/payments/PaymentPagination'
@@ -21,9 +20,7 @@ export default function PaymentHistoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface">
-      <AppHeader />
-
+    <div className="bg-surface">
       <nav
         aria-label="Đường dẫn trang"
         className="border-b border-slate-200 bg-white"
@@ -39,7 +36,7 @@ export default function PaymentHistoryPage() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-350 space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-350 space-y-6 px-4 py-8 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-brand-700">
@@ -53,12 +50,20 @@ export default function PaymentHistoryPage() {
             </p>
           </div>
 
-          <Link
-            to="/me"
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Tài khoản của tôi
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/renter/bookings"
+              className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-2.5 text-sm font-semibold text-brand-800 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+            >
+              Đơn của tôi
+            </Link>
+            <Link
+              to="/me"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+            >
+              Tài khoản của tôi
+            </Link>
+          </div>
         </div>
 
         <section
@@ -153,7 +158,7 @@ export default function PaymentHistoryPage() {
             onClose={() => setSelectedBookingCode(null)}
           />
         )}
-      </main>
+      </div>
     </div>
   )
 }
