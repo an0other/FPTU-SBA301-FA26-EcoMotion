@@ -20,29 +20,107 @@ export const BookingDetail = ({
   onCancelBooking,
   onCompleteBooking,
   onOpenDispute,
+  onUploadDisputeEvidence,
   onEditRequest,
 }) => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [complaintCategory, setComplaintCategory] = useState('');
   const [complaintCharge, setComplaintCharge] = useState('');
+  const [complaintDescription, setComplaintDescription] = useState('');
+  const [evidenceList, setEvidenceList] = useState([]);
+  const [submittingDispute, setSubmittingDispute] = useState(false);
   const [actionError, setActionError] = useState('');
   const [disputeNote, setDisputeNote] = useState('');
   const [editing, setEditing] = useState(false);
   const statusMeta = bookingStatusMeta(booking.status);
 
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setActionError('Chỉ hỗ trợ tệp định dạng hình ảnh (JPG, PNG, WebP).');
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setActionError('Dung lượng ảnh không được vượt quá 10MB.');
+        continue;
+      }
+
+      const tempId = String(Date.now() + Math.random());
+      const previewUrl = URL.createObjectURL(file);
+
+      setEvidenceList((prev) => [
+        ...prev,
+        { id: tempId, file, previewUrl, url: null, uploading: true, error: null },
+      ]);
+
+      if (onUploadDisputeEvidence) {
+        try {
+          const uploadedUrl = await onUploadDisputeEvidence(file);
+          setEvidenceList((prev) =>
+            prev.map((item) =>
+              item.id === tempId ? { ...item, url: uploadedUrl, uploading: false } : item
+            )
+          );
+        } catch (err) {
+          setEvidenceList((prev) =>
+            prev.map((item) =>
+              item.id === tempId
+                ? { ...item, uploading: false, error: 'Tải ảnh thất bại' }
+                : item
+            )
+          );
+        }
+      }
+    }
+    e.target.value = '';
+  };
+
+  const handleRemoveEvidence = (idToRemove) => {
+    setEvidenceList((prev) => {
+      const target = prev.find((item) => item.id === idToRemove);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((item) => item.id !== idToRemove);
+    });
+  };
+
   const handleComplaintSubmit = async (e) => {
     e.preventDefault();
     setActionError('');
+
+    if (!complaintDescription.trim()) {
+      setActionError('Vui lòng nhập mô tả chi tiết lý do khiếu nại (ví dụ: Khách ói ra xe).');
+      return;
+    }
+
+    const isStillUploading = evidenceList.some((item) => item.uploading);
+    if (isStillUploading) {
+      setActionError('Hình ảnh bằng chứng đang được tải lên, vui lòng đợi một chút.');
+      return;
+    }
+
+    setSubmittingDispute(true);
     try {
+      const evidenceUrls = evidenceList.map((item) => item.url).filter(Boolean);
       await onOpenDispute({
         category: complaintCategory,
         chargeType: complaintCategory === 'CHARGE' ? complaintCharge : undefined,
+        description: complaintDescription.trim(),
+        evidenceUrls,
       });
-      setDisputeNote('Đã gửi khiếu nại. Admin sẽ xem xét.');
+      setDisputeNote('Đã gửi khiếu nại thành công kèm hình ảnh minh chứng. Ban quản trị sẽ thụ lý và phản hồi.');
       setComplaintCategory('');
       setComplaintCharge('');
+      setComplaintDescription('');
+      setEvidenceList([]);
     } catch (err) {
       setActionError(readErrorMessage(err));
+    } finally {
+      setSubmittingDispute(false);
     }
   };
 
@@ -404,15 +482,90 @@ export const BookingDetail = ({
                   </div>
                 )}
 
-                {disputeNote && <p className="text-sm text-[#15803D]">{disputeNote}</p>}
-                {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
+                {/* Description of Dispute */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-[#14221A]">
+                    Mô tả chi tiết / Lý do khiếu nại <span className="text-[#B42318]">*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={complaintDescription}
+                    onChange={(e) => setComplaintDescription(e.target.value)}
+                    placeholder="Nhập lý do khiếu nại cụ thể (ví dụ: Khách ói ra xe gây ố bẩn nội thất, phụ phí vệ sinh tính chưa hợp lý...)"
+                    className="w-full p-3 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none focus:border-[#15803D] focus:bg-white transition-all resize-none"
+                  />
+                </div>
+
+                {/* Evidence Image Upload */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-[#14221A]">
+                      Hình ảnh bằng chứng đính kèm
+                    </label>
+                    <span className="text-[11px] text-[#6D7A72]">
+                      {evidenceList.length} ảnh đã chọn
+                    </span>
+                  </div>
+
+                  <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] hover:bg-[#F1F5F9] cursor-pointer transition-colors text-xs font-medium text-[#475569]">
+                    <svg className="w-4 h-4 text-[#64748B]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Chọn ảnh minh chứng (JPG, PNG, WebP)</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* Thumbnail Previews */}
+                  {evidenceList.length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
+                      {evidenceList.map((item) => (
+                        <div key={item.id} className="relative group rounded-xl overflow-hidden border border-[#E2E8F0] aspect-square bg-slate-100">
+                          <img
+                            src={item.previewUrl}
+                            alt="Bằng chứng"
+                            className="w-full h-full object-cover"
+                          />
+                          {item.uploading && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-[10px] font-bold">
+                              Đang tải...
+                            </div>
+                          )}
+                          {item.error && (
+                            <div className="absolute inset-0 bg-rose-600/70 flex items-center justify-center text-white text-[10px] p-1 text-center font-bold">
+                              Lỗi tải ảnh
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEvidence(item.id)}
+                            className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-black/80 rounded-full text-white text-xs flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Xóa ảnh"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {disputeNote && <p className="text-sm text-[#15803D] font-medium">{disputeNote}</p>}
+                {actionError && <p className="text-sm text-[#B42318] font-medium">{actionError}</p>}
 
                 <div className="flex justify-end pt-1">
                   <button
                     type="submit"
-                    className="px-5 py-2 font-semibold text-xs border border-[#B42318] text-[#B42318] rounded-xl hover:bg-rose-50 transition-colors cursor-pointer active:scale-95"
+                    disabled={submittingDispute}
+                    className="px-5 py-2 font-semibold text-xs border border-[#B42318] text-[#B42318] hover:bg-rose-50 rounded-xl transition-colors cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    Gửi khiếu nại
+                    {submittingDispute ? 'Đang gửi...' : 'Gửi khiếu nại'}
                   </button>
                 </div>
               </form>

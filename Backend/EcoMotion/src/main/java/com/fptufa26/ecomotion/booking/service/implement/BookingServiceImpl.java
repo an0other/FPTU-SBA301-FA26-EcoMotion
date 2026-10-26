@@ -100,6 +100,7 @@ public class BookingServiceImpl implements BookingService {
     private final ScheduleService scheduleService;
     private final DisputeService disputeService;
     private final PaymentRequestRepository paymentRequestRepository;
+    private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
 
     private static final Set<BookingStatus> CANCELLABLE = EnumSet.of(
             BookingStatus.PENDING,
@@ -356,12 +357,25 @@ public class BookingServiceImpl implements BookingService {
             }
         }
         DisputeOpenedResponse response = disputeService.open(
-                booking, booking.getRenter().getUser(), request.category(), charge);
+                booking, booking.getRenter().getUser(), request.category(), charge,
+                request.description(), request.resolvedEvidenceUrls());
         if (finalRequest != null) {
             finalRequest.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
             finalRequest.setIssueNote("Payment held while a charge dispute is reviewed");
         }
         return response;
+    }
+
+    @Override
+    @Transactional
+    public String uploadDisputeEvidence(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Vui lòng chọn hình ảnh để tải lên");
+        }
+        var uploadResult = cloudinaryService.uploadDisputeEvidence(file, booking.getId());
+        return uploadResult.secureUrl();
     }
 
     private BookingDetailResponse toDetail(Booking booking) {

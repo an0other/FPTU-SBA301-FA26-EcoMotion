@@ -49,6 +49,13 @@ public class DisputeServiceImpl implements DisputeService {
     @Override
     @Transactional
     public DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge) {
+        return open(booking, raisedBy, category, charge, null, null);
+    }
+
+    @Override
+    @Transactional
+    public DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge,
+                                      String description, List<String> evidenceUrls) {
         if (category == DisputeCategory.CHARGE) {
             if (disputeRepository.existsByBooking_IdAndCategoryAndStatusAndCharge_Id(
                     booking.getId(), category, DisputeStatus.OPEN, charge.getId())) {
@@ -66,8 +73,16 @@ public class DisputeServiceImpl implements DisputeService {
         dispute.setHandledBy(null);
         dispute.setCategory(category);
         dispute.setStatus(DisputeStatus.OPEN);
+        dispute.setDescription(description);
+        dispute.setEvidenceUrlList(evidenceUrls);
         disputeRepository.save(dispute);
-        return new DisputeOpenedResponse(dispute.getCategory(), dispute.getStatus());
+        return new DisputeOpenedResponse(
+                dispute.getCategory(),
+                dispute.getStatus(),
+                dispute.getId(),
+                dispute.getDescription(),
+                dispute.getEvidenceUrlList()
+        );
     }
 
     @Override
