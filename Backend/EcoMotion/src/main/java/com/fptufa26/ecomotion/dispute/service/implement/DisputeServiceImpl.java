@@ -28,13 +28,23 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 public class DisputeServiceImpl implements DisputeService {
 
     private final DisputeRepository disputeRepository;
     private final UserService userService;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
+
+    public DisputeServiceImpl(
+            DisputeRepository disputeRepository,
+            UserService userService,
+            BookingPaymentLedgerService bookingPaymentLedgerService,
+            PaymentRequestService paymentRequestService) {
+        this.disputeRepository = disputeRepository;
+        this.userService = userService;
+        this.bookingPaymentLedgerService = bookingPaymentLedgerService;
+        this.paymentRequestService = paymentRequestService;
+    }
 
     @Override
     @Transactional
@@ -137,6 +147,7 @@ public class DisputeServiceImpl implements DisputeService {
                 request.setStatus(PaymentRequestStatus.PENDING);
                 booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
             }
+            paymentRequestService.savePaymentRequest(request);
         });
         bookingPaymentLedgerService.saveBooking(booking);
     }

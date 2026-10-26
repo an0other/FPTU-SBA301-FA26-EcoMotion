@@ -72,5 +72,9 @@ public interface BookingService {
 
     long countTotalBookings();
 
+    Optional<Booking> findByBookingCode(String bookingCode);
+
+    Booking saveBooking(Booking booking);
+
     BigDecimal sumTotalRevenue();
 }

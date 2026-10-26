@@ -44,6 +44,7 @@ import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import org.springframework.security.access.AccessDeniedException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
@@ -53,6 +54,7 @@ import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
+import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.service.UserService;
@@ -330,13 +332,13 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public CheckoutPreviewResponse previewCheckout(Long userId, String bookingCode) {
-        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR");
+        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox");
     }
 
     @Override
     @Transactional
     public CheckoutResultResponse checkout(Long userId, String bookingCode, CheckoutRequest request) {
-        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán bằng VietQR");
+        throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox");
     }
 
     @Override
@@ -762,11 +764,18 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {
-        Booking booking = bookingRepository.findByBookingCode(bookingCode)
-                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        Optional<Booking> opt = bookingRepository.findByBookingCode(bookingCode);
+        if (opt.isEmpty()) {
+            try {
+                Long id = Long.parseLong(bookingCode);
+                opt = bookingRepository.findById(id);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        Booking booking = opt.orElseThrow(() -> new NotFoundException("Booking not found"));
         Long ownerId = booking.getRenter().getUser().getUserId();
         if (!ownerId.equals(userId)) {
-            throw new NotFoundException("Booking not found");
+            throw new AccessDeniedException("Bạn không có quyền truy cập đơn thuê này");
         }
         return booking;
     }
@@ -788,27 +797,58 @@ public class BookingServiceImpl implements BookingService {
 
     private BookingPolicySnapshot requireSnapshot(Booking booking) {
         return snapshotRepository.findByBooking_Id(booking.getId())
-                .orElseGet(() -> legacySnapshot(booking));
+                .orElseGet(() -> createFallbackSnapshot(booking));
     }
 
-    private BookingPolicySnapshot legacySnapshot(Booking booking) {
-        if (booking.getPlan() == null) {
-            throw new NotFoundException("Không tìm thấy chính sách giá của booking");
-        }
+    private BookingPolicySnapshot createFallbackSnapshot(Booking booking) {
+        RentalPlan plan = booking.getPlan();
+        Provider provider = (booking.getVehicle() != null) ? booking.getVehicle().getProvider() : null;
+        BigDecimal depositRatio = (provider != null && provider.getDepositRatio() != null)
+                ? provider.getDepositRatio()
+                : new BigDecimal("0.30");
+
         BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
         snapshot.setBooking(booking);
-        snapshot.setPlanType(booking.getPlan().getPlanType());
-        snapshot.setSlotPrice(booking.getPlan().getSlotPrice());
-        snapshot.setSlotLengthMinutes(booking.getPlan().getSlotLengthMinutes());
-        snapshot.setDepositRatio(booking.getVehicle().getProvider().getDepositRatio());
-        snapshot.setUpfrontAmount(booking.getPlan().getUpfrontAmount());
-        return snapshot;
+        if (plan != null) {
+            snapshot.setSlotPrice(plan.getSlotPrice());
+            snapshot.setSlotLengthMinutes(plan.getSlotLengthMinutes());
+            snapshot.setPlanType(plan.getPlanType());
+            snapshot.setDepositRatio(plan.getPlanType() == PlanType.YEARLY ? null : depositRatio);
+            snapshot.setUpfrontAmount(plan.getUpfrontAmount());
+            snapshot.setAllowedOvertimeMinutes(plan.getAllowedOvertimeMinutes());
+            snapshot.setOvertimeSurchargeRatio(plan.getOvertimeSurchargeRatio());
+            snapshot.setWaitingFreeMinutes(plan.getWaitingFreeMinutes());
+            snapshot.setWaitingRate(plan.getWaitingRate());
+            snapshot.setWeekendSurchargeRatio(plan.getWeekendSurchargeRatio());
+            snapshot.setFreeRadiusKm(plan.getFreeRadiusKm());
+            snapshot.setOutOfRadiusRate(plan.getOutOfRadiusRate());
+            snapshot.setHourlyToDailyThresholdMinutes(plan.getHourlyToDailyThresholdMinutes());
+        } else {
+            BigDecimal price = booking.getTotalAmount() != null ? booking.getTotalAmount() : BigDecimal.ZERO;
+            snapshot.setSlotPrice(price);
+            snapshot.setSlotLengthMinutes(1440);
+            snapshot.setPlanType(PlanType.DAILY);
+            snapshot.setDepositRatio(depositRatio);
+        }
+        return snapshotRepository.save(snapshot);
     }
 
     private int baseSlots(Booking booking) {
         return chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
                 .map(BookingCharge::getQuantity)
-                .orElseThrow(() -> new NotFoundException("Base rental charge not found"));
+                .orElseGet(() -> {
+                    RentalPlan plan = booking.getPlan();
+                    if (plan != null && plan.getSlotPrice() != null && plan.getSlotPrice().compareTo(BigDecimal.ZERO) > 0
+                            && booking.getTotalAmount() != null) {
+                        try {
+                            int calculated = booking.getTotalAmount().divideToIntegralValue(plan.getSlotPrice()).intValue();
+                            return Math.max(calculated, 1);
+                        } catch (Exception ignored) {
+                            return 1;
+                        }
+                    }
+                    return 1;
+                });
     }
 
     private Instant endOf(Booking booking, BookingPolicySnapshot snapshot, int slots) {
@@ -857,18 +897,39 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private boolean canPay(Booking booking) {
-        if (booking.getStatus() != BookingStatus.ACCEPTED
-                && booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
+        Instant now = clock.instant();
+        if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT
+                || booking.getStatus() == BookingStatus.ACCEPTED) {
+            boolean alreadyPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                    .anyMatch(tx -> tx.getType() == PaymentType.DEPOSIT_PAY && tx.getStatus() == PaymentStatus.PAID);
+            if (alreadyPaid) {
+                return false;
+            }
+            Optional<PaymentRequest> depositReq = paymentRequestService
+                    .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT);
+            if (depositReq.isPresent()) {
+                PaymentRequest request = depositReq.get();
+                if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(now)) {
+                    return false;
+                }
+                return request.getStatus() == PaymentRequestStatus.PENDING
+                        || request.getStatus() == PaymentRequestStatus.REJECTED;
+            }
+            return booking.getPickupTime() == null || !booking.getPickupTime().isBefore(now);
+        }
+        if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
             return false;
         }
-        PaymentRequestType type = booking.getStatus() == BookingStatus.ACCEPTED
-                ? PaymentRequestType.DEPOSIT
-                : PaymentRequestType.FINAL_BALANCE;
-        return paymentRequestService.findPaymentRequest(booking.getId(), type)
-                .filter(request -> request.getExpiresAt() == null || request.getExpiresAt().isAfter(Instant.now()))
-                .map(request -> request.getStatus() == PaymentRequestStatus.PENDING
-                        || request.getStatus() == PaymentRequestStatus.REJECTED)
-                .orElse(false);
+        boolean alreadySettled = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .anyMatch(tx -> tx.getType() == PaymentType.SETTLEMENT && tx.getStatus() == PaymentStatus.PAID);
+        if (alreadySettled) {
+            return false;
+        }
+        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.FINAL_BALANCE)
+                .map(request -> (request.getExpiresAt() == null || request.getExpiresAt().isAfter(now))
+                        && (request.getStatus() == PaymentRequestStatus.PENDING
+                        || request.getStatus() == PaymentRequestStatus.REJECTED))
+                .orElse(true);
     }
 
     private Instant endOf(Booking booking) {
@@ -970,6 +1031,18 @@ public class BookingServiceImpl implements BookingService {
     @Transactional(readOnly = true)
     public long countTotalBookings() {
         return bookingRepository.count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Booking> findByBookingCode(String bookingCode) {
+        return bookingRepository.findByBookingCode(bookingCode);
+    }
+
+    @Override
+    @Transactional
+    public Booking saveBooking(Booking booking) {
+        return bookingRepository.save(booking);
     }
 
     @Override

@@ -190,4 +190,22 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     Optional<Booking> findBookingByBookingCodeAndRenter_User_Id(
             String bookingCode,
             Long userId);
+
+    @Query("SELECT b FROM Booking b WHERE b.driver.id = :driverId AND b.status IN :statuses " +
+            "AND b.pickupTime < :windowEnd AND (b.actualEndAt IS NULL OR b.actualEndAt > :windowStart)")
+    List<Booking> findOverlappingDriverBookings(
+            @Param("driverId") Long driverId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("windowStart") Instant windowStart,
+            @Param("windowEnd") Instant windowEnd
+    );
+
+    @Query("SELECT COUNT(b) FROM Booking b WHERE b.driver.id = :driverId AND b.status IN :statuses " +
+            "AND b.pickupTime >= :start AND b.pickupTime < :end")
+    long countDriverTripsBetween(
+            @Param("driverId") Long driverId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("start") Instant start,
+            @Param("end") Instant end
+    );
 }

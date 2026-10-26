@@ -44,6 +44,7 @@ public record BookingDetailResponse(
         boolean canPay,
         boolean canConfirmStart,
         boolean canConfirmEnd,
-        List<DisputeCategory> disputeCategories
+        List<DisputeCategory> disputeCategories,
+        String providerName
 ) {
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import Toast from '../components/Toast'
 import { providerFinanceService } from '../services/providerFinanceService'
+import { paymentService } from '../services/paymentService'
 import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
 import { isPaymentRequestExpired } from '../utils/paymentDisplay'
 
@@ -64,6 +65,8 @@ export default function CustomerPaymentPage() {
   const [txRef, setTxRef] = useState('')
   const [proofNote, setProofNote] = useState('')
   const [submittingProof, setSubmittingProof] = useState(false)
+  const [paymentCreating, setPaymentCreating] = useState(false)
+  const [inlineError, setInlineError] = useState(null)
   const proofPreviewUrl = useMemo(
     () => (proofFile ? URL.createObjectURL(proofFile) : ''),
     [proofFile],
@@ -184,6 +187,33 @@ export default function CustomerPaymentPage() {
     setProofModalOpen(true)
   }
 
+  const handlePayWithVnpay = async () => {
+    if (paymentCreating || !bookingIdentifier) return
+    setPaymentCreating(true)
+    setInlineError(null)
+    try {
+      const isFinal = selectedRequest?.paymentType === 'FINAL_BALANCE'
+      const res = await paymentService.createVnpayPaymentUrl({
+        bookingCode: bookingIdentifier,
+        paymentType: isFinal ? 'FINAL_PAYMENT' : 'DEPOSIT',
+        language: 'vn',
+      })
+      if (res?.paymentUrl) {
+        window.location.href = res.paymentUrl
+        return
+      }
+      throw new Error('Cổng VNPAY không trả về đường dẫn thanh toán hợp lệ.')
+    } catch (err) {
+      setInlineError(
+        err?.response?.data?.message
+        || err?.original?.response?.data?.message
+        || err?.message
+        || 'Không thể kết nối cổng thanh toán VNPAY.'
+      )
+      setPaymentCreating(false)
+    }
+  }
+
   const handleReissue = async () => {
     try {
       await providerFinanceService.reissueDepositPayment(bookingIdentifier)
@@ -227,6 +257,16 @@ export default function CustomerPaymentPage() {
             >
               Thử lại
             </button>
+            {bookingIdentifier ? (
+              <button
+                type="button"
+                onClick={handlePayWithVnpay}
+                disabled={paymentCreating}
+                className="rounded-lg bg-[#1a237e] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0d1642] disabled:opacity-50"
+              >
+                {paymentCreating ? 'Đang kết nối VNPAY...' : 'Thanh toán qua VNPAY'}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -244,9 +284,9 @@ export default function CustomerPaymentPage() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Thanh toán chuyển khoản trực tiếp</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Thanh toán đặt cọc</h1>
             <p className="mt-0.5 text-xs text-slate-500">
-              Đơn thuê <span className="font-mono font-bold text-slate-800">#{selectedRequest.bookingCode}</span> • Thanh toán trực tiếp vào tài khoản ngân hàng của chủ xe
+              Đơn thuê <span className="font-mono font-bold text-slate-800">#{selectedRequest.bookingCode}</span> • VietQR chuyển khoản hoặc cổng VNPAY
             </p>
           </div>
           <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${badge.bg}`}>
@@ -274,6 +314,12 @@ export default function CustomerPaymentPage() {
             ))}
           </div>
         )}
+
+        {inlineError ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">
+            {inlineError}
+          </div>
+        ) : null}
 
         {/* Main Payment Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
@@ -378,26 +424,36 @@ export default function CustomerPaymentPage() {
           </div>
 
           {/* Action Footer */}
-          <div className="mt-8 border-t border-slate-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="mt-8 border-t border-slate-100 pt-6 flex flex-col gap-4">
             <div className="text-xs text-slate-500 flex items-center gap-1.5">
               <Icon name="info" className="text-base text-slate-400 shrink-0" />
-              <span>Sau khi chuyển khoản xong, vui lòng bấm nút bên cạnh để gửi ảnh biên lai đối soát.</span>
+              <span>Chọn VietQR (gửi biên lai) hoặc thanh toán tự động qua VNPAY. Chỉ một cổng được ghi nhận cọc.</span>
             </div>
-
-            <button
-              type="button"
-              onClick={handleOpenProofModal}
-              disabled={requestExpired || !['PENDING', 'PARTIALLY_PAID', 'REJECTED'].includes(selectedRequest.status)}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#047857] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Icon name="receipt_long" className="text-lg" />
-              Tôi đã chuyển khoản & Gửi bằng chứng
-            </button>
-            {requestExpired && selectedRequest.paymentType === 'DEPOSIT' && !selectedRequest.evidences?.length ? (
-              <button type="button" onClick={handleReissue} className="w-full sm:w-auto rounded-xl border border-[#059669] px-5 py-2.5 text-sm font-semibold text-[#047857]">
-                Cấp lại yêu cầu thanh toán
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handlePayWithVnpay}
+                disabled={paymentCreating || requestExpired}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a237e] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#0d1642] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {paymentCreating ? <Icon name="sync" className="animate-spin text-lg" /> : <Icon name="account_balance" className="text-lg" />}
+                {paymentCreating ? 'Đang kết nối VNPAY...' : 'Thanh toán qua VNPAY'}
               </button>
-            ) : null}
+              <button
+                type="button"
+                onClick={handleOpenProofModal}
+                disabled={requestExpired || !['PENDING', 'PARTIALLY_PAID', 'REJECTED'].includes(selectedRequest.status)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[#047857] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Icon name="receipt_long" className="text-lg" />
+                Tôi đã chuyển khoản & Gửi bằng chứng
+              </button>
+              {requestExpired && selectedRequest.paymentType === 'DEPOSIT' && !selectedRequest.evidences?.length ? (
+                <button type="button" onClick={handleReissue} className="w-full sm:w-auto rounded-xl border border-[#059669] px-5 py-2.5 text-sm font-semibold text-[#047857]">
+                  Cấp lại yêu cầu thanh toán
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
 

@@ -13,7 +13,7 @@ export const TRIP_STATUS_CONFIG = {
   },
   IN_PROGRESS: {
     label: 'Đang thực hiện',
-    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
     dotClass: 'bg-amber-500',
   },
   AWAITING_START_CONFIRMATION: {
@@ -91,7 +91,7 @@ export const TRIP_EXECUTION_CONFIG = {
     actionType: 'finish',
     confirmTitle: 'Xác nhận hoàn thành chuyến đi',
     confirmMessage: 'Khách đã xuống xe an toàn tại điểm đến. Bạn có muốn kết thúc chuyến đi này?',
-    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 animate-pulse',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     dotClass: 'bg-emerald-500',
   },
   AWAITING_START_CONFIRMATION: {

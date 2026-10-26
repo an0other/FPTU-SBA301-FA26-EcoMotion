@@ -7,6 +7,7 @@ import {
   IconEye,
   IconTag,
 } from '../../components/icons/Icons'
+import VehicleDetailModal from './modals/VehicleDetailModal'
 
 const STATUS_BADGES = {
   APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -87,14 +88,15 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
     }
   }
 
-  async function handleReject(vehicleId) {
-    if (!rejectReason.trim()) {
+  async function handleReject(vehicleId, customReason) {
+    const finalReason = customReason || rejectReason
+    if (!finalReason || !finalReason.trim()) {
       alert('Vui lòng nhập lý do từ chối duyệt xe.')
       return
     }
     setActionLoading(true)
     try {
-      await adminService.updateVehicleApproval(vehicleId, 'REJECTED', rejectReason.trim())
+      await adminService.updateVehicleApproval(vehicleId, 'REJECTED', finalReason.trim())
       setMessage({ type: 'success', text: 'Đã từ chối xe và gửi thông báo tới chủ xe.' })
       setSelectedVehicle(null)
       loadVehicles()
@@ -257,200 +259,16 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
         )}
       </div>
 
-      {/* Vehicle Inspection & Approval Modal */}
+      {/* Vehicle Detail Inspection Modal */}
       {selectedVehicle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-bold text-slate-900">
-                    {selectedVehicle.brand} {selectedVehicle.model} ({selectedVehicle.manufactureYear})
-                  </h3>
-                  <span
-                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
-                      STATUS_BADGES[selectedVehicle.status] || 'bg-slate-100'
-                    }`}
-                  >
-                    {selectedVehicle.status}
-                  </span>
-                </div>
-                <p className="mt-1 font-mono text-xs font-bold text-brand-700">
-                  Biển kiểm soát: {selectedVehicle.licensePlate}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedVehicle(null)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <IconX className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="mt-6 space-y-6">
-              {/* Specs Grid */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  Thông số kỹ thuật &amp; Pháp lý xe
-                </h4>
-                <div className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 text-xs sm:grid-cols-4">
-                  <div>
-                    <span className="text-slate-500 block">Số chỗ:</span>
-                    <strong className="text-slate-900">{selectedVehicle.seatCount} chỗ</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Nhiên liệu:</span>
-                    <strong className="text-slate-900">{selectedVehicle.fuelType || 'Điện (EV)'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Hộp số:</span>
-                    <strong className="text-slate-900">{selectedVehicle.transmission || 'Tự động'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Màu sắc:</span>
-                    <strong className="text-slate-900">{selectedVehicle.color || '—'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Số khung:</span>
-                    <strong className="text-slate-900 font-mono text-[11px]">{selectedVehicle.chassisNo || '—'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Số máy:</span>
-                    <strong className="text-slate-900 font-mono text-[11px]">{selectedVehicle.engineNo || '—'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Chủ xe ID:</span>
-                    <strong className="text-slate-900">NCC #{selectedVehicle.providerId}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Điểm đánh giá:</span>
-                    <strong className="text-slate-900">
-                      ★ {selectedVehicle.ratingAvg || '5.0'} ({selectedVehicle.ratingCount || 0} đánh giá)
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Legal Documents Review */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  Giấy tờ pháp lý bắt buộc ({selectedVehicle.documents?.length || 0} tài liệu)
-                </h4>
-
-                {(!selectedVehicle.documents || selectedVehicle.documents.length === 0) ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
-                    Chủ xe chưa tải lên giấy tờ xe (Đăng ký, Đăng kiểm, Bảo hiểm).
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    {selectedVehicle.documents.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs"
-                      >
-                        <div className="space-y-1">
-                          <span className="block text-[11px] font-bold text-brand-700">
-                            {DOC_TYPE_LABELS[doc.docType] || doc.docType}
-                          </span>
-                          <div className="text-xs text-slate-800">
-                            <strong>Số hiệu:</strong> {doc.docNumber || '—'}
-                          </div>
-                          <div className="text-[11px] text-slate-500">
-                            Hạn: {doc.expiryDate || 'Vô thời hạn'}
-                          </div>
-                          <span
-                            className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                              STATUS_BADGES[doc.status] || 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {doc.status}
-                          </span>
-                        </div>
-
-                        {doc.fileUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewDocUrl(doc.fileUrl)}
-                            className="mt-3 flex items-center justify-center gap-1 rounded-lg border border-slate-200 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-                          >
-                            <IconEye className="h-3.5 w-3.5" />
-                            <span>Xem tài liệu</span>
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Reject Reason Form (if toggled) */}
-              {showRejectInput && (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-4 space-y-3">
-                  <label className="block text-xs font-bold text-rose-900">
-                    Nhập lý do từ chối duyệt xe <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    rows="3"
-                    placeholder="Ví dụ: Giấy đăng kiểm đã hết hạn, ảnh xe mờ không rõ biển số..."
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    className="w-full rounded-xl border border-rose-300 bg-white p-3 text-xs outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowRejectInput(false)}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
-                    >
-                      Hủy bỏ
-                    </button>
-                    <button
-                      type="button"
-                      disabled={actionLoading}
-                      onClick={() => handleReject(selectedVehicle.id)}
-                      className="rounded-xl bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
-                    >
-                      {actionLoading ? 'Đang gửi...' : 'Xác nhận từ chối xe'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Actions */}
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-              <span className="text-[11px] text-slate-400">
-                Lưu ý: Phê duyệt xe không đòi hỏi phải gán tài xế ngay lập tức.
-              </span>
-
-              <div className="flex items-center gap-2">
-                {!showRejectInput && (
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => setShowRejectInput(true)}
-                    className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
-                  >
-                    Từ chối xe
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={() => handleApprove(selectedVehicle.id)}
-                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98"
-                >
-                  {actionLoading ? 'Đang xử lý...' : 'Phê duyệt xe mở bán'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <VehicleDetailModal
+          vehicle={selectedVehicle}
+          onClose={() => setSelectedVehicle(null)}
+          onApprove={(id) => handleApprove(id)}
+          onReject={(id, reason) => handleReject(id, reason)}
+          actionLoading={actionLoading}
+          onPreviewDoc={(url) => setPreviewDocUrl(url)}
+        />
       )}
 
       {/* Document / Photo Preview Modal */}

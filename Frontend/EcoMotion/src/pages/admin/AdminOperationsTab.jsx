@@ -7,6 +7,9 @@ import {
   IconSearch,
   IconX,
 } from '../../components/icons/Icons'
+import BookingDetailModal from './modals/BookingDetailModal'
+import DisputeDetailModal from './modals/DisputeDetailModal'
+import PaymentDetailModal from './modals/PaymentDetailModal'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -51,6 +54,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
 
   // SubTab 3: Payments & Refund
   const [payments, setPayments] = useState([])
+  const [selectedPayment, setSelectedPayment] = useState(null)
   const [showRefundModal, setShowRefundModal] = useState(false)
   const [refundForm, setRefundForm] = useState({ bookingId: '', amount: '', reason: '' })
 
@@ -98,20 +102,15 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
     }
   }
 
-  // Dispute Resolve Submit
-  async function handleResolveDisputeSubmit(e) {
-    e.preventDefault()
-    if (!disputeForm.resolution.trim()) {
-      alert('Vui lòng nhập nội dung phân xử / phương án giải quyết.')
-      return
-    }
+  // Dispute Resolve
+  async function handleResolveDispute(disputeId, status, decision, resolution) {
     setActionLoading(true)
     try {
       await adminService.resolveDispute(
-        resolvingDispute.id,
-        disputeForm.status,
-        disputeForm.decision,
-        disputeForm.resolution.trim(),
+        disputeId,
+        status,
+        decision,
+        resolution,
       )
       setMessage({ type: 'success', text: 'Đã cập nhật phân xử tranh chấp thành công!' })
       setResolvingDispute(null)
@@ -454,12 +453,13 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                     <th className="px-5 py-3.5">Phương thức</th>
                     <th className="px-5 py-3.5">Trạng thái</th>
                     <th className="px-5 py-3.5">Thời gian</th>
+                    <th className="px-5 py-3.5 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {payments.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="py-8 text-center text-slate-400">
+                      <td colSpan="9" className="py-8 text-center text-slate-400">
                         {loading ? 'Đang tải lịch sử giao dịch...' : 'Chưa có giao dịch nào'}
                       </td>
                     </tr>
@@ -491,6 +491,15 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-slate-500">{p.paidAt || '—'}</td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPayment(p)}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                          >
+                            Chi tiết
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -501,211 +510,28 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
         </div>
       )}
 
-      {/* Booking Detail Modal with Charges breakdown */}
-      {selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900">
-                  Chi tiết đơn #{selectedBooking.bookingCode}
-                </h3>
-                <span className="text-xs text-slate-500">
-                  Tạo lúc: {selectedBooking.createdAt || '—'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedBooking(null)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <IconX className="h-5 w-5" />
-              </button>
-            </div>
+      {/* Operation Detail Modals */}
+      <BookingDetailModal
+        booking={selectedBooking}
+        onClose={() => setSelectedBooking(null)}
+        onOpenRefund={(bookingId) => {
+          setShowRefundModal(true)
+          setRefundForm((prev) => ({ ...prev, bookingId: String(bookingId) }))
+        }}
+      />
 
-            <div className="mt-5 space-y-5 text-xs">
-              <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-3">
-                <div>
-                  <span className="text-slate-500 block">Khách thuê ID:</span>
-                  <strong className="text-slate-900">Renter #{selectedBooking.renterId}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Xe được thuê ID:</span>
-                  <strong className="text-slate-900">Xe #{selectedBooking.vehicleId}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Tài xế phân công:</span>
-                  <strong className="text-slate-900">
-                    {selectedBooking.driverId ? `Tài xế #${selectedBooking.driverId}` : 'Chưa gán'}
-                  </strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Thời gian đón:</span>
-                  <strong className="text-slate-900">{selectedBooking.pickupTime || '—'}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Số hành khách:</span>
-                  <strong className="text-slate-900">{selectedBooking.passengerCount} người</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Tổng tiền đơn:</span>
-                  <strong className="text-base font-extrabold text-brand-700">
-                    {formatVND(selectedBooking.totalAmount)}
-                  </strong>
-                </div>
-              </div>
+      <DisputeDetailModal
+        dispute={resolvingDispute}
+        onClose={() => setResolvingDispute(null)}
+        onResolve={handleResolveDispute}
+        actionLoading={actionLoading}
+      />
 
-              <div>
-                <span className="text-slate-500 block mb-1">Địa chỉ đón khách:</span>
-                <p className="rounded-xl border border-slate-200 bg-white p-3 font-semibold text-slate-800">
-                  {selectedBooking.pickupAddress || 'Chưa cung cấp'}
-                </p>
-              </div>
+      <PaymentDetailModal
+        payment={selectedPayment}
+        onClose={() => setSelectedPayment(null)}
+      />
 
-              {/* Charges List */}
-              <div>
-                <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  Bảng kê phụ phí &amp; Tiền cọc (Charges Breakdown)
-                </h4>
-                {(!selectedBooking.charges || selectedBooking.charges.length === 0) ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-slate-400">
-                    Chưa có khoản phụ phí nào được ghi nhận cho đơn này.
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
-                    <table className="w-full text-left">
-                      <thead className="bg-slate-50 font-bold text-slate-500">
-                        <tr>
-                          <th className="p-2.5">Loại phí</th>
-                          <th className="p-2.5">Mô tả</th>
-                          <th className="p-2.5">Số lượng</th>
-                          <th className="p-2.5">Đơn giá</th>
-                          <th className="p-2.5 text-right">Thành tiền</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {selectedBooking.charges.map((c) => (
-                          <tr key={c.id}>
-                            <td className="p-2.5 font-bold text-slate-800">{c.chargeType}</td>
-                            <td className="p-2.5 text-slate-600">{c.description || '—'}</td>
-                            <td className="p-2.5 text-slate-600">{c.quantity || 1}</td>
-                            <td className="p-2.5 text-slate-600">{formatVND(c.unitPrice)}</td>
-                            <td className="p-2.5 text-right font-bold text-slate-900">
-                              {formatVND(c.amount)}
-                              {c.isWaived && (
-                                <span className="ml-1 rounded bg-slate-100 px-1 text-[10px] text-slate-500">
-                                  Miễn giảm
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setSelectedBooking(null)}
-                className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Dispute Resolution Modal */}
-      {resolvingDispute && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Phân xử khiếu nại DISP-#{resolvingDispute.id}
-                </h3>
-                <span className="text-xs text-slate-500">
-                  Liên quan đơn hàng #{resolvingDispute.bookingId} • Loại: {resolvingDispute.category}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setResolvingDispute(null)}
-                className="rounded-lg p-1 text-slate-400 hover:text-slate-600"
-              >
-                <IconX className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleResolveDisputeSubmit} className="mt-4 space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Trạng thái xử lý tranh chấp:
-                </label>
-                <select
-                  value={disputeForm.status}
-                  onChange={(e) => setDisputeForm((prev) => ({ ...prev, status: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 p-2.5 outline-none font-semibold"
-                >
-                  <option value="RESOLVED">RESOLVED (Đã giải quyết dứt điểm)</option>
-                  <option value="IN_REVIEW">IN_REVIEW (Đang tiếp nhận thẩm tra)</option>
-                  <option value="REJECTED">REJECTED (Bác bỏ khiếu nại)</option>
-                </select>
-              </div>
-
-              {resolvingDispute.category === 'CHARGE' && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Quyết định đối với phụ phí:</label>
-                  <select
-                    value={disputeForm.decision}
-                    onChange={(e) => setDisputeForm((prev) => ({ ...prev, decision: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 p-2.5 outline-none font-semibold"
-                  >
-                    <option value="KEEP_CHARGE">Giữ nguyên phụ phí</option>
-                    <option value="WAIVE_CHARGE">Miễn toàn bộ phụ phí</option>
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Nội dung phán quyết / Phương án giải quyết <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows="4"
-                  required
-                  placeholder="Ghi rõ phán quyết: Hoàn trả bao nhiêu tiền phụ phí, chấp thuận hay bác khiếu nại..."
-                  value={disputeForm.resolution}
-                  onChange={(e) => setDisputeForm((prev) => ({ ...prev, resolution: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setResolvingDispute(null)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="rounded-xl bg-brand-600 px-4 py-2 font-bold text-white hover:bg-brand-700"
-                >
-                  {actionLoading ? 'Đang lưu...' : 'Lưu phán quyết'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Mock Refund Modal */}
       {showRefundModal && (

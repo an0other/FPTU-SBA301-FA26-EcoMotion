@@ -84,6 +84,54 @@ export const providerBookingService = {
     return data?.data ?? []
   },
 
+  async getAssignmentCandidates(idOrCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/assign-candidates`)
+    return data?.data ?? []
+  },
+
+  async suggestDriverAssignment(idOrCode) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/assign-suggest`)
+    return data?.data
+  },
+
+  async autoAssignDriver(idOrCode) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/auto-assign`)
+    return data?.data
+  },
+
+  async getBookingIncidents(idOrCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/incidents`)
+    return data?.data ?? []
+  },
+
+  async resolveIncident(idOrCode, incidentId, payload) {
+    const { data } = await apiClient.post(
+      `/provider/bookings/${encodeURIComponent(idOrCode)}/incidents/${encodeURIComponent(incidentId)}/resolve`,
+      payload
+    )
+    return data?.data
+  },
+
+  async getBookingEvidence(idOrCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(idOrCode)}/evidence`)
+    return data?.data ?? []
+  },
+
+  async uploadBookingEvidence(idOrCode, formData) {
+    const { data } = await apiClient.post(
+      `/provider/bookings/${encodeURIComponent(idOrCode)}/evidence/upload`,
+      formData
+    )
+    return data?.data
+  },
+
+  async deleteBookingEvidence(idOrCode, evidenceId) {
+    const { data } = await apiClient.delete(
+      `/provider/bookings/${encodeURIComponent(idOrCode)}/evidence/${encodeURIComponent(evidenceId)}`
+    )
+    return data?.data
+  },
+
   async exportBookings(status) {
     const params = {}
     if (status && status !== 'ALL') params.status = status
