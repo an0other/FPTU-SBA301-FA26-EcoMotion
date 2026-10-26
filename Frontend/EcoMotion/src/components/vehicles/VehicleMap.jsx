@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { formatCurrency } from '../../utils/formatCurrency'
+import { formatSlotPrice } from '../../utils/planLabels'
 
 const DEFAULT_CENTER = [10.7769, 106.7009]
 const BASEMAPS = [
@@ -74,7 +74,7 @@ function carPopup(items, selectedPlanType, cancelClose, scheduleClose) {
     const plan = plans.find((candidate) => candidate.planType === selectedPlanType)
       || plans.reduce((min, candidate) => !min || Number(candidate.slotPrice) < Number(min.slotPrice)
         ? candidate : min, null)
-    price.textContent = `${item.distanceKm.toFixed(1)} km · ${plan ? formatCurrency(plan.slotPrice) : 'Liên hệ'}`
+    price.textContent = `${item.distanceKm.toFixed(1)} km · ${plan ? formatSlotPrice(plan.slotPrice, plan.slotLengthMinutes) : 'Liên hệ'}`
     const link = document.createElement('a')
     link.href = `/vehicles/${encodeURIComponent(car.id)}`
     link.textContent = 'Xem chi tiết'

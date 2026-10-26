@@ -3,14 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { RequestSubmitted } from '../../components/booking/RequestSubmitted'
 import { readErrorMessage } from '../../services/apiClient'
 import { getMyBooking } from '../../services/bookingService'
-
-function formatWhen(value) {
-  if (!value) return ''
-  return new Intl.DateTimeFormat('vi-VN', {
-    hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric',
-    timeZone: 'Asia/Ho_Chi_Minh',
-  }).format(new Date(value))
-}
+import { formatBookingWhen } from '../../utils/bookingDateTime'
 
 function fromDetail(detail) {
   return {
@@ -23,7 +16,7 @@ function fromDetail(detail) {
     },
     slots: detail.slotCount,
     planType: detail.planType,
-    formattedStart: formatWhen(detail.pickupTime),
+    formattedStart: formatBookingWhen(detail.pickupTime),
     pickupAddress: detail.pickupAddress,
     depositAmount: Number(detail.depositAmount ?? 0),
     totalAmount: Number(detail.totalAmount),

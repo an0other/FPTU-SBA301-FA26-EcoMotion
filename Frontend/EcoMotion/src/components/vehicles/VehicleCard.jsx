@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatCurrency } from '../../utils/formatCurrency'
+import { formatSlotPrice } from '../../utils/planLabels'
 import { IconMapPin, IconStar } from '../icons/Icons'
 
 const FUEL_STYLES = {
@@ -62,7 +62,7 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
           {hasRating ? (
             <>
               {Number(vehicle.ratingAvg ?? 0).toFixed(1)}
-              <span className="font-medium text-slate-500">({reviewCount})</span>
+              <span className="font-medium text-slate-500">({reviewCount} đánh giá xe)</span>
             </>
           ) : (
             'Mới'
@@ -110,12 +110,7 @@ export default function VehicleCard({ vehicle, selectedPlanType }) {
               {priceLabel}
             </p>
             <p className="truncate text-[15px] font-bold text-brand-700">
-              {featured ? formatCurrency(featured.slotPrice) : 'Liên hệ'}
-              {featured && (
-                <span className="ml-0.5 text-[10px] font-medium text-slate-500">
-                  / slot
-                </span>
-              )}
+              {featured ? formatSlotPrice(featured.slotPrice, featured.slotLengthMinutes) : 'Liên hệ'}
             </p>
           </div>
           <Link

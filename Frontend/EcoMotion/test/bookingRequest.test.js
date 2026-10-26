@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { availabilityWindow, buildBookingPayload, hasValidPickup, overlapsOccupied } from '../src/utils/bookingAvailability.js'
+import {
+  availabilityWindow,
+  buildBookingPayload,
+  estimateBookingTotals,
+  hasValidPickup,
+  overlapsOccupied,
+  pickupAfterAddressEdit,
+} from '../src/utils/bookingAvailability.js'
 
 test('availability window starts at Vietnam midnight and covers projected end', () => {
   const window = availabilityWindow('2026-10-20T03:00:00Z', '2026-10-22T03:00:00Z')
@@ -26,4 +33,34 @@ test('pickup validation and create payload retain exact coordinates and note', (
   assert.equal(payload.pickupLatitude, 10.8791)
   assert.equal(payload.pickupLongitude, 106.8146)
   assert.equal(payload.driverNote, 'Có trẻ nhỏ')
+})
+
+test('editing pickup text after a pin clears coordinates', () => {
+  const pinned = { address: 'Bến xe Miền Đông mới', latitude: 10.8791, longitude: 106.8146 }
+  const edited = pickupAfterAddressEdit(pinned, 'Bến xe Miền Đông mới, cổng A')
+  assert.equal(edited.address, 'Bến xe Miền Đông mới, cổng A')
+  assert.equal(edited.latitude, null)
+  assert.equal(edited.longitude, null)
+  assert.equal(hasValidPickup(edited), false)
+  const unchanged = pickupAfterAddressEdit(pinned, pinned.address)
+  assert.equal(unchanged, pinned)
+})
+
+test('hire totals derive from slot price and deposit policy', () => {
+  const hire = estimateBookingTotals({
+    slotPrice: 500_000,
+    slots: 3,
+    depositRatio: 0.3,
+    minimumDepositAmount: 200_000,
+    planType: 'DAILY',
+  })
+  assert.equal(hire.totalAmount, 1_500_000)
+  assert.equal(hire.depositAmount, 450_000)
+  const yearly = estimateBookingTotals({
+    slotPrice: 80_000_000,
+    slots: 1,
+    planType: 'YEARLY',
+    upfrontAmount: 20_000_000,
+  })
+  assert.equal(yearly.depositAmount, 20_000_000)
 })
