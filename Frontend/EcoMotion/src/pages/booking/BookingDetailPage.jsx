@@ -53,6 +53,7 @@ function toCard(detail) {
     canCancel: detail.canCancel,
     canEditRequest: detail.canEditRequest,
     canPay: detail.canPay,
+    holdExpiresAt: detail.holdExpiresAt,
     depositAmount: Number(detail.depositAmount ?? 0),
     refundExplanation: detail.refundPreview?.explanation ?? '',
     disputeCategories: detail.disputeCategories ?? [],

@@ -1,3 +1,5 @@
+import { HoldCountdown } from '../payments/HoldCountdown'
+
 const FUEL_LABELS = {
   EV: 'Thuần điện (EV)',
   GASOLINE: 'Xăng',
@@ -65,8 +67,13 @@ export const RequestSubmitted = ({
           </div>
 
           <p className="text-sm text-gray-600 max-w-md mx-auto pt-1">
-            Hãy thanh toán bằng VietQR trong thời hạn để giữ lịch. <strong className="text-[#14221A]">Số cọc do hệ thống tính theo chính sách của xe.</strong>
+            Thanh toán cọc VietQR hoặc VNPAY trong 15 phút để giữ lịch. <strong className="text-[#14221A]">Số cọc do hệ thống tính theo chính sách của xe.</strong>
           </p>
+          {booking.holdExpiresAt ? (
+            <div className="flex justify-center pt-3">
+              <HoldCountdown expiresAt={booking.holdExpiresAt} />
+            </div>
+          ) : null}
         </div>
 
         {/* Compact Reservation Summary Box */}
@@ -158,11 +165,11 @@ export const RequestSubmitted = ({
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <button
             onClick={onPayDeposit}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 rounded-[12px] bg-[#15803D] text-white font-semibold text-sm hover:bg-[#166534] transition-colors shadow-xs cursor-pointer"
+            className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 rounded-[12px] bg-[#15803D] text-white font-semibold text-sm hover:bg-[#166534] transition-colors shadow-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-brand-500/40"
             type="button"
           >
             <span className="material-symbols-outlined text-[20px] mr-2">qr_code_2</span>
-            Thanh toán cọc VietQR
+            Thanh toán cọc
           </button>
           <button
             onClick={onGoToMyBookings}

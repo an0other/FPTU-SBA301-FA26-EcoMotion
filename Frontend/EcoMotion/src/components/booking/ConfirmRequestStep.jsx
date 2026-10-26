@@ -226,7 +226,7 @@ export const ConfirmRequestStep = ({
           <div className="p-4 bg-[#E8F6EE]/50 rounded-[12px] border border-[#15803D]/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <div>
-                <span className="text-sm font-bold text-[#14221A]">Cọc dự kiến (thu sau khi chủ xe chấp nhận)</span>
+                <span className="text-sm font-bold text-[#14221A]">Cọc giữ chỗ — thanh toán trong 15 phút sau khi gửi đơn</span>
                 <span className="text-xs text-gray-500 ml-2">({depositNote})</span>
               </div>
               <div className="text-xl font-bold text-[#15803D]">
@@ -236,7 +236,7 @@ export const ConfirmRequestStep = ({
             <div className="mt-2 p-2.5 bg-white rounded-lg border border-[#E6EBE8] flex items-start gap-2 text-xs">
               <span className="material-symbols-outlined text-[#15803D] text-[18px] shrink-0 mt-0.5">verified</span>
               <p className="text-gray-700">
-                <strong className="text-[#15803D]">Chưa thanh toán lúc này.</strong> Bạn chỉ thanh toán cọc sau khi chủ xe xác nhận đồng ý chuyến đi.
+                <strong className="text-[#15803D]">Chưa thu lúc gửi đơn.</strong> Sau khi gửi, lịch xe được giữ 15 phút để bạn thanh toán cọc VietQR hoặc VNPAY.
               </p>
             </div>
           </div>

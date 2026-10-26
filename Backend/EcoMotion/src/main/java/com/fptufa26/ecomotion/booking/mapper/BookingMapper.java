@@ -109,7 +109,8 @@ public interface BookingMapper {
             String imageUrl,
             boolean canPay,
             boolean atRisk,
-            String riskMessage
+            String riskMessage,
+            Instant holdExpiresAt
     ) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
@@ -143,7 +144,8 @@ public interface BookingMapper {
                 booking.getTotalAmount(),
                 canPay,
                 atRisk,
-                riskMessage);
+                riskMessage,
+                holdExpiresAt);
     }
 
     default BookingDetailResponse toDetail(Booking booking,
@@ -159,7 +161,8 @@ public interface BookingMapper {
                                            boolean canPay,
                                            boolean canConfirmStart,
                                            boolean canConfirmEnd,
-                                           List<DisputeCategory> disputeCategories) {
+                                           List<DisputeCategory> disputeCategories,
+                                           Instant holdExpiresAt) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
         String vehicleName = !vehicleReplaced && snapshot.getVehicleName() != null
@@ -217,7 +220,8 @@ public interface BookingMapper {
                 canConfirmStart,
                 canConfirmEnd,
                 disputeCategories,
-                providerName);
+                providerName,
+                holdExpiresAt);
     }
 
     @Mapping(target = "bookingCode", source = "booking.bookingCode")

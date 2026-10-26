@@ -27,6 +27,7 @@ function fromDetail(detail) {
     pickupAddress: detail.pickupAddress,
     depositAmount: Number(detail.depositAmount ?? 0),
     totalAmount: Number(detail.totalAmount),
+    holdExpiresAt: detail.holdExpiresAt,
   }
 }
 
