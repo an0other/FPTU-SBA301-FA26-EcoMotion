@@ -16,6 +16,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -33,6 +34,12 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     List<Booking> findByVehicle_IdOrderByCreatedAtDesc(Long vehicleId);
 
     long countByStatus(BookingStatus status);
+
+    @Query("SELECT COALESCE(SUM(b.totalAmount * p.commissionRate), 0) FROM Booking b JOIN b.vehicle v JOIN v.provider p WHERE b.status = com.fptufa26.ecomotion.booking.enums.BookingStatus.COMPLETED")
+    BigDecimal sumAdminCommission();
+
+    @Query("SELECT COALESCE(SUM(b.totalAmount), 0) FROM Booking b WHERE b.status = com.fptufa26.ecomotion.booking.enums.BookingStatus.COMPLETED")
+    BigDecimal sumCompletedGrossRentalVolume();
 
     @Override
     @EntityGraph(attributePaths = {

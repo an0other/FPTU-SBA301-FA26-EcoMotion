@@ -79,4 +79,10 @@ public interface BookingService {
     Booking saveBooking(Booking booking);
 
     BigDecimal sumTotalRevenue();
+
+    BigDecimal sumAdminCommission();
+
+    BigDecimal sumCompletedGrossRentalVolume();
+
+    BigDecimal sumEscrowDeposits();
 }

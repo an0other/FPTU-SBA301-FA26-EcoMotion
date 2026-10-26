@@ -124,6 +124,16 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
             <p className="mt-1 max-w-2xl text-sm text-slate-600">
               Kiểm soát phê duyệt hồ sơ người dùng, duyệt phương tiện mở bán, thụ lý khiếu nại tranh chấp và giám sát dòng tiền giao dịch.
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/90 px-2.5 py-1 border border-slate-200/60 shadow-2xs">
+                <IconCar className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Xe mở bán: <strong className="text-slate-900">{stats?.approvedVehicles ?? 0}</strong>/{stats?.totalVehicles ?? 0}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/90 px-2.5 py-1 border border-slate-200/60 shadow-2xs">
+                <IconUsers className="h-3.5 w-3.5 text-blue-600" />
+                <span>Tài khoản hoạt động: <strong className="text-slate-900">{stats?.activeUsers ?? 0}</strong>/{stats?.totalUsers ?? 0}</span>
+              </span>
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
@@ -138,38 +148,63 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
         </div>
 
         {/* Financial Highlights */}
-        <div className="mt-6 grid grid-cols-1 gap-4 border-t border-brand-100 pt-6 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200/60 bg-white/80 p-4 backdrop-blur-xs">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <IconWallet className="h-4 w-4 text-brand-600" />
-              <span>Tổng doanh thu thực tế</span>
+        <div className="mt-6 grid grid-cols-1 gap-4 border-t border-brand-100 pt-6 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Card 1: Doanh thu sàn (Hoa hồng thực nhận) */}
+          <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 via-white to-white p-4.5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-800">Doanh thu sàn (Hoa hồng)</span>
+              <span className="rounded-lg bg-emerald-100 p-1.5 text-emerald-700">
+                <IconWallet className="h-4 w-4" />
+              </span>
             </div>
-            <div className="mt-2 text-xl font-extrabold text-slate-900">
-              {formatVND(stats?.totalRevenue)}
+            <div className="mt-2 text-2xl font-black text-emerald-950">
+              {formatVND(stats?.platformCommission)}
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">Ghi nhận từ các khoản thanh toán PAID</p>
+            <p className="mt-1 text-[11px] font-medium text-emerald-700">
+              Thu từ {stats?.completedBookings ?? 0} chuyến hoàn tất
+            </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200/60 bg-white/80 p-4 backdrop-blur-xs">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <IconCar className="h-4 w-4 text-emerald-600" />
-              <span>Tỷ lệ xe đã duyệt mở bán</span>
+          {/* Card 2: Tổng dòng tiền qua sàn (GMV) */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4.5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Tổng giao dịch (GMV)</span>
+              <span className="rounded-lg bg-blue-50 p-1.5 text-blue-600">
+                <IconSparkles className="h-4 w-4" />
+              </span>
             </div>
-            <div className="mt-2 text-xl font-extrabold text-slate-900">
-              {stats?.approvedVehicles ?? 0} <span className="text-sm font-normal text-slate-500">/ {stats?.totalVehicles ?? 0} xe</span>
+            <div className="mt-2 text-2xl font-black text-slate-900">
+              {formatVND(stats?.grossMerchandiseValue ?? stats?.totalRevenue)}
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">Đủ điều kiện phục vụ khách thuê</p>
+            <p className="mt-1 text-[11px] text-slate-500">Toàn bộ dòng tiền khách đã thanh toán</p>
           </div>
 
-          <div className="rounded-xl border border-slate-200/60 bg-white/80 p-4 backdrop-blur-xs">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <IconUsers className="h-4 w-4 text-blue-600" />
-              <span>Người dùng đang hoạt động</span>
+          {/* Card 3: Tiền đối soát cho Chủ xe (Provider Share) */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4.5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Đối soát trả Chủ xe</span>
+              <span className="rounded-lg bg-indigo-50 p-1.5 text-indigo-600">
+                <IconShield className="h-4 w-4" />
+              </span>
             </div>
-            <div className="mt-2 text-xl font-extrabold text-slate-900">
-              {stats?.activeUsers ?? 0} <span className="text-sm font-normal text-slate-500">/ {stats?.totalUsers ?? 0} tài khoản</span>
+            <div className="mt-2 text-2xl font-black text-indigo-950">
+              {formatVND(stats?.providerPayoutDue)}
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">Khách thuê, đối tác NCC và tài xế</p>
+            <p className="mt-1 text-[11px] text-slate-500">Tiền thuê NCC nhận sau trừ hoa hồng</p>
+          </div>
+
+          {/* Card 4: Quỹ tiền cọc đang tạm giữ (Escrow Deposit) */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4.5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Quỹ cọc đang tạm giữ</span>
+              <span className="rounded-lg bg-amber-50 p-1.5 text-amber-600">
+                <IconClock className="h-4 w-4" />
+              </span>
+            </div>
+            <div className="mt-2 text-2xl font-black text-amber-950">
+              {formatVND(stats?.escrowDeposits)}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">Tiền cọc đơn đang chạy / chờ hoàn</p>
           </div>
         </div>
       </div>
