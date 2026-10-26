@@ -20,6 +20,9 @@ import com.fptufa26.ecomotion.dispute.entity.Dispute;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
+import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
+import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
+import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
@@ -127,6 +130,7 @@ public class DevDataSeeder implements ApplicationRunner {
     private final RenterPaymentDataSeeder renterPaymentDataSeeder;
     private final RenterReviewDataSeeder renterReviewDataSeeder;
     private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
+    private final ProviderBankAccountRepository providerBankAccountRepository;
 
     private record PlanPrices(String hourly, String daily, String monthly) {
     }
@@ -159,6 +163,8 @@ public class DevDataSeeder implements ApplicationRunner {
         User providerUserB = userRepository.findById(PROVIDER_B_USER_ID).orElseThrow();
         Provider providerA = seedProvider(providerUserA, "EcoMotion Depot A", ADDRESS_A, "02873000010", new BigDecimal("10.773300"), new BigDecimal("106.703600"));
         Provider providerB = seedProvider(providerUserB, "EcoMotion Depot B", ADDRESS_B, "02873000011", new BigDecimal("10.774900"), new BigDecimal("106.698500"));
+        seedVietQrReceivingAccount(providerA, "VCB", "Vietcombank", "0123456789", "NGUYEN VAN A");
+        seedVietQrReceivingAccount(providerB, "VCB", "Vietcombank", "0987654321", "TRAN THI B");
 
         // Seed Renter profiles
         seedRenterProfile(userRepository.findById(1L).orElseThrow());
@@ -811,6 +817,30 @@ public class DevDataSeeder implements ApplicationRunner {
         provider.setRatingAvg(new BigDecimal("5.00"));
         provider.setRatingCount(2);
         return providerRepository.save(provider);
+    }
+
+    private void seedVietQrReceivingAccount(Provider provider, String bankCode, String bankName,
+                                            String accountNumber, String accountHolder) {
+        boolean snapshotMissing = provider.getBankAccountNo() == null || provider.getBankAccountNo().isBlank();
+        if (snapshotMissing) {
+            provider.setBankCode(bankCode);
+            provider.setBankName(bankName);
+            provider.setBankAccountNo(accountNumber);
+            provider.setBankAccountHolder(accountHolder);
+            provider = providerRepository.save(provider);
+        }
+        if (providerBankAccountRepository.existsByProvider_IdAndStatus(provider.getId(), BankAccountStatus.ACTIVE)) {
+            return;
+        }
+        ProviderBankAccount account = new ProviderBankAccount();
+        account.setProvider(provider);
+        account.setBankCode(provider.getBankCode() != null ? provider.getBankCode() : bankCode);
+        account.setBankName(provider.getBankName() != null ? provider.getBankName() : bankName);
+        account.setAccountNumber(provider.getBankAccountNo() != null ? provider.getBankAccountNo() : accountNumber);
+        account.setAccountHolderName(
+                provider.getBankAccountHolder() != null ? provider.getBankAccountHolder() : accountHolder);
+        account.setStatus(BankAccountStatus.ACTIVE);
+        providerBankAccountRepository.save(account);
     }
 
     private void seedRenterProfile(User user) {

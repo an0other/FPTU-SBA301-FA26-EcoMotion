@@ -375,8 +375,13 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (!Set.of("image/jpeg", "image/png", "image/webp").contains(contentType)) {
             throw new InvalidPaymentOperationException("Chỉ chấp nhận ảnh JPG, PNG hoặc WebP");
         }
-        if (transferredAmount == null || transferredAmount.compareTo(new BigDecimal("1000")) < 0) {
-            throw new InvalidPaymentOperationException("Số tiền đã chuyển tối thiểu 1.000 ₫");
+        BigDecimal qrAmount = pr.getAmount().subtract(
+                pr.getPaidAmount() == null ? BigDecimal.ZERO : pr.getPaidAmount()).max(BigDecimal.ZERO);
+        if (qrAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            qrAmount = pr.getAmount();
+        }
+        if (qrAmount.compareTo(new BigDecimal("1000")) < 0) {
+            throw new InvalidPaymentOperationException("Số tiền trên yêu cầu thanh toán tối thiểu 1.000 ₫");
         }
         if (transactionReference != null && transactionReference.length() > 100) {
             throw new InvalidPaymentOperationException("Mã giao dịch ngân hàng tối đa 100 ký tự");
@@ -400,7 +405,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                     "payment-evidence", currentUserId, immutableName, bytes, contentType);
             registerRollbackCleanup(storedPath);
             return submitPaymentProof(paymentRequestId, currentUserId,
-                    new SubmitProofRequest(storedPath, transferredAmount,
+                    new SubmitProofRequest(storedPath, qrAmount,
                             transactionReference, transferredAt, note));
         } catch (java.io.IOException ex) {
             throw new InvalidPaymentOperationException("Không thể đọc ảnh chứng từ");
