@@ -15,7 +15,8 @@ public interface VehicleCatalogMapper {
 
     @Mapping(target = "name", expression = "java(vehicle.getBrand() + \" \" + vehicle.getModel())")
     @Mapping(target = "imageUrl", source = "imageUrl")
-    @Mapping(target = "depositRatio", source = "vehicle.provider.depositRatio")
+    @Mapping(target = "depositRatio", expression = "java(vehicle.getDepositRatioOverride() != null ? vehicle.getDepositRatioOverride() : vehicle.getProvider().getDepositRatio())")
+    @Mapping(target = "minimumDepositAmount", source = "vehicle.minimumDepositAmount")
     @Mapping(target = "plans", source = "plans")
     BookableVehicleResponse toBookableVehicle(Vehicle vehicle, String imageUrl, List<RentalPlan> plans);
 

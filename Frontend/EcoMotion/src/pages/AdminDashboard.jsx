@@ -12,7 +12,6 @@ import {
   IconCar,
   IconClock,
   IconShield,
-  IconRefresh,
 } from '../components/icons/Icons'
 
 function initialsOf(user) {

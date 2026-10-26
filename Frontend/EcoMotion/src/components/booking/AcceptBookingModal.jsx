@@ -43,7 +43,7 @@ export default function AcceptBookingModal({
         </div>
 
         <p className="text-xs text-slate-600 mb-6">
-          Khi xác nhận, trạng thái đơn sẽ chuyển sang <strong className="text-emerald-700">Đã xác nhận (CONFIRMED)</strong>. Lịch trình xe sẽ được khóa để đảm bảo không bị trùng lặp với các đơn khác.
+          Khi xác nhận, trạng thái đơn sẽ chuyển sang <strong className="text-emerald-700">Đã xác nhận</strong>. Lịch trình xe sẽ được khóa để đảm bảo không bị trùng lặp với các đơn khác.
         </p>
 
         <div className="flex items-center justify-end gap-3">

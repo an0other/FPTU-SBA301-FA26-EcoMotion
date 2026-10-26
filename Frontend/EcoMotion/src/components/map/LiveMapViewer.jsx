@@ -44,20 +44,16 @@ export default function LiveMapViewer({
 
   // Derive initial or updated center
   useEffect(() => {
-    if (vehicleLocation?.latitude && vehicleLocation?.longitude) {
-      setCenter({
-        lat: Number(vehicleLocation.latitude),
-        lon: Number(vehicleLocation.longitude),
-      })
-    } else if (pickupLocation?.latitude && pickupLocation?.longitude) {
-      setCenter({
-        lat: Number(pickupLocation.latitude),
-        lon: Number(pickupLocation.longitude),
-      })
-    } else {
-      // Default to Ho Chi Minh City Center
-      setCenter({ lat: 10.776889, lon: 106.700806 })
-    }
+    const timerId = window.setTimeout(() => {
+      if (vehicleLocation?.latitude && vehicleLocation?.longitude) {
+        setCenter({ lat: Number(vehicleLocation.latitude), lon: Number(vehicleLocation.longitude) })
+      } else if (pickupLocation?.latitude && pickupLocation?.longitude) {
+        setCenter({ lat: Number(pickupLocation.latitude), lon: Number(pickupLocation.longitude) })
+      } else {
+        setCenter({ lat: 10.776889, lon: 106.700806 })
+      }
+    }, 0)
+    return () => window.clearTimeout(timerId)
   }, [
     vehicleLocation?.latitude,
     vehicleLocation?.longitude,

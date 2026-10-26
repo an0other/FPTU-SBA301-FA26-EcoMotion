@@ -47,6 +47,24 @@ public class BookingPolicySnapshot {
     @Column(name = "deposit_ratio", precision = 6, scale = 4)
     private BigDecimal depositRatio;
 
+    @Column(name = "minimum_deposit_amount", precision = 14, scale = 2)
+    private BigDecimal minimumDepositAmount;
+
+    @Column(name = "deposit_amount", precision = 14, scale = 2)
+    private BigDecimal depositAmount;
+
+    @Column(name = "vehicle_name", length = 180)
+    private String vehicleName;
+
+    @Column(name = "vehicle_manufacture_year")
+    private Integer vehicleManufactureYear;
+
+    @Column(name = "vehicle_license_plate", length = 20)
+    private String vehicleLicensePlate;
+
+    @Column(name = "vehicle_image_url", length = 500)
+    private String vehicleImageUrl;
+
     @Column(name = "upfront_amount", precision = 14, scale = 2)
     private BigDecimal upfrontAmount;
 

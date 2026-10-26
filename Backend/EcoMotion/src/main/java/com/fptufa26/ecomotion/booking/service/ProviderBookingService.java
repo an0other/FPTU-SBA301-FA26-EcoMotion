@@ -10,6 +10,9 @@ import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.booking.enums.DriverAssignmentMode;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest;
+import com.fptufa26.ecomotion.booking.dto.response.OperationalResolutionResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -33,6 +36,9 @@ public interface ProviderBookingService {
 
     ProviderBookingResponse assignDriver(Long currentUserId, String bookingCodeOrId, Long driverId);
 
+    ProviderBookingResponse assignDriver(Long currentUserId, String bookingCodeOrId,
+                                         Long driverId, DriverAssignmentMode mode);
+
     List<BookingChargeResponse> getCharges(Long currentUserId, String bookingCodeOrId);
 
     BookingChargeResponse addCharge(Long currentUserId, String bookingCodeOrId, AddChargeRequest request);
@@ -41,11 +47,16 @@ public interface ProviderBookingService {
 
     List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId);
 
+    List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId, String bookingCode);
+
     byte[] exportBookingsCsv(Long currentUserId, String status);
 
     TripTrackingResponse getTripTracking(Long currentUserId, String bookingCodeOrId);
 
     TripLocationResponse getTripLocation(Long currentUserId, String bookingCodeOrId);
+
+    OperationalResolutionResponse resolveOperationalRisk(
+            Long currentUserId, String bookingCodeOrId, ResolveOperationalRiskRequest request);
 
     List<com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId);
 
@@ -55,7 +66,7 @@ public interface ProviderBookingService {
 
     void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest request);
 
-    List<com.fptufa26.ecomotion.booking.entity.TripIncident> getBookingIncidents(Long currentUserId, String bookingCodeOrId);
+    List<com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse> getBookingIncidents(Long currentUserId, String bookingCodeOrId);
 
-    List<com.fptufa26.ecomotion.booking.entity.TripEvidence> getBookingEvidence(Long currentUserId, String bookingCodeOrId);
+    List<com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse> getBookingEvidence(Long currentUserId, String bookingCodeOrId);
 }

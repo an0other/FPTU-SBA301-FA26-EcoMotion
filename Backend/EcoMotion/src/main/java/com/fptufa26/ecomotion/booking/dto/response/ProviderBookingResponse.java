@@ -32,7 +32,9 @@ public record ProviderBookingResponse(
         Instant driverConfirmedAt,
         Instant actualArrivedAt,
         Instant actualStartAt,
-        Instant actualEndAt
+        Instant actualEndAt,
+        boolean atRisk,
+        String riskMessage
 ) {
     public ProviderBookingResponse(
             String bookingCode,
@@ -75,6 +77,8 @@ public record ProviderBookingResponse(
                 null,
                 null,
                 null,
+                null,
+                false,
                 null
         );
     }

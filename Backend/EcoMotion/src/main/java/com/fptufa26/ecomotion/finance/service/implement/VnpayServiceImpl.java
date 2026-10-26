@@ -99,11 +99,15 @@ public class VnpayServiceImpl implements VnpayService {
         if (!isFinalPayment) {
             boolean alreadyPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
                     .anyMatch(tx -> tx.getType() == PaymentType.DEPOSIT_PAY && tx.getStatus() == PaymentStatus.PAID);
-            if (alreadyPaid || booking.getStatus() == BookingStatus.CONFIRMED) {
+            if (alreadyPaid || booking.getStatus() == BookingStatus.CONFIRMED
+                    || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED
+                    || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
                 throw new InvalidPaymentOperationException("Tiền đặt cọc cho đơn thuê này đã được thanh toán thành công");
             }
-            if (booking.getStatus() != BookingStatus.ACCEPTED && booking.getStatus() != BookingStatus.PENDING) {
-                throw new InvalidPaymentOperationException("Chỉ có thể đặt cọc khi đơn thuê ở trạng thái chờ duyệt hoặc đã chấp nhận (Hiện tại: " + booking.getStatus() + ")");
+            if (booking.getStatus() != BookingStatus.ACCEPTED
+                    && booking.getStatus() != BookingStatus.PENDING
+                    && booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+                throw new InvalidPaymentOperationException("Chỉ có thể đặt cọc khi đơn thuê đang chờ cọc hoặc đã chấp nhận (Hiện tại: " + booking.getStatus() + ")");
             }
 
             Optional<PaymentRequest> depositPr = paymentRequestRepository
@@ -234,12 +238,15 @@ public class VnpayServiceImpl implements VnpayService {
         List<BookingChargeLineResponse> chargeLines = charges.stream()
                 .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.DEPOSIT)
                 .map(c -> new BookingChargeLineResponse(
+                        c.getId(),
                         c.getChargeType(),
                         c.getDescription(),
                         c.getQuantity(),
                         c.getUnitPrice(),
                         c.getAppliedRate(),
-                        c.getAmount()
+                        c.getAmount(),
+                        c.isWaived(),
+                        c.isWaived() ? BigDecimal.ZERO : c.getAmount()
                 ))
                 .toList();
 
@@ -364,7 +371,19 @@ public class VnpayServiceImpl implements VnpayService {
 
         Booking booking = transaction.getBooking();
         if (transaction.getType() == PaymentType.DEPOSIT_PAY) {
-            if (booking.getStatus() == BookingStatus.ACCEPTED || booking.getStatus() == BookingStatus.PENDING) {
+            if (booking.getStatus() == BookingStatus.CONFIRMED
+                    || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED
+                    || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
+                transaction.setStatus(PaymentStatus.PAID);
+                if (transaction.getPaidAt() == null) {
+                    transaction.setPaidAt(clock.instant());
+                }
+                paymentTransactionRepository.save(transaction);
+                return new VnpayIpnResponse("02", "Order already confirmed");
+            }
+            if (booking.getStatus() == BookingStatus.ACCEPTED
+                    || booking.getStatus() == BookingStatus.PENDING
+                    || booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
                 Vehicle vehicle = vehicleRepository.findByIdForUpdate(booking.getVehicle().getId())
                         .orElseThrow(() -> new ResourceNotFoundException("Xe không tồn tại"));
 
@@ -375,7 +394,8 @@ public class VnpayServiceImpl implements VnpayService {
                 Instant end = booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * slots));
                 AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, booking.getPickupTime(), end);
 
-                if (!scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
+                if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT
+                        && !scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
                     transaction.setStatus(PaymentStatus.FAILED);
                     paymentTransactionRepository.save(transaction);
                     return new VnpayIpnResponse("00", "Slot conflict, requires refund reconciliation");
@@ -400,7 +420,11 @@ public class VnpayServiceImpl implements VnpayService {
                 transaction.setPaidAt(clock.instant());
                 paymentTransactionRepository.save(transaction);
 
-                scheduleService.book(vehicle, booking, booking.getPickupTime(), end);
+                if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+                    scheduleService.confirmHold(booking.getId());
+                } else {
+                    scheduleService.book(vehicle, booking, booking.getPickupTime(), end);
+                }
                 booking.setStatus(BookingStatus.CONFIRMED);
                 bookingRepository.save(booking);
 

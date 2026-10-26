@@ -61,7 +61,10 @@ export function BookingRequestPage() {
   const totalAmount = plan ? Number(plan.slotPrice) * slots : 0
   const depositAmount = plan?.planType === 'YEARLY'
     ? Number(plan.upfrontAmount ?? 0)
-    : Math.round(totalAmount * Number(vehicle?.depositRatio ?? 0))
+    : Math.min(totalAmount, Math.max(
+      Math.round(totalAmount * Number(vehicle?.depositRatio ?? 0)),
+      Number(vehicle?.minimumDepositAmount ?? 0),
+    ))
 
   const projectedEnd = useMemo(() => {
     if (!plan || !startDate || !startTime) return ''
@@ -108,7 +111,7 @@ export function BookingRequestPage() {
             planType: plan.planType,
             formattedStart: `${startTime}, ${startDate}`,
             pickupAddress: pickup.address,
-            depositAmount,
+            depositAmount: Number(created.depositAmount),
             totalAmount: Number(created.totalAmount),
           },
         },
@@ -199,7 +202,7 @@ export function BookingRequestPage() {
           vehicleType={planLabel(plan?.planType).title}
           vehicleImage={vehicle.imageUrl}
           vehicleYear={vehicle.manufactureYear}
-          planTitle={plan ? `${planLabel(plan.planType).title} (${plan.planType})` : ''}
+          planTitle={plan ? planLabel(plan.planType).title : ''}
           durationLabel={plan ? `${slots} slot liên tiếp` : ''}
           formattedStart={`${startTime}, ${startDate}`}
           projectedEnd={projectedEnd}

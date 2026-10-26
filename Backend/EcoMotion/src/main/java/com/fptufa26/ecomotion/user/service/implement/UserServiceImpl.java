@@ -478,6 +478,20 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
+    public Provider updateProviderBankSnapshot(Long providerId, String bankCode, String bankName,
+                                               String accountNumber, String accountHolder) {
+        Provider provider = providerRepository.findById(providerId)
+                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.NotFoundException(
+                        "Không tìm thấy nhà cung cấp"));
+        provider.setBankCode(bankCode);
+        provider.setBankName(bankName);
+        provider.setBankAccountNo(accountNumber);
+        provider.setBankAccountHolder(accountHolder);
+        return providerRepository.save(provider);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<Driver> listDrivers(DriverStatus status) {
         if (status != null) {

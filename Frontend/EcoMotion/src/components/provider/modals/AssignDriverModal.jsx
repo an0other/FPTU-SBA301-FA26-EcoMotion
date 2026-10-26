@@ -14,7 +14,7 @@ function initialsOf(name) {
 }
 
 export default function AssignDriverModal({ booking, currentDriverId, isOpen, onClose, onSuccess }) {
-  const [activeMode, setActiveMode] = useState('SUGGESTION') // 'MANUAL' | 'SUGGESTION' | 'AUTO'
+  const [activeMode, setActiveMode] = useState('MANUAL') // 'MANUAL' | 'SUGGESTION' | 'AUTO'
 
   // Manual mode state
   const { drivers, loading: loadingDrivers, error: driversError } = useAvailableDrivers()
