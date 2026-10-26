@@ -65,16 +65,17 @@ class DriverTripLifecycleIntegrationTest {
     @Test
     @DisplayName("Complete Trip Execution Lifecycle: Confirm -> Arrive -> Start -> Location Tracking -> Finish -> Provider Tracking")
     void completeTripLifecycleFlow() throws Exception {
-        String driverToken = loginAndGetToken("driver.nam@ecomotion.vn", "EcoMotion@123");
+        String driverToken = loginAndGetToken("driver.review@ecomotion.vn", "EcoMotion@123");
         String providerToken = loginAndGetToken("provider.a@ecomotion.vn", "EcoMotion@123");
+        String renterToken = loginAndGetToken("kieu.vo@ecomotion.vn", "EcoMotion@123");
 
         Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
         Driver driverNam = driverRepository.findAll().stream()
-                .filter(d -> d.getUser().getEmail().equalsIgnoreCase("driver.nam@ecomotion.vn"))
+                .filter(d -> "SEED-R16-D001".equals(d.getLicenseNo()))
                 .findFirst().orElseThrow();
 
         booking.setDriver(driverNam);
-        booking.setStatus(BookingStatus.ACCEPTED);
+        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
         booking.setAssignedAt(Instant.now().minusSeconds(1800));
         booking.setDriverConfirmedAt(null);
         booking.setActualArrivedAt(null);
@@ -97,7 +98,7 @@ class DriverTripLifecycleIntegrationTest {
                 .andExpect(jsonPath("$.data.executionStatus").value("CONFIRMED"))
                 .andExpect(jsonPath("$.data.driverConfirmedAt").exists());
 
-        mockMvc.perform(get("/api/provider/bookings/{id}", tripId)
+        mockMvc.perform(get("/api/provider/bookings/{bookingCode}", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("DRIVER_CONFIRMED"))
@@ -115,7 +116,7 @@ class DriverTripLifecycleIntegrationTest {
                 .andExpect(jsonPath("$.data.executionStatus").value("ARRIVED"))
                 .andExpect(jsonPath("$.data.actualArrivedAt").exists());
 
-        mockMvc.perform(get("/api/provider/bookings/{id}", tripId)
+        mockMvc.perform(get("/api/provider/bookings/{bookingCode}", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("DRIVER_ARRIVED"))
@@ -130,11 +131,17 @@ class DriverTripLifecycleIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.executionStatus").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.executionStatus").value("AWAITING_START_CONFIRMATION"))
+                .andExpect(jsonPath("$.data.status").value("AWAITING_START_CONFIRMATION"));
+
+        mockMvc.perform(post("/api/renter/bookings/{bookingCode}/confirm-start", booking.getBookingCode())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.started").value(true))
                 .andExpect(jsonPath("$.data.actualStartAt").exists());
 
-        mockMvc.perform(get("/api/provider/bookings/{id}", tripId)
+        mockMvc.perform(get("/api/provider/bookings/{bookingCode}", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
@@ -157,7 +164,7 @@ class DriverTripLifecycleIntegrationTest {
                 .andExpect(jsonPath("$.data.longitude").value(106.700806))
                 .andExpect(jsonPath("$.data.trackingState").value("LIVE"));
 
-        mockMvc.perform(get("/api/v1/provider/trips/{tripId}/tracking", tripId)
+        mockMvc.perform(get("/api/v1/provider/trips/{bookingCode}/tracking", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
@@ -167,7 +174,7 @@ class DriverTripLifecycleIntegrationTest {
                 .andExpect(jsonPath("$.data.latestLocation.latitude").value(10.776889))
                 .andExpect(jsonPath("$.data.latestLocation.longitude").value(106.700806));
 
-        mockMvc.perform(get("/api/v1/provider/trips/{tripId}/location", tripId)
+        mockMvc.perform(get("/api/v1/provider/trips/{bookingCode}/location", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
@@ -177,19 +184,24 @@ class DriverTripLifecycleIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.status").value("AWAITING_END_CONFIRMATION"))
                 .andExpect(jsonPath("$.data.actualEndAt").exists());
 
-        mockMvc.perform(get("/api/provider/bookings/{id}", tripId)
+        mockMvc.perform(post("/api/renter/bookings/{bookingCode}/confirm-end", booking.getBookingCode())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"));
+
+        mockMvc.perform(get("/api/provider/bookings/{bookingCode}", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.trip.status").value("COMPLETED"));
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"))
+                .andExpect(jsonPath("$.data.trip.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"));
 
         mockMvc.perform(post("/api/v1/driver/trips/{tripId}/finish", tripId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("CONFLICT"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"));
 
         mockMvc.perform(post("/api/v1/driver/trips/{tripId}/locations", tripId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken)
@@ -241,10 +253,13 @@ class DriverTripLifecycleIntegrationTest {
         Long tripId = booking.getId();
 
         Driver driverNam = driverRepository.findAll().stream()
-                .filter(d -> d.getUser().getEmail().equalsIgnoreCase("driver.nam@ecomotion.vn"))
+                .filter(d -> "SEED-R16-D001".equals(d.getLicenseNo()))
                 .findFirst().orElseThrow();
 
-        mockMvc.perform(put("/api/v1/provider/bookings/{id}/driver", tripId)
+        booking.setStatus(BookingStatus.CONFIRMED);
+        bookingRepository.saveAndFlush(booking);
+
+        mockMvc.perform(put("/api/v1/provider/bookings/{bookingCode}/driver", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("driverId", driverNam.getId()))))
@@ -256,6 +271,37 @@ class DriverTripLifecycleIntegrationTest {
         Booking updatedBooking = bookingRepository.findById(tripId).orElseThrow();
         assertThat(updatedBooking.getStatus()).isEqualTo(BookingStatus.DRIVER_ASSIGNED);
         assertThat(updatedBooking.getDriver().getId()).isEqualTo(driverNam.getId());
+    }
+
+    @Test
+    @DisplayName("Tài xế báo sự cố trước chuyến và booking chờ tài xế thay thế")
+    void driverReportsUnavailableBeforeTrip() throws Exception {
+        String driverToken = loginAndGetToken("driver.review@ecomotion.vn", "EcoMotion@123");
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        Driver driver = driverRepository.findAll().stream()
+                .filter(d -> "SEED-R16-D001".equals(d.getLicenseNo()))
+                .findFirst().orElseThrow();
+        booking.setDriver(driver);
+        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
+        booking.setAssignedAt(Instant.now());
+        bookingRepository.saveAndFlush(booking);
+
+        mockMvc.perform(post("/api/driver/trips/{tripId}/report-unavailable", booking.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "reason", "Xe cá nhân bị hỏng trên đường đến điểm đón"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.executionStatus").value("DRIVER_REPLACEMENT_REQUIRED"));
+
+        Booking updated = bookingRepository.findById(booking.getId()).orElseThrow();
+        assertThat(updated.isDriverReplacementRequired()).isTrue();
+        assertThat(updated.getDriverIssueReason()).contains("bị hỏng");
+        assertThat(updated.getDriverIssueReportedAt()).isNotNull();
+
+        mockMvc.perform(post("/api/driver/trips/{tripId}/confirm", booking.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
+                .andExpect(status().isConflict());
     }
 
     @Test

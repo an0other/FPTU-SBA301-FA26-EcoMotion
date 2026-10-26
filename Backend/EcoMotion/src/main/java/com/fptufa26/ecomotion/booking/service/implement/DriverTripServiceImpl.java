@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
@@ -13,7 +14,11 @@ import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.exception.InvalidTripTransitionException;
 import com.fptufa26.ecomotion.booking.exception.TripConflictException;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
+import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
+import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
 import com.fptufa26.ecomotion.booking.repository.VehicleLocationRepository;
+import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.booking.service.DriverTripService;
 import com.fptufa26.ecomotion.booking.service.MapGeocodingService;
 import com.fptufa26.ecomotion.booking.specification.BookingSpecification;
@@ -74,6 +79,10 @@ public class DriverTripServiceImpl implements DriverTripService {
 
     private final BookingRepository bookingRepository;
     private final VehicleLocationRepository vehicleLocationRepository;
+    private final DriverAssignmentRepository driverAssignmentRepository;
+    private final TripIncidentRepository tripIncidentRepository;
+    private final TripEvidenceRepository tripEvidenceRepository;
+    private final DriverOptimizationService driverOptimizationService;
     private final UserService userService;
     private final VehicleService vehicleService;
     private final MapGeocodingService mapGeocodingService;
@@ -170,14 +179,28 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
             throw new InvalidTripTransitionException("Không thể xác nhận chuyến đi đã hoàn thành");
         }
+        if (booking.isDriverReplacementRequired()) {
+            throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
+        }
         if (booking.getDriverConfirmedAt() != null || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
             throw new TripConflictException("Chuyến đi đã được xác nhận trước đó");
+        }
+        if (booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
+            throw new InvalidTripTransitionException("Chỉ có thể xác nhận chuyến đã được nhà cung cấp phân công");
         }
 
         Instant now = clock.instant();
         booking.setDriverConfirmedAt(now);
         booking.setStatus(BookingStatus.DRIVER_CONFIRMED);
         Booking saved = bookingRepository.saveAndFlush(booking);
+
+        driverAssignmentRepository.findByBooking_IdAndDriver_IdAndStatus(
+                saved.getId(), driver.getId(), com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE
+        ).ifPresent(da -> {
+            da.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.ACCEPTED);
+            da.setRespondedAt(now);
+            driverAssignmentRepository.save(da);
+        });
 
         log.info(
                 "Trip status changed: tripId={}, bookingId={}, tripStatus={}, bookingStatus={}",
@@ -209,6 +232,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
         if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
             throw new InvalidTripTransitionException("Không thể cập nhật chuyến đi đã hoàn thành");
+        }
+        if (booking.isDriverReplacementRequired()) {
+            throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
         }
         if (booking.getDriverConfirmedAt() == null && booking.getStatus() != BookingStatus.DRIVER_CONFIRMED) {
             throw new InvalidTripTransitionException("Tài xế phải xác nhận nhận chuyến trước khi báo đã đến");
@@ -253,8 +279,11 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
             throw new InvalidTripTransitionException("Không thể bắt đầu chuyến đi đã bị hủy");
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
+        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getDriverEndConfirmedAt() != null) {
             throw new InvalidTripTransitionException("Không thể bắt đầu chuyến đi đã hoàn thành");
+        }
+        if (booking.isDriverReplacementRequired()) {
+            throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
         }
         if (booking.getDriverConfirmedAt() == null && booking.getStatus() != BookingStatus.DRIVER_CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ARRIVED) {
             throw new InvalidTripTransitionException("Tài xế phải xác nhận nhận chuyến trước khi bắt đầu");
@@ -262,13 +291,18 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getActualArrivedAt() == null && booking.getStatus() != BookingStatus.DRIVER_ARRIVED) {
             throw new InvalidTripTransitionException("Tài xế phải báo đã đến điểm đón trước khi bắt đầu chuyến");
         }
-        if (booking.getActualStartAt() != null || booking.getStatus() == BookingStatus.IN_PROGRESS) {
-            throw new TripConflictException("Chuyến đi đã được bắt đầu trước đó");
+        if (booking.getDriverStartConfirmedAt() != null) {
+            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
         }
 
         Instant now = clock.instant();
-        booking.setActualStartAt(now);
-        booking.setStatus(BookingStatus.IN_PROGRESS);
+        booking.setDriverStartConfirmedAt(now);
+        if (booking.getRenterStartConfirmedAt() != null) {
+            booking.setActualStartAt(now);
+            booking.setStatus(BookingStatus.IN_PROGRESS);
+        } else {
+            booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
+        }
         Booking saved = bookingRepository.saveAndFlush(booking);
 
         log.info(
@@ -299,8 +333,8 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
             throw new InvalidTripTransitionException("Không thể kết thúc chuyến đi đã bị hủy");
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
-            throw new TripConflictException("Chuyến đi đã được kết thúc trước đó");
+        if (booking.getDriverEndConfirmedAt() != null) {
+            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
         }
         if (booking.getStatus() != BookingStatus.IN_PROGRESS || booking.getActualStartAt() == null) {
             throw new InvalidTripTransitionException("Chỉ có thể kết thúc chuyến đi đang thực hiện (IN_PROGRESS)");
@@ -308,7 +342,10 @@ public class DriverTripServiceImpl implements DriverTripService {
 
         Instant now = clock.instant();
         booking.setActualEndAt(now);
-        booking.setStatus(BookingStatus.COMPLETED);
+        booking.setDriverEndConfirmedAt(now);
+        booking.setStatus(booking.getRenterEndConfirmedAt() != null
+                ? BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
+                : BookingStatus.AWAITING_END_CONFIRMATION);
         if (booking.getProviderConfirmedAt() == null) {
             booking.setProviderConfirmedAt(now);
         }
@@ -326,6 +363,32 @@ public class DriverTripServiceImpl implements DriverTripService {
 
     @Override
     @Transactional
+    public DriverTripDetailResponse reportUnavailable(Long currentUserId, String tripIdOrCode,
+                                                      ReportDriverIssueRequest request) {
+        Driver driver = resolveDriver(currentUserId);
+        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        if (booking.getActualStartAt() != null || booking.getStatus() == BookingStatus.IN_PROGRESS) {
+            throw new InvalidTripTransitionException("Chuyến đi đã bắt đầu; hãy dùng quy trình báo sự cố đang vận hành");
+        }
+        if (booking.getStatus() == BookingStatus.CANCELLED
+                || booking.getStatus() == BookingStatus.REJECTED
+                || booking.getStatus() == BookingStatus.COMPLETED) {
+            throw new InvalidTripTransitionException("Không thể báo sự cố cho chuyến đi đã kết thúc");
+        }
+        if (booking.isDriverReplacementRequired()) {
+            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
+        }
+        booking.setDriverReplacementRequired(true);
+        booking.setDriverIssueReason(request.reason().trim());
+        booking.setDriverIssueReportedAt(clock.instant());
+        booking.setDriverIssueReportedBy(driver.getUser());
+        booking.setDriverIssueResolvedAt(null);
+        Booking saved = bookingRepository.saveAndFlush(booking);
+        return toDetailResponse(saved, getCoverUrl(saved), getLatestLocationForBooking(saved.getId()));
+    }
+
+    @Override
+    @Transactional
     public TripLocationResponse recordLocation(Long currentUserId, String tripIdOrCode, LocationUpdateRequest request) {
         Driver driver = resolveDriver(currentUserId);
         Booking booking = resolveDriverBooking(driver, tripIdOrCode);
@@ -337,7 +400,12 @@ public class DriverTripServiceImpl implements DriverTripService {
             throw new InvalidTripTransitionException("Không thể cập nhật vị trí cho chuyến đi đã kết thúc");
         }
         if (booking.getDriverConfirmedAt() == null) {
-            throw new InvalidTripTransitionException("Tài xế chưa xác nhận nhận chuyến");
+            if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.DRIVER_ARRIVED) {
+                booking.setDriverConfirmedAt(booking.getActualStartAt() != null ? booking.getActualStartAt() : clock.instant());
+                bookingRepository.save(booking);
+            } else {
+                throw new InvalidTripTransitionException("Tài xế chưa xác nhận nhận chuyến");
+            }
         }
 
         validateCoordinates(request.latitude(), request.longitude(), request.recordedAt());
@@ -380,9 +448,10 @@ public class DriverTripServiceImpl implements DriverTripService {
         Instant now = clock.instant();
         TripLocationResponse locationResponse = getLatestLocationForBooking(booking.getId());
 
-        Double pickupLat = null;
-        Double pickupLon = null;
-        if (booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
+        Double pickupLat = booking.getPickupLatitude() == null ? null : booking.getPickupLatitude().doubleValue();
+        Double pickupLon = booking.getPickupLongitude() == null ? null : booking.getPickupLongitude().doubleValue();
+        if (pickupLat == null && pickupLon == null
+                && booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
             Optional<MapGeocodingService.GeoPoint> geoOpt = mapGeocodingService.geocodeAddress(booking.getPickupAddress());
             if (geoOpt.isPresent()) {
                 pickupLat = geoOpt.get().latitude();
@@ -439,18 +508,141 @@ public class DriverTripServiceImpl implements DriverTripService {
         );
     }
 
+    @Override
+    @Transactional
+    public DriverTripDetailResponse rejectTrip(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest request) {
+        Driver driver = resolveDriver(currentUserId);
+        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+
+        if (booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
+            throw new InvalidTripTransitionException("Chỉ có thể từ chối chuyến đang ở trạng thái chờ xác nhận (DRIVER_ASSIGNED)");
+        }
+
+        Instant now = clock.instant();
+        driverAssignmentRepository.findByBooking_IdAndDriver_IdAndStatus(
+                booking.getId(), driver.getId(), com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE
+        ).ifPresentOrElse(da -> {
+            da.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.REJECTED);
+            da.setRejectionReason(request.rejectionReason());
+            da.setRejectionNote(request.rejectionNote());
+            da.setRespondedAt(now);
+            driverAssignmentRepository.save(da);
+        }, () -> {
+            com.fptufa26.ecomotion.booking.entity.DriverAssignment da = new com.fptufa26.ecomotion.booking.entity.DriverAssignment();
+            da.setBooking(booking);
+            da.setDriver(driver);
+            da.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.REJECTED);
+            da.setRejectionReason(request.rejectionReason());
+            da.setRejectionNote(request.rejectionNote());
+            da.setAssignedAt(booking.getAssignedAt() != null ? booking.getAssignedAt() : now);
+            da.setRespondedAt(now);
+            driverAssignmentRepository.save(da);
+        });
+
+        driverOptimizationService.triggerAutoReassign(
+                booking.getId(), driver.getId(), request.rejectionReason().name() + ": " + request.rejectionNote()
+        );
+
+        Booking refreshed = bookingRepository.findById(booking.getId())
+                .orElse(booking);
+
+        return toDetailResponse(refreshed, getCoverUrl(refreshed), getLatestLocationForBooking(refreshed.getId()));
+    }
+
+    @Override
+    @Transactional
+    public com.fptufa26.ecomotion.booking.entity.TripIncident reportIncident(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest request) {
+        Driver driver = resolveDriver(currentUserId);
+        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+
+        if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
+            throw new InvalidTripTransitionException("Không thể báo sự cố cho chuyến đi đã bị hủy");
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
+            throw new InvalidTripTransitionException("Không thể báo sự cố cho chuyến đi đã hoàn thành");
+        }
+
+        com.fptufa26.ecomotion.booking.entity.TripIncident incident = new com.fptufa26.ecomotion.booking.entity.TripIncident();
+        incident.setBooking(booking);
+        incident.setDriver(driver);
+        incident.setIncidentType(request.incidentType());
+        incident.setDescription(request.description());
+        incident.setUrgency(request.urgency());
+        incident.setStatus(com.fptufa26.ecomotion.booking.enums.TripIncidentStatus.OPEN);
+        incident.setLocationLatitude(request.latitude());
+        incident.setLocationLongitude(request.longitude());
+        incident.setEvidenceUrls(request.evidenceUrls());
+        incident.setCreatedBy(driver.getUser());
+        incident.setCreatedAt(clock.instant());
+
+        com.fptufa26.ecomotion.booking.entity.TripIncident saved = tripIncidentRepository.save(incident);
+
+        if (booking.getStatus() == BookingStatus.DRIVER_ASSIGNED || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
+            if (request.urgency() == com.fptufa26.ecomotion.booking.enums.TripIncidentUrgency.CRITICAL
+                    || request.urgency() == com.fptufa26.ecomotion.booking.enums.TripIncidentUrgency.HIGH) {
+                log.warn("High urgency incident reported before trip for booking {}. Triggering auto reassign.", booking.getBookingCode());
+                driverOptimizationService.triggerAutoReassign(
+                        booking.getId(), driver.getId(), "Sự cố trước chuyến: " + request.description()
+                );
+            }
+        }
+
+        return saved;
+    }
+
+    @Override
+    public java.util.List<com.fptufa26.ecomotion.booking.entity.TripIncident> listIncidents(Long currentUserId, String tripIdOrCode) {
+        Driver driver = resolveDriver(currentUserId);
+        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        return tripIncidentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId());
+    }
+
+    @Override
+    @Transactional
+    public com.fptufa26.ecomotion.booking.entity.TripEvidence uploadEvidence(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest request) {
+        Driver driver = resolveDriver(currentUserId);
+        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+
+        com.fptufa26.ecomotion.booking.entity.TripEvidence evidence = new com.fptufa26.ecomotion.booking.entity.TripEvidence();
+        evidence.setBooking(booking);
+        evidence.setDriver(driver);
+        evidence.setEvidenceType(request.evidenceType());
+        evidence.setImageUrl(request.imageUrl());
+        evidence.setNote(request.note());
+        evidence.setRecordedAt(clock.instant());
+        evidence.setCreatedAt(clock.instant());
+
+        return tripEvidenceRepository.save(evidence);
+    }
+
+    @Override
+    public java.util.List<com.fptufa26.ecomotion.booking.entity.TripEvidence> listEvidence(Long currentUserId, String tripIdOrCode) {
+        Driver driver = resolveDriver(currentUserId);
+        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        return tripEvidenceRepository.findByBooking_IdOrderByRecordedAtAsc(booking.getId());
+    }
+
     public static String deriveExecutionStatus(Booking booking) {
+        if (booking.isDriverReplacementRequired()) {
+            return "DRIVER_REPLACEMENT_REQUIRED";
+        }
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
             return "CANCELLED";
         }
         if (booking.getStatus() == BookingStatus.REJECTED) {
             return "REJECTED";
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
-            return "COMPLETED";
+        if (booking.getStatus() == BookingStatus.AWAITING_START_CONFIRMATION) {
+            return "AWAITING_START_CONFIRMATION";
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION) {
+            return "AWAITING_END_CONFIRMATION";
         }
         if (booking.getStatus() == BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
             return "AWAITING_EXTRA_CHARGE_CONFIRMATION";
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
+            return "COMPLETED";
         }
         if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getActualStartAt() != null) {
             return "IN_PROGRESS";
@@ -572,7 +764,7 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
         String clean = status.trim().toUpperCase(Locale.ROOT);
         if ("ASSIGNED".equals(clean)) {
-            return List.of(BookingStatus.ACCEPTED, BookingStatus.CONFIRMED);
+            return List.of(BookingStatus.DRIVER_ASSIGNED);
         }
         try {
             return List.of(BookingStatus.valueOf(clean));
@@ -681,6 +873,9 @@ public class DriverTripServiceImpl implements DriverTripService {
                 executionStatus,
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPassengerCount() != null ? booking.getPassengerCount() : 1,
                 vehicleSummary,
                 customerSummary,
@@ -759,6 +954,9 @@ public class DriverTripServiceImpl implements DriverTripService {
                 executionStatus,
                 booking.getPickupTime(),
                 booking.getPickupAddress(),
+                booking.getPickupLatitude(),
+                booking.getPickupLongitude(),
+                booking.getDriverNote(),
                 booking.getPassengerCount() != null ? booking.getPassengerCount() : 1,
                 booking.getContractUrl(),
                 booking.getActualStartAt(),

@@ -40,6 +40,7 @@ import java.util.List;
 public class ProviderFinanceController {
 
     private final ProviderFinanceService providerFinanceService;
+    private final com.fptufa26.ecomotion.finance.service.RefundService refundService;
 
     @GetMapping("/summary")
     @Operation(summary = "Get provider overall finance overview and metrics")
@@ -142,5 +143,29 @@ public class ProviderFinanceController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long payoutId) {
         return ApiResponse.success(providerFinanceService.getPayoutDetail(principal.getUserId(), payoutId));
+    }
+
+    @GetMapping("/refunds")
+    @Operation(summary = "List all refund requests for the current provider")
+    public ApiResponse<List<com.fptufa26.ecomotion.finance.dto.response.RefundResponse>> listRefunds(
+            @AuthenticationPrincipal SecurityUser principal) {
+        return ApiResponse.success(refundService.listRefundsForProvider(principal.getUserId()));
+    }
+
+    @PostMapping("/refunds")
+    @Operation(summary = "Submit a refund request on behalf of the provider")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RefundResponse> createRefund(
+            @AuthenticationPrincipal SecurityUser principal,
+            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest request) {
+        return ApiResponse.success(refundService.createRefundRequest(principal.getUserId(), request));
+    }
+
+    @PostMapping("/refunds/{refundId}/review")
+    @Operation(summary = "Provider reviews, approves or rejects a refund request")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RefundResponse> reviewRefund(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable Long refundId,
+            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest request) {
+        return ApiResponse.success(refundService.reviewRefundRequest(principal.getUserId(), refundId, request));
     }
 }

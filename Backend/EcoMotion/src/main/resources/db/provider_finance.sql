@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS payment_request (
     account_holder_snapshot VARCHAR(150) NOT NULL,
     status                  VARCHAR(30) NOT NULL DEFAULT 'PENDING',
     expires_at              TIMESTAMPTZ,
+    first_proof_at          TIMESTAMPTZ,
+    reconciliation_deadline TIMESTAMPTZ,
+    receiving_bank_account_id BIGINT REFERENCES provider_bank_account (id) ON DELETE RESTRICT,
     confirmed_at            TIMESTAMPTZ,
     confirmed_by_id         BIGINT REFERENCES users (id) ON DELETE SET NULL,
     rejection_reason        VARCHAR(500),
@@ -46,11 +49,12 @@ CREATE TABLE IF NOT EXISTS payment_request (
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_payment_request_type CHECK (payment_type IN ('DEPOSIT', 'FINAL_BALANCE', 'ADJUSTMENT')),
-    CONSTRAINT ck_payment_request_status CHECK (status IN ('PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'CONFIRMED', 'REJECTED', 'EXPIRED', 'REVIEW_REQUIRED')),
+    CONSTRAINT ck_payment_request_status CHECK (status IN ('PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'CONFIRMED', 'REJECTED', 'EXPIRED', 'REVIEW_REQUIRED', 'VOIDED')),
     CONSTRAINT ck_payment_request_amount CHECK (amount > 0)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_payment_request_ref ON payment_request (transfer_reference);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_payment_request_booking_type ON payment_request (booking_id, payment_type);
 CREATE INDEX IF NOT EXISTS idx_payment_request_booking ON payment_request (booking_id);
 CREATE INDEX IF NOT EXISTS idx_payment_request_status ON payment_request (status);
 
@@ -81,6 +85,17 @@ ALTER TABLE payment_transaction ADD COLUMN IF NOT EXISTS bank_account_holder_sna
 ALTER TABLE payment_transaction ADD COLUMN IF NOT EXISTS verification_method VARCHAR(30) DEFAULT 'PROVIDER_CONFIRMED';
 ALTER TABLE payment_transaction ADD COLUMN IF NOT EXISTS payment_request_id BIGINT REFERENCES payment_request (id) ON DELETE SET NULL;
 ALTER TABLE payment_transaction ADD COLUMN IF NOT EXISTS confirmed_by_id BIGINT REFERENCES users (id) ON DELETE SET NULL;
+ALTER TABLE payment_transaction ADD COLUMN IF NOT EXISTS applied_amount NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE payment_transaction ADD COLUMN IF NOT EXISTS receiving_bank_account_id BIGINT REFERENCES provider_bank_account (id) ON DELETE RESTRICT;
+ALTER TABLE payment_transaction ADD COLUMN IF NOT EXISTS processing_note VARCHAR(500);
+ALTER TABLE payment_transaction DROP CONSTRAINT IF EXISTS ck_payment_amount;
+ALTER TABLE payment_transaction ADD CONSTRAINT ck_payment_amount CHECK (
+    amount > 0 AND applied_amount >= 0 AND applied_amount <= amount
+);
 
 CREATE INDEX IF NOT EXISTS idx_payment_payout_provider ON payment_transaction (type, status);
 CREATE INDEX IF NOT EXISTS idx_payment_request_fk ON payment_transaction (payment_request_id);
+DROP INDEX IF EXISTS uk_payment_gateway_ref;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_payment_bank_gateway_ref
+    ON payment_transaction (receiving_bank_account_id, gateway_ref)
+    WHERE receiving_bank_account_id IS NOT NULL AND gateway_ref IS NOT NULL;

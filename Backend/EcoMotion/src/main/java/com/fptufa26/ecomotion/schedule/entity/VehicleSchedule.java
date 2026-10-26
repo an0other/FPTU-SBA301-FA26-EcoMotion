@@ -58,6 +58,9 @@ public class VehicleSchedule {
     @Column(nullable = false, length = 20)
     private ScheduleStatus status = ScheduleStatus.ACTIVE;
 
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
     @Column(length = 255)
     private String reason;
 

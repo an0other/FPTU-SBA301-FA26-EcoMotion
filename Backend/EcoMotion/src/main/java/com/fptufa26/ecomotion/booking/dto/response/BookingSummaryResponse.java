@@ -15,8 +15,14 @@ public record BookingSummaryResponse(
         String licensePlate,
         String imageUrl,
         String pickupAddress,
+        BigDecimal pickupLatitude,
+        BigDecimal pickupLongitude,
+        String driverNote,
         Instant pickupTime,
         int passengerCount,
-        BigDecimal totalAmount
+        BigDecimal totalAmount,
+        boolean canPay,
+        boolean atRisk,
+        String riskMessage
 ) {
 }

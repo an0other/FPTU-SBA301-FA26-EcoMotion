@@ -1,5 +1,8 @@
 package com.fptufa26.ecomotion.booking.controller;
 
+import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.user.repository.DriverRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +18,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +39,12 @@ class DriverTripApiIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private BookingRepository bookingRepository;
+
+    @Autowired
+    private DriverRepository driverRepository;
 
     private String loginAndGetToken(String email, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
@@ -93,7 +103,7 @@ class DriverTripApiIntegrationTest {
                         .param("status", "ASSIGNED")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.total").value(2));
+                .andExpect(jsonPath("$.data.total").value(0));
     }
 
     @Test
@@ -169,6 +179,17 @@ class DriverTripApiIntegrationTest {
         String providerToken = loginAndGetToken("provider.a@ecomotion.vn", "EcoMotion@123");
         String driverNamToken = loginAndGetToken("driver.nam@ecomotion.vn", "EcoMotion@123");
         String driverCuongToken = loginAndGetToken("driver.cuong@ecomotion.vn", "EcoMotion@123");
+        var booking = bookingRepository.findByBookingCode("BK-9Q2Z11").orElseThrow();
+        booking.setPickupTime(Instant.parse("2028-11-01T01:00:00Z"));
+        var driverCuong = driverRepository.findAll().stream()
+                .filter(driver -> "driver.cuong@ecomotion.vn".equalsIgnoreCase(driver.getUser().getEmail()))
+                .findFirst().orElseThrow();
+        bookingRepository.findAll().stream()
+                .filter(other -> other.getDriver() != null
+                        && other.getDriver().getId().equals(driverCuong.getId())
+                        && !other.getId().equals(booking.getId()))
+                .forEach(other -> other.setStatus(BookingStatus.CANCELLED));
+        bookingRepository.saveAndFlush(booking);
 
         mockMvc.perform(get("/api/v1/driver/trips/BK-9Q2Z11")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverNamToken))

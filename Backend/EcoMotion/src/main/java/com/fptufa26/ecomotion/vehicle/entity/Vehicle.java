@@ -85,6 +85,12 @@ public class Vehicle {
     @Column(name = "maintenance_buffer_minutes", nullable = false)
     private Integer maintenanceBufferMinutes;
 
+    @Column(name = "deposit_ratio_override", precision = 6, scale = 4)
+    private BigDecimal depositRatioOverride;
+
+    @Column(name = "minimum_deposit_amount", precision = 14, scale = 2)
+    private BigDecimal minimumDepositAmount;
+
     @Column(name = "rating_avg", nullable = false, precision = 3, scale = 2)
     private BigDecimal ratingAvg = BigDecimal.ZERO;
 

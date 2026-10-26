@@ -26,7 +26,8 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             SELECT COUNT(s) FROM VehicleSchedule s
             WHERE s.vehicle.provider.id = :providerId
               AND s.type IN ('BLOCKED', 'MAINTENANCE')
-              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              AND (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+                   OR (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD AND s.expiresAt > CURRENT_TIMESTAMP))
               AND s.endAt > :now
             """)
     long countActiveBlocksByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
@@ -108,7 +109,8 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
     @Query("""
             select count(s) > 0 from VehicleSchedule s
             where s.vehicle.id = :vehicleId
-              and s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+              and (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+                   or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD and s.expiresAt > CURRENT_TIMESTAMP))
               and s.startAt < :endAt
               and s.endAt > :startAt
             """)
@@ -133,6 +135,22 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
     );
 
     @Query("""
+            select s from VehicleSchedule s
+            where s.vehicle.id = :vehicleId
+              and (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+                   or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD
+                       and s.expiresAt > CURRENT_TIMESTAMP))
+              and s.startAt < :rangeTo
+              and s.endAt > :rangeFrom
+            order by s.startAt
+            """)
+    List<VehicleSchedule> findOccupiedInRange(
+            @Param("vehicleId") Long vehicleId,
+            @Param("rangeFrom") Instant rangeFrom,
+            @Param("rangeTo") Instant rangeTo
+    );
+
+    @Query("""
             SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END
             FROM VehicleSchedule s
             WHERE s.vehicle.id = :vehicleId
@@ -145,6 +163,22 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             @Param("startAt") Instant startAt,
             @Param("endAt") Instant endAt
     );
+
+    @Query("""
+            select count(s) > 0 from VehicleSchedule s
+            where s.vehicle.id = :vehicleId
+              and (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
+                   or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD
+                       and s.expiresAt > CURRENT_TIMESTAMP))
+              and (s.booking is null or s.booking.id <> :excludeBookingId)
+              and s.startAt < :endAt
+              and s.endAt > :startAt
+            """)
+    boolean existsOccupiedOverlapExcludingBooking(
+            @Param("vehicleId") Long vehicleId,
+            @Param("startAt") Instant startAt,
+            @Param("endAt") Instant endAt,
+            @Param("excludeBookingId") Long excludeBookingId);
 
     @Query("SELECT COUNT(s) > 0 FROM VehicleSchedule s " +
             "WHERE s.vehicle.id = :vehicleId " +
@@ -173,4 +207,12 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             Instant endAt,
             Instant startAt
     );
+
+    @Query("""
+            select distinct s.booking.id from VehicleSchedule s
+            where s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD
+              and s.expiresAt <= :now
+              and s.booking is not null
+            """)
+    List<Long> findExpiredHoldBookingIds(@Param("now") Instant now);
 }

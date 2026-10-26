@@ -368,7 +368,8 @@ class ProviderVehicleServiceTest {
 
         var updated = providerVehicleService.updateVehicle(user.getUserId(), vehicle.getId(), request);
 
-        assertThat(updated.licensePlate()).isEqualTo(newPlate);
+        assertThat(updated.licensePlate()).isEqualTo(
+                com.fptufa26.ecomotion.vehicle.service.LicensePlatePolicy.display(newPlate));
         assertThat(updated.status()).isEqualTo(VehicleStatus.PENDING);
     }
 
@@ -433,7 +434,8 @@ class ProviderVehicleServiceTest {
                 new BigDecimal("15000.00"),
                 20,
                 new BigDecimal("2500.00"),
-                new BigDecimal("0.2000")
+                new BigDecimal("0.2000"),
+                true
         );
 
         var updatedPlans = providerVehicleService.updateVehicleRentalPlans(user.getUserId(), vehicle.getId(), request);
@@ -484,6 +486,60 @@ class ProviderVehicleServiceTest {
         assertThatThrownBy(() ->
                 providerVehicleService.updateVehicleRentalPlans(user.getUserId(), vehicle.getId(), request)
         ).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("updateVehicleRentalPlans requires confirmation for a price change of at least 50 percent")
+    void updateVehicleRentalPlansRequiresConfirmationForUnusualPrice() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).getFirst();
+        var hourly = providerVehicleService.getVehicleRentalPlans(user.getUserId(), vehicle.getId()).stream()
+                .filter(plan -> plan.planType() == PlanType.HOURLY)
+                .findFirst()
+                .orElseThrow();
+        BigDecimal unusualPrice = hourly.slotPrice().multiply(new BigDecimal("1.50"));
+        UpdateRentalPlansRequest request = new UpdateRentalPlansRequest(
+                List.of(new UpdateRentalPlansRequest.PlanItemRequest(
+                        PlanType.HOURLY, unusualPrice, PlanStatus.ACTIVE, null, 480)),
+                15,
+                new BigDecimal("0.1500"),
+                10,
+                new BigDecimal("12000.00"),
+                15,
+                new BigDecimal("2000.00"),
+                new BigDecimal("0.1500")
+        );
+
+        assertThatThrownBy(() -> providerVehicleService.updateVehicleRentalPlans(
+                user.getUserId(), vehicle.getId(), request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("bất thường");
+    }
+
+    @Test
+    @DisplayName("replacing a verified vehicle document returns the vehicle to pending approval")
+    void replacingVerifiedDocumentReturnsVehicleToPending() {
+        User user = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        Provider provider = userService.findProviderByUserId(user.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).stream()
+                .filter(row -> row.getStatus() == VehicleStatus.APPROVED)
+                .findFirst()
+                .orElseThrow();
+
+        providerVehicleService.updateVehicleDocument(
+                user.getUserId(),
+                vehicle.getId(),
+                new UpdateVehicleDocumentRequest(
+                        DocumentType.REGISTRATION,
+                        "REG-UPDATED",
+                        null,
+                        "/api/files/vehicle/updated-registration.pdf"
+                )
+        );
+
+        assertThat(vehicleRepository.findById(vehicle.getId()).orElseThrow().getStatus())
+                .isEqualTo(VehicleStatus.PENDING);
     }
 
     @Test

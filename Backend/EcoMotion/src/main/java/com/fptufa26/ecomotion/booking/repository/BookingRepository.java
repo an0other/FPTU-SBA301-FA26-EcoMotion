@@ -19,12 +19,20 @@ import org.springframework.stereotype.Repository;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
-import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
 import java.util.Optional;
 
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpecificationExecutor<Booking> {
+
+    List<Booking> findAllByOrderByCreatedAtDesc();
+
+    List<Booking> findByStatusOrderByCreatedAtDesc(BookingStatus status);
+
+    List<Booking> findByRenter_IdOrderByCreatedAtDesc(Long renterId);
+
+    List<Booking> findByVehicle_IdOrderByCreatedAtDesc(Long vehicleId);
+
+    long countByStatus(BookingStatus status);
 
     @Override
     @EntityGraph(attributePaths = {
@@ -47,6 +55,11 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     Optional<Booking> findByBookingCodeAndRenter_User_Id(
             String bookingCode,
             Long userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.bookingCode = :bookingCode AND b.renter.user.id = :userId")
+    Optional<Booking> findByBookingCodeAndRenterUserIdForUpdate(
+            @Param("bookingCode") String bookingCode, @Param("userId") Long userId);
     // Existing renter and booking-code queries.
     long countByBookingCodeStartingWith(String prefix);
 
@@ -84,6 +97,15 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
             "plan"
     })
     Optional<Booking> findByBookingCodeAndVehicle_Provider_Id(String bookingCode, Long providerId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.id = :id AND b.vehicle.provider.id = :providerId")
+    Optional<Booking> findByIdAndProviderIdForUpdate(@Param("id") Long id, @Param("providerId") Long providerId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.bookingCode = :bookingCode AND b.vehicle.provider.id = :providerId")
+    Optional<Booking> findByBookingCodeAndProviderIdForUpdate(
+            @Param("bookingCode") String bookingCode, @Param("providerId") Long providerId);
 
     List<Booking> findByVehicle_Provider_Id(Long providerId);
 
@@ -168,4 +190,22 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     Optional<Booking> findBookingByBookingCodeAndRenter_User_Id(
             String bookingCode,
             Long userId);
+
+    @Query("SELECT b FROM Booking b WHERE b.driver.id = :driverId AND b.status IN :statuses " +
+            "AND b.pickupTime < :windowEnd AND (b.actualEndAt IS NULL OR b.actualEndAt > :windowStart)")
+    List<Booking> findOverlappingDriverBookings(
+            @Param("driverId") Long driverId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("windowStart") Instant windowStart,
+            @Param("windowEnd") Instant windowEnd
+    );
+
+    @Query("SELECT COUNT(b) FROM Booking b WHERE b.driver.id = :driverId AND b.status IN :statuses " +
+            "AND b.pickupTime >= :start AND b.pickupTime < :end")
+    long countDriverTripsBetween(
+            @Param("driverId") Long driverId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("start") Instant start,
+            @Param("end") Instant end
+    );
 }

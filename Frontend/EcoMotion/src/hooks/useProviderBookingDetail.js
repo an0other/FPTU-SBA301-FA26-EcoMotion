@@ -5,6 +5,7 @@ export function useProviderBookingDetail(idOrCode) {
   const [booking, setBooking] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [operationalRisk, setOperationalRisk] = useState(null)
 
   useEffect(() => {
     if (!idOrCode) {
@@ -18,9 +19,13 @@ export function useProviderBookingDetail(idOrCode) {
         setLoading(true)
       }
       try {
-        const data = await providerBookingService.getBookingDetail(idOrCode)
+        const [data, risk] = await Promise.all([
+          providerBookingService.getBookingDetail(idOrCode),
+          providerBookingService.getOperationalRisk(idOrCode),
+        ])
         if (active) {
           setBooking(data)
+          setOperationalRisk(risk)
           setError(null)
           if (!silent) {
             setLoading(false)
@@ -76,8 +81,12 @@ export function useProviderBookingDetail(idOrCode) {
     }
     setError(null)
     try {
-      const data = await providerBookingService.getBookingDetail(idOrCode)
+      const [data, risk] = await Promise.all([
+        providerBookingService.getBookingDetail(idOrCode),
+        providerBookingService.getOperationalRisk(idOrCode),
+      ])
       setBooking(data)
+      setOperationalRisk(risk)
     } catch (err) {
       if (!silent) {
         setError(
@@ -100,5 +109,6 @@ export function useProviderBookingDetail(idOrCode) {
     loading,
     error,
     refetch,
+    operationalRisk,
   }
 }

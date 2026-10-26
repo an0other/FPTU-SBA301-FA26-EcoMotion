@@ -13,6 +13,8 @@ import java.util.Optional;
 @Repository
 public interface BookingChargeRepository extends JpaRepository<BookingCharge, Long> {
 
+    List<BookingCharge> findByBooking_Id(Long bookingId);
+
     List<BookingCharge> findByBooking_IdOrderByCreatedAtAsc(Long bookingId);
 
     Optional<BookingCharge> findByBooking_IdAndChargeType(Long bookingId, ChargeType chargeType);

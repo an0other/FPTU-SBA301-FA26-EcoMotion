@@ -9,6 +9,19 @@ import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
 import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.seed.DevDataSeeder;
+import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
+import com.fptufa26.ecomotion.finance.dto.request.SubmitProofRequest;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
+import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus;
+import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
+import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.repository.PaymentEvidenceRepository;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
+import com.fptufa26.ecomotion.user.repository.ProviderRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +30,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -27,6 +41,7 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -50,6 +65,83 @@ class RenterBookingDetailApiIntegrationTest {
 
     @Autowired
     private VehicleScheduleRepository vehicleScheduleRepository;
+
+    @Autowired
+    private PaymentRequestService paymentRequestService;
+
+    @Autowired
+    private PaymentRequestRepository paymentRequestRepository;
+
+    @Autowired
+    private PaymentEvidenceRepository paymentEvidenceRepository;
+
+    @Autowired
+    private ProviderBankAccountRepository bankAccountRepository;
+
+    @Autowired
+    private ProviderRepository providerRepository;
+
+    @Autowired
+    private VehicleRepository vehicleRepository;
+
+    @Test
+    @DisplayName("request details can be edited before the deposit locks the booking")
+    void updateRequestDetailsBeforeDepositLock() throws Exception {
+        String token = login();
+        String code = createBooking(token, "DAILY", 1, "2027-10-01T01:00:00Z");
+
+        String update = """
+                {
+                  "pickupTime": "2027-10-02T02:00:00Z",
+                  "pickupAddress": "Ben xe Mien Dong Moi",
+                  "pickupLatitude": 10.879100,
+                  "pickupLongitude": 106.814600,
+                  "passengerCount": 3,
+                  "driverNote": "Co nguoi lon tuoi\\nCan ho tro"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/renter/bookings/" + code + "/request-details")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(update))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pickupAddress").value("Ben xe Mien Dong Moi"))
+                .andExpect(jsonPath("$.data.pickupLatitude").value(10.879100))
+                .andExpect(jsonPath("$.data.driverNote").value("Co nguoi lon tuoi Can ho tro"))
+                .andExpect(jsonPath("$.data.canEditRequest").value(true));
+
+        Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
+        ensureBankAccount(booking);
+        PaymentRequest depositRequest = paymentRequestRepository
+                .findByBooking_IdAndPaymentType(booking.getId(),
+                        com.fptufa26.ecomotion.finance.enums.PaymentRequestType.DEPOSIT)
+                .orElseThrow();
+        paymentRequestService.submitPaymentProof(depositRequest.getId(), 1L,
+                new SubmitProofRequest("/files/booking/proof.png", depositRequest.getAmount(),
+                        "EDIT-LOCK-001", null, null));
+
+        mockMvc.perform(patch("/api/renter/bookings/" + code + "/request-details")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(update))
+                .andExpect(status().isConflict());
+
+        PaymentRequest rejected = paymentRequestRepository.findById(depositRequest.getId()).orElseThrow();
+        rejected.setStatus(PaymentRequestStatus.REJECTED);
+        var rejectedEvidence = paymentEvidenceRepository
+                .findByPaymentRequest_IdOrderByCreatedAtDesc(depositRequest.getId()).getFirst();
+        rejectedEvidence.setStatus(PaymentEvidenceStatus.REJECTED);
+        paymentEvidenceRepository.saveAndFlush(rejectedEvidence);
+        paymentRequestRepository.saveAndFlush(rejected);
+
+        mockMvc.perform(patch("/api/renter/bookings/" + code + "/request-details")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(update))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.canEditRequest").value(true));
+    }
 
     @Test
     @DisplayName("detail hides sequential ids and shows no refund before a deposit is paid")
@@ -105,7 +197,6 @@ class RenterBookingDetailApiIntegrationTest {
     void cancelEarlyRefundsFullDeposit() throws Exception {
         String token = login();
         String code = createBooking(token, "DAILY", 1, Instant.now().plus(Duration.ofHours(72)).toString());
-        accept(code);
         checkout(token, code, "CARD");
 
         mockMvc.perform(post("/api/renter/bookings/" + code + "/cancel")
@@ -126,9 +217,11 @@ class RenterBookingDetailApiIntegrationTest {
     @DisplayName("cancelling inside 24 hours refunds half the deposit")
     void cancelLateRefundsHalfDeposit() throws Exception {
         String token = login();
-        String code = createBooking(token, "DAILY", 1, Instant.now().plus(Duration.ofHours(2)).toString());
-        accept(code);
+        String code = createBooking(token, "DAILY", 1, "2027-08-01T01:00:00Z");
         checkout(token, code, "CARD");
+        Booking lateBooking = bookingRepository.findByBookingCode(code).orElseThrow();
+        lateBooking.setPickupTime(Instant.now().plus(Duration.ofHours(2)));
+        bookingRepository.saveAndFlush(lateBooking);
 
         mockMvc.perform(post("/api/renter/bookings/" + code + "/cancel")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -137,12 +230,14 @@ class RenterBookingDetailApiIntegrationTest {
     }
 
     @Test
+    @Transactional
     @DisplayName("cancelling a confirmed yearly booking releases the schedule and does not refund")
     void cancelYearlyDoesNotRefund() throws Exception {
-        String token = login();
-        String code = createBooking(token, "YEARLY", 1, "2028-08-01T01:00:00Z");
-        accept(code);
-        checkout(token, code, "E_WALLET");
+        String token = login("renter.demo@ecomotion.vn");
+        String code = "EM-SEED-R14-001";
+        Booking yearly = bookingRepository.findByBookingCode(code).orElseThrow();
+        yearly.setStatus(BookingStatus.CONFIRMED);
+        bookingRepository.saveAndFlush(yearly);
 
         mockMvc.perform(post("/api/renter/bookings/" + code + "/cancel")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -161,7 +256,6 @@ class RenterBookingDetailApiIntegrationTest {
     void confirmEndNeedsBothSides() throws Exception {
         String token = login();
         String waiting = createBooking(token, "DAILY", 1, "2026-11-08T01:00:00Z");
-        accept(waiting);
         checkout(token, waiting, "CARD");
         Booking waitingBooking = bookingRepository.findByBookingCode(waiting).orElseThrow();
         waitingBooking.setStatus(BookingStatus.IN_PROGRESS);
@@ -173,7 +267,6 @@ class RenterBookingDetailApiIntegrationTest {
                 .andExpect(jsonPath("$.data.completed").value(false));
 
         String code = createBooking(token, "DAILY", 1, "2026-11-02T01:00:00Z");
-        accept(code);
         checkout(token, code, "CASH");
         Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
         booking.setStatus(BookingStatus.IN_PROGRESS);
@@ -183,8 +276,8 @@ class RenterBookingDetailApiIntegrationTest {
         mockMvc.perform(post("/api/renter/bookings/" + code + "/confirm-end")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.completed").value(true));
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"))
+                .andExpect(jsonPath("$.data.completed").value(false));
     }
 
     @Test
@@ -222,12 +315,53 @@ class RenterBookingDetailApiIntegrationTest {
                 .andExpect(jsonPath("$.data.completed").value(false));
     }
 
+    @Test
+    @DisplayName("renter can track only their active trip")
+    void renterTrackingIsScopedToActiveTrip() throws Exception {
+        String token = login();
+        Booking activeBooking = bookingRepository.findByBookingCode(DevDataSeeder.IN_PROGRESS_BOOKING_CODE)
+                .orElseThrow();
+        activeBooking.setPickupLatitude(new BigDecimal("10.801234"));
+        activeBooking.setPickupLongitude(new BigDecimal("106.650123"));
+        bookingRepository.saveAndFlush(activeBooking);
+
+        mockMvc.perform(get("/api/renter/bookings/" + DevDataSeeder.IN_PROGRESS_BOOKING_CODE + "/tracking")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.bookingCode").value(DevDataSeeder.IN_PROGRESS_BOOKING_CODE))
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.latestLocation.trackingState").value("UNAVAILABLE"));
+
+        mockMvc.perform(get("/api/renter/bookings/" + DevDataSeeder.PENDING_BOOKING_CODE + "/tracking")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isConflict());
+    }
+
     private void checkout(String token, String code, String method) throws Exception {
-        mockMvc.perform(post("/api/renter/bookings/" + code + "/checkout")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"method\":\"" + method + "\"}"))
-                .andExpect(status().isOk());
+        Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
+        ensureBankAccount(booking);
+        PaymentRequest request = paymentRequestRepository
+                .findByBooking_IdAndPaymentType(booking.getId(),
+                        com.fptufa26.ecomotion.finance.enums.PaymentRequestType.DEPOSIT)
+                .orElseGet(() -> paymentRequestService.createDepositPaymentRequest(booking));
+        request.setStatus(PaymentRequestStatus.PROOF_SUBMITTED);
+        paymentRequestRepository.saveAndFlush(request);
+        paymentRequestService.confirmPayment(
+                request.getId(), 2L,
+                new ConfirmPaymentRequest(request.getAmount(), "TEST-" + code, method));
+    }
+
+    private void ensureBankAccount(Booking booking) {
+        if (bankAccountRepository.findByProvider_IdAndStatus(
+                booking.getVehicle().getProvider().getId(), BankAccountStatus.ACTIVE).isPresent()) return;
+        ProviderBankAccount account = new ProviderBankAccount();
+        account.setProvider(providerRepository.findById(
+                booking.getVehicle().getProvider().getId()).orElseThrow());
+        account.setBankCode("VCB");
+        account.setBankName("Vietcombank");
+        account.setAccountNumber("0123456789");
+        account.setAccountHolderName("ECOMOTION TEST");
+        bankAccountRepository.saveAndFlush(account);
     }
 
     private String createBooking(String token, String planType, int slotCount, String pickupTime) throws Exception {
@@ -238,6 +372,7 @@ class RenterBookingDetailApiIntegrationTest {
                 .getResponse()
                 .getContentAsString());
         JsonNode vehicle = vehicles.get("data").get(0);
+        ensureBankAccountForVehicle(vehicle.get("id").asLong());
         JsonNode plan = null;
         for (JsonNode candidate : vehicle.get("plans")) {
             if (planType.equals(candidate.get("planType").asText())) {
@@ -252,6 +387,8 @@ class RenterBookingDetailApiIntegrationTest {
                   "slotCount": %d,
                   "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
+                  "pickupLatitude": 10.801234,
+                  "pickupLongitude": 106.652345,
                   "passengerCount": 2
                 }
                 """.formatted(vehicle.get("id").asLong(), plan.get("id").asLong(), slotCount, pickupTime);
@@ -266,6 +403,20 @@ class RenterBookingDetailApiIntegrationTest {
         return objectMapper.readTree(response).get("data").get("bookingCode").asText();
     }
 
+    private void ensureBankAccountForVehicle(long vehicleId) {
+        var vehicle = vehicleRepository.findById(vehicleId).orElseThrow();
+        if (bankAccountRepository.findByProvider_IdAndStatus(
+                vehicle.getProvider().getId(), BankAccountStatus.ACTIVE).isPresent()) return;
+        ProviderBankAccount account = new ProviderBankAccount();
+        account.setProvider(vehicle.getProvider());
+        account.setBankCode("VCB");
+        account.setBankName("Vietcombank");
+        account.setAccountNumber("0123456789");
+        account.setAccountHolderName("ECOMOTION TEST");
+        account.setStatus(BankAccountStatus.ACTIVE);
+        bankAccountRepository.saveAndFlush(account);
+    }
+
     private void accept(String bookingCode) {
         Booking booking = bookingRepository.findByBookingCode(bookingCode).orElseThrow();
         booking.setStatus(BookingStatus.ACCEPTED);
@@ -273,11 +424,15 @@ class RenterBookingDetailApiIntegrationTest {
     }
 
     private String login() throws Exception {
+        return login(DevDataSeeder.RENTER_EMAIL);
+    }
+
+    private String login(String email) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","password":"%s"}
-                                """.formatted(DevDataSeeder.RENTER_EMAIL, DevDataSeeder.DEFAULT_PASSWORD)))
+                                """.formatted(email, DevDataSeeder.DEFAULT_PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

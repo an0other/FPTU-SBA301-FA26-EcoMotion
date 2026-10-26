@@ -7,15 +7,29 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.List;
 
 @Repository
 public interface PaymentTransactionRepository
         extends JpaRepository<PaymentTransaction, Long> {
+
+    List<PaymentTransaction> findAllByOrderByCreatedAtDesc();
+
+    List<PaymentTransaction> findByStatusOrderByCreatedAtDesc(PaymentStatus status);
+
+    List<PaymentTransaction> findByTypeOrderByCreatedAtDesc(PaymentType type);
+
+    List<PaymentTransaction> findByBooking_IdOrderByCreatedAtDesc(Long bookingId);
+
+    long countByStatus(PaymentStatus status);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM PaymentTransaction p WHERE p.status = 'PAID' AND p.direction = 'IN'")
+    BigDecimal sumTotalPaidIn();
 
     List<PaymentTransaction> findByBooking_IdOrderByCreatedAtAsc(Long bookingId);
 
@@ -49,6 +63,12 @@ public interface PaymentTransactionRepository
     Optional<PaymentTransaction> findByGatewayRef(String gatewayRef);
 
     boolean existsByGatewayRef(String gatewayRef);
+
+boolean existsByReceivingBankAccount_IdAndGatewayRef(Long receivingBankAccountId, String gatewayRef);
+
+    Optional<PaymentTransaction> findByVnpTxnRef(String vnpTxnRef);
+
+    boolean existsByVnpTxnRef(String vnpTxnRef);
 
     boolean existsByCharge_IdAndStatus(Long chargeId, PaymentStatus status);
     @EntityGraph(attributePaths = "booking")

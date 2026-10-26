@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.vehicle.service;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDepositPolicyRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
@@ -11,6 +12,7 @@ import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDepositPolicyResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import java.util.List;
@@ -50,6 +52,14 @@ public interface ProviderVehicleService {
             Long vehicleId,
             UpdateVehicleRequest request
     );
+
+    VehicleDepositPolicyResponse updateDepositPolicy(
+            Long userId,
+            Long vehicleId,
+            UpdateVehicleDepositPolicyRequest request
+    );
+
+    VehicleDepositPolicyResponse getDepositPolicy(Long userId, Long vehicleId);
 
     List<ProviderRentalPlanResponse> getVehicleRentalPlans(
             Long userId,

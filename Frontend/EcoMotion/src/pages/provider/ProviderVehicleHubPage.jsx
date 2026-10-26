@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
@@ -45,7 +45,6 @@ const DOC_SPECS = [
 
 export default function ProviderVehicleHubPage() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const fileInputRef = useRef(null)
 
@@ -58,10 +57,10 @@ export default function ProviderVehicleHubPage() {
   const [toast, setToast] = useState(null)
   const [showRuleModal, setShowRuleModal] = useState(false)
   const [vehicle, setVehicle] = useState(null)
+  const [licensePlateHistory, setLicensePlateHistory] = useState([])
   const [providerInfo, setProviderInfo] = useState({ displayName: '', depotAddress: '' })
 
   const [documents, setDocuments] = useState([])
-  const [loadingDocs, setLoadingDocs] = useState(false)
   const [docModal, setDocModal] = useState({
     isOpen: false,
     docType: null,
@@ -106,16 +105,18 @@ export default function ProviderVehicleHubPage() {
   })
   const [initialSurcharges, setInitialSurcharges] = useState(null)
   const [savingPlans, setSavingPlans] = useState(false)
-
-  useEffect(() => {
-    fetchVehicleData()
-    fetchDashboardSummary()
-  }, [id])
+  const [depositPolicy, setDepositPolicy] = useState({ depositRatioOverride: '', minimumDepositAmount: 0 })
+  const [depositPolicyInfo, setDepositPolicyInfo] = useState(null)
+  const [savingDepositPolicy, setSavingDepositPolicy] = useState(false)
 
   async function fetchVehicleData() {
     try {
       setLoading(true)
-      const data = await providerService.getVehicleById(id)
+      const [data, plateHistory] = await Promise.all([
+        providerService.getVehicleById(id),
+        providerService.getVehicleLicensePlateHistory(id),
+      ])
+      setLicensePlateHistory(plateHistory)
       setVehicle(data)
       const initialForm = {
         licensePlate: data.licensePlate || '',
@@ -131,6 +132,17 @@ export default function ProviderVehicleHubPage() {
       }
       setForm(initialForm)
       setInitialData(initialForm)
+
+      try {
+        const policy = await providerService.getVehicleDepositPolicy(id)
+        setDepositPolicyInfo(policy)
+        setDepositPolicy({
+          depositRatioOverride: policy.depositRatioOverride == null ? '' : Number(policy.depositRatioOverride),
+          minimumDepositAmount: Number(policy.minimumDepositAmount ?? 0),
+        })
+      } catch (policyError) {
+        console.error('Failed to load deposit policy', policyError)
+      }
 
       if (data.plans && data.plans.length > 0) {
         const loadedPlans = {
@@ -174,13 +186,10 @@ export default function ProviderVehicleHubPage() {
 
       // Fetch documents
       try {
-        setLoadingDocs(true)
         const docs = await providerService.getVehicleDocuments(id)
         setDocuments(docs || [])
       } catch (e) {
         console.error('Failed to load vehicle documents', e)
-      } finally {
-        setLoadingDocs(false)
       }
     } catch (err) {
       setToast({
@@ -293,6 +302,16 @@ export default function ProviderVehicleHubPage() {
       // Ignored
     }
   }
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchVehicleData()
+      fetchDashboardSummary()
+    }, 0)
+    return () => window.clearTimeout(timerId)
+    // Reload only when navigating to another vehicle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   function handleTabChange(tabKey) {
     const newParams = new URLSearchParams(searchParams)
@@ -505,6 +524,20 @@ export default function ProviderVehicleHubPage() {
         return
       }
 
+      const hasUnusualPriceChange = ['HOURLY', 'DAILY', 'MONTHLY', 'YEARLY'].some((type) => {
+        const previous = Number(initialPricingPlans?.[type]?.slotPrice ?? 0)
+        const next = Number(pricingPlans[type]?.slotPrice ?? 0)
+        return previous > 0 && Math.abs(next - previous) / previous >= 0.5
+      })
+      let confirmUnusualPriceChange = false
+      if (hasUnusualPriceChange) {
+        confirmUnusualPriceChange = window.confirm('Có gói giá thay đổi từ 50% trở lên. Bạn có chắc muốn lưu mức giá này?')
+        if (!confirmUnusualPriceChange) {
+          setSavingPlans(false)
+          return
+        }
+      }
+
       const payload = {
         plans: [
           {
@@ -536,7 +569,8 @@ export default function ProviderVehicleHubPage() {
         outOfRadiusRate: Number(surcharges.outOfRadiusRate) || 0,
         waitingFreeMinutes: Number(surcharges.waitingFreeMinutes) || 0,
         waitingRate: Number(surcharges.waitingRate) || 0,
-        weekendSurchargeRatio: Number(surcharges.weekendSurchargeRatio) || 0
+        weekendSurchargeRatio: Number(surcharges.weekendSurchargeRatio) || 0,
+        confirmUnusualPriceChange
       }
 
       const updated = await providerService.updateVehicleRentalPlans(id, payload)
@@ -555,6 +589,29 @@ export default function ProviderVehicleHubPage() {
       })
     } finally {
       setSavingPlans(false)
+    }
+  }
+
+  async function handleSaveDepositPolicy() {
+    const ratioValue = depositPolicy.depositRatioOverride === ''
+      ? null
+      : Number(depositPolicy.depositRatioOverride)
+    if (ratioValue != null && (ratioValue < 0.01 || ratioValue > 1)) {
+      setToast({ type: 'error', message: 'Tỷ lệ cọc riêng phải từ 1% đến 100%.' })
+      return
+    }
+    try {
+      setSavingDepositPolicy(true)
+      const updated = await providerService.updateVehicleDepositPolicy(id, {
+        depositRatioOverride: ratioValue,
+        minimumDepositAmount: Number(depositPolicy.minimumDepositAmount || 0),
+      })
+      setDepositPolicyInfo(updated)
+      setToast({ type: 'success', message: 'Đã cập nhật chính sách đặt cọc cho xe.' })
+    } catch (err) {
+      setToast({ type: 'error', message: err.response?.data?.message || err.message || 'Không thể cập nhật chính sách đặt cọc.' })
+    } finally {
+      setSavingDepositPolicy(false)
     }
   }
 
@@ -716,6 +773,19 @@ export default function ProviderVehicleHubPage() {
                   </span>
                 </div>
               </div>
+              {licensePlateHistory.length > 0 && (
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="text-sm font-bold text-slate-900">Lịch sử biển số</h4>
+                  <div className="mt-3 space-y-2">
+                    {licensePlateHistory.map((entry) => (
+                      <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700">
+                        <span><strong>{entry.previousPlate}</strong> → <strong>{entry.newPlate}</strong></span>
+                        <span>{entry.changedBy || 'Nhà cung cấp'} · {new Date(entry.changedAt).toLocaleString('vi-VN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right: Quick actions */}
@@ -1499,6 +1569,28 @@ export default function ProviderVehicleHubPage() {
                       </>
                     )}
                   </button>
+                </div>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-bold text-slate-800">Tỷ lệ cọc riêng của xe</label>
+                      <p className="mb-1 text-[10px] text-slate-500">Để trống để dùng mức mặc định {Math.round(Number(depositPolicyInfo?.providerDefaultRatio ?? 0.3) * 100)}% của nhà cung cấp.</p>
+                      <input type="number" min="0.01" max="1" step="0.01" value={depositPolicy.depositRatioOverride} onChange={(event) => setDepositPolicy((current) => ({ ...current, depositRatioOverride: event.target.value }))} placeholder="Ví dụ 0.5 = 50%" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-800">Mức cọc tối thiểu (VNĐ)</label>
+                      <p className="mb-1 text-[10px] text-slate-500">Hữu ích cho xe giá trị cao; cọc không vượt tổng tiền thuê.</p>
+                      <input type="number" min="0" step="100000" value={depositPolicy.minimumDepositAmount} onChange={(event) => setDepositPolicy((current) => ({ ...current, minimumDepositAmount: event.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold" />
+                    </div>
+                  </div>
+                  <div className="min-w-56 rounded-lg bg-white p-3 text-xs text-slate-600 shadow-xs">
+                    <p>Tỷ lệ hiệu lực: <strong>{Math.round(Number(depositPolicyInfo?.effectiveRatio ?? depositPolicyInfo?.providerDefaultRatio ?? 0.3) * 100)}%</strong></p>
+                    <p>Ví dụ đơn {Number(depositPolicyInfo?.exampleRentalAmount ?? 10000000).toLocaleString('vi-VN')} đ: <strong className="text-emerald-700">{Number(depositPolicyInfo?.exampleDepositAmount ?? 0).toLocaleString('vi-VN')} đ</strong></p>
+                    <button type="button" onClick={handleSaveDepositPolicy} disabled={savingDepositPolicy} className="mt-2 w-full rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white disabled:opacity-50">{savingDepositPolicy ? 'Đang lưu...' : 'Lưu chính sách cọc'}</button>
+                  </div>
                 </div>
               </div>
 
