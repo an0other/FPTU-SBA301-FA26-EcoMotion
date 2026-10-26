@@ -77,6 +77,17 @@ export const providerService = {
     return data?.data
   },
 
+  async uploadVehicleImage(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const { data } = await apiClient.post('/provider/vehicles/images/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return data?.data
+  },
+
   async getProviderScheduleStats() {
     const { data } = await apiClient.get('/provider/schedules/stats')
     return data?.data
