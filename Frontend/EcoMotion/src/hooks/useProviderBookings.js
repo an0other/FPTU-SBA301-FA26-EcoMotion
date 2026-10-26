@@ -6,6 +6,7 @@ export function useProviderBookings(status = 'ALL') {
   const [summary, setSummary] = useState({
     total: 0,
     pending: 0,
+    awaitingDeposit: 0,
     accepted: 0,
     confirmed: 0,
     inProgress: 0,

@@ -8,7 +8,6 @@ import {
   getTripStatusConfig,
   serializeTripFilters,
   STATUS_FILTER_OPTIONS,
-  TRIP_STATUS_CONFIG,
   TRIP_VIEWS,
 } from '../src/utils/driverTripUtils.js'
 import { createDriverTripService, driverTripService } from '../src/services/driverTripService.js'

@@ -4,8 +4,9 @@ import { BOOKING_FILTERS, BOOKING_STATUS_META, bookingMatchesFilter, bookingStat
 import { isPaymentRequestExpired } from '../src/utils/paymentDisplay.js'
 
 const statuses = ['PENDING', 'REJECTED', 'ACCEPTED', 'CONFIRMED', 'DRIVER_ASSIGNED',
-  'DRIVER_CONFIRMED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_EXTRA_CHARGE_CONFIRMATION',
-  'AWAITING_FINAL_PAYMENT', 'COMPLETED', 'CANCELLED']
+  'AWAITING_DEPOSIT', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION',
+  'IN_PROGRESS', 'AWAITING_END_CONFIRMATION', 'AWAITING_EXTRA_CHARGE_CONFIRMATION',
+  'AWAITING_FINAL_PAYMENT', 'COMPLETED', 'CANCELLATION_REVIEW', 'CANCELLED']
 
 test('all backend booking states have one label, style and exclusive filter group', () => {
   const groupIds = BOOKING_FILTERS.filter((filter) => filter.id !== 'ALL').map((filter) => filter.id)
@@ -18,9 +19,9 @@ test('all backend booking states have one label, style and exclusive filter grou
   }
 })
 
-test('payment actions exist only for accepted and awaiting final payment', () => {
+test('payment actions exist only for deposit and final-payment states', () => {
   const withAction = statuses.filter((status) => bookingStatusMeta(status).action)
-  assert.deepEqual(withAction, ['ACCEPTED', 'AWAITING_FINAL_PAYMENT'])
+  assert.deepEqual(withAction, ['ACCEPTED', 'AWAITING_DEPOSIT', 'AWAITING_FINAL_PAYMENT'])
   assert.ok(bookingStatusMeta('UNKNOWN').label)
 })
 

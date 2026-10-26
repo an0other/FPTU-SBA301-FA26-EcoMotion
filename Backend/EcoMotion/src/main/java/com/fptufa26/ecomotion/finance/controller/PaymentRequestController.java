@@ -1,8 +1,5 @@
 package com.fptufa26.ecomotion.finance.controller;
 
-import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.booking.service.BookingService;
-import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
@@ -45,7 +42,6 @@ import java.util.List;
 public class PaymentRequestController {
 
     private final PaymentRequestService paymentRequestService;
-    private final BookingService bookingService;
 
     // ==========================================
     // 1. Payment Requests (Renter, Provider, Admin)
@@ -64,17 +60,19 @@ public class PaymentRequestController {
     public ApiResponse<List<PaymentRequestResponse>> getPaymentRequestsByBookingCode(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable String bookingCode) {
-        Booking booking = bookingService.findByBookingCode(bookingCode)
-                .or(() -> {
-                    try {
-                        return bookingService.getBookingById(Long.parseLong(bookingCode));
-                    } catch (NumberFormatException e) {
-                        return java.util.Optional.empty();
-                    }
-                })
-                .orElseThrow(() -> new ResourceNotFoundException("Booking not found: " + bookingCode));
-        return ApiResponse.success(paymentRequestService.getPaymentRequestsByBooking(
-                booking.getId(), principal.getUserId()));
+        return ApiResponse.success(paymentRequestService.getPaymentRequestsByBookingCode(
+                bookingCode, principal.getUserId()));
+    }
+
+    @PostMapping({"/api/v1/renter/bookings/{bookingCode}/payment-requests/deposit/reissue",
+            "/api/renter/bookings/{bookingCode}/payment-requests/deposit/reissue"})
+    @PreAuthorize("hasRole('RENTER')")
+    @Operation(summary = "Cấp lại yêu cầu đặt cọc đã hết hạn nếu lịch xe vẫn còn trống")
+    public ApiResponse<PaymentRequestResponse> reissueDeposit(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(paymentRequestService.reissueDepositByBookingCode(
+                bookingCode, principal.getUserId()));
     }
 
     @GetMapping({"/api/v1/payment-requests/{id}", "/api/payment-requests/{id}"})
@@ -98,7 +96,7 @@ public class PaymentRequestController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file,
-            @RequestParam BigDecimal transferredAmount,
+            @RequestParam(required = false) BigDecimal transferredAmount,
             @RequestParam(required = false) String transactionReference,
             @RequestParam(required = false) Instant transferredAt,
             @RequestParam(required = false) String note) {

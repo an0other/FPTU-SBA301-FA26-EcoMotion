@@ -1,14 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { adminService } from '../../services/adminService'
 import {
   IconCar,
   IconSearch,
-  IconCheckCircle,
-  IconAlertTriangle,
   IconX,
   IconEye,
   IconTag,
-  IconImage,
 } from '../../components/icons/Icons'
 import VehicleDetailModal from './modals/VehicleDetailModal'
 
@@ -42,11 +39,7 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [previewDocUrl, setPreviewDocUrl] = useState(null)
 
-  useEffect(() => {
-    loadVehicles()
-  }, [statusFilter])
-
-  async function loadVehicles() {
+  const loadVehicles = useCallback(async () => {
     setLoading(true)
     setMessage(null)
     try {
@@ -57,7 +50,11 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter, keyword])
+
+  useEffect(() => {
+    queueMicrotask(loadVehicles)
+  }, [loadVehicles])
 
   function handleSearchSubmit(e) {
     e.preventDefault()
