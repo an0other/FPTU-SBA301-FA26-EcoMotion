@@ -178,9 +178,18 @@ export default function AppHeader({ filters, onSearchSubmit, showViewSwitch = fa
               {user.role === 'PROVIDER' && (
                 <Link
                   to="/provider/bookings"
-                  className="rounded-lg bg-brand-50 border border-brand-200 px-3 py-1.5 text-xs font-bold text-brand-700 transition hover:bg-brand-100"
+                  className="rounded-lg bg-brand-50 border border-brand-200 px-3 py-1.5 text-xs font-bold text-brand-700 transition-colors hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
                 >
                   Quản lý đơn
+                </Link>
+              )}
+
+              {user.role === 'RENTER' && (
+                <Link
+                  to="/renter/bookings"
+                  className="rounded-lg bg-brand-50 border border-brand-200 px-3 py-1.5 text-xs font-bold text-brand-700 transition-colors hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                >
+                  Đơn của tôi
                 </Link>
               )}
 

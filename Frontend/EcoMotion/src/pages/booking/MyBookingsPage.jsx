@@ -71,13 +71,11 @@ export function MyBookingsPage() {
     }
   }, [activeFilter, keyword, page])
 
-  if (!bookings) {
-    return <p className="max-w-3xl mx-auto px-6 py-16 text-sm text-[#14221A]">{error || 'Đang tải đơn...'}</p>
-  }
-
   return (
     <MyBookingsList
       bookings={bookings}
+      loading={!bookings}
+      error={error}
       activeFilter={activeFilter}
       keyword={keyword}
       page={page}
@@ -93,7 +91,6 @@ export function MyBookingsPage() {
         setPage(0)
       }}
       onPageChange={setPage}
-      onSelectBooking={(booking) => navigate(`/renter/bookings/${booking.id}`)}
       onPayDeposit={(booking) => navigate(`/renter/bookings/${booking.id}/payment`)}
       onBookCar={() => navigate('/')}
     />

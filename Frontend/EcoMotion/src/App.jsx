@@ -68,7 +68,14 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/activate" element={<ActivatePage />} />
-      <Route path="/payment/vnpay/callback" element={<VnpayCallbackPage />} />
+      <Route
+        path="/payment/vnpay/callback"
+        element={
+          <BookingShell>
+            <VnpayCallbackPage />
+          </BookingShell>
+        }
+      />
 
       <Route
         path="/policy"
@@ -109,9 +116,9 @@ export default function App() {
         <Route
           path="/renter/bookings/:bookingCode/submitted"
           element={
-            <BookingWizardShell>
+            <BookingShell>
               <SubmittedBookingPage />
-            </BookingWizardShell>
+            </BookingShell>
           }
         />
 
@@ -135,7 +142,11 @@ export default function App() {
 
         <Route
           path="/renter/payments"
-          element={<PaymentHistoryPage />}
+          element={
+            <BookingShell>
+              <PaymentHistoryPage />
+            </BookingShell>
+          }
         />
 
         <Route
@@ -145,12 +156,20 @@ export default function App() {
 
         <Route
           path="/renter/yearly-rental"
-          element={<YearlyRentalPage />}
+          element={
+            <BookingShell>
+              <YearlyRentalPage />
+            </BookingShell>
+          }
         />
 
         <Route
           path="/renter/bookings/:bookingCode/yearly-rental"
-          element={<YearlyRentalPage />}
+          element={
+            <BookingShell>
+              <YearlyRentalPage />
+            </BookingShell>
+          }
         />
       </Route>
 

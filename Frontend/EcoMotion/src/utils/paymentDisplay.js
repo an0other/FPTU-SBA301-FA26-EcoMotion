@@ -25,7 +25,7 @@ export const BOOKING_STATUS_LABELS = {
   PENDING: 'Chờ chấp nhận',
   AWAITING_DEPOSIT: 'Chờ thanh toán cọc',
   REJECTED: 'Đã từ chối',
-  ACCEPTED: 'Chờ thanh toán giữ chỗ',
+  ACCEPTED: 'Chờ thanh toán cọc',
   CONFIRMED: 'Đã xác nhận',
   DRIVER_ASSIGNED: 'Đã phân công tài xế',
   DRIVER_CONFIRMED: 'Tài xế đã xác nhận',

@@ -1,6 +1,6 @@
 export const BOOKING_STATUS_META = {
   PENDING: { label: 'Chờ chủ xe duyệt', group: 'PROCESSING', badgeClass: 'text-slate-700 bg-slate-100 border-slate-200' },
-  AWAITING_DEPOSIT: { label: 'Chờ đặt cọc', group: 'PROCESSING', badgeClass: 'text-amber-800 bg-amber-50 border-amber-200', action: 'Thanh toán cọc' },
+  AWAITING_DEPOSIT: { label: 'Chờ thanh toán cọc', group: 'PROCESSING', badgeClass: 'text-amber-800 bg-amber-50 border-amber-200', action: 'Thanh toán cọc' },
   ACCEPTED: { label: 'Chờ thanh toán cọc', group: 'PROCESSING', badgeClass: 'text-amber-800 bg-amber-50 border-amber-200', action: 'Thanh toán cọc' },
   CONFIRMED: { label: 'Đã xác nhận', group: 'UPCOMING', badgeClass: 'text-emerald-800 bg-emerald-50 border-emerald-200' },
   DRIVER_ASSIGNED: { label: 'Đã phân công tài xế', group: 'UPCOMING', badgeClass: 'text-blue-800 bg-blue-50 border-blue-200' },

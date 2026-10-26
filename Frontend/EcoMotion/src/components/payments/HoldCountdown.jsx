@@ -31,25 +31,35 @@ export function HoldCountdown({ expiresAt, compact = false, className = '' }) {
     none: 'border-slate-200 bg-slate-50 text-slate-700',
   }[urgency]
 
+  const spoken =
+    urgency === 'expired'
+      ? 'Hết thời gian giữ chỗ'
+      : `${label} ${formatCountdown(ms)}`
+
   if (compact) {
     return (
       <span
-        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold ${tone} ${className}`}
-        aria-live="polite"
+        role="status"
+        aria-atomic="true"
+        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold ${tone} ${className}`}
       >
         <Icon name="timer" className="text-sm" />
-        {urgency === 'expired' ? 'Hết hạn' : formatCountdown(ms)}
+        {spoken}
       </span>
     )
   }
 
   return (
-    <div className={`min-w-[11rem] rounded-xl border px-3 py-2 ${tone} ${className}`}>
+    <div
+      role="status"
+      aria-atomic="true"
+      className={`min-w-[11rem] rounded-xl border px-3 py-2 ${tone} ${className}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span>
         <Icon name="timer" className="text-base" />
       </div>
-      <p className="mt-0.5 font-mono text-xl font-bold tabular-nums" aria-live="polite">
+      <p className="mt-0.5 font-mono text-xl font-bold tabular-nums">
         {formatCountdown(ms)}
       </p>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/10">

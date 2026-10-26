@@ -1,9 +1,57 @@
-import { BOOKING_FILTERS, bookingStatusMeta } from '../../utils/bookingStatus';
-import { HoldCountdown } from '../payments/HoldCountdown';
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { BOOKING_FILTERS, bookingStatusMeta } from '../../utils/bookingStatus'
+import { remainingMs } from '../../utils/paymentDisplay'
+import { HoldCountdown } from '../payments/HoldCountdown'
 
+const FOCUS =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2'
+
+function useNow(enabled) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!enabled) return undefined
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [enabled])
+  return now
+}
+
+function BookingSkeleton() {
+  return (
+    <div className="flex flex-col gap-3.5" aria-hidden="true">
+      {[0, 1, 2].map((key) => (
+        <div
+          key={key}
+          className="flex animate-pulse flex-col gap-4 rounded-xl border border-[#E6EBE8] bg-white p-4 md:flex-row md:items-center"
+        >
+          <div className="h-20 w-28 shrink-0 rounded-xl bg-slate-200" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-3 w-32 rounded bg-slate-200" />
+            <div className="h-4 w-48 rounded bg-slate-100" />
+            <div className="h-3 w-40 rounded bg-slate-100" />
+          </div>
+          <div className="h-8 w-28 rounded-full bg-slate-100" />
+          <div className="h-10 w-32 rounded-xl bg-slate-100" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function payAction(booking, holdExpired) {
+  if (!booking.canPay) return null
+  if (holdExpired) return { label: 'Cấp lại', tone: 'renew' }
+  return {
+    label: bookingStatusMeta(booking.status).action || 'Thanh toán cọc',
+    tone: 'pay',
+  }
+}
 
 export const MyBookingsList = ({
   bookings,
+  loading = false,
+  error = '',
   activeFilter,
   keyword,
   page,
@@ -13,160 +61,181 @@ export const MyBookingsList = ({
   onFilterChange,
   onKeywordChange,
   onPageChange,
-  onSelectBooking,
   onPayDeposit,
   onBookCar,
 }) => {
-  const getStatusBadge = (status) => {
-    const meta = bookingStatusMeta(status);
-    return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${meta.badgeClass}`}>{meta.label}</span>;
-  };
+  const watchingHold = (bookings ?? []).some(
+    (booking) => booking.status === 'AWAITING_DEPOSIT' && booking.holdExpiresAt,
+  )
+  const now = useNow(watchingHold)
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Page Title */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#14221A]">Đơn của tôi</h1>
-        <p className="text-sm sm:text-base text-[#14221A]/70 mt-1">
-          Quản lý và theo dõi trạng thái các đơn thuê xe của bạn
-        </p>
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="sticky top-32 z-10 space-y-4 bg-surface pb-3 pt-1">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[#14221A] sm:text-3xl">
+            Đơn của tôi
+          </h1>
+          <p className="mt-1 text-sm text-[#14221A]/70 sm:text-base">
+            Mã đơn, hạn cọc và thao tác kế tiếp trên một hàng.
+          </p>
+        </div>
+
+        <label className="block max-w-xl">
+          <span className="sr-only">Tìm đơn thuê</span>
+          <div className="flex items-center gap-2 rounded-xl border border-[#DDE5E0] bg-white px-4 py-3 shadow-sm focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-500/30">
+            <span className="material-symbols-outlined text-[20px] text-[#14221A]/50" aria-hidden="true">
+              search
+            </span>
+            <input
+              type="search"
+              name="booking-search"
+              autoComplete="off"
+              spellCheck={false}
+              value={keyword}
+              onChange={(event) => onKeywordChange(event.target.value)}
+              placeholder="Tìm theo mã đơn hoặc tên xe…"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[#14221A] outline-none placeholder:text-[#14221A]/45"
+            />
+          </div>
+        </label>
+
+        <div className="w-full overflow-x-auto pb-1">
+          <div className="inline-flex items-center gap-2">
+            {BOOKING_FILTERS.map((tab) => {
+              const isActive = activeFilter === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onFilterChange(tab.id)}
+                  type="button"
+                  aria-pressed={isActive}
+                  className={`cursor-pointer whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${FOCUS} ${
+                    isActive
+                      ? 'border border-transparent bg-brand-700 text-white shadow-xs'
+                      : 'border border-[#E6EBE8] bg-white text-[#14221A] hover:bg-slate-50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
-      <label className="block max-w-xl">
-        <span className="sr-only">Tìm đơn thuê</span>
-        <div className="flex items-center gap-2 rounded-[14px] border border-[#DDE5E0] bg-white px-4 py-3 shadow-sm focus-within:border-[#15803D]">
-          <span className="material-symbols-outlined text-[20px] text-[#14221A]/50">search</span>
-          <input
-            type="search"
-            value={keyword}
-            onChange={(event) => onKeywordChange(event.target.value)}
-            placeholder="Tìm theo mã đơn hoặc tên xe"
-            className="min-w-0 flex-1 bg-transparent text-sm text-[#14221A] outline-none placeholder:text-[#14221A]/45"
-          />
-        </div>
-      </label>
+      {error ? (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {error}
+        </p>
+      ) : null}
 
-      {/* Filter Chips Bar */}
-      <div className="w-full overflow-x-auto pb-2 scrollbar-none">
-        <div className="inline-flex items-center gap-2 shrink-0">
-          {BOOKING_FILTERS.map((tab) => {
-            const isActive = activeFilter === tab.id;
+      {loading || !bookings ? (
+        <BookingSkeleton />
+      ) : bookings.length > 0 ? (
+        <div className="flex flex-col gap-3.5">
+          {bookings.map((booking) => {
+            const meta = bookingStatusMeta(booking.status)
+            const holdMs = remainingMs(booking.holdExpiresAt, now)
+            const holdExpired =
+              booking.status === 'AWAITING_DEPOSIT' && holdMs != null && holdMs <= 0
+            const action = payAction(booking, holdExpired)
+            const showCountdown =
+              booking.status === 'AWAITING_DEPOSIT' &&
+              Boolean(booking.holdExpiresAt) &&
+              !holdExpired
+
             return (
-              <button
-                key={tab.id}
-                onClick={() => onFilterChange(tab.id)}
-                type="button"
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-180 cursor-pointer ${
-                  isActive
-                    ? 'bg-[#15803D] text-white border border-transparent shadow-xs'
-                    : 'bg-white text-[#14221A] border border-[#E6EBE8] hover:bg-[#F7F8F6]'
-                }`}
+              <article
+                key={booking.id}
+                className="rounded-xl border border-[#E6EBE8] bg-white p-4 shadow-card"
               >
-                {tab.label}
-              </button>
-            );
+                <div className="flex flex-col gap-4 min-[390px]:gap-4 lg:flex-row lg:items-center lg:gap-6">
+                  <Link
+                    to={`/renter/bookings/${booking.id}`}
+                    className={`flex min-w-0 flex-1 flex-col gap-3 rounded-lg sm:flex-row sm:items-center sm:gap-4 ${FOCUS}`}
+                  >
+                    <img
+                      alt=""
+                      width={112}
+                      height={80}
+                      className="h-20 w-28 shrink-0 rounded-xl object-cover"
+                      src={booking.vehicle.image}
+                    />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p
+                        className="font-mono text-xs font-bold tracking-wide text-[#14221A]"
+                        translate="no"
+                      >
+                        {booking.id}
+                      </p>
+                      <h2 className="truncate text-base font-bold text-[#14221A]">
+                        {booking.vehicle.name}
+                        {booking.vehicle.year ? ` (${booking.vehicle.year})` : ''}
+                      </h2>
+                      <p className="text-sm text-[#14221A]/80">{booking.formattedStart}</p>
+                      <p className="truncate text-sm text-[#14221A]/70">{booking.pickupAddress}</p>
+                      {booking.atRisk ? (
+                        <p className="text-xs font-semibold text-amber-800">Xe có nguy cơ về trễ</p>
+                      ) : null}
+                    </div>
+                    <p className="shrink-0 text-base font-bold tabular-nums text-[#14221A] sm:text-right">
+                      {booking.totalAmount.toLocaleString('vi-VN')}&nbsp;đ
+                    </p>
+                  </Link>
+
+                  <div className="flex min-w-0 shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    <div className="flex min-w-0 flex-col items-start gap-1.5 sm:items-end">
+                      <span
+                        className={`inline-flex max-w-full items-center rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap ${meta.badgeClass}`}
+                      >
+                        {holdExpired ? 'Hết hạn giữ chỗ' : meta.label}
+                      </span>
+                      {showCountdown ? <HoldCountdown expiresAt={booking.holdExpiresAt} compact /> : null}
+                    </div>
+                    {action ? (
+                      <button
+                        type="button"
+                        onClick={() => onPayDeposit(booking)}
+                        className={`cursor-pointer whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium shadow-xs transition-colors ${FOCUS} ${
+                          action.tone === 'renew'
+                            ? 'border border-brand-700 bg-white text-brand-800 hover:bg-brand-50'
+                            : 'bg-brand-700 text-white hover:bg-brand-800'
+                        }`}
+                      >
+                        {action.label}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            )
           })}
         </div>
-      </div>
-
-      {/* Booking List */}
-      {bookings.length > 0 ? (
-        <div className="flex flex-col gap-3.5 transition-opacity duration-180">
-          {bookings.map((booking) => (
-            <article
-              key={booking.id}
-              onClick={() => onSelectBooking(booking)}
-              className="bg-white rounded-[16px] border border-[#E6EBE8] p-4 shadow-[0_8px_24px_rgba(20,34,26,0.06)] hover:-translate-y-0.5 transition-all duration-180 cursor-pointer"
-            >
-              <div className="flex flex-col md:flex-row md:items-center gap-4 lg:gap-6 min-h-[76px]">
-                {/* Vehicle Thumbnail */}
-                <img
-                  alt={booking.vehicle.name}
-                  className="w-28 h-20 rounded-[12px] object-cover shrink-0"
-                  src={booking.vehicle.image}
-                />
-
-                {/* Col 1 ID & Vehicle Name */}
-                <div className="w-full md:w-52 shrink-0">
-                  <span className="font-mono font-bold text-xs text-[#14221A]/70 block leading-tight">
-                    {booking.id}
-                  </span>
-                  <h2 className="font-bold text-base text-[#14221A] mt-0.5 truncate">
-                    {booking.vehicle.name} ({booking.vehicle.year})
-                  </h2>
-                  {booking.atRisk && <p className="mt-1 text-xs font-semibold text-amber-700">⚠ Xe có nguy cơ về trễ</p>}
-                </div>
-
-                {/* Col 2: Pickup Time */}
-                <div className="w-full md:w-56 shrink-0 flex items-center gap-2 text-sm text-[#14221A]">
-                  <span className="material-symbols-outlined text-[18px] text-[#14221A]/60 shrink-0">
-                    calendar_today
-                  </span>
-                  <span>{booking.formattedStart}</span>
-                </div>
-
-                {/* Col 3: Address */}
-                <div className="flex-1 min-w-0 text-sm text-[#14221A]/80 truncate">
-                  {booking.pickupAddress}
-                </div>
-
-                {/* Col 4: Price */}
-                <div className="w-full md:w-32 shrink-0 md:text-right">
-                  <span className="text-base font-bold text-[#14221A] whitespace-nowrap">
-                    {booking.totalAmount.toLocaleString('vi-VN')} đ
-                  </span>
-                </div>
-
-                {/* Col 5: Badge */}
-                <div className="shrink-0 flex flex-col items-start md:items-end gap-1.5">
-                  {getStatusBadge(booking.status)}
-                  {booking.status === 'AWAITING_DEPOSIT' ? (
-                    <HoldCountdown expiresAt={booking.holdExpiresAt} compact />
-                  ) : null}
-                </div>
-
-                {/* Col 6: Contextual Action (if ACCEPTED) */}
-                {booking.canPay && (
-                  <div className="shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPayDeposit(booking);
-                      }}
-                      className="px-4 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-medium shadow-xs whitespace-nowrap cursor-pointer active:scale-98 transition-all duration-180"
-                      type="button"
-                    >
-                      {bookingStatusMeta(booking.status).action}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
       ) : (
-        /* Empty State */
-        <div className="flex flex-col items-center justify-center text-center py-16 px-4 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
-          <div className="w-16 h-16 rounded-full bg-[#E8F6EE] flex items-center justify-center mb-4 text-[#15803D]">
-            <span className="material-symbols-outlined text-[32px]">directions_car</span>
+        <div className="flex flex-col items-center justify-center rounded-xl border border-[#E6EBE8] bg-white px-4 py-16 text-center shadow-card">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+            <span className="material-symbols-outlined text-[32px]" aria-hidden="true">
+              directions_car
+            </span>
           </div>
-          <h3 className="text-lg font-bold text-[#14221A] mb-1">Chưa có đơn ở trạng thái này</h3>
-          <p className="text-sm text-[#14221A]/70 max-w-sm mb-6">
+          <h3 className="mb-1 text-lg font-bold text-[#14221A]">Chưa có đơn ở trạng thái này</h3>
+          <p className="mb-6 max-w-sm text-sm text-[#14221A]/70">
             Bạn chưa có đơn thuê xe nào trong danh mục này.
           </p>
           <button
             onClick={onBookCar}
-            className="px-6 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-semibold shadow-xs cursor-pointer active:scale-98 transition-all duration-180"
+            className={`cursor-pointer rounded-xl bg-brand-700 px-6 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-brand-800 ${FOCUS}`}
             type="button"
           >
-            Khám phá & Đặt xe
+            Khám phá &amp; Đặt xe
           </button>
         </div>
       )}
 
-      {total > 0 && (
-        <div className="flex flex-col gap-3 rounded-[14px] border border-[#E6EBE8] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-[#14221A]/70">
+      {total > 0 && !loading ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-[#E6EBE8] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm tabular-nums text-[#14221A]/70">
             Hiển thị {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} trong {total} đơn
           </p>
           <div className="flex items-center gap-2">
@@ -174,24 +243,24 @@ export const MyBookingsList = ({
               type="button"
               disabled={page === 0}
               onClick={() => onPageChange(Math.max(0, page - 1))}
-              className="rounded-[10px] border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] disabled:cursor-not-allowed disabled:opacity-40"
+              className={`rounded-lg border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS}`}
             >
               Trang trước
             </button>
-            <span className="min-w-20 text-center text-sm font-semibold text-[#14221A]">
+            <span className="min-w-20 text-center text-sm font-semibold tabular-nums text-[#14221A]">
               Trang {page + 1}/{Math.max(1, Math.ceil(total / pageSize))}
             </span>
             <button
               type="button"
               disabled={!hasMore}
               onClick={() => onPageChange(page + 1)}
-              className="rounded-[10px] border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] disabled:cursor-not-allowed disabled:opacity-40"
+              className={`rounded-lg border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS}`}
             >
               Trang sau
             </button>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
-  );
-};
+  )
+}

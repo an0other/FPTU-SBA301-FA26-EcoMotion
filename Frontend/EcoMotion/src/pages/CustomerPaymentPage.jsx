@@ -31,7 +31,7 @@ function Icon({ name, className = '' }) {
 }
 
 const STATUS_BADGES = {
-  PENDING: { label: 'Chờ thanh toán', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
+  PENDING: { label: 'Chờ thanh toán cọc', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
   PROOF_SUBMITTED: { label: 'Chờ đối soát biên lai', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
   PARTIALLY_PAID: { label: 'Thanh toán một phần', bg: 'bg-orange-50 text-orange-800 border-orange-200' },
   CONFIRMED: { label: 'Đã xác nhận thanh toán', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
@@ -253,6 +253,12 @@ export default function CustomerPaymentPage() {
   }
 
   const badge = STATUS_BADGES[selectedRequest.status] || { label: selectedRequest.status, bg: 'bg-slate-100 text-slate-700' }
+  const badgeLabel =
+    selectedRequest.status === 'PENDING'
+      ? selectedRequest.paymentType === 'FINAL_BALANCE'
+        ? 'Chờ thanh toán quyết toán'
+        : 'Chờ thanh toán cọc'
+      : badge.label
   const requestExpired = isPaymentRequestExpired(selectedRequest, currentTime)
   const canSendProof = !requestExpired && ['PENDING', 'PARTIALLY_PAID', 'REJECTED'].includes(selectedRequest.status)
   const title = selectedRequest.paymentType === 'FINAL_BALANCE' ? 'Thanh toán quyết toán' : 'Thanh toán đặt cọc'
@@ -261,7 +267,7 @@ export default function CustomerPaymentPage() {
     <div className="pb-24 sm:pb-10">
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
 
-      <div className="sticky top-0 z-20 border-b border-[#E6EBE8] bg-white/95 px-4 py-3 backdrop-blur-sm sm:px-6">
+      <div className="sticky top-32 z-10 border-b border-[#E6EBE8] bg-white px-4 py-3 sm:px-6">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3">
           <Link
             to={bookingHref}
@@ -271,7 +277,7 @@ export default function CustomerPaymentPage() {
             Đơn {selectedRequest.bookingCode}
           </Link>
           <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${badge.bg}`}>
-            {badge.label}
+            {badgeLabel}
           </span>
           <div className="ml-auto">
             <HoldCountdown expiresAt={selectedRequest.expiresAt} />
