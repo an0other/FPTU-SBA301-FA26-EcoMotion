@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
-import { BookingSubnav } from '../components/booking/BookingSubnav'
 import {
   IconAlertTriangle,
   IconArrowLeft,
@@ -171,7 +170,6 @@ export default function VehicleDetailPage() {
   return (
     <div className="min-h-screen bg-surface">
       <AppHeader />
-      <BookingSubnav />
 
       <nav aria-label="Đường dẫn trang" className="border-b border-slate-200 bg-white py-3">
         <div className="mx-auto flex max-w-[1400px] items-center px-4 text-xs sm:px-6">

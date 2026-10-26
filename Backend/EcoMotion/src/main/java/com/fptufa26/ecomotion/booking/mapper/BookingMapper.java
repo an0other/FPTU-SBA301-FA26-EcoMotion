@@ -16,6 +16,7 @@ import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
+import com.fptufa26.ecomotion.booking.enums.BookingActionKind;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
@@ -110,7 +111,11 @@ public interface BookingMapper {
             boolean canPay,
             boolean atRisk,
             String riskMessage,
-            Instant holdExpiresAt
+            Instant holdExpiresAt,
+            Instant endTime,
+            BigDecimal depositAmount,
+            String driverName,
+            BookingActionKind actionKind
     ) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
@@ -145,7 +150,11 @@ public interface BookingMapper {
                 canPay,
                 atRisk,
                 riskMessage,
-                holdExpiresAt);
+                holdExpiresAt,
+                endTime,
+                depositAmount,
+                driverName,
+                actionKind);
     }
 
     default BookingDetailResponse toDetail(Booking booking,
