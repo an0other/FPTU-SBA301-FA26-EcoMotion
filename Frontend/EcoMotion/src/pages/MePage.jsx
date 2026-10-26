@@ -98,11 +98,19 @@ export default function MePage() {
           EcoMotion <span className="text-[11px] font-semibold text-brand-600">VN</span>
         </Link>
         <div className="flex items-center gap-2">
+          {data?.role === 'RENTER' ? (
+            <Link
+              to="/renter/bookings"
+              className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-2.5 text-[13px] font-semibold text-brand-800 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+            >
+              Đơn của tôi
+            </Link>
+          ) : null}
           <Link
             to={backTo}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-100"
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
           >
-            ← Quay lại
+            Quay lại
           </Link>
           <button
             type="button"
