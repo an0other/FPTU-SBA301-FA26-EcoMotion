@@ -82,6 +82,16 @@ public class PaymentRequest {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    @Column(name = "first_proof_at")
+    private Instant firstProofAt;
+
+    @Column(name = "reconciliation_deadline")
+    private Instant reconciliationDeadline;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receiving_bank_account_id")
+    private ProviderBankAccount receivingBankAccount;
+
     @Column(name = "confirmed_at")
     private Instant confirmedAt;
 

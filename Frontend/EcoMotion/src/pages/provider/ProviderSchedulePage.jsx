@@ -1,5 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
@@ -29,7 +28,7 @@ export default function ProviderSchedulePage() {
   const itemsPerPage = 6
 
   // Real-time clock ticker (auto-detects expired schedules every 15s)
-  const [nowTime, setNowTime] = useState(Date.now())
+  const [nowTime, setNowTime] = useState(() => Date.now())
 
   // Modal create
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -46,7 +45,7 @@ export default function ProviderSchedulePage() {
   const [cancelingLoading, setCancelingLoading] = useState(false)
 
   // Fetch stats and vehicles
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       const [statsRes, vehiclesRes] = await Promise.all([
         providerService.getProviderScheduleStats(),
@@ -57,10 +56,10 @@ export default function ProviderSchedulePage() {
     } catch (err) {
       console.error('Failed to load schedule stats or vehicles', err)
     }
-  }
+  }, [])
 
   // Fetch schedules
-  const loadSchedules = async () => {
+  const loadSchedules = useCallback(async () => {
     setLoading(true)
     try {
       const params = {}
@@ -78,11 +77,11 @@ export default function ProviderSchedulePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedVehicleId, selectedType, selectedStatus, startDateFilter, endDateFilter])
 
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    queueMicrotask(loadInitialData)
+  }, [loadInitialData])
 
   // Auto-tick and refresh stats every 15 seconds
   useEffect(() => {
@@ -91,12 +90,14 @@ export default function ProviderSchedulePage() {
       loadInitialData()
     }, 15000)
     return () => clearInterval(timer)
-  }, [])
+  }, [loadInitialData])
 
   useEffect(() => {
-    loadSchedules()
-    setCurrentPage(1)
-  }, [selectedVehicleId, selectedType, selectedStatus, startDateFilter, endDateFilter])
+    queueMicrotask(() => {
+      loadSchedules()
+      setCurrentPage(1)
+    })
+  }, [loadSchedules])
 
   // Helper date formatter
   const formatDateTime = (isoString) => {
@@ -582,7 +583,6 @@ export default function ProviderSchedulePage() {
                     const durationText = formatDuration(item.startAt, item.endAt)
                     const isCancelled = item.status === 'CANCELLED'
                     const isPast = new Date(item.endAt).getTime() <= nowTime
-                    const isActive = item.status === 'ACTIVE' && !isPast
 
                     return (
                       <tr

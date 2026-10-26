@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
@@ -49,12 +49,11 @@ export default function ProviderDriverPage() {
   const licenseInputRef = useRef(null)
 
   // Load drivers and stats
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const [driversRes, statsRes] = await Promise.all([
         providerService.getDrivers({
-          search: searchTerm || undefined,
           status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
           sort: sortBy,
         }),
@@ -71,11 +70,11 @@ export default function ProviderDriverPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedStatus, sortBy])
 
   useEffect(() => {
-    loadData()
-  }, [selectedStatus, sortBy])
+    queueMicrotask(loadData)
+  }, [loadData])
 
   // Client-side search for instant filtering
   const filteredDrivers = useMemo(() => {

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { providerBookingService } from '../services/providerBookingService'
 
-export function useAvailableDrivers() {
+export function useAvailableDrivers(bookingCode) {
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -11,7 +11,7 @@ export function useAvailableDrivers() {
 
     async function fetchDrivers() {
       try {
-        const data = await providerBookingService.getAvailableDrivers()
+        const data = await providerBookingService.getAvailableDrivers(bookingCode)
         if (active) {
           setDrivers(data)
           setLoading(false)
@@ -29,20 +29,20 @@ export function useAvailableDrivers() {
     return () => {
       active = false
     }
-  }, [])
+  }, [bookingCode])
 
   const refetch = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await providerBookingService.getAvailableDrivers()
+      const data = await providerBookingService.getAvailableDrivers(bookingCode)
       setDrivers(data)
     } catch (err) {
       setError(err?.message || 'Không thể tải danh sách tài xế.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [bookingCode])
 
   return {
     drivers,

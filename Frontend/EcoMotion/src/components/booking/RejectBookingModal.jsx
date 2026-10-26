@@ -33,10 +33,10 @@ export default function RejectBookingModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+      <div className="relative w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200">
         <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600">
             <IconAlertTriangle className="h-6 w-6" />
           </div>
           <div>
@@ -84,7 +84,7 @@ export default function RejectBookingModal({
           </div>
 
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-            Hành động này sẽ cập nhật trạng thái đơn thành <strong>Từ chối (REJECTED)</strong> và không thể hoàn tác.
+            Hành động này sẽ cập nhật trạng thái đơn thành <strong>Đã từ chối</strong> và không thể hoàn tác.
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">

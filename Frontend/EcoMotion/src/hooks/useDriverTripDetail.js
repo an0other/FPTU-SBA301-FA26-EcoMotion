@@ -35,9 +35,9 @@ export function useDriverTripDetail(tripIdOrCode) {
 
   useEffect(() => {
     let active = true
-    if (active) {
-      fetchDetail()
-    }
+    queueMicrotask(() => {
+      if (active) fetchDetail()
+    })
     return () => {
       active = false
     }

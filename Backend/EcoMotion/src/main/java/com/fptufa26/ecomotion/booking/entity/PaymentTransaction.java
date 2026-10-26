@@ -49,6 +49,9 @@ public class PaymentTransaction {
     @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;
 
+    @Column(name = "applied_amount", precision = 14, scale = 2)
+    private BigDecimal appliedAmount = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 3)
     private PaymentDirection direction;
@@ -59,6 +62,24 @@ public class PaymentTransaction {
 
     @Column(name = "gateway_ref", length = 100)
     private String gatewayRef;
+
+    @Column(name = "vnp_txn_ref", length = 100)
+    private String vnpTxnRef;
+
+    @Column(name = "vnp_transaction_no", length = 100)
+    private String vnpTransactionNo;
+
+    @Column(name = "vnp_bank_code", length = 20)
+    private String vnpBankCode;
+
+    @Column(name = "vnp_card_type", length = 50)
+    private String vnpCardType;
+
+    @Column(name = "vnp_pay_date", length = 50)
+    private String vnpPayDate;
+
+    @Column(name = "vnp_response_code", length = 20)
+    private String vnpResponseCode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -77,6 +98,13 @@ public class PaymentTransaction {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "payment_request_id")
     private com.fptufa26.ecomotion.finance.entity.PaymentRequest paymentRequest;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receiving_bank_account_id")
+    private com.fptufa26.ecomotion.finance.entity.ProviderBankAccount receivingBankAccount;
+
+    @Column(name = "processing_note", length = 500)
+    private String processingNote;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "confirmed_by_id")
@@ -114,6 +142,9 @@ public class PaymentTransaction {
         }
         if (verificationMethod == null) {
             verificationMethod = com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED;
+        }
+        if (appliedAmount == null) {
+            appliedAmount = BigDecimal.ZERO;
         }
     }
 

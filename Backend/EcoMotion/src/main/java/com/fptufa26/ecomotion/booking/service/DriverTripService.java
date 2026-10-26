@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.service;
 
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
@@ -28,7 +29,20 @@ public interface DriverTripService {
 
     DriverTripDetailResponse finishTrip(Long currentUserId, String tripIdOrCode);
 
+    DriverTripDetailResponse reportUnavailable(Long currentUserId, String tripIdOrCode,
+                                               ReportDriverIssueRequest request);
+
     TripLocationResponse recordLocation(Long currentUserId, String tripIdOrCode, LocationUpdateRequest request);
 
     TripTrackingResponse getTripTracking(Long currentUserId, String tripIdOrCode);
+
+    DriverTripDetailResponse rejectTrip(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest request);
+
+    com.fptufa26.ecomotion.booking.entity.TripIncident reportIncident(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest request);
+
+    java.util.List<com.fptufa26.ecomotion.booking.entity.TripIncident> listIncidents(Long currentUserId, String tripIdOrCode);
+
+    com.fptufa26.ecomotion.booking.entity.TripEvidence uploadEvidence(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest request);
+
+    java.util.List<com.fptufa26.ecomotion.booking.entity.TripEvidence> listEvidence(Long currentUserId, String tripIdOrCode);
 }

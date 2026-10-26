@@ -5,6 +5,10 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository;
 import com.fptufa26.ecomotion.seed.DevDataSeeder;
+import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
+import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
+import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +44,12 @@ class RenterCheckoutApiIntegrationTest {
     @Autowired
     private VehicleScheduleRepository vehicleScheduleRepository;
 
+    @Autowired
+    private ProviderBankAccountRepository bankAccountRepository;
+
+    @Autowired
+    private VehicleRepository vehicleRepository;
+
     @Test
     @DisplayName("legacy checkout is disabled for accepted bookings")
     void checkoutDepositLocksSchedule() throws Exception {
@@ -50,8 +60,6 @@ class RenterCheckoutApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("LEGACY_CHECKOUT_DISABLED"));
 
         String code = createBooking(token, "DAILY", 3, "2026-12-05T01:00:00Z");
-        accept(code);
-
         mockMvc.perform(post("/api/renter/bookings/" + code + "/checkout")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -60,8 +68,8 @@ class RenterCheckoutApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("LEGACY_CHECKOUT_DISABLED"));
 
         Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
-        assertThat(booking.getStatus()).isEqualTo(BookingStatus.ACCEPTED);
-        assertThat(vehicleScheduleRepository.findByBooking_Id(booking.getId())).isEmpty();
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
+        assertThat(vehicleScheduleRepository.findByBooking_Id(booking.getId())).hasSize(1);
     }
 
     @Test
@@ -78,8 +86,8 @@ class RenterCheckoutApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("LEGACY_CHECKOUT_DISABLED"));
 
         Booking booking = bookingRepository.findByBookingCode(code).orElseThrow();
-        assertThat(booking.getStatus()).isEqualTo(BookingStatus.PENDING);
-        assertThat(vehicleScheduleRepository.findByBooking_Id(booking.getId())).isEmpty();
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
+        assertThat(vehicleScheduleRepository.findByBooking_Id(booking.getId())).hasSize(1);
     }
 
     @Test
@@ -108,6 +116,7 @@ class RenterCheckoutApiIntegrationTest {
                 .getResponse()
                 .getContentAsString());
         JsonNode vehicle = vehicles.get("data").get(0);
+        ensureBankAccount(vehicle.get("id").asLong());
         JsonNode plan = null;
         for (JsonNode candidate : vehicle.get("plans")) {
             if (planType.equals(candidate.get("planType").asText())) {
@@ -136,6 +145,20 @@ class RenterCheckoutApiIntegrationTest {
                 .getResponse()
                 .getContentAsString();
         return objectMapper.readTree(response).get("data").get("bookingCode").asText();
+    }
+
+    private void ensureBankAccount(long vehicleId) {
+        var vehicle = vehicleRepository.findById(vehicleId).orElseThrow();
+        if (bankAccountRepository.findByProvider_IdAndStatus(
+                vehicle.getProvider().getId(), BankAccountStatus.ACTIVE).isPresent()) return;
+        ProviderBankAccount account = new ProviderBankAccount();
+        account.setProvider(vehicle.getProvider());
+        account.setBankCode("VCB");
+        account.setBankName("Vietcombank");
+        account.setAccountNumber("0123456789");
+        account.setAccountHolderName("ECOMOTION TEST");
+        account.setStatus(BankAccountStatus.ACTIVE);
+        bankAccountRepository.saveAndFlush(account);
     }
 
     private void accept(String bookingCode) {

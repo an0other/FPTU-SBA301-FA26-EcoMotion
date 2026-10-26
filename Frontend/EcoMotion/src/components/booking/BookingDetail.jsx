@@ -4,6 +4,7 @@ import { CancelBookingModal } from './CancelBookingModal';
 import { bookingStatusMeta } from '../../utils/bookingStatus';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
+import LiveMapViewer from '../map/LiveMapViewer';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
@@ -14,13 +15,19 @@ const DISPUTE_LABELS = {
 
 export const BookingDetail = ({
   booking,
+  operationalRisk,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
   onCancelBooking,
   onCompleteBooking,
+  onConfirmStart,
   onOpenDispute,
   onEditRequest,
+  trackingData,
+  trackingLoading,
+  trackingError,
+  onRefreshTracking,
 }) => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [complaintCategory, setComplaintCategory] = useState('');
@@ -36,7 +43,7 @@ export const BookingDetail = ({
     try {
       await onOpenDispute({
         category: complaintCategory,
-        chargeType: complaintCategory === 'CHARGE' ? complaintCharge : undefined,
+        chargeId: complaintCategory === 'CHARGE' ? Number(complaintCharge) : undefined,
       });
       setDisputeNote('Đã gửi khiếu nại. Admin sẽ xem xét.');
       setComplaintCategory('');
@@ -72,6 +79,13 @@ export const BookingDetail = ({
           </div>
         </div>
         {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
+        {operationalRisk?.atRisk && (
+          <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-bold">Nguy cơ xe về trễ</p>
+            <p className="mt-1">{operationalRisk.message}</p>
+            <p className="mt-1 text-xs">Nhà cung cấp sẽ chủ động đổi xe, dời lịch hoặc hủy và hoàn tiền nếu cần.</p>
+          </div>
+        )}
       </div>
 
       {/* Main 2-Column Grid */}
@@ -120,11 +134,32 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {['IN_PROGRESS', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking.status) && (
+          {['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION'].includes(booking.status) && (
+            <div className="p-5 text-white bg-cyan-700 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold">Tài xế đã đến điểm đón</h2>
+                <p className="text-xs sm:text-sm text-white/90 mt-1">Chuyến chỉ bắt đầu sau khi cả bạn và tài xế cùng xác nhận.</p>
+              </div>
+              {booking.canConfirmStart ? <button
+                onClick={async () => {
+                  setActionError('');
+                  try {
+                    await onConfirmStart(booking.id);
+                  } catch (err) {
+                    setActionError(readErrorMessage(err));
+                  }
+                }}
+                type="button"
+                className="px-5 py-2.5 bg-white text-cyan-800 font-bold text-sm rounded-[12px]"
+              >Xác nhận bắt đầu chuyến</button> : <p className="text-sm font-medium">Đã xác nhận, đang chờ tài xế</p>}
+            </div>
+          )}
+
+          {['IN_PROGRESS', 'AWAITING_END_CONFIRMATION', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking.status) && (
             <div className="p-5 text-white bg-[#15803D] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <h2 className="text-base font-bold text-white">
-                  {booking.status === 'IN_PROGRESS' ? 'Chuyến đang diễn ra' : 'Tài xế đã kết thúc chuyến'}
+                  {booking.status === 'IN_PROGRESS' ? 'Chuyến đang diễn ra' : 'Đang xác nhận kết thúc chuyến'}
                 </h2>
                 <p className="text-xs sm:text-sm text-white/90">
                   {booking.actualStartTime
@@ -153,11 +188,28 @@ export const BookingDetail = ({
             </div>
           )}
 
+          {booking.status === 'AWAITING_DEPOSIT' && (
+            <div className="p-5 bg-[#E8F6EE] border border-[#15803D]/30 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-[#15803D]">Lịch xe đang được giữ cho bạn</h2>
+                <p className="text-xs text-gray-600 mt-1">Hãy thanh toán cọc bằng VietQR và gửi biên lai trong thời hạn hiển thị.</p>
+              </div>
+              {booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-[#15803D] text-white font-semibold text-sm rounded-[12px]">Thanh toán cọc</button> : null}
+            </div>
+          )}
+
+          {booking.status === 'CANCELLATION_REVIEW' && (
+            <div className="p-5 bg-orange-50 border border-orange-200 rounded-[16px]">
+              <h2 className="text-base font-bold text-orange-900">Đang đối soát yêu cầu huỷ</h2>
+              <p className="text-xs text-orange-800 mt-1">Biên lai đã được gửi nên hệ thống cần kiểm tra khoản tiền trước khi huỷ hoặc hoàn tiền.</p>
+            </div>
+          )}
+
           {booking.status === 'AWAITING_FINAL_PAYMENT' && (
             <div className="p-5 bg-purple-50 border border-purple-200 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-purple-900">Đã chốt quyết toán</h2>
-                <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư bằng VietQR để hoàn tất đơn thuê.</p>
+                <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư qua cổng thanh toán VNPAY để hoàn tất đơn thuê.</p>
               </div>
               {booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
                 Thanh toán số dư
@@ -190,7 +242,7 @@ export const BookingDetail = ({
                   type="button"
                   className="px-6 py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm rounded-[12px] shadow-sm transition-all cursor-pointer whitespace-nowrap"
                 >
-                  {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán giữ chỗ ngay'}
+                  {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán cọc'}
                 </button> : null}
               </div>
             </div>
@@ -214,6 +266,31 @@ export const BookingDetail = ({
               >
                 Huỷ đơn
               </button> : null}
+            </div>
+          )}
+
+          {['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(booking.status) && (
+            <div className="bg-white p-5 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-[#14221A]">Vị trí xe theo thời gian thực</h3>
+                  <p className="mt-1 text-xs text-[#6D7A72]">
+                    {trackingData?.latestLocation?.receivedAt
+                      ? `Cập nhật lúc ${new Date(trackingData.latestLocation.receivedAt).toLocaleTimeString('vi-VN')}${trackingData.latestLocation.accuracyMeters ? ` • sai số khoảng ${Math.round(trackingData.latestLocation.accuracyMeters)} m` : ''}`
+                      : 'Đang chờ tín hiệu GPS từ tài xế.'}
+                  </p>
+                </div>
+                <button type="button" onClick={onRefreshTracking} disabled={trackingLoading} className="rounded-lg border border-[#15803D] px-3 py-2 text-xs font-semibold text-[#15803D] disabled:opacity-50">
+                  {trackingLoading ? 'Đang cập nhật...' : 'Làm mới vị trí'}
+                </button>
+              </div>
+              {trackingError ? <p className="mb-3 text-xs text-[#B42318]">{trackingError}</p> : null}
+              <LiveMapViewer
+                vehicleLocation={trackingData?.latestLocation}
+                pickupLocation={{ latitude: booking.pickupLatitude, longitude: booking.pickupLongitude, address: booking.pickupAddress }}
+                vehicleInfo={{ licensePlate: booking.vehicle.plateNumber, name: booking.vehicle.name }}
+                height="340px"
+              />
             </div>
           )}
 
@@ -354,7 +431,7 @@ export const BookingDetail = ({
                 </thead>
                 <tbody className="divide-y divide-[#E6EBE8]">
                   {booking.charges.map((charge) => (
-                    <tr key={`${charge.chargeType}-${charge.description}`}>
+                    <tr key={charge.chargeId ?? `${charge.chargeType}-${charge.description}`}>
                       <td className="py-3 px-3 font-medium text-[#14221A]">{charge.label}</td>
                       <td className="py-3 px-3 text-[#6D7A72]">{charge.description}</td>
                       <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">{charge.formula}</td>
@@ -397,8 +474,8 @@ export const BookingDetail = ({
                       className="w-full h-11 px-3.5 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none cursor-pointer"
                     >
                       <option value="" disabled>-- Chọn khoản --</option>
-                      {booking.charges.map((charge) => (
-                        <option key={charge.chargeType} value={charge.chargeType}>{charge.label}</option>
+                      {booking.charges.filter((charge) => !charge.isWaived && !['BASE_RENTAL', 'DEPOSIT'].includes(charge.chargeType)).map((charge) => (
+                        <option key={charge.chargeId} value={charge.chargeId}>{charge.label}</option>
                       ))}
                     </select>
                   </div>
@@ -492,7 +569,7 @@ export const BookingDetail = ({
 
       {/* Cancel Confirmation Dialog Modal */}
       <CancelBookingModal
-        bookingId={booking.id}
+        bookingCode={booking.id}
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
         refundExplanation={booking.refundExplanation}

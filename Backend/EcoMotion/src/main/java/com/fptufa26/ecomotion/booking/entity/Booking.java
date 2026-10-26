@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.booking.entity;
 
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
+import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
@@ -61,8 +62,17 @@ public class Booking {
     private Driver driver;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
     private BookingStatus status = BookingStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "assignment_mode", length = 30)
+    private com.fptufa26.ecomotion.booking.enums.AssignmentMode assignmentMode = com.fptufa26.ecomotion.booking.enums.AssignmentMode.AUTO_SUGGEST;
+
+    @Column(name = "reassign_count")
+    private Integer reassignCount = 0;
+
+    @Column(name = "assignment_expires_at")
+    private Instant assignmentExpiresAt;
 
     @Column(name = "assigned_at")
     private Instant assignedAt;
@@ -76,14 +86,42 @@ public class Booking {
     @Column(name = "actual_start_at")
     private Instant actualStartAt;
 
+    @Column(name = "driver_start_confirmed_at")
+    private Instant driverStartConfirmedAt;
+
+    @Column(name = "renter_start_confirmed_at")
+    private Instant renterStartConfirmedAt;
+
     @Column(name = "actual_end_at")
     private Instant actualEndAt;
+
+    @Column(name = "driver_end_confirmed_at")
+    private Instant driverEndConfirmedAt;
+
+    @Column(name = "renter_end_confirmed_at")
+    private Instant renterEndConfirmedAt;
 
     @Column(name = "renter_confirmed_at")
     private Instant renterConfirmedAt;
 
     @Column(name = "provider_confirmed_at")
     private Instant providerConfirmedAt;
+
+    @Column(name = "driver_replacement_required", nullable = false)
+    private boolean driverReplacementRequired;
+
+    @Column(name = "driver_issue_reason", length = 500)
+    private String driverIssueReason;
+
+    @Column(name = "driver_issue_reported_at")
+    private Instant driverIssueReportedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "driver_issue_reported_by")
+    private User driverIssueReportedBy;
+
+    @Column(name = "driver_issue_resolved_at")
+    private Instant driverIssueResolvedAt;
 
     @jakarta.persistence.Version
     @Column(name = "version")
@@ -123,6 +161,22 @@ public class Booking {
 
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "operational_resolution", length = 30)
+    private OperationalResolutionType operationalResolution;
+
+    @Column(name = "operational_resolution_reason", length = 500)
+    private String operationalResolutionReason;
+
+    @Column(name = "operational_resolved_at")
+    private Instant operationalResolvedAt;
+
+    @Column(name = "previous_vehicle_id")
+    private Long previousVehicleId;
+
+    @Column(name = "previous_pickup_time")
+    private Instant previousPickupTime;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

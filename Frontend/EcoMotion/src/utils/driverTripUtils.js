@@ -13,8 +13,28 @@ export const TRIP_STATUS_CONFIG = {
   },
   IN_PROGRESS: {
     label: 'Đang thực hiện',
-    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
     dotClass: 'bg-amber-500',
+  },
+  AWAITING_START_CONFIRMATION: {
+    label: 'Đang chờ khách xác nhận bắt đầu',
+    badgeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+    dotClass: 'bg-cyan-500 animate-pulse',
+  },
+  AWAITING_END_CONFIRMATION: {
+    label: 'Đang chờ khách xác nhận kết thúc',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+    dotClass: 'bg-orange-500 animate-pulse',
+  },
+  AWAITING_EXTRA_CHARGE_CONFIRMATION: {
+    label: 'Chờ nhà cung cấp chốt phụ phí',
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    dotClass: 'bg-purple-500',
+  },
+  DRIVER_REPLACEMENT_REQUIRED: {
+    label: 'Đang chờ đổi tài xế',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+    dotClass: 'bg-rose-500 animate-pulse',
   },
   COMPLETED: {
     label: 'Đã hoàn thành',
@@ -71,8 +91,40 @@ export const TRIP_EXECUTION_CONFIG = {
     actionType: 'finish',
     confirmTitle: 'Xác nhận hoàn thành chuyến đi',
     confirmMessage: 'Khách đã xuống xe an toàn tại điểm đến. Bạn có muốn kết thúc chuyến đi này?',
-    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 animate-pulse',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     dotClass: 'bg-emerald-500',
+  },
+  AWAITING_START_CONFIRMATION: {
+    key: 'AWAITING_START_CONFIRMATION',
+    label: 'Bạn đã xác nhận, đang chờ khách bắt đầu chuyến',
+    actionLabel: null,
+    actionType: null,
+    badgeClass: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+    dotClass: 'bg-cyan-500 animate-pulse',
+  },
+  AWAITING_END_CONFIRMATION: {
+    key: 'AWAITING_END_CONFIRMATION',
+    label: 'Bạn đã kết thúc, đang chờ khách xác nhận',
+    actionLabel: null,
+    actionType: null,
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+    dotClass: 'bg-orange-500 animate-pulse',
+  },
+  AWAITING_EXTRA_CHARGE_CONFIRMATION: {
+    key: 'AWAITING_EXTRA_CHARGE_CONFIRMATION',
+    label: 'Đang chờ nhà cung cấp chốt phụ phí',
+    actionLabel: null,
+    actionType: null,
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    dotClass: 'bg-purple-500',
+  },
+  DRIVER_REPLACEMENT_REQUIRED: {
+    key: 'DRIVER_REPLACEMENT_REQUIRED',
+    label: 'Đã báo sự cố, đang chờ nhà cung cấp đổi tài xế',
+    actionLabel: null,
+    actionType: null,
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+    dotClass: 'bg-rose-500 animate-pulse',
   },
   COMPLETED: {
     key: 'COMPLETED',
@@ -112,7 +164,7 @@ export function deriveExecutionStatus(trip) {
     return trip.executionStatus.toUpperCase()
   }
   const status = (trip.status || '').toUpperCase()
-  if (status === 'COMPLETED' || status === 'CANCELLED' || status === 'REJECTED' || status === 'IN_PROGRESS') {
+  if (['COMPLETED', 'CANCELLED', 'REJECTED', 'IN_PROGRESS', 'AWAITING_START_CONFIRMATION', 'AWAITING_END_CONFIRMATION', 'AWAITING_EXTRA_CHARGE_CONFIRMATION', 'DRIVER_REPLACEMENT_REQUIRED'].includes(status)) {
     return status
   }
   if (trip.actualStartAt) return 'IN_PROGRESS'

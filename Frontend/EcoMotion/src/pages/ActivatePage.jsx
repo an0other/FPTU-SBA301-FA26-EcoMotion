@@ -264,7 +264,7 @@ export default function ActivatePage() {
     return () => {
       active = false
     }
-  }, [session?.token])
+  }, [session?.token, activateStatus])
 
   function startCooldown(seconds, setter = setCooldown) {
     clearInterval(timerRef.current)
