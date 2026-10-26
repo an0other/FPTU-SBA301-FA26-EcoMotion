@@ -6,8 +6,6 @@ import {
   IconWallet,
   IconSearch,
   IconX,
-  IconEye,
-  IconCheckCircle,
 } from '../../components/icons/Icons'
 import BookingDetailModal from './modals/BookingDetailModal'
 import DisputeDetailModal from './modals/DisputeDetailModal'
@@ -61,11 +59,15 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   const [refundForm, setRefundForm] = useState({ bookingId: '', amount: '', reason: '' })
 
   useEffect(() => {
-    if (initialSubTab) setSubTab(initialSubTab)
+    if (!initialSubTab) return undefined
+    const timerId = window.setTimeout(() => setSubTab(initialSubTab), 0)
+    return () => window.clearTimeout(timerId)
   }, [initialSubTab])
 
   useEffect(() => {
     loadData()
+    // loadData reads the selected operation filters represented below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subTab, bookingStatus, disputeStatus])
 
   async function loadData() {
@@ -529,6 +531,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
         payment={selectedPayment}
         onClose={() => setSelectedPayment(null)}
       />
+
 
       {/* Mock Refund Modal */}
       {showRefundModal && (

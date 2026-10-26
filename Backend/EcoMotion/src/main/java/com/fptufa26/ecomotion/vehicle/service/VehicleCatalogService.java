@@ -12,6 +12,10 @@ public interface VehicleCatalogService {
 
     Vehicle requireApproved(Long vehicleId);
 
+    Vehicle requireApprovedForUpdate(Long vehicleId);
+
+    Vehicle requireOwnedByProvider(Long vehicleId, Long providerId);
+
     RentalPlan requireActivePlan(Long vehicleId, Long planId);
 
     String coverImageUrl(Long vehicleId);

@@ -1,19 +1,21 @@
-import { useState } from 'react';
-import { BOOKING_FILTERS, bookingMatchesFilter, bookingStatusMeta } from '../../utils/bookingStatus';
+import { BOOKING_FILTERS, bookingStatusMeta } from '../../utils/bookingStatus';
 
 
 export const MyBookingsList = ({
   bookings,
+  activeFilter,
+  keyword,
+  page,
+  pageSize,
+  total,
+  hasMore,
+  onFilterChange,
+  onKeywordChange,
+  onPageChange,
   onSelectBooking,
   onPayDeposit,
   onBookCar,
 }) => {
-  const [activeFilter, setActiveFilter] = useState('ALL');
-
-  const filteredBookings = bookings.filter((b) => {
-    return bookingMatchesFilter(b.status, activeFilter);
-  });
-
   const getStatusBadge = (status) => {
     const meta = bookingStatusMeta(status);
     return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${meta.badgeClass}`}>{meta.label}</span>;
@@ -29,6 +31,20 @@ export const MyBookingsList = ({
         </p>
       </div>
 
+      <label className="block max-w-xl">
+        <span className="sr-only">Tìm đơn thuê</span>
+        <div className="flex items-center gap-2 rounded-[14px] border border-[#DDE5E0] bg-white px-4 py-3 shadow-sm focus-within:border-[#15803D]">
+          <span className="material-symbols-outlined text-[20px] text-[#14221A]/50">search</span>
+          <input
+            type="search"
+            value={keyword}
+            onChange={(event) => onKeywordChange(event.target.value)}
+            placeholder="Tìm theo mã đơn hoặc tên xe"
+            className="min-w-0 flex-1 bg-transparent text-sm text-[#14221A] outline-none placeholder:text-[#14221A]/45"
+          />
+        </div>
+      </label>
+
       {/* Filter Chips Bar */}
       <div className="w-full overflow-x-auto pb-2 scrollbar-none">
         <div className="inline-flex items-center gap-2 shrink-0">
@@ -37,7 +53,7 @@ export const MyBookingsList = ({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveFilter(tab.id)}
+                onClick={() => onFilterChange(tab.id)}
                 type="button"
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-180 cursor-pointer ${
                   isActive
@@ -53,9 +69,9 @@ export const MyBookingsList = ({
       </div>
 
       {/* Booking List */}
-      {filteredBookings.length > 0 ? (
+      {bookings.length > 0 ? (
         <div className="flex flex-col gap-3.5 transition-opacity duration-180">
-          {filteredBookings.map((booking) => (
+          {bookings.map((booking) => (
             <article
               key={booking.id}
               onClick={() => onSelectBooking(booking)}
@@ -77,6 +93,7 @@ export const MyBookingsList = ({
                   <h2 className="font-bold text-base text-[#14221A] mt-0.5 truncate">
                     {booking.vehicle.name} ({booking.vehicle.year})
                   </h2>
+                  {booking.atRisk && <p className="mt-1 text-xs font-semibold text-amber-700">⚠ Xe có nguy cơ về trễ</p>}
                 </div>
 
                 {/* Col 2: Pickup Time */}
@@ -138,6 +155,35 @@ export const MyBookingsList = ({
           >
             Khám phá & Đặt xe
           </button>
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="flex flex-col gap-3 rounded-[14px] border border-[#E6EBE8] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-[#14221A]/70">
+            Hiển thị {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} trong {total} đơn
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => onPageChange(Math.max(0, page - 1))}
+              className="rounded-[10px] border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Trang trước
+            </button>
+            <span className="min-w-20 text-center text-sm font-semibold text-[#14221A]">
+              Trang {page + 1}/{Math.max(1, Math.ceil(total / pageSize))}
+            </span>
+            <button
+              type="button"
+              disabled={!hasMore}
+              onClick={() => onPageChange(page + 1)}
+              className="rounded-[10px] border border-[#DDE5E0] px-3 py-2 text-sm font-medium text-[#14221A] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Trang sau
+            </button>
+          </div>
         </div>
       )}
     </div>

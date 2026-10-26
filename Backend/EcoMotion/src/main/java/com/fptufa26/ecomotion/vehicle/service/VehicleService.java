@@ -51,4 +51,6 @@ public interface VehicleService {
     long countVehiclesByStatus(VehicleStatus status);
 
     long countTotalVehicles();
+
+    Vehicle requireApprovedProviderVehicleForUpdate(Long vehicleId, Long providerId);
 }

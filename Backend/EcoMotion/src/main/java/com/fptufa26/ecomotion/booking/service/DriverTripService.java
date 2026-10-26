@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.service;
 
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
@@ -27,6 +28,9 @@ public interface DriverTripService {
     DriverTripDetailResponse startTrip(Long currentUserId, String tripIdOrCode);
 
     DriverTripDetailResponse finishTrip(Long currentUserId, String tripIdOrCode);
+
+    DriverTripDetailResponse reportUnavailable(Long currentUserId, String tripIdOrCode,
+                                               ReportDriverIssueRequest request);
 
     TripLocationResponse recordLocation(Long currentUserId, String tripIdOrCode, LocationUpdateRequest request);
 

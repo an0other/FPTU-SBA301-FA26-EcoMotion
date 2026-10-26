@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
@@ -135,6 +136,15 @@ public class DriverTripController {
             @PathVariable("tripId") String tripId) {
         DriverTripDetailResponse response = driverTripService.finishTrip(principal.getUserId(), tripId);
         return ApiResponse.success(response);
+    }
+
+    @PostMapping("/{tripId}/report-unavailable")
+    @Operation(summary = "Tài xế báo không thể tiếp tục nhận chuyến do sự cố")
+    public ApiResponse<DriverTripDetailResponse> reportUnavailable(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("tripId") String tripId,
+            @Valid @RequestBody ReportDriverIssueRequest request) {
+        return ApiResponse.success(driverTripService.reportUnavailable(principal.getUserId(), tripId, request));
     }
 
     @PostMapping("/{tripId}/locations")

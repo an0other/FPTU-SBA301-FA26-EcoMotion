@@ -7,6 +7,7 @@ const FUEL_LABELS = {
 
 export const RequestSubmitted = ({
   booking,
+  onPayDeposit,
   onGoToMyBookings,
   onGoToCarPage,
 }) => {
@@ -50,7 +51,7 @@ export const RequestSubmitted = ({
         {/* Header Title & Order Reference */}
         <div className="text-center space-y-2 mb-6">
           <h1 className="text-xl sm:text-2xl font-bold text-[#14221A] tracking-tight">
-            Yêu cầu thuê xe đã được gửi thành công!
+            Lịch xe đã được giữ thành công!
           </h1>
 
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
@@ -59,12 +60,12 @@ export const RequestSubmitted = ({
             </span>
             <span className="inline-flex items-center px-3.5 py-1 rounded-full text-xs font-semibold bg-[#FEF08A] text-amber-900 shadow-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mr-1.5 animate-pulse"></span>
-              Chờ chủ xe duyệt
+              Chờ thanh toán cọc
             </span>
           </div>
 
           <p className="text-sm text-gray-600 max-w-md mx-auto pt-1">
-            Chủ xe sẽ chấp nhận hoặc từ chối. <strong className="text-[#14221A]">Bạn chưa bị trừ tiền.</strong>
+            Hãy thanh toán bằng VietQR trong thời hạn để giữ lịch. <strong className="text-[#14221A]">Số cọc do hệ thống tính theo chính sách của xe.</strong>
           </p>
         </div>
 
@@ -137,7 +138,7 @@ export const RequestSubmitted = ({
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between flex-wrap gap-1">
                 <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  TIỀN CỌC DỰ KIẾN
+                  TIỀN CỌC CẦN THANH TOÁN
                 </span>
                 <span className="text-base sm:text-lg text-[#15803D] font-bold">
                   {booking.depositAmount.toLocaleString('vi-VN')} đ
@@ -147,7 +148,7 @@ export const RequestSubmitted = ({
                 <span className="material-symbols-outlined text-[15px] text-[#15803D]">
                   verified_user
                 </span>
-                Chỉ thu sau khi chủ xe chấp nhận đơn
+                Khoản cọc được trừ vào tổng tiền thuê
               </p>
             </div>
           </div>
@@ -156,8 +157,16 @@ export const RequestSubmitted = ({
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <button
-            onClick={onGoToMyBookings}
+            onClick={onPayDeposit}
             className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 rounded-[12px] bg-[#15803D] text-white font-semibold text-sm hover:bg-[#166534] transition-colors shadow-xs cursor-pointer"
+            type="button"
+          >
+            <span className="material-symbols-outlined text-[20px] mr-2">qr_code_2</span>
+            Thanh toán cọc VietQR
+          </button>
+          <button
+            onClick={onGoToMyBookings}
+            className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 rounded-[12px] bg-white text-[#15803D] border border-[#15803D] font-semibold text-sm hover:bg-emerald-50 transition-colors shadow-xs cursor-pointer"
             type="button"
           >
             <span className="material-symbols-outlined text-[20px] mr-2">receipt_long</span>

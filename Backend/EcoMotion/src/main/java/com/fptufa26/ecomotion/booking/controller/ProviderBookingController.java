@@ -3,12 +3,15 @@ package com.fptufa26.ecomotion.booking.controller;
 import com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest;
 import com.fptufa26.ecomotion.booking.dto.request.AssignDriverRequest;
 import com.fptufa26.ecomotion.booking.dto.request.DenyBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest;
+import com.fptufa26.ecomotion.booking.dto.response.OperationalResolutionResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
 import com.fptufa26.ecomotion.booking.service.ProviderBookingService;
+import com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
@@ -39,6 +42,7 @@ import java.util.List;
 public class ProviderBookingController {
 
     private final ProviderBookingService providerBookingService;
+    private final VehicleOperationalRiskService vehicleOperationalRiskService;
     private final com.fptufa26.ecomotion.booking.service.TripEvidenceService tripEvidenceService;
 
     @GetMapping
@@ -75,6 +79,24 @@ public class ProviderBookingController {
         return ApiResponse.success(providerBookingService.getBookingDetail(principal.getUserId(), id));
     }
 
+    @GetMapping("/{id}/operational-risk")
+    @Operation(summary = "Kiểm tra nguy cơ xe chưa về kịp cho booking kế tiếp")
+    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse> operationalRisk(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("id") String id) {
+        return ApiResponse.success(vehicleOperationalRiskService.assessForProvider(principal.getUserId(), id));
+    }
+
+    @PostMapping("/{id}/operational-resolution")
+    @Operation(summary = "Đổi xe, dời lịch hoặc hủy hoàn tiền khi xe có nguy cơ về trễ")
+    public ApiResponse<OperationalResolutionResponse> resolveOperationalRisk(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("id") String id,
+            @RequestBody @Valid ResolveOperationalRiskRequest request) {
+        return ApiResponse.success(providerBookingService.resolveOperationalRisk(
+                principal.getUserId(), id, request));
+    }
+
     @PostMapping("/{id}/accept")
     @Operation(summary = "Accept a pending booking")
     public ApiResponse<ProviderBookingResponse> acceptBooking(
@@ -99,7 +121,8 @@ public class ProviderBookingController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id,
             @RequestBody @Valid AssignDriverRequest request) {
-        return ApiResponse.success(providerBookingService.assignDriver(principal.getUserId(), id, request.driverId()));
+        return ApiResponse.success(providerBookingService.assignDriver(
+                principal.getUserId(), id, request.driverId(), request.mode()));
     }
 
     @GetMapping("/{id}/charges")
@@ -181,7 +204,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/incidents")
     @Operation(summary = "Get list of reported incidents for a booking")
-    public ApiResponse<List<com.fptufa26.ecomotion.booking.entity.TripIncident>> getBookingIncidents(
+    public ApiResponse<List<com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse>> getBookingIncidents(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.getBookingIncidents(principal.getUserId(), id));

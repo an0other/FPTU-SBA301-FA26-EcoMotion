@@ -6,7 +6,6 @@ export default function AssignDriverModal({
   isOpen,
   onClose,
   onConfirm,
-  bookingId,
   bookingCode,
   currentDriverId,
   submitting,
@@ -20,13 +19,13 @@ export default function AssignDriverModal({
 
   useEffect(() => {
     let active = true
-    if (!isOpen || !bookingId) return
+    if (!isOpen || !bookingCode) return
 
     async function load() {
       setLoading(true)
       setError(null)
       try {
-        const data = await bookingService.getAvailableDrivers(bookingId)
+        const data = await bookingService.getAvailableDrivers(bookingCode)
         if (!active) return
         setDrivers(data || [])
         if (currentDriverId) {
@@ -45,7 +44,7 @@ export default function AssignDriverModal({
     return () => {
       active = false
     }
-  }, [isOpen, bookingId, currentDriverId, reloadTrigger])
+  }, [isOpen, bookingCode, currentDriverId, reloadTrigger])
 
   function handleRetry() {
     setReloadTrigger((v) => v + 1)

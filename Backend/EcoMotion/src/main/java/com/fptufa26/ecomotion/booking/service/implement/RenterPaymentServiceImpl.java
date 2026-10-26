@@ -22,11 +22,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.fptufa26.ecomotion.booking.dto.response.BookingPaymentSummaryResponse;
-import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
-import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 
 import java.math.BigDecimal;
@@ -187,13 +185,21 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        BigDecimal allocatedPayments = transactions.stream()
+                .filter(payment -> payment.getStatus() == PaymentStatus.PAID)
+                .filter(payment -> payment.getDirection() == com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN)
+                .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
+                        ? payment.getAppliedAmount()
+                        : payment.getAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         BigDecimal refundedAmount = transactions.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID)
                 .filter(payment -> payment.getType() == PaymentType.REFUND)
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal netPaidAmount = paidAmount.subtract(refundedAmount);
+        BigDecimal netPaidAmount = paidAmount.subtract(refundedAmount).max(BigDecimal.ZERO);
 
         boolean canCalculateBalance =
                 !yearly
@@ -201,7 +207,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                         && recordedCost != null;
 
         BigDecimal remainingAmount = canCalculateBalance
-                ? recordedCost.subtract(netPaidAmount).max(BigDecimal.ZERO)
+                ? recordedCost.subtract(allocatedPayments).max(BigDecimal.ZERO)
                 : null;
 
         BigDecimal creditAmount = canCalculateBalance

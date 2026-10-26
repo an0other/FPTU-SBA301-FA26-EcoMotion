@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.vehicle.service;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
@@ -44,11 +45,15 @@ class VehicleServiceBoundaryTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private ScheduleService scheduleService;
+
     private VehicleService service;
 
     @BeforeEach
     void setUp() {
-        service = new VehicleServiceImpl(vehicleRepository, vehicleImageService, rentalPlanService, userService);
+        service = new VehicleServiceImpl(
+                vehicleRepository, vehicleImageService, rentalPlanService, userService, scheduleService);
     }
 
     @Test

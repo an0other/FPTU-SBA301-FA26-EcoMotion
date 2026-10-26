@@ -8,6 +8,8 @@ public record ConfirmEndResponse(
         String bookingCode,
         BookingStatus status,
         Instant renterConfirmedAt,
+        Instant driverEndConfirmedAt,
+        Instant actualEndAt,
         boolean completed
 ) {
 }

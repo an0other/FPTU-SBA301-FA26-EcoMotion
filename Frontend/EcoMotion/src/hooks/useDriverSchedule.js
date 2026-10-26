@@ -78,7 +78,7 @@ export function useDriverSchedule(initialOptions = {}) {
   }, [view, status, date, page, size])
 
   useEffect(() => {
-    fetchData()
+    queueMicrotask(fetchData)
   }, [fetchData, user?.id])
 
   return {
