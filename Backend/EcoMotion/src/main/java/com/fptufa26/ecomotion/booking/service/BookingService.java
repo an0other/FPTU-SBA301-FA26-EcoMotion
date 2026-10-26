@@ -34,7 +34,7 @@ public interface BookingService {
     List<BookingSummaryResponse> listMine(Long userId, BookingStatus status);
 
     PageResponse<BookingSummaryResponse> listMinePage(
-            Long userId, BookingStatus status, String group, String keyword, int page, int size);
+            Long userId, BookingStatus status, String group, String keyword, String sort, int page, int size);
 
     CheckoutPreviewResponse previewCheckout(Long userId, String bookingCode);
 

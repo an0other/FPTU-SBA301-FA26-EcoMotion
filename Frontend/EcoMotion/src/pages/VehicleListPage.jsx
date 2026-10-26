@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import AppHeader from '../components/AppHeader'
-import { BookingSubnav } from '../components/booking/BookingSubnav'
 import FilterSidebar from '../components/vehicles/FilterSidebar'
 import VehicleCard from '../components/vehicles/VehicleCard'
 import Pagination from '../components/vehicles/Pagination'
@@ -201,7 +200,6 @@ export default function VehicleListPage() {
     <div className="min-h-screen bg-surface">
       <AppHeader filters={appliedFilters} onSearchSubmit={handleSearchSubmit}
         showViewSwitch view={view} onViewChange={setView} />
-      <BookingSubnav />
 
       <nav aria-label="Đường dẫn trang" className="border-b border-slate-200 bg-white py-3">
         <div className="mx-auto max-w-[1400px] px-4 text-xs sm:px-6">

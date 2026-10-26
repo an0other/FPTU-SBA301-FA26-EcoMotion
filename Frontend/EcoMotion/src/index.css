@@ -59,7 +59,7 @@ body {
 }
 
 html {
-  scroll-padding-top: 8.5rem;
+  scroll-padding-top: 5rem;
 }
 
 .leaflet-interactive[role='button']:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }

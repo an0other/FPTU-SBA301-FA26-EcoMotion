@@ -1,7 +1,6 @@
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
 import AppHeader from './components/AppHeader'
-import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -40,7 +39,6 @@ function BookingShell({ children }) {
   return (
     <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
       <AppHeader />
-      <BookingSubnav />
       <main className="w-full flex-1">{children}</main>
     </div>
   )

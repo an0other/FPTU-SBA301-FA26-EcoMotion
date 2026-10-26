@@ -4,10 +4,11 @@ function bookingPath(bookingCode) {
   return encodeURIComponent(String(bookingCode ?? '').trim().toUpperCase())
 }
 
-export async function listMyBookings({ group = 'ALL', keyword = '', page = 0, size = 10 } = {}) {
+export async function listMyBookings({ group = 'ALL', keyword = '', sort = 'PICKUP', page = 0, size = 10 } = {}) {
   const params = { page, size }
   if (group && group !== 'ALL') params.group = group
   if (keyword.trim()) params.keyword = keyword.trim()
+  if (sort) params.sort = sort
   const { data } = await apiClient.get('/renter/bookings', { params })
   return data.data ?? { items: [], total: 0, offset: 0, limit: size, hasMore: false }
 }

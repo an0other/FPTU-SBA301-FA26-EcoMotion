@@ -267,7 +267,7 @@ export default function CustomerPaymentPage() {
     <div className="pb-24 sm:pb-10">
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
 
-      <div className="sticky top-32 z-10 border-b border-[#E6EBE8] bg-white px-4 py-3 sm:px-6">
+      <div className="border-b border-[#E6EBE8] bg-white px-4 py-3 sm:px-6">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3">
           <Link
             to={bookingHref}
