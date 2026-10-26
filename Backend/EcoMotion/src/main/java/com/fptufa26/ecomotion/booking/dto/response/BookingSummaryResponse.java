@@ -23,6 +23,7 @@ public record BookingSummaryResponse(
         BigDecimal totalAmount,
         boolean canPay,
         boolean atRisk,
-        String riskMessage
+        String riskMessage,
+        Instant holdExpiresAt
 ) {
 }

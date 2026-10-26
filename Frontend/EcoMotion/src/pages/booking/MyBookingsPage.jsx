@@ -26,6 +26,7 @@ function toCard(item) {
     pickupAddress: item.pickupAddress,
     totalAmount: Number(item.totalAmount),
     canPay: Boolean(item.canPay),
+    holdExpiresAt: item.holdExpiresAt,
     atRisk: Boolean(item.atRisk),
     riskMessage: item.riskMessage,
     formattedStart: formatWhen(item.pickupTime),

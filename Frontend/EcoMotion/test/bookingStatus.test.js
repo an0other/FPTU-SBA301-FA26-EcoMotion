@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { BOOKING_FILTERS, BOOKING_STATUS_META, bookingMatchesFilter, bookingStatusMeta } from '../src/utils/bookingStatus.js'
-import { isPaymentRequestExpired } from '../src/utils/paymentDisplay.js'
+import {
+  formatCountdown,
+  isPaymentRequestExpired,
+  remainingMs,
+  countdownUrgency,
+} from '../src/utils/paymentDisplay.js'
 
 const statuses = ['PENDING', 'REJECTED', 'ACCEPTED', 'CONFIRMED', 'DRIVER_ASSIGNED',
   'AWAITING_DEPOSIT', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION',
@@ -30,4 +35,15 @@ test('payment expiry changes exactly at the server deadline', () => {
   assert.equal(isPaymentRequestExpired(request, Date.parse('2026-10-21T07:59:59.999Z')), false)
   assert.equal(isPaymentRequestExpired(request, Date.parse('2026-10-21T08:00:00.000Z')), true)
   assert.equal(isPaymentRequestExpired({ expiresAt: null }, Date.now()), false)
+})
+
+test('hold countdown formats remaining time and urgency', () => {
+  const deadline = '2026-10-21T08:15:00.000Z'
+  assert.equal(remainingMs(deadline, Date.parse('2026-10-21T08:00:00.000Z')), 15 * 60 * 1000)
+  assert.equal(formatCountdown(15 * 60 * 1000), '15:00')
+  assert.equal(formatCountdown(2 * 60 * 1000), '02:00')
+  assert.equal(formatCountdown(-1), '00:00')
+  assert.equal(countdownUrgency(3 * 60 * 1000), 'ok')
+  assert.equal(countdownUrgency(90 * 1000), 'urgent')
+  assert.equal(countdownUrgency(0), 'expired')
 })

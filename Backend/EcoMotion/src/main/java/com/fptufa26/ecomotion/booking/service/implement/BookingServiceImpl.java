@@ -573,7 +573,8 @@ public class BookingServiceImpl implements BookingService {
                 canPay(booking),
                 canConfirmStart,
                 canConfirm,
-                disputeCategories(booking, chargeRows));
+                disputeCategories(booking, chargeRows),
+                holdExpiresAt(booking));
     }
 
     private void requireDisputeAllowed(Booking booking, DisputeCategory category) {
@@ -692,8 +693,17 @@ public class BookingServiceImpl implements BookingService {
         }
         if (booking.getStatus() == BookingStatus.REJECTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã từ chối", null, "Không có lý do", true, true));
-        } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
+        } else if (booking.getStatus() == BookingStatus.ACCEPTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã chấp nhận", null, null, true, false));
+        } else if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+            steps.add(new TimelineStepResponse(
+                    "Đang giữ chỗ",
+                    booking.getCreatedAt(),
+                    "Thanh toán cọc trong 15 phút",
+                    true,
+                    false));
+        } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
+            steps.add(new TimelineStepResponse("Đã giữ chỗ", booking.getCreatedAt(), null, true, false));
         }
         payments.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID
@@ -760,7 +770,18 @@ public class BookingServiceImpl implements BookingService {
         String imageUrl = vehicleCatalogService.coverImageUrl(booking.getVehicle().getId());
         var risk = vehicleOperationalRiskService.assess(booking);
         return bookingMapper.toSummary(
-                booking, snapshot, imageUrl, canPay(booking), risk.atRisk(), risk.message());
+                booking, snapshot, imageUrl, canPay(booking), risk.atRisk(), risk.message(), holdExpiresAt(booking));
+    }
+
+    private Instant holdExpiresAt(Booking booking) {
+        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+            return null;
+        }
+        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
+                .map(PaymentRequest::getExpiresAt)
+                .orElseGet(() -> booking.getCreatedAt() == null
+                        ? null
+                        : booking.getCreatedAt().plus(INITIAL_HOLD_DURATION));
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {

@@ -1,4 +1,5 @@
 import { BOOKING_FILTERS, bookingStatusMeta } from '../../utils/bookingStatus';
+import { HoldCountdown } from '../payments/HoldCountdown';
 
 
 export const MyBookingsList = ({
@@ -117,7 +118,12 @@ export const MyBookingsList = ({
                 </div>
 
                 {/* Col 5: Badge */}
-                <div className="shrink-0">{getStatusBadge(booking.status)}</div>
+                <div className="shrink-0 flex flex-col items-start md:items-end gap-1.5">
+                  {getStatusBadge(booking.status)}
+                  {booking.status === 'AWAITING_DEPOSIT' ? (
+                    <HoldCountdown expiresAt={booking.holdExpiresAt} compact />
+                  ) : null}
+                </div>
 
                 {/* Col 6: Contextual Action (if ACCEPTED) */}
                 {booking.canPay && (
