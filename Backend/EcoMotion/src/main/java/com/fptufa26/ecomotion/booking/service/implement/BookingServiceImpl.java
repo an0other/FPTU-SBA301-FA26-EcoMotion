@@ -1064,4 +1064,22 @@ public class BookingServiceImpl implements BookingService {
     public BigDecimal sumTotalRevenue() {
         return paymentTransactionRepository.sumTotalPaidIn();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumAdminCommission() {
+        return bookingRepository.sumAdminCommission();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumCompletedGrossRentalVolume() {
+        return bookingRepository.sumCompletedGrossRentalVolume();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumEscrowDeposits() {
+        return paymentTransactionRepository.sumEscrowDeposits();
+    }
 }

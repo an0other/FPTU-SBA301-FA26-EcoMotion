@@ -23,4 +23,9 @@ public class AdminStatsResponse {
     private long totalBookings;
     private long openDisputes;
     private BigDecimal totalRevenue;
+    private BigDecimal grossMerchandiseValue;
+    private BigDecimal platformCommission;
+    private BigDecimal providerPayoutDue;
+    private BigDecimal escrowDeposits;
+    private long completedBookings;
 }
