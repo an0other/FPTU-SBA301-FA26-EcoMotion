@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
 import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
@@ -53,6 +53,7 @@ function toCard(detail) {
     canCancel: detail.canCancel,
     canEditRequest: detail.canEditRequest,
     canPay: detail.canPay,
+    holdExpiresAt: detail.holdExpiresAt,
     depositAmount: Number(detail.depositAmount ?? 0),
     refundExplanation: detail.refundPreview?.explanation ?? '',
     disputeCategories: detail.disputeCategories ?? [],
@@ -168,9 +169,6 @@ export function BookingDetailPage() {
         trackingError={trackingError}
         onRefreshTracking={refetchTracking}
       />
-      <p className="max-w-[1120px] mx-auto px-4 pb-8 text-sm">
-        <Link to="/renter/bookings" className="text-[#15803D] font-semibold">Về đơn của tôi</Link>
-      </p>
     </>
   )
 }

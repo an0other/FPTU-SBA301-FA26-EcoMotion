@@ -1,3 +1,5 @@
+import { formatCurrency } from './formatCurrency.js'
+
 export const PLAN_LABELS = {
   HOURLY: {
     title: 'Gói giờ',
@@ -16,7 +18,7 @@ export const PLAN_LABELS = {
   },
   YEARLY: {
     title: 'Gói năm',
-    footer: 'Tự lái theo hợp đồng, tính theo năm',
+    footer: 'Hợp đồng năm · quy trình riêng',
     unit: 'năm',
   },
 }
@@ -45,4 +47,27 @@ export function slotDurationLabel(minutes) {
     return `${hours} giờ`
   }
   return `${m} phút`
+}
+
+export function formatSlotPrice(amount, slotLengthMinutes) {
+  const money = formatCurrency(amount)
+  if (money === '—') return money
+  const duration = slotDurationLabel(slotLengthMinutes)
+  return duration ? `${money} / ${duration}` : money
+}
+
+export const PLAN_PRICE_SUFFIX = {
+  HOURLY: '/giờ',
+  DAILY: '/ngày',
+  MONTHLY: '/tháng',
+  YEARLY: '/năm',
+}
+
+export function rentalSpanLabel(slotLengthMinutes, slots) {
+  const count = Number(slots)
+  const minutes = Number(slotLengthMinutes)
+  if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isFinite(count) || count <= 0) {
+    return ''
+  }
+  return slotDurationLabel(minutes * count) ?? ''
 }
