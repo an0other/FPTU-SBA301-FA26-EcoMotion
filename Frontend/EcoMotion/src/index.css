@@ -58,6 +58,10 @@ body {
   padding: 0;
 }
 
+html {
+  scroll-padding-top: 8.5rem;
+}
+
 .leaflet-interactive[role='button']:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
 .vehicle-map-popup { min-width: 0; font-family: 'Be Vietnam Pro', sans-serif; }
 .vehicle-map-popup-address { margin: 0 0 8px; color: #475569; font-size: 11px; }

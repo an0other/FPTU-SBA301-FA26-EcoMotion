@@ -22,9 +22,9 @@ export const PolicyPage = ({ onBookNow }) => {
           <div className="w-10 h-10 rounded-full bg-[#E8F6EE] text-[#15803D] flex items-center justify-center">
             <span className="material-symbols-outlined text-[22px]">verified</span>
           </div>
-          <h3 className="font-bold text-base text-[#14221A]">Chưa thu cọc khi chưa duyệt</h3>
+          <h3 className="font-bold text-base text-[#14221A]">Cọc trong 15 phút sau khi gửi đơn</h3>
           <p className="text-xs text-gray-600 leading-relaxed">
-            Bạn chỉ phải thanh toán 30% tiền cọc giữ chỗ sau khi chủ xe hoặc hệ thống EcoMotion duyệt chấp nhận yêu cầu của bạn.
+            Sau khi gửi đơn, xe được giữ chỗ 15 phút để bạn thanh toán cọc. Hết hạn có thể cấp lại yêu cầu thanh toán trên đơn của bạn.
           </p>
         </div>
 
