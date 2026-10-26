@@ -35,4 +35,14 @@ public interface DriverTripService {
     TripLocationResponse recordLocation(Long currentUserId, String tripIdOrCode, LocationUpdateRequest request);
 
     TripTrackingResponse getTripTracking(Long currentUserId, String tripIdOrCode);
+
+    DriverTripDetailResponse rejectTrip(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest request);
+
+    com.fptufa26.ecomotion.booking.entity.TripIncident reportIncident(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest request);
+
+    java.util.List<com.fptufa26.ecomotion.booking.entity.TripIncident> listIncidents(Long currentUserId, String tripIdOrCode);
+
+    com.fptufa26.ecomotion.booking.entity.TripEvidence uploadEvidence(Long currentUserId, String tripIdOrCode, com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest request);
+
+    java.util.List<com.fptufa26.ecomotion.booking.entity.TripEvidence> listEvidence(Long currentUserId, String tripIdOrCode);
 }

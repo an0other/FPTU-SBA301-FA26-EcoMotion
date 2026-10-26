@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import BookingStatusBadge from '../components/provider/BookingStatusBadge'
 import Toast from '../components/Toast'
@@ -10,11 +10,12 @@ import AddChargeModal from '../components/provider/modals/AddChargeModal'
 import LiveMapViewer from '../components/map/LiveMapViewer'
 import { useProviderBookingDetail } from '../hooks/useProviderBookingDetail'
 import { useProviderTripTracking } from '../hooks/useProviderTripTracking'
+import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { providerBookingService } from '../services/providerBookingService'
-import { providerService } from '../services/providerService'
+import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded ${className}`}>{name}</span>
+  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
 }
 
 function formatVnd(amount) {
@@ -44,21 +45,38 @@ function initialsOf(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-const CHARGE_LABELS = {
-  BASE_RENTAL: 'Tiền thuê', DEPOSIT: 'Tiền cọc', OVERTIME: 'Phụ phí quá giờ',
-  WAITING: 'Phụ phí chờ', WEEKEND: 'Phụ phí cuối tuần', OUT_OF_RADIUS: 'Phụ phí ngoài bán kính',
+const URGENCY_STYLES = {
+  CRITICAL: 'bg-red-100 text-red-800 border-red-300 font-bold',
+  HIGH: 'bg-orange-100 text-orange-800 border-orange-300 font-bold',
+  MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300 font-medium',
+  LOW: 'bg-blue-100 text-blue-800 border-blue-200 font-medium',
 }
 
-const PAYMENT_TYPE_LABELS = {
-  DEPOSIT_PAY: 'Thanh toán cọc', UPFRONT_PAY: 'Trả trước', SETTLEMENT: 'Quyết toán', REFUND: 'Hoàn tiền', PAYOUT: 'Chi trả nhà cung cấp',
+const INCIDENT_TYPE_LABELS = {
+  ACCIDENT: 'Tai nạn giao thông',
+  HEALTH_ISSUE: 'Vấn đề sức khỏe',
+  VEHICLE_BREAKDOWN: 'Sự cố xe hỏng hóc',
+  CANNOT_REACH_PICKUP: 'Không tiếp cận được điểm đón',
+  LOST_CONTACT_WITH_CUSTOMER: 'Mất liên lạc với khách thuê',
+  TRAFFIC_JAM: 'Ùn tắc giao thông nghiêm trọng',
+  OTHER: 'Sự cố khác',
 }
 
-const PAYMENT_STATUS_LABELS = { PENDING: 'Chờ xử lý', PAID: 'Đã thanh toán', FAILED: 'Thất bại' }
+const EVIDENCE_TYPE_LABELS = {
+  PICKUP_ARRIVAL: 'Ảnh có mặt tại điểm đón',
+  VEHICLE_HANDOVER: 'Ảnh bàn giao xe',
+  PRE_TRIP_CONDITION: 'Ảnh tình trạng xe trước chuyến',
+  POST_TRIP_CONDITION: 'Ảnh tình trạng xe sau chuyến',
+  INCIDENT: 'Ảnh phát sinh sự cố',
+  INCIDENT_PROOF: 'Ảnh phát sinh sự cố',
+  TRIP_COMPLETION: 'Ảnh hoàn tất chuyến đi',
+  OTHER: 'Hình ảnh khác',
+}
 
 export default function ProviderBookingDetailPage() {
   const { bookingCode } = useParams()
   const navigate = useNavigate()
-  const { booking, loading, error, refetch, operationalRisk } = useProviderBookingDetail(bookingCode)
+  const { booking, loading, error, refetch } = useProviderBookingDetail(bookingCode)
 
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [showAcceptModal, setShowAcceptModal] = useState(false)
@@ -67,12 +85,14 @@ export default function ProviderBookingDetailPage() {
   const [showAddChargeModal, setShowAddChargeModal] = useState(false)
   const [toast, setToast] = useState({ message: '', type: 'success' })
   const [finalizing, setFinalizing] = useState(false)
-  const [resolution, setResolution] = useState('CHANGE_VEHICLE')
-  const [replacementVehicleId, setReplacementVehicleId] = useState('')
-  const [newPickupTime, setNewPickupTime] = useState('')
-  const [resolutionReason, setResolutionReason] = useState('Xe của chuyến trước chưa về kịp')
-  const [resolvingRisk, setResolvingRisk] = useState(false)
-  const [replacementVehicles, setReplacementVehicles] = useState([])
+
+  // Incident & Evidence state
+  const [incidents, setIncidents] = useState([])
+  const [evidenceList, setEvidenceList] = useState([])
+  const [selectedEvidenceImage, setSelectedEvidenceImage] = useState(null)
+  const [resolvingIncident, setResolvingIncident] = useState(null)
+  const [resolutionNotes, setResolutionNotes] = useState('')
+  const [submittingResolution, setSubmittingResolution] = useState(false)
 
   const isPending = booking?.status === 'PENDING'
   const isRejected = booking?.status === 'REJECTED'
@@ -82,40 +102,80 @@ export default function ProviderBookingDetailPage() {
     enabled: Boolean(booking?.driverName && !isCancelled && !isRejected),
   })
 
-  useEffect(() => {
-    if (!operationalRisk?.atRisk) return
-    let active = true
-    providerService.getVehicles({ status: 'APPROVED', size: 100 })
-      .then((result) => {
-        const items = result?.items ?? result?.content ?? result ?? []
-        if (active) setReplacementVehicles(items.filter((vehicle) => vehicle.id !== booking?.vehicleId))
-      })
-      .catch(() => {
-        if (active) setReplacementVehicles([])
-      })
-    return () => { active = false }
-  }, [operationalRisk?.atRisk, booking?.vehicleId])
-
-  const handleResolveOperationalRisk = async () => {
-    setResolvingRisk(true)
+  // Load Incidents and Evidence
+  const fetchIncidentsAndEvidence = useCallback(async () => {
+    if (!bookingCode) return
     try {
-      const result = await providerBookingService.resolveOperationalRisk(booking.bookingCode, {
-        resolution,
-        replacementVehicleId: resolution === 'CHANGE_VEHICLE' ? Number(replacementVehicleId) : null,
-        newPickupTime: resolution === 'RESCHEDULE' && newPickupTime ? new Date(newPickupTime).toISOString() : null,
-        reason: resolutionReason,
-      })
-      setToast({ message: result.message, type: 'success' })
-      refetch()
+      const [incData, evData] = await Promise.allSettled([
+        providerBookingService.getBookingIncidents(bookingCode),
+        providerBookingService.getBookingEvidence(bookingCode),
+      ])
+      if (incData.status === 'fulfilled') setIncidents(incData.value || [])
+      if (evData.status === 'fulfilled') setEvidenceList(evData.value || [])
+    } catch {
+      // Quiet fail if not yet mounted
+    }
+  }, [bookingCode])
+
+  useEffect(() => {
+    if (bookingCode) {
+      fetchIncidentsAndEvidence()
+    }
+  }, [bookingCode, fetchIncidentsAndEvidence])
+
+  const handleDeleteEvidence = async (evidenceId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa ảnh minh chứng này khỏi hệ thống?')) return
+    try {
+      await providerBookingService.deleteBookingEvidence(bookingCode, evidenceId)
+      setToast({ message: 'Đã xóa ảnh minh chứng thành công', type: 'success' })
+      fetchIncidentsAndEvidence()
     } catch (err) {
-      setToast({ message: err.message || 'Không thể xử lý nguy cơ xe về trễ', type: 'error' })
-    } finally {
-      setResolvingRisk(false)
+      setToast({
+        message: err?.response?.data?.message || 'Không thể xóa ảnh minh chứng',
+        type: 'error',
+      })
     }
   }
 
+  // Realtime Sync Hook
+  useRealtimeSync({
+    handlers: {
+      [TV5_REALTIME_EVENTS.DRIVER_ASSIGNED]: () => {
+        refetch()
+        setToast({ message: 'Tài xế đã được phân công cho chuyến xe.', type: 'info' })
+      },
+      [TV5_REALTIME_EVENTS.DRIVER_ACCEPTED]: () => {
+        refetch()
+        setToast({ message: 'Tài xế đã xác nhận tiếp nhận chuyến!', type: 'success' })
+      },
+      [TV5_REALTIME_EVENTS.DRIVER_REJECTED]: () => {
+        refetch()
+        setToast({ message: 'Cảnh báo: Tài xế đã từ chối nhận chuyến!', type: 'warning' })
+      },
+      [TV5_REALTIME_EVENTS.DRIVER_INCIDENT]: () => {
+        refetch()
+        fetchIncidentsAndEvidence()
+        setToast({ message: 'Cảnh báo khẩn: Tài xế vừa báo cáo sự cố phát sinh!', type: 'error' })
+      },
+      [TV5_REALTIME_EVENTS.TRIP_STARTED]: () => {
+        refetch()
+        setToast({ message: 'Chuyến xe đã chính thức bắt đầu hành trình.', type: 'info' })
+      },
+      [TV5_REALTIME_EVENTS.TRIP_COMPLETED]: () => {
+        refetch()
+        fetchIncidentsAndEvidence()
+        setToast({ message: 'Chuyến xe đã kết thúc an toàn.', type: 'success' })
+      },
+    },
+    onResync: () => {
+      refetch()
+      fetchIncidentsAndEvidence()
+    },
+  })
+
   const handleActionSuccess = (_, message) => {
     refetch()
+    fetchIncidentsAndEvidence()
     setToast({ message, type: 'success' })
   }
 
@@ -124,26 +184,47 @@ export default function ProviderBookingDetailPage() {
     try {
       const result = await providerBookingService.finalizeSettlement(booking.bookingCode)
       setToast({
-        message: result.status === 'COMPLETED'
+        message: result?.status === 'COMPLETED'
           ? 'Đã chốt quyết toán. Đơn thuê đã hoàn thành.'
-          : 'Đã chốt phụ phí và tạo yêu cầu thanh toán VietQR.',
+          : 'Đã chốt phụ phí và tạo yêu cầu thanh toán VNPAY/quyết toán.',
         type: 'success',
       })
       refetch()
     } catch (err) {
-      setToast({ message: err.message || 'Không thể chốt quyết toán', type: 'error' })
+      setToast({ message: err?.response?.data?.message || err?.message || 'Không thể chốt quyết toán', type: 'error' })
     } finally {
       setFinalizing(false)
+    }
+  }
+
+  const handleResolveIncident = async (e) => {
+    e.preventDefault()
+    if (!resolvingIncident || !resolutionNotes.trim()) return
+
+    setSubmittingResolution(true)
+    try {
+      await providerBookingService.resolveIncident(booking.bookingCode, resolvingIncident.id, {
+        resolutionNotes: resolutionNotes.trim(),
+        newStatus: 'RESOLVED',
+      })
+      setToast({ message: 'Đã cập nhật phương án xử lý sự cố thành công!', type: 'success' })
+      setResolvingIncident(null)
+      setResolutionNotes('')
+      fetchIncidentsAndEvidence()
+    } catch (err) {
+      setToast({ message: err?.response?.data?.message || err?.message || 'Không thể lưu xử lý sự cố', type: 'error' })
+    } finally {
+      setSubmittingResolution(false)
     }
   }
 
   if (loading) {
     return (
       <ProviderLayout active="Đơn thuê">
-        <div className="mx-auto max-w-7xl py-12 text-center">
-          <Icon name="hourglass_empty" className="animate-spin text-4xl text-[#064e3b] mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-700">Đang tải thông tin chi tiết đơn thuê...</p>
-          <p className="text-xs text-slate-400 mt-1">Vui lòng đợi trong giây lát</p>
+        <div className="mx-auto max-w-7xl py-16 text-center">
+          <Icon name="sync" className="animate-spin text-3xl text-brand-700 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-800">Đang tải thông tin chi tiết đơn thuê...</p>
+          <p className="text-xs text-slate-400 mt-1">Hệ thống đang truy xuất dữ liệu nghiệp vụ</p>
         </div>
       </ProviderLayout>
     )
@@ -152,23 +233,25 @@ export default function ProviderBookingDetailPage() {
   if (error || !booking) {
     return (
       <ProviderLayout active="Đơn thuê">
-        <div className="mx-auto max-w-2xl py-12">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
-            <Icon name="error" className="text-4xl text-red-600 mx-auto mb-2" />
-            <h2 className="text-base font-bold text-red-900">Không tìm thấy đơn thuê</h2>
-            <p className="text-xs text-red-700 mt-1">{error || 'Đơn thuê không tồn tại hoặc bạn không có quyền truy cập.'}</p>
+        <div className="mx-auto max-w-xl py-12">
+          <div className="rounded-lg border border-red-200 bg-white p-6 text-center shadow-xs">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 mb-3">
+              <Icon name="error_outline" className="text-2xl" />
+            </div>
+            <h2 className="text-base font-bold text-slate-900">Không tìm thấy đơn thuê</h2>
+            <p className="text-xs text-slate-500 mt-1">{error || 'Đơn thuê không tồn tại hoặc bạn không có quyền truy cập.'}</p>
             <div className="mt-5 flex justify-center gap-3">
               <button
                 type="button"
                 onClick={() => navigate('/provider/bookings')}
-                className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
               >
                 Quay lại danh sách
               </button>
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-2xs hover:bg-red-700 transition"
+                className="rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white hover:bg-brand-800"
               >
                 Thử lại
               </button>
@@ -183,100 +266,113 @@ export default function ProviderBookingDetailPage() {
     ? booking.vehicleImageUrls
     : (booking.vehicleImageUrl ? [booking.vehicleImageUrl] : [])
 
+  const activeIncidents = incidents.filter((inc) => inc.status !== 'RESOLVED' && inc.status !== 'CANCELLED')
+
   return (
     <ProviderLayout active="Đơn thuê">
-      {operationalRisk?.atRisk && (
-        <div role="alert" className="mx-auto mt-5 max-w-7xl rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-3">
-          <p className="font-bold">Booking có nguy cơ trễ vì xe chưa về</p>
-          <p className="mt-1">{operationalRisk.message}</p>
-          <div className="grid gap-3 md:grid-cols-3">
-            <select value={resolution} onChange={(event) => setResolution(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2">
-              <option value="CHANGE_VEHICLE">Đổi xe</option>
-              <option value="RESCHEDULE">Dời giờ nhận xe</option>
-              <option value="CANCEL_AND_REFUND">Hủy và hoàn 100%</option>
-            </select>
-            {resolution === 'CHANGE_VEHICLE' && (
-              <select value={replacementVehicleId} onChange={(event) => setReplacementVehicleId(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2">
-                <option value="">Chọn xe thay thế</option>
-                {replacementVehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.licensePlate} — {vehicle.brand} {vehicle.model}</option>)}
-              </select>
-            )}
-            {resolution === 'RESCHEDULE' && <input type="datetime-local" value={newPickupTime} onChange={(event) => setNewPickupTime(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2" />}
-            <input value={resolutionReason} maxLength={500} onChange={(event) => setResolutionReason(event.target.value)} className="rounded-lg border border-amber-300 bg-white px-3 py-2" placeholder="Lý do xử lý" />
-          </div>
-          <button type="button" disabled={resolvingRisk || !resolutionReason.trim() || (resolution === 'CHANGE_VEHICLE' && !replacementVehicleId) || (resolution === 'RESCHEDULE' && !newPickupTime)} onClick={handleResolveOperationalRisk} className="rounded-lg bg-amber-700 px-4 py-2 font-bold text-white disabled:opacity-50">
-            {resolvingRisk ? 'Đang xử lý...' : 'Xác nhận phương án'}
-          </button>
-        </div>
-      )}
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-5">
         <Toast
           message={toast.message}
           type={toast.type}
           onClose={() => setToast({ message: '', type: 'success' })}
         />
 
-        {/* 1. Header with Breadcrumb, Status, and Action Buttons */}
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center border-b border-slate-200/80 pb-5">
-          <div>
-            <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-              <Link to="/provider/bookings" className="hover:text-slate-700 transition">
-                Hàng đợi đơn thuê
-              </Link>
-              <Icon name="chevron_right" className="text-[14px] text-slate-400" />
-              <span className="font-mono text-[#064e3b] font-bold">{booking.bookingCode}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 lg:text-3xl font-mono">
-                {booking.bookingCode}
-              </h1>
-              <BookingStatusBadge status={booking.status} />
-              <span className="text-xs text-slate-500 font-medium">
-                Tạo lúc: {formatDateTime(booking.createdAt)}
-              </span>
+        {/* Breadcrumb & Navigation */}
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <button
+            type="button"
+            onClick={() => navigate('/provider/bookings')}
+            className="hover:text-brand-800 transition flex items-center gap-1 font-semibold"
+          >
+            <Icon name="arrow_back" className="text-[16px]" />
+            <span>Quản lý đơn đặt xe</span>
+          </button>
+          <span>/</span>
+          <span className="font-mono font-bold text-slate-800">{booking.bookingCode}</span>
+        </div>
+
+        {/* Urgent Incident Alert Banner if active incidents exist */}
+        {activeIncidents.length > 0 && (
+          <div className="rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Icon name="warning" className="text-2xl text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-bold text-red-900">
+                    Cảnh báo sự cố chuyến đi đang chờ xử lý ({activeIncidents.length})
+                  </h3>
+                  <div className="mt-1 space-y-1 text-xs text-red-800">
+                    {activeIncidents.map((inc) => (
+                      <div key={inc.id} className="flex items-center gap-2">
+                        <span className="font-bold">
+                          [{INCIDENT_TYPE_LABELS[inc.incidentType] || inc.incidentType}]
+                        </span>
+                        <span>{inc.description}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] border ${URGENCY_STYLES[inc.urgency] || 'bg-slate-100'}`}>
+                          {inc.urgency}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResolvingIncident(activeIncidents[0])}
+                className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-red-700"
+              >
+                Xử lý sự cố ngay
+              </button>
             </div>
           </div>
+        )}
 
-          {/* Quick Action Buttons */}
+        {/* Master Detail Header Card */}
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold font-mono text-slate-900">#{booking.bookingCode}</h1>
+              <BookingStatusBadge status={booking.status} />
+              {booking.paymentStatus && (
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
+                  Thanh toán: {booking.paymentStatus}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              Khởi tạo lúc: {formatDateTime(booking.createdAt)} • Cập nhật cuối: {formatDateTime(booking.updatedAt)}
+            </p>
+          </div>
+
+          {/* Action Button Strip */}
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/provider/bookings')}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
-            >
-              <Icon name="arrow_back" className="text-[17px]" />
-              <span>Quay lại</span>
-            </button>
-
             {isPending && (
               <>
                 <button
                   type="button"
                   onClick={() => setShowDenyModal(true)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3.5 text-xs font-bold text-red-600 shadow-2xs hover:bg-red-50 transition"
+                  className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
-                  <Icon name="close" className="text-[18px]" />
-                  <span>Từ chối</span>
+                  Từ chối
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAcceptModal(true)}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#064e3b] px-4 text-xs font-bold text-white shadow-xs hover:bg-[#054031] transition"
+                  className="rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition"
                 >
-                  <Icon name="check" className="text-[18px]" />
-                  <span>Chấp nhận đơn</span>
+                  Chấp nhận đơn
                 </button>
               </>
             )}
 
-            {(booking.status === 'CONFIRMED' || booking.executionStatus === 'DRIVER_REPLACEMENT_REQUIRED') && (
+            {!isRejected && !isCancelled && booking.status !== 'PENDING' && (
               <button
                 type="button"
                 onClick={() => setShowAssignModal(true)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3.5 text-xs font-bold text-teal-800 shadow-2xs hover:bg-teal-100 transition"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3.5 py-2 text-xs font-bold text-brand-900 hover:bg-brand-100 transition shadow-2xs"
               >
-                <Icon name="badge" className="text-[18px]" />
-                <span>{booking.executionStatus === 'DRIVER_REPLACEMENT_REQUIRED' || booking.driverName ? 'Đổi tài xế' : 'Gán tài xế'}</span>
+                <Icon name="assignment_ind" className="text-[18px]" />
+                <span>{booking.driverName ? 'Điều phối lại tài xế' : 'Phân công tài xế'}</span>
               </button>
             )}
 
@@ -284,20 +380,20 @@ export default function ProviderBookingDetailPage() {
               <button
                 type="button"
                 onClick={() => setShowAddChargeModal(true)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 text-xs font-bold text-indigo-800 shadow-2xs hover:bg-indigo-100 transition"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-900 hover:bg-indigo-100 transition shadow-2xs"
               >
-                <Icon name="add_circle" className="text-[18px]" />
+                <Icon name="add_card" className="text-[18px]" />
                 <span>Thêm phụ phí</span>
               </button>
             )}
 
-            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION'
-              && booking.providerConfirmedAt && booking.renterConfirmedAt && (
+            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' &&
+              booking.providerConfirmedAt && booking.renterConfirmedAt && (
               <button
                 type="button"
                 onClick={handleFinalizeSettlement}
                 disabled={finalizing}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-purple-700 px-4 text-xs font-bold text-white shadow-xs hover:bg-purple-800 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-purple-800 disabled:opacity-50"
               >
                 <Icon name="price_check" className="text-[18px]" />
                 <span>{finalizing ? 'Đang chốt...' : 'Chốt quyết toán'}</span>
@@ -306,153 +402,107 @@ export default function ProviderBookingDetailPage() {
           </div>
         </div>
 
-        {/* 2-Column Main Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT COLUMN: Customer, Vehicle, Trip, Driver (8 cols) */}
-          <div className="lg:col-span-8 space-y-6">
+        {/* 2-Column Responsive Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* LEFT COLUMN: Customer, Vehicle, Driver, Map, Surcharges, Incidents, Evidence (8 cols) */}
+          <div className="lg:col-span-8 space-y-5">
             {/* Customer & Trip Overview Card */}
-            <div className="rounded-2xl border border-[#dbece0] bg-white p-6 shadow-2xs space-y-5">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Icon name="person" className="text-[20px] text-[#064e3b]" />
-                <span>Thông tin khách hàng &amp; Chuyến đi</span>
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Icon name="person" className="text-[18px] text-brand-700" />
+                <span>Khách hàng &amp; Lịch trình đón</span>
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Customer card */}
-                <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-4 flex items-start gap-3.5">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-[#064e3b] shadow-2xs">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-800">
                     {initialsOf(booking.renterName)}
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5 text-xs">
                     <div className="font-bold text-slate-900 text-sm">{booking.renterName}</div>
-                    <div className="flex items-center gap-1 text-xs text-slate-600">
-                      <Icon name="phone" className="text-[14px] text-slate-400" />
+                    <div className="text-slate-600 flex items-center gap-1">
+                      <Icon name="phone" className="text-[13px] text-slate-400" />
                       <span>{booking.renterPhone || '—'}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-slate-500">
-                      <Icon name="mail" className="text-[14px] text-slate-400" />
+                    <div className="text-slate-500 flex items-center gap-1 text-[11px]">
+                      <Icon name="mail" className="text-[13px] text-slate-400" />
                       <span>{booking.renterEmail}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Trip Quick Info */}
-                <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-4 space-y-2 text-xs">
+                {/* Trip info */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-1.5 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Hình thức thuê:</span>
-                    <strong className="text-[#064e3b] font-semibold">{booking.rentalType || 'Theo ngày'}</strong>
+                    <strong className="text-slate-800">{booking.rentalType || 'Theo ngày'}</strong>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Thời lượng dự kiến:</span>
+                    <span className="text-slate-500">Thời gian thuê:</span>
                     <strong className="text-slate-800">{booking.rentalDuration || '1 ngày'}</strong>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Số lượng khách:</span>
-                    <strong className="text-slate-800">{booking.passengerCount ? `${booking.passengerCount} người` : '1 người'}</strong>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-200/80 pt-1.5">
-                    <span className="text-slate-500">Giờ đón xe:</span>
-                    <strong className="text-slate-900 font-bold">{formatDateTime(booking.pickupTime)}</strong>
+                  <div className="flex justify-between border-t border-slate-200 pt-1">
+                    <span className="text-slate-500">Giờ đón khách:</span>
+                    <strong className="text-brand-900 font-bold">{formatDateTime(booking.pickupTime)}</strong>
                   </div>
                 </div>
               </div>
 
               {/* Pickup Address */}
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 flex items-start gap-2.5 text-xs">
-                <Icon name="location_on" className="text-[20px] text-emerald-600 shrink-0 mt-0.5" />
+              <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-start gap-2.5 text-xs">
+                <Icon name="pin_drop" className="text-[18px] text-brand-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold text-slate-700 block">Địa chỉ điểm đón:</span>
+                  <span className="font-bold text-slate-700 block">Điểm đón khách:</span>
                   <span className="text-slate-900 font-medium">{booking.pickupAddress}</span>
                 </div>
               </div>
-
-              {/* Actual Start & End Timestamps */}
-              {(booking.actualStartAt || booking.actualEndAt) && (
-                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-100 text-xs">
-                  <div>
-                    <span className="text-slate-500 block">Bắt đầu thực tế:</span>
-                    <strong className="text-slate-800">{formatDateTime(booking.actualStartAt)}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Kết thúc thực tế:</span>
-                    <strong className="text-slate-800">{formatDateTime(booking.actualEndAt)}</strong>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Vehicle Information Card with Gallery */}
-            <div className="rounded-2xl border border-[#dbece0] bg-white p-6 shadow-2xs space-y-4">
+            {/* Vehicle Information Card */}
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Icon name="directions_car" className="text-[20px] text-[#064e3b]" />
-                  <span>Thông tin phương tiện</span>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Icon name="directions_car" className="text-[18px] text-brand-700" />
+                  <span>Phương tiện phục vụ</span>
                 </h2>
-                <span className="rounded bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-bold text-slate-700">
+                <span className="rounded bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
                   {booking.licensePlate}
                 </span>
               </div>
 
-              {/* Vehicle Gallery & Specs */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-                {/* Images */}
-                <div className="md:col-span-6 space-y-2">
-                  <div className="aspect-[16/10] overflow-hidden rounded-xl bg-slate-100 border border-slate-200 shadow-2xs">
-                    {images[activeImageIndex] ? (
-                      <img
-                        src={images[activeImageIndex]}
-                        alt={booking.vehicleName}
-                        className="h-full w-full object-cover transition-all"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-slate-400">
-                        <Icon name="directions_car" className="text-5xl" />
-                      </div>
-                    )}
-                  </div>
-                  {images.length > 1 && (
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                      {images.map((img, idx) => (
-                        <button
-                          key={img}
-                          type="button"
-                          onClick={() => setActiveImageIndex(idx)}
-                          className={`h-12 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition ${activeImageIndex === idx ? 'border-emerald-600 ring-2 ring-emerald-600/30' : 'border-transparent opacity-70 hover:opacity-100'
-                            }`}
-                        >
-                          <img src={img} alt="thumbnail" className="h-full w-full object-cover" />
-                        </button>
-                      ))}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="md:col-span-5 aspect-[16/10] overflow-hidden rounded-xl bg-slate-100 border border-slate-200">
+                  {images[activeImageIndex] ? (
+                    <img
+                      src={images[activeImageIndex]}
+                      alt={booking.vehicleName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-slate-400">
+                      <Icon name="directions_car" className="text-4xl" />
                     </div>
                   )}
                 </div>
 
-                {/* Specs Table */}
-                <div className="md:col-span-6 grid grid-cols-2 gap-3 text-xs content-center">
-                  <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-3">
-                    <span className="text-slate-400 block text-[11px]">Hãng &amp; Dòng xe</span>
-                    <strong className="text-slate-900 font-bold text-sm">{booking.vehicleName}</strong>
+                <div className="md:col-span-7 grid grid-cols-2 gap-2 text-xs content-center">
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Mẫu xe</span>
+                    <strong className="text-slate-900 text-sm">{booking.vehicleName}</strong>
                   </div>
-                  <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-3">
-                    <span className="text-slate-400 block text-[11px]">Biển kiểm soát</span>
-                    <strong className="text-slate-900 font-mono font-bold text-sm">{booking.licensePlate}</strong>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Biển số</span>
+                    <strong className="text-slate-900 font-mono text-sm">{booking.licensePlate}</strong>
                   </div>
-                  <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-3">
-                    <span className="text-slate-400 block text-[11px]">Năm sản xuất</span>
-                    <strong className="text-slate-800 font-bold">{booking.modelYear || '2024'}</strong>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Số ghế</span>
+                    <strong className="text-slate-800">{booking.seats ? `${booking.seats} chỗ` : '5 chỗ'}</strong>
                   </div>
-                  <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-3">
-                    <span className="text-slate-400 block text-[11px]">Số chỗ ngồi</span>
-                    <strong className="text-slate-800 font-bold">{booking.seats ? `${booking.seats} chỗ` : '5 chỗ'}</strong>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-3">
-                    <span className="text-slate-400 block text-[11px]">Hộp số</span>
-                    <strong className="text-slate-800 font-bold">{booking.transmission === 'AUTOMATIC' ? 'Tự động' : 'Số sàn'}</strong>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 bg-[#f9fdfa] p-3">
-                    <span className="text-slate-400 block text-[11px]">Nhiên liệu</span>
-                    <strong className="text-emerald-700 font-bold">
-                      {booking.fuelType === 'EV' ? 'Xe điện (EV)' : booking.fuelType === 'HYBRID' ? 'Hybrid' : 'Xăng/Dầu'}
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Động cơ</span>
+                    <strong className="text-emerald-700">
+                      {booking.fuelType === 'EV' ? 'Điện (EV)' : booking.fuelType === 'HYBRID' ? 'Hybrid' : 'Xăng/Dầu'}
                     </strong>
                   </div>
                 </div>
@@ -460,149 +510,94 @@ export default function ProviderBookingDetailPage() {
             </div>
 
             {/* Assigned Driver Card */}
-            <div className="rounded-2xl border border-[#dbece0] bg-white p-6 shadow-2xs space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Icon name="badge" className="text-[20px] text-[#064e3b]" />
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Icon name="badge" className="text-[18px] text-brand-700" />
                   <span>Tài xế phân công</span>
                 </h2>
-                {booking.status === 'CONFIRMED' && (
+                {!isRejected && !isCancelled && (
                   <button
                     type="button"
                     onClick={() => setShowAssignModal(true)}
-                    className="text-xs font-bold text-teal-700 hover:text-teal-800 transition"
+                    className="text-xs font-bold text-brand-700 hover:text-brand-900 transition"
                   >
-                    {booking.driverName ? 'Đổi tài xế khác' : '+ Phân công tài xế ngay'}
+                    {booking.driverName ? 'Thay đổi tài xế' : '+ Phân công tài xế ngay'}
                   </button>
                 )}
               </div>
 
               {booking.driverName ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
-                  <div className="flex items-center gap-3.5">
-                    {booking.driverPortraitUrl ? (
-                      <img
-                        src={booking.driverPortraitUrl}
-                        alt={booking.driverName}
-                        className="h-12 w-12 rounded-full object-cover shadow-2xs border border-white"
-                      />
-                    ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-200 font-bold text-teal-800 text-sm">
-                        {initialsOf(booking.driverName)}
-                      </div>
-                    )}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/40 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-200 font-bold text-brand-800 text-sm">
+                      {initialsOf(booking.driverName)}
+                    </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-sm sm:text-base">{booking.driverName}</span>
+                        <span className="font-bold text-slate-900 text-sm">{booking.driverName}</span>
                         {booking.driverLicenseClass && (
-                          <span className="rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-bold text-teal-800">
+                          <span className="rounded bg-brand-100 px-1.5 py-0.2 text-[10px] font-bold text-brand-800">
                             Hạng {booking.driverLicenseClass}
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 mt-1">
-                        <span>SĐT: <strong className="text-slate-800">{booking.driverPhone || '—'}</strong></span>
-                        <span>GPLX: <strong className="text-slate-800">{booking.driverLicenseNo || '—'}</strong></span>
+                      <div className="flex items-center gap-3 text-xs text-slate-600 mt-0.5">
+                        <span>SĐT: <strong className="text-slate-800 font-mono">{booking.driverPhone || '—'}</strong></span>
+                        {booking.driverLicenseNo && (
+                          <span>GPLX: <strong className="text-slate-800 font-mono">{booking.driverLicenseNo}</strong></span>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <div className="flex items-center sm:justify-end gap-1 text-xs font-bold text-amber-600">
-                      <Icon name="star" className="text-[16px] fill-current" />
-                      <span>{Number(booking.driverRatingAvg || 5).toFixed(1)} / 5.0</span>
-                    </div>
-                    <span className="inline-block mt-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                    <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
                       Đã gán cho chuyến
                     </span>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-6 px-4 rounded-xl border border-dashed border-amber-300 bg-amber-50/60 text-center">
-                  <Icon name="warning" className="text-3xl text-amber-600 mb-1" />
-                  <span className="text-xs font-bold text-amber-900">Chuyến xe này chưa được gán tài xế</span>
-                  <p className="text-[11px] text-amber-700 mt-0.5 max-w-sm">
-                    Vui lòng chọn tài xế thuộc đội xe của bạn trước thời điểm khởi hành để tài xế kịp nhận xe.
+                <div className="py-6 px-4 rounded-xl border border-dashed border-amber-300 bg-amber-50/50 text-center">
+                  <span className="text-xs font-bold text-amber-900 block">Chưa phân công tài xế</span>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    Hãy mở bộ điều phối để phân công tài xế tự động hoặc chọn từ danh sách đề xuất.
                   </p>
                   {!isRejected && !isCancelled && (
                     <button
                       type="button"
                       onClick={() => setShowAssignModal(true)}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-4 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-teal-800 transition"
+                      className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-brand-800"
                     >
-                      <Icon name="person_add" className="text-[16px]" />
-                      <span>Phân công tài xế</span>
+                      <Icon name="assignment_ind" className="text-[16px]" />
+                      <span>Mở giao diện điều phối</span>
                     </button>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Live Vehicle Tracking & OpenStreetMap Map (O08) */}
+            {/* Live GPS Map & Execution Milestones */}
             {booking.driverName && (
-              <div className="rounded-2xl border border-[#dbece0] bg-white p-6 shadow-2xs space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Icon name="satellite_alt" className="text-[20px] text-[#064e3b]" />
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900">
-                        Giám sát phương tiện & Vị trí trực tiếp
-                      </h2>
-                      <p className="text-xs text-slate-500">
-                        Theo dõi vị trí phương tiện phục vụ chuyến xe theo thời gian thực (Cập nhật tự động 10s)
-                      </p>
-                    </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <Icon name="map" className="text-[18px] text-brand-700" />
+                      <span>Giám sát vị trí trực tiếp</span>
+                    </h2>
+                    <p className="text-xs text-slate-500">Cập nhật tọa độ phương tiện thời gian thực</p>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-0.5 text-xs font-bold ${booking.actualEndAt || booking.status === 'COMPLETED'
-                          ? 'bg-slate-100 text-slate-700 border-slate-200'
-                          : booking.actualStartAt || booking.status === 'IN_PROGRESS'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 animate-pulse'
-                            : booking.actualArrivedAt
-                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                              : booking.driverConfirmedAt
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}
-                    >
-                      <span
-                        className={`h-2 w-2 rounded-full ${booking.actualEndAt || booking.status === 'COMPLETED'
-                            ? 'bg-slate-400'
-                            : booking.actualStartAt || booking.status === 'IN_PROGRESS'
-                              ? 'bg-emerald-500'
-                              : booking.actualArrivedAt
-                                ? 'bg-indigo-500'
-                                : booking.driverConfirmedAt
-                                  ? 'bg-blue-500'
-                                  : 'bg-amber-500'
-                          }`}
-                      />
-                      {booking.actualEndAt || booking.status === 'COMPLETED'
-                        ? 'Chuyến đã hoàn thành'
-                        : booking.actualStartAt || booking.status === 'IN_PROGRESS'
-                          ? 'Đang trên hành trình'
-                          : booking.actualArrivedAt
-                            ? 'Tài xế đã đến điểm đón'
-                            : booking.driverConfirmedAt
-                              ? 'Tài xế đã nhận chuyến'
-                              : 'Chờ tài xế xác nhận'}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() => refetchTracking()}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                      title="Làm mới vị trí"
-                    >
-                      <Icon name="refresh" className={`text-[14px] ${trackingLoading ? 'animate-spin' : ''}`} />
-                      <span>Làm mới</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => refetchTracking()}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Icon name="refresh" className={`text-[14px] ${trackingLoading ? 'animate-spin' : ''}`} />
+                    <span>Làm mới</span>
+                  </button>
                 </div>
 
-                {/* Map Viewer */}
                 <LiveMapViewer
                   vehicleLocation={trackingData?.latestLocation}
                   pickupLocation={{
@@ -612,74 +607,189 @@ export default function ProviderBookingDetailPage() {
                   }}
                   vehicleInfo={{
                     licensePlate: booking.licensePlate,
-                    name: `${booking.brand || ''} ${booking.model || ''}`.trim(),
+                    name: booking.vehicleName,
                     color: booking.color,
                   }}
-                  height="380px"
+                  height="340px"
                 />
 
-                {/* Execution Timeline */}
-                <div className="mt-4 rounded-xl border border-slate-100 bg-[#f9fdfa] p-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
-                    <Icon name="timeline" className="text-[16px] text-teal-700" />
-                    <span>Dấu mốc thực hiện thực tế (Hệ thống ghi nhận)</span>
-                  </h3>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-                    <div className="rounded-lg bg-white p-2.5 border border-slate-200/70">
-                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">1. Phân công</span>
-                      <strong className="text-slate-800 text-[11px] block mt-0.5">
-                        {formatDateTime(booking.assignedAt || trackingData?.assignedAt)}
-                      </strong>
-                    </div>
-
-                    <div className="rounded-lg bg-white p-2.5 border border-slate-200/70">
-                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">2. Tài xế nhận</span>
-                      <strong className={`text-[11px] block mt-0.5 ${booking.driverConfirmedAt || trackingData?.driverConfirmedAt ? 'text-blue-700 font-bold' : 'text-slate-400'}`}>
-                        {formatDateTime(booking.driverConfirmedAt || trackingData?.driverConfirmedAt)}
-                      </strong>
-                    </div>
-
-                    <div className="rounded-lg bg-white p-2.5 border border-slate-200/70">
-                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">3. Đến điểm đón</span>
-                      <strong className={`text-[11px] block mt-0.5 ${booking.actualArrivedAt || trackingData?.actualArrivedAt ? 'text-indigo-700 font-bold' : 'text-slate-400'}`}>
-                        {formatDateTime(booking.actualArrivedAt || trackingData?.actualArrivedAt)}
-                      </strong>
-                    </div>
-
-                    <div className="rounded-lg bg-white p-2.5 border border-slate-200/70">
-                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">4. Bắt đầu chuyến</span>
-                      <strong className={`text-[11px] block mt-0.5 ${booking.actualStartAt || trackingData?.actualStartAt ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
-                        {formatDateTime(booking.actualStartAt || trackingData?.actualStartAt)}
-                      </strong>
-                    </div>
-
-                    <div className="rounded-lg bg-white p-2.5 border border-slate-200/70">
-                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">5. Kết thúc</span>
-                      <strong className={`text-[11px] block mt-0.5 ${booking.actualEndAt || trackingData?.actualEndAt ? 'text-slate-900 font-bold' : 'text-slate-400'}`}>
-                        {formatDateTime(booking.actualEndAt || trackingData?.actualEndAt)}
-                      </strong>
-                    </div>
+                {/* Timestamps */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs pt-1">
+                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">1. Phân công</span>
+                    <strong className="text-slate-800 text-[11px] block mt-0.5">
+                      {formatDateTime(booking.assignedAt || trackingData?.assignedAt)}
+                    </strong>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">2. Đã nhận</span>
+                    <strong className="text-slate-800 text-[11px] block mt-0.5">
+                      {formatDateTime(booking.driverConfirmedAt || trackingData?.driverConfirmedAt)}
+                    </strong>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">3. Đã đến</span>
+                    <strong className="text-slate-800 text-[11px] block mt-0.5">
+                      {formatDateTime(booking.actualArrivedAt || trackingData?.actualArrivedAt)}
+                    </strong>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">4. Bắt đầu</span>
+                    <strong className="text-slate-800 text-[11px] block mt-0.5">
+                      {formatDateTime(booking.actualStartAt || trackingData?.actualStartAt)}
+                    </strong>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">5. Kết thúc</span>
+                    <strong className="text-slate-800 text-[11px] block mt-0.5">
+                      {formatDateTime(booking.actualEndAt || trackingData?.actualEndAt)}
+                    </strong>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Additional Charges Table */}
-            <div className="rounded-2xl border border-[#dbece0] bg-white p-6 shadow-2xs space-y-4">
+            {/* Incident Records Section */}
+            {incidents.length > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Icon name="report_problem" className="text-[18px] text-red-600" />
+                    <span>Lịch sử sự cố ghi nhận ({incidents.length})</span>
+                  </h2>
+                </div>
+
+                <div className="space-y-2.5">
+                  {incidents.map((inc) => (
+                    <div key={inc.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] border ${URGENCY_STYLES[inc.urgency] || 'bg-slate-100'}`}>
+                            {inc.urgency}
+                          </span>
+                          <span className="font-bold text-slate-900">
+                            {INCIDENT_TYPE_LABELS[inc.incidentType] || inc.incidentType}
+                          </span>
+                        </div>
+                        <span className="text-slate-400 font-mono text-[11px]">
+                          {formatDateTime(inc.reportedAt || inc.createdAt)}
+                        </span>
+                      </div>
+
+                      <p className="text-slate-700 leading-relaxed">{inc.description}</p>
+
+                      {inc.evidenceUrls && (
+                        <div className="text-[11px]">
+                          <a
+                            href={inc.evidenceUrls}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-brand-700 underline font-medium"
+                          >
+                            Xem ảnh minh chứng sự cố
+                          </a>
+                        </div>
+                      )}
+
+                      {inc.status === 'RESOLVED' ? (
+                        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-emerald-900 text-[11px]">
+                          <span className="font-bold">Đã xử lý: </span>
+                          <span>{inc.resolutionNotes || 'Đã ghi nhận phương án giải quyết.'}</span>
+                        </div>
+                      ) : (
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setResolvingIncident(inc)}
+                            className="rounded-lg bg-white border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                          >
+                            Ghi nhận xử lý sự cố
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Trip Evidence Gallery */}
+            {evidenceList.length > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Icon name="photo_camera" className="text-[18px] text-brand-700" />
+                    <span>Hình ảnh biên bản &amp; Minh chứng ({evidenceList.length})</span>
+                  </h2>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {evidenceList.map((ev) => (
+                    <div
+                      key={ev.id}
+                      className="group relative rounded-lg border border-slate-200 overflow-hidden bg-slate-50 text-xs shadow-2xs hover:border-slate-300 transition"
+                    >
+                      <div
+                        onClick={() => setSelectedEvidenceImage(ev.imageUrl)}
+                        className="aspect-[4/3] bg-slate-200 cursor-pointer overflow-hidden relative"
+                      >
+                        <img
+                          src={getOptimizedImageUrl(ev.imageUrl, { width: 400 })}
+                          alt={ev.note || 'Evidence'}
+                          className="h-full w-full object-cover group-hover:scale-105 transition duration-200"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition flex items-center justify-center">
+                          <Icon name="zoom_in" className="text-white opacity-0 group-hover:opacity-100 text-2xl drop-shadow" />
+                        </div>
+                      </div>
+                      <div className="p-2 space-y-0.5">
+                        <div className="flex items-center justify-between gap-1">
+                          <span
+                            className="font-bold text-slate-800 block text-[11px] truncate"
+                            title={EVIDENCE_TYPE_LABELS[ev.type || ev.evidenceType] || ev.type || ev.evidenceType}
+                          >
+                            {EVIDENCE_TYPE_LABELS[ev.type || ev.evidenceType] || ev.type || ev.evidenceType}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteEvidence(ev.id)}
+                            className="text-slate-400 hover:text-rose-600 p-0.5 rounded transition"
+                            title="Xóa minh chứng"
+                          >
+                            <Icon name="delete" className="text-[14px]" />
+                          </button>
+                        </div>
+                        {ev.note && (
+                          <span className="text-slate-500 text-[10px] block truncate" title={ev.note}>
+                            {ev.note}
+                          </span>
+                        )}
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono pt-1 border-t border-slate-100">
+                          <span className="truncate max-w-[90px]">{ev.uploadedBy?.name || 'Tài xế'}</span>
+                          <span>{formatDateTime(ev.capturedAt || ev.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Surcharges Breakdown Table */}
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <Icon name="receipt_long" className="text-[20px] text-[#064e3b]" />
+                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Icon name="receipt_long" className="text-[18px] text-brand-700" />
                     <span>Bóc tách phụ phí phát sinh ({booking.charges?.length || 0})</span>
                   </h2>
-                  <p className="text-xs text-slate-500">Các khoản phí vượt giờ, chờ, km ngoài bán kính hoặc ghi nhận thủ công</p>
+                  <p className="text-xs text-slate-500">Các khoản phụ thu quá giờ, chờ đợi, bán kính ngoài</p>
                 </div>
                 {!isRejected && !isCancelled && (
                   <button
                     type="button"
                     onClick={() => setShowAddChargeModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-800 shadow-2xs hover:bg-indigo-100 transition"
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     <Icon name="add" className="text-[16px]" />
                     <span>Thêm phụ phí</span>
@@ -688,50 +798,36 @@ export default function ProviderBookingDetailPage() {
               </div>
 
               {booking.charges && booking.charges.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-100">
-                  <table className="w-full min-w-[600px] border-collapse text-left text-xs">
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[500px] border-collapse text-left text-xs">
                     <thead>
-                      <tr className="border-b border-slate-100 bg-[#f4fbf7] text-[11px] font-bold text-slate-500 uppercase">
-                        <th className="px-4 py-2.5">Khoản phụ phí</th>
-                        <th className="px-4 py-2.5">Số lượng</th>
-                        <th className="px-4 py-2.5 text-right">Đơn giá</th>
-                        <th className="px-4 py-2.5 text-right">Hệ số</th>
-                        <th className="px-4 py-2.5 text-right">Thành tiền</th>
-                        <th className="px-4 py-2.5">Ghi chú</th>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                        <th className="px-3.5 py-2.5">Khoản phụ phí</th>
+                        <th className="px-3.5 py-2.5">Số lượng</th>
+                        <th className="px-3.5 py-2.5 text-right">Đơn giá</th>
+                        <th className="px-3.5 py-2.5 text-right">Thành tiền</th>
+                        <th className="px-3.5 py-2.5">Minh chứng</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {booking.charges.map((charge) => (
-                        <tr key={charge.id} className="hover:bg-slate-50/50">
-                          <td className="px-4 py-3 font-semibold text-slate-800">
-                            <div>{charge.description}</div>
+                      {booking.charges.map((c) => (
+                        <tr key={c.id} className="hover:bg-slate-50/50">
+                          <td className="px-3.5 py-2.5 font-semibold text-slate-800">
+                            <div>{c.description}</div>
                             <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded inline-block mt-0.5">
-                              {CHARGE_LABELS[charge.chargeType] || 'Phụ phí'}
+                              {c.chargeType}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-slate-600">{charge.quantity ?? '—'}</td>
-                          <td className="px-4 py-3 text-right font-mono text-slate-600">
-                            {formatVnd(charge.unitPrice)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-slate-600">
-                            {charge.appliedRate ? `${charge.appliedRate}x` : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                            {formatVnd(charge.amount)}
-                          </td>
-                          <td className="px-4 py-3 text-slate-500 text-[11px]">
-                            {charge.evidenceUrl ? (
-                              <a
-                                href={charge.evidenceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-emerald-700 hover:underline flex items-center gap-1"
-                              >
-                                <Icon name="attachment" className="text-[14px]" />
-                                <span>Xem bằng chứng</span>
+                          <td className="px-3.5 py-2.5 text-slate-600">{c.quantity ?? '1'}</td>
+                          <td className="px-3.5 py-2.5 text-right font-mono text-slate-600">{formatVnd(c.unitPrice)}</td>
+                          <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">{formatVnd(c.amount)}</td>
+                          <td className="px-3.5 py-2.5 text-slate-500">
+                            {c.evidenceUrl ? (
+                              <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline">
+                                Xem link
                               </a>
                             ) : (
-                              <span>Bởi {charge.createdByName}</span>
+                              '—'
                             )}
                           </td>
                         </tr>
@@ -747,29 +843,29 @@ export default function ProviderBookingDetailPage() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Pricing, Policy Snapshot, Payments, Timeline (4 cols) */}
-          <div className="lg:col-span-4 space-y-6">
+          {/* RIGHT COLUMN: Financial Summary, Policies, Timeline (4 cols) */}
+          <div className="lg:col-span-4 space-y-5">
             {/* Price Summary Card */}
-            <div className="rounded-2xl border border-[#dbece0] bg-white p-6 shadow-2xs space-y-4">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Icon name="payments" className="text-[20px] text-[#064e3b]" />
-                <span>Chi phí &amp; Thanh toán</span>
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Icon name="payments" className="text-[18px] text-brand-700" />
+                <span>Chi phí &amp; Quyết toán</span>
               </h2>
 
-              <div className="rounded-xl border border-emerald-200/60 bg-[#f2f9f5] p-4 text-center">
-                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Tổng giá trị đơn</span>
-                <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-[#064e3b] mt-1 block">
+              <div className="rounded-lg border border-brand-200 bg-slate-50 p-4 text-center">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Tổng chi phí</span>
+                <span className="text-2xl font-black font-mono text-brand-900 mt-1 block">
                   {formatVnd(booking.totalAmount)}
                 </span>
-                <span className="text-[11px] font-medium text-emerald-800 mt-1 block">
-                  {booking.status === 'COMPLETED' ? 'Đã thanh toán đủ' : 'Bao gồm chi phí thuê và phụ phí'}
+                <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán' : 'Bao gồm tiền thuê gốc & phụ phí'}
                 </span>
               </div>
 
               {/* Policy Snapshot breakdown */}
               <div className="space-y-2 text-xs border-t border-slate-100 pt-3">
                 <div className="flex justify-between text-slate-600">
-                  <span>Giá gốc 1 slot:</span>
+                  <span>Giá 1 slot thuê:</span>
                   <strong className="text-slate-900 font-mono">{formatVnd(booking.slotPrice)}</strong>
                 </div>
                 {booking.depositRatio != null && (
@@ -780,7 +876,7 @@ export default function ProviderBookingDetailPage() {
                 )}
                 {booking.allowedOvertimeMinutes != null && (
                   <div className="flex justify-between text-slate-600">
-                    <span>Vượt giờ cho phép:</span>
+                    <span>Vượt giờ miễn phí:</span>
                     <strong className="text-slate-900">{booking.allowedOvertimeMinutes} phút</strong>
                   </div>
                 )}
@@ -790,34 +886,22 @@ export default function ProviderBookingDetailPage() {
                     <strong className="text-slate-900">{booking.freeRadiusKm} km</strong>
                   </div>
                 )}
-                {booking.outOfRadiusRate != null && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>Phụ thu ngoài bán kính:</span>
-                    <strong className="text-slate-900 font-mono">{formatVnd(booking.outOfRadiusRate)} / km</strong>
-                  </div>
-                )}
-                {booking.waitingFreeMinutes != null && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>Chờ miễn phí:</span>
-                    <strong className="text-slate-900">{booking.waitingFreeMinutes} phút</strong>
-                  </div>
-                )}
               </div>
 
               {/* Payment Transactions list */}
               {booking.paymentTransactions && booking.paymentTransactions.length > 0 && (
                 <div className="border-t border-slate-100 pt-3 space-y-2">
-                  <span className="text-xs font-bold text-slate-800 block">Lịch sử giao dịch:</span>
-                  <div className="space-y-2">
+                  <span className="text-xs font-bold text-slate-800 block">Lịch sử giao dịch VNPAY/Cọc:</span>
+                  <div className="space-y-1.5">
                     {booking.paymentTransactions.map((tx) => (
-                      <div key={tx.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-xs flex justify-between items-center">
+                      <div key={tx.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs flex justify-between items-center">
                         <div>
-                          <div className="font-semibold text-slate-900">{PAYMENT_TYPE_LABELS[tx.type] || 'Giao dịch'}</div>
+                          <div className="font-semibold text-slate-900">{tx.type}</div>
                           <div className="text-[10px] text-slate-400">{formatDateTime(tx.paidAt || tx.createdAt)}</div>
                         </div>
                         <div className="text-right">
                           <div className="font-mono font-bold text-slate-900">{formatVnd(tx.amount)}</div>
-                          <span className="text-[10px] text-emerald-700 font-semibold">{PAYMENT_STATUS_LABELS[tx.status] || 'Đang xử lý'}</span>
+                          <span className="text-[10px] text-emerald-700 font-semibold">{tx.status}</span>
                         </div>
                       </div>
                     ))}
@@ -826,54 +910,70 @@ export default function ProviderBookingDetailPage() {
               )}
             </div>
 
-            {/* Booking Timeline Card */}
-            <div className="rounded-2xl border border-[#dbece0] bg-white p-6 shadow-2xs space-y-4">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Icon name="timeline" className="text-[20px] text-[#064e3b]" />
-                <span>Tiến trình đơn thuê</span>
+            {/* Timeline */}
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Icon name="history" className="text-[18px] text-brand-700" />
+                <span>Tiến trình đơn</span>
               </h2>
 
-              <div className="relative pl-6 space-y-5 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                {booking.timeline && booking.timeline.map((event, idx) => {
-                  const isDone = event.status === 'COMPLETED'
-                  const isCurrent = event.status === 'CURRENT'
-                  const isError = event.status === 'ERROR' || event.status === 'CANCELLED'
-
-                  return (
-                    <div key={idx} className="relative">
-                      {/* Dot icon */}
-                      <span
-                        className={`absolute -left-6 top-0.5 flex h-5 w-5 items-center justify-center rounded-full text-white text-[12px] shadow-2xs ${isError
-                            ? 'bg-red-500'
-                            : isDone
-                              ? 'bg-emerald-600'
-                              : isCurrent
-                                ? 'bg-amber-500 animate-pulse'
-                                : 'bg-slate-300'
-                          }`}
-                      >
-                        <Icon name={event.icon || 'circle'} className="text-[12px]" />
-                      </span>
-
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className={`text-xs font-bold ${isError ? 'text-red-700' : 'text-slate-800'}`}>
-                            {event.title}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {formatDateTime(event.timestamp)}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{event.description}</p>
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="relative pl-5 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 text-xs">
+                {booking.timeline && booking.timeline.map((event, idx) => (
+                  <div key={idx} className="relative">
+                    <span className="absolute -left-5 top-1 h-2.5 w-2.5 rounded-full bg-brand-600 ring-2 ring-white" />
+                    <div className="font-bold text-slate-800">{event.title}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">{formatDateTime(event.timestamp)}</div>
+                    {event.description && <p className="text-[11px] text-slate-500 mt-0.5">{event.description}</p>}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Incident Resolution Dialog */}
+      {resolvingIncident && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200">
+            <h3 className="text-base font-bold text-slate-900 mb-2">
+              Xử lý sự cố: {INCIDENT_TYPE_LABELS[resolvingIncident.incidentType] || resolvingIncident.incidentType}
+            </h3>
+            <p className="text-xs text-slate-600 mb-4">{resolvingIncident.description}</p>
+            <form onSubmit={handleResolveIncident} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Phương án giải quyết &amp; Ghi chú nghiệp vụ <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows="3"
+                  value={resolutionNotes}
+                  onChange={(e) => setResolutionNotes(e.target.value)}
+                  placeholder="Ví dụ: Đã liên hệ điều xe cứu hộ / Khách đã đổi giờ đón..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-brand-600 focus:outline-none"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResolvingIncident(null)}
+                  className="rounded-lg border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingResolution}
+                  className="rounded-lg bg-brand-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
+                >
+                  {submittingResolution ? 'Đang lưu...' : 'Xác nhận giải quyết'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Action Modals */}
       <AcceptBookingModal
@@ -904,6 +1004,45 @@ export default function ProviderBookingDetailPage() {
         onClose={() => setShowAddChargeModal(false)}
         onSuccess={handleActionSuccess}
       />
+
+      {/* Lightbox Preview Modal */}
+      {selectedEvidenceImage && (
+        <div
+          onClick={() => setSelectedEvidenceImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 animate-in fade-in duration-150 backdrop-blur-xs"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-h-[90vh] max-w-3xl overflow-hidden rounded-lg bg-black shadow-2xl"
+          >
+            <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
+              <a
+                href={selectedEvidenceImage}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900"
+                title="Mở ảnh gốc trong tab mới"
+              >
+                <Icon name="open_in_new" className="text-lg" />
+              </a>
+              <button
+                type="button"
+                onClick={() => setSelectedEvidenceImage(null)}
+                className="rounded-full bg-slate-900/70 p-2 text-white hover:bg-slate-900"
+                title="Đóng"
+              >
+                <Icon name="close" className="text-lg" />
+              </button>
+            </div>
+            <img
+              src={selectedEvidenceImage}
+              alt="Minh chứng phóng to"
+              className="max-h-[85vh] w-auto object-contain"
+            />
+          </div>
+        </div>
+      )}
     </ProviderLayout>
   )
 }

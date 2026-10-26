@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import AppHeader from './components/AppHeader'
 import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
+import ErrorBoundary from './components/ErrorBoundary'
 
 import ActivatePage from './pages/ActivatePage'
 import AdminDashboard from './pages/AdminDashboard'
@@ -20,6 +21,7 @@ import ProviderFinancePage from './pages/ProviderFinancePage'
 import RegisterPage from './pages/RegisterPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import VehicleListPage from './pages/VehicleListPage'
+import VnpayCallbackPage from './pages/VnpayCallbackPage'
 import YearlyRentalPage from './pages/YearlyRentalPage'
 
 import ProviderHomePage from './pages/provider/ProviderHomePage'
@@ -57,7 +59,8 @@ export default function App() {
   const navigate = useNavigate()
 
   return (
-    <Routes>
+    <ErrorBoundary>
+      <Routes>
       <Route path="/" element={<VehicleListPage />} />
       <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
       <Route path="/renter" element={<Navigate to="/" replace />} />
@@ -65,6 +68,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/activate" element={<ActivatePage />} />
+      <Route path="/payment/vnpay/callback" element={<VnpayCallbackPage />} />
 
       <Route
         path="/policy"
@@ -195,5 +199,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </ErrorBoundary>
   )
 }

@@ -950,6 +950,11 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     }
 
     private void confirmDepositAndLockSchedule(Booking booking, PaymentTransaction transaction) {
+        if (booking.getStatus() == BookingStatus.CONFIRMED
+                || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED
+                || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
+            return;
+        }
         if (booking.getStatus() != BookingStatus.ACCEPTED
                 && booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
             throw new InvalidPaymentOperationException("Đơn thuê không còn ở trạng thái chờ xác nhận cọc");
@@ -1243,5 +1248,17 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.getPaidAt(),
                 tx.getCreatedAt()
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PaymentRequest> findByBookingIdAndPaymentType(Long bookingId, PaymentRequestType paymentType) {
+        return paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, paymentType);
+    }
+
+    @Override
+    @Transactional
+    public PaymentRequest savePaymentRequest(PaymentRequest paymentRequest) {
+        return paymentRequestRepository.save(paymentRequest);
     }
 }

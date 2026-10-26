@@ -3,14 +3,18 @@ import DriverLayout from '../components/driver/DriverLayout'
 import ActiveTripBanner from '../components/driver/ActiveTripBanner'
 import DriverTripCard from '../components/driver/DriverTripCard'
 import TripListSkeleton from '../components/driver/TripListSkeleton'
+import DriverRejectTripModal from '../components/driver/DriverRejectTripModal'
+import Toast from '../components/Toast'
 import { useDriverSchedule } from '../hooks/useDriverSchedule'
+import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
+import { driverTripService } from '../services/driverTripService'
 import {
   STATUS_FILTER_OPTIONS,
   TRIP_VIEWS,
 } from '../../src/utils/driverTripUtils'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded ${className}`}>{name}</span>
+  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
 }
 
 export default function DriverSchedulePage() {
@@ -33,9 +37,26 @@ export default function DriverSchedulePage() {
   } = useDriverSchedule()
 
   const [dateDraft, setDateDraft] = useState(date || '')
+  const [rejectingTrip, setRejectingTrip] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [toast, setToast] = useState({ message: '', type: 'success' })
+
+  // Realtime Sync Hook
+  useRealtimeSync({
+    handlers: {
+      [TV5_REALTIME_EVENTS.DRIVER_ASSIGNED]: () => {
+        refetch()
+        setToast({ message: 'Bạn có một chuyến đi mới vừa được phân công!', type: 'info' })
+      },
+      [TV5_REALTIME_EVENTS.DRIVER_REASSIGNED]: () => {
+        refetch()
+        setToast({ message: 'Thông báo: Có thay đổi phân công lịch trình.', type: 'warning' })
+      },
+    },
+    onResync: () => refetch(),
+  })
 
   const totalPages = Math.ceil(total / size) || 1
-  const isFiltered = status !== 'ALL' || Boolean(date)
 
   const handleDateChange = (e) => {
     const val = e.target.value
@@ -48,16 +69,37 @@ export default function DriverSchedulePage() {
     setDate(null)
   }
 
+  // Confirm assigned trip directly from card
+  const handleConfirmTrip = async (trip) => {
+    setActionLoading(true)
+    try {
+      const tripId = trip.tripId || trip.bookingCode
+      await driverTripService.confirmTrip(tripId)
+      setToast({ message: 'Đã xác nhận nhận chuyến thành công! Vui lòng chuẩn bị di chuyển.', type: 'success' })
+      refetch()
+    } catch (err) {
+      setToast({ message: err?.response?.data?.message || err?.message || 'Không thể xác nhận chuyến', type: 'error' })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   return (
     <DriverLayout activeTab="schedule">
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ message: '', type: 'success' })}
+      />
+
       {/* Top Banner & Header info */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-            Lịch trình tài xế
+            Lịch trình tác nghiệp
           </h1>
           <p className="mt-0.5 text-xs text-slate-500">
-            Xem và theo dõi các chuyến xe đã được phân công
+            Theo dõi danh sách cuốc xe và tiếp nhận chuyến được phân công
           </p>
         </div>
 
@@ -85,9 +127,9 @@ export default function DriverSchedulePage() {
               key={item.key}
               type="button"
               onClick={() => setView(item.key)}
-              className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${
+              className={`flex-1 rounded-lg py-2.5 text-xs font-bold transition ${
                 isActive
-                  ? 'bg-brand-600 text-white shadow-xs'
+                  ? 'bg-brand-700 text-white shadow-xs'
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -98,17 +140,17 @@ export default function DriverSchedulePage() {
       </div>
 
       {/* Filter and Date Bar */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5 rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
         {/* Status Dropdown */}
         <div className="flex items-center gap-2">
-          <label htmlFor="status-filter" className="text-xs font-medium text-slate-500">
+          <label htmlFor="status-filter" className="text-xs font-semibold text-slate-500">
             Trạng thái:
           </label>
           <select
             id="status-filter"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-brand-500 focus:bg-white"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-brand-600 focus:bg-white"
           >
             {STATUS_FILTER_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -120,7 +162,7 @@ export default function DriverSchedulePage() {
 
         {/* Date Selector */}
         <div className="flex items-center gap-2">
-          <label htmlFor="date-filter" className="text-xs font-medium text-slate-500">
+          <label htmlFor="date-filter" className="text-xs font-semibold text-slate-500">
             Ngày:
           </label>
           <div className="flex items-center gap-1">
@@ -129,7 +171,7 @@ export default function DriverSchedulePage() {
               type="date"
               value={dateDraft}
               onChange={handleDateChange}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-brand-500 focus:bg-white"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-brand-600 focus:bg-white"
             />
             {dateDraft && (
               <button
@@ -138,107 +180,87 @@ export default function DriverSchedulePage() {
                 title="Bỏ lọc theo ngày"
                 className="rounded p-1 text-slate-400 hover:text-slate-600"
               >
-                <Icon name="close" className="text-[14px]" />
+                <Icon name="close" className="text-[16px]" />
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Content Section: Loading, Error, Empty or List */}
-      {loading ? (
-        <TripListSkeleton />
-      ) : error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-6 text-center">
-          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-            <Icon name="error_outline" className="text-[24px]" />
-          </span>
-          <h3 className="mt-3 text-sm font-bold text-slate-900">Không thể tải dữ liệu</h3>
-          <p className="mt-1 text-xs text-rose-700">{error}</p>
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-brand-700"
-          >
-            <Icon name="refresh" className="text-[16px]" />
-            <span>Thử lại</span>
-          </button>
-        </div>
-      ) : trips.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-8 text-center shadow-xs">
-          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-            <Icon name="no_crash" className="text-[24px]" />
-          </span>
-          <h3 className="mt-3 text-sm font-bold text-slate-900">
-            {isFiltered
-              ? 'Không tìm thấy chuyến phù hợp.'
-              : 'Bạn chưa có chuyến được phân công.'}
-          </h3>
-          <p className="mt-1 text-xs text-slate-500">
-            {isFiltered
-              ? 'Hãy thử thay đổi bộ lọc trạng thái hoặc ngày tìm kiếm.'
-              : 'Khi nhà xe phân công chuyến mới, thông tin sẽ xuất hiện tại đây.'}
-          </p>
-          {isFiltered && (
-            <button
-              type="button"
-              onClick={() => {
-                setStatus('ALL')
-                handleClearDate()
-              }}
-              className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-            >
-              Xoá bộ lọc
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1 text-xs text-slate-500">
-            <span>
-              Tìm thấy <strong className="text-slate-800">{total}</strong> chuyến
-            </span>
-            <span>
-              Trang <strong>{page + 1}</strong> / {totalPages}
-            </span>
+      {/* Error state */}
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 flex items-start gap-2">
+          <Icon name="error" className="text-[18px] text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Lỗi tải dữ liệu: </span>
+            {error}
           </div>
-
-          <div className="space-y-4">
-            {trips.map((trip) => (
-              <DriverTripCard key={trip.tripId || trip.bookingCode} trip={trip} />
-            ))}
-          </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-              <button
-                type="button"
-                onClick={() => setPage(Math.max(0, page - 1))}
-                disabled={page === 0}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
-              >
-                <Icon name="chevron_left" className="text-[16px]" />
-                <span>Trang trước</span>
-              </button>
-
-              <span className="text-xs font-medium text-slate-600">
-                {page + 1} / {totalPages}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setPage(page + 1)}
-                disabled={page + 1 >= totalPages}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
-              >
-                <span>Trang sau</span>
-                <Icon name="chevron_right" className="text-[16px]" />
-              </button>
-            </div>
-          )}
         </div>
       )}
+
+      {/* Trip Cards List */}
+      {loading ? (
+        <TripListSkeleton />
+      ) : trips.length === 0 ? (
+        <div className="my-8 rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center">
+          <Icon name="event_busy" className="mx-auto mb-2 text-4xl text-slate-300" />
+          <h3 className="text-sm font-bold text-slate-800">Không có chuyến đi nào phù hợp</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Bạn có thể thử chọn tab khác hoặc thay đổi bộ lọc ngày để xem các chuyến khác.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3.5">
+          {trips.map((trip) => (
+            <DriverTripCard
+              key={trip.tripId || trip.bookingCode}
+              trip={trip}
+              onConfirm={handleConfirmTrip}
+              onReject={(t) => setRejectingTrip(t)}
+              actionLoading={actionLoading}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4 text-xs text-slate-600">
+          <span>Tổng số {total} chuyến</span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page <= 0}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold hover:bg-slate-50 disabled:opacity-40"
+            >
+              Trước
+            </button>
+            <span className="px-2 font-bold text-slate-800">
+              {page + 1} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold hover:bg-slate-50 disabled:opacity-40"
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Trip Modal */}
+      <DriverRejectTripModal
+        trip={rejectingTrip}
+        isOpen={Boolean(rejectingTrip)}
+        onClose={() => setRejectingTrip(null)}
+        onSuccess={(msg) => {
+          refetch()
+          setToast({ message: msg, type: 'info' })
+        }}
+      />
     </DriverLayout>
   )
 }

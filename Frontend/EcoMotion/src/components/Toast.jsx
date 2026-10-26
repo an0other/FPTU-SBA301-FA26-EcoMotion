@@ -19,7 +19,7 @@ export default function Toast({ message, type = 'error', duration = 4000, onClos
   return (
     <div
       role="alert"
-      className={`fixed right-4 left-4 top-24 z-[9999] flex items-center gap-3 rounded-xl border px-4 py-3.5 text-[14px] font-medium shadow-2xl transition-all sm:left-auto sm:right-6 sm:max-w-[420px] ${
+      className={`fixed right-4 left-4 top-20 z-[9999] flex items-center gap-3 rounded-lg border px-4 py-3 text-xs font-semibold shadow-md transition-all sm:left-auto sm:right-6 sm:max-w-[400px] ${
         VARIANT_CLASS[type] ?? VARIANT_CLASS.info
       }`}
     >

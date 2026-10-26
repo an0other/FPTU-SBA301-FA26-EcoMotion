@@ -7,7 +7,8 @@ import com.fptufa26.ecomotion.auth.dto.response.SendOtpResponse;
 import com.fptufa26.ecomotion.auth.dto.response.VerifyOtpResponse;
 import com.fptufa26.ecomotion.auth.exception.DuplicateEmailException;
 import com.fptufa26.ecomotion.auth.exception.UnsupportedRoleException;
-import com.fptufa26.ecomotion.auth.service.OtpService;
+import com.fptufa26.ecomotion.otp.service.OtpService;
+import com.fptufa26.ecomotion.otp.dto.response.OtpChallenge;
 import com.fptufa26.ecomotion.auth.service.TokenService;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
@@ -64,7 +65,7 @@ class RegistrationServiceImplTest {
     @Test
     @DisplayName("sendOtp returns the challenge and echoes the code when expose-in-response is on")
     void sendOtpEchoesCode() {
-        when(otpService.send(EMAIL)).thenReturn(new OtpService.OtpChallenge(EMAIL, "123456", 300, 60));
+        when(otpService.send(any())).thenReturn(new OtpChallenge("123456", 300, 60));
 
         SendOtpResponse response = service.sendOtp(EMAIL);
 
@@ -78,7 +79,7 @@ class RegistrationServiceImplTest {
     @DisplayName("sendOtp hides the code when expose-in-response is off")
     void sendOtpHidesCodeWhenNotExposed() {
         ReflectionTestUtils.setField(service, "exposeOtpInResponse", false);
-        when(otpService.send(EMAIL)).thenReturn(new OtpService.OtpChallenge(EMAIL, "123456", 300, 60));
+        when(otpService.send(any())).thenReturn(new OtpChallenge("123456", 300, 60));
 
         SendOtpResponse response = service.sendOtp(EMAIL);
 
@@ -93,7 +94,7 @@ class RegistrationServiceImplTest {
         assertThatThrownBy(() -> service.sendOtp(EMAIL))
                 .isInstanceOf(DuplicateEmailException.class);
 
-        verify(otpService, never()).send(anyString());
+        verify(otpService, never()).send(any());
     }
 
     @Test
@@ -104,7 +105,7 @@ class RegistrationServiceImplTest {
 
         VerifyOtpResponse response = service.verifyOtp(EMAIL, "123456");
 
-        verify(otpService).verify(EMAIL, "123456");
+        verify(otpService).verify(any());
         assertThat(response.registrationToken()).isEqualTo(TOKEN);
         assertThat(response.expiresInSeconds()).isEqualTo(1800L);
     }

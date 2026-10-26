@@ -62,8 +62,17 @@ public class Booking {
     private Driver driver;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
     private BookingStatus status = BookingStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "assignment_mode", length = 30)
+    private com.fptufa26.ecomotion.booking.enums.AssignmentMode assignmentMode = com.fptufa26.ecomotion.booking.enums.AssignmentMode.AUTO_SUGGEST;
+
+    @Column(name = "reassign_count")
+    private Integer reassignCount = 0;
+
+    @Column(name = "assignment_expires_at")
+    private Instant assignmentExpiresAt;
 
     @Column(name = "assigned_at")
     private Instant assignedAt;

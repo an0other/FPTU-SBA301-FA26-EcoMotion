@@ -64,7 +64,11 @@ public interface PaymentTransactionRepository
 
     boolean existsByGatewayRef(String gatewayRef);
 
-    boolean existsByReceivingBankAccount_IdAndGatewayRef(Long receivingBankAccountId, String gatewayRef);
+boolean existsByReceivingBankAccount_IdAndGatewayRef(Long receivingBankAccountId, String gatewayRef);
+
+    Optional<PaymentTransaction> findByVnpTxnRef(String vnpTxnRef);
+
+    boolean existsByVnpTxnRef(String vnpTxnRef);
 
     boolean existsByCharge_IdAndStatus(Long chargeId, PaymentStatus status);
     @EntityGraph(attributePaths = "booking")
