@@ -11,11 +11,15 @@ import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
+import com.fptufa26.ecomotion.booking.dto.response.ConfirmStartResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
+import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.vehicle.dto.response.BookableVehicleResponse;
 import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
@@ -49,13 +53,19 @@ public class RenterBookingController {
 
     private final BookingService bookingService;
     private final VehicleCatalogService vehicleCatalogService;
+    private final VehicleOperationalRiskService vehicleOperationalRiskService;
     private final VnpayService vnpayService;
 
     @GetMapping
-    public ApiResponse<List<BookingSummaryResponse>> listMine(
+    public ApiResponse<PageResponse<BookingSummaryResponse>> listMine(
             @AuthenticationPrincipal SecurityUser user,
-            @RequestParam(required = false) BookingStatus status) {
-        return ApiResponse.success(bookingService.listMine(user.getUserId(), status));
+            @RequestParam(required = false) BookingStatus status,
+            @RequestParam(required = false) String group,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ApiResponse.success(bookingService.listMinePage(
+                user.getUserId(), status, group, keyword, page, size));
     }
 
     @GetMapping("/vehicles")
@@ -75,8 +85,7 @@ public class RenterBookingController {
     public ResponseEntity<ApiResponse<CheckoutPreviewResponse>> previewCheckout(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
-        return ResponseEntity.status(HttpStatus.GONE).body(
-                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox"));
+        return ResponseEntity.ok(ApiResponse.success(bookingService.previewCheckout(user.getUserId(), bookingCode)));
     }
 
     @PostMapping("/{bookingCode}/checkout")
@@ -84,8 +93,7 @@ public class RenterBookingController {
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode,
             @Valid @RequestBody CheckoutRequest request) {
-        return ResponseEntity.status(HttpStatus.GONE).body(
-                ApiResponse.error("LEGACY_CHECKOUT_DISABLED", "Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox"));
+        return ResponseEntity.ok(ApiResponse.success(bookingService.checkout(user.getUserId(), bookingCode, request)));
     }
 
     @GetMapping("/{bookingCode}")
@@ -93,6 +101,20 @@ public class RenterBookingController {
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
         return ApiResponse.success(bookingService.detail(user.getUserId(), bookingCode));
+    }
+
+    @GetMapping("/{bookingCode}/operational-risk")
+    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse> operationalRisk(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(vehicleOperationalRiskService.assessForRenter(user.getUserId(), bookingCode));
+    }
+
+    @GetMapping("/{bookingCode}/tracking")
+    public ApiResponse<TripTrackingResponse> tracking(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(bookingService.getTripTracking(user.getUserId(), bookingCode));
     }
 
     @PatchMapping("/{bookingCode}/request-details")
@@ -115,6 +137,13 @@ public class RenterBookingController {
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
         return ApiResponse.success(bookingService.confirmEnd(user.getUserId(), bookingCode));
+    }
+
+    @PostMapping("/{bookingCode}/confirm-start")
+    public ApiResponse<ConfirmStartResponse> confirmStart(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(bookingService.confirmStart(user.getUserId(), bookingCode));
     }
 
     @PostMapping("/{bookingCode}/disputes")

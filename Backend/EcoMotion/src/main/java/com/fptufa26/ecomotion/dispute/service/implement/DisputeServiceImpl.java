@@ -3,7 +3,7 @@ package com.fptufa26.ecomotion.dispute.service.implement;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
@@ -32,17 +32,17 @@ public class DisputeServiceImpl implements DisputeService {
 
     private final DisputeRepository disputeRepository;
     private final UserService userService;
-    private final BookingService bookingService;
+    private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
 
     public DisputeServiceImpl(
             DisputeRepository disputeRepository,
             UserService userService,
-            @org.springframework.context.annotation.Lazy BookingService bookingService,
+            BookingPaymentLedgerService bookingPaymentLedgerService,
             PaymentRequestService paymentRequestService) {
         this.disputeRepository = disputeRepository;
         this.userService = userService;
-        this.bookingService = bookingService;
+        this.bookingPaymentLedgerService = bookingPaymentLedgerService;
         this.paymentRequestService = paymentRequestService;
     }
 
@@ -120,7 +120,7 @@ public class DisputeServiceImpl implements DisputeService {
                 .orElseThrow(() -> new ConflictException("Tranh chấp không liên kết với phụ phí"));
         Booking booking = dispute.getBooking();
         Optional<PaymentRequest> finalRequest = paymentRequestService
-                .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
+                .findPaymentRequest(booking.getId(), PaymentRequestType.FINAL_BALANCE);
         finalRequest.ifPresent(request -> {
             if (request.getStatus() == PaymentRequestStatus.CONFIRMED
                     || request.getPaidAmount().signum() > 0) {
@@ -149,13 +149,19 @@ public class DisputeServiceImpl implements DisputeService {
             }
             paymentRequestService.savePaymentRequest(request);
         });
-        bookingService.saveBooking(booking);
+        bookingPaymentLedgerService.saveBooking(booking);
     }
 
     @Override
     @Transactional(readOnly = true)
     public long countOpenOrInReview() {
         return disputeRepository.countOpenOrInReview();
+    }
+
+    @Override
+    public boolean hasOpenDispute(Long bookingId) {
+        return disputeRepository.existsByBooking_IdAndStatusIn(
+                bookingId, java.util.List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
     }
 
     @Override

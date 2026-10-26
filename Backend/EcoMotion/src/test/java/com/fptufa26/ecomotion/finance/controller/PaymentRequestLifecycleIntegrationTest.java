@@ -171,7 +171,7 @@ class PaymentRequestLifecycleIntegrationTest {
     }
 
     @Test
-    void expiredRequestRejectsProofAndIsNotAdvertisedAsPayable() {
+    void expiredRequestPreservesLateProofForManualReviewAndIsNotAdvertisedAsPayable() {
         Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
         booking.setStatus(BookingStatus.ACCEPTED);
         bookingRepository.saveAndFlush(booking);
@@ -181,11 +181,12 @@ class PaymentRequestLifecycleIntegrationTest {
         paymentRequestRepository.saveAndFlush(request);
 
         byte[] png = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
-        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+        paymentRequestService.submitPaymentProof(
                 request.getId(), booking.getRenter().getUser().getId(),
                 new MockMultipartFile("file", "receipt.png", "image/png", png),
-                request.getAmount(), null, null, null))
-                .hasMessageContaining("hết hạn");
+                request.getAmount(), null, null, null);
+        assertThat(paymentRequestRepository.findById(request.getId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentRequestStatus.REVIEW_REQUIRED);
         assertThat(bookingService.listMine(booking.getRenter().getUser().getId(), null)).filteredOn(
                 summary -> summary.bookingCode().equals(booking.getBookingCode()))
                 .allMatch(summary -> !summary.canPay());
@@ -229,6 +230,40 @@ class PaymentRequestLifecycleIntegrationTest {
                 .get()
                 .extracting(charge -> charge.getAmount().setScale(2))
                 .isEqualTo(request.getAmount().setScale(2));
+    }
+
+    @Test
+    void overpaymentCapsAllocationAndCreatesOnePendingRefund() {
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        booking.setStatus(BookingStatus.ACCEPTED);
+        bookingRepository.saveAndFlush(booking);
+        ensureBankAccount(booking);
+
+        PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
+        request.setStatus(PaymentRequestStatus.PROOF_SUBMITTED);
+        paymentRequestRepository.saveAndFlush(request);
+        BigDecimal received = request.getAmount().add(new BigDecimal("100000.00"));
+
+        paymentRequestService.confirmPayment(request.getId(), 2L,
+                new ConfirmPaymentRequest(received, "BANK-OVERPAY-001", null));
+
+        PaymentRequest confirmed = paymentRequestRepository.findById(request.getId()).orElseThrow();
+        assertThat(confirmed.getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        assertThat(confirmed.getPaidAmount()).isEqualByComparingTo(request.getAmount());
+        assertThat(transactionRepository.findByBooking_Id(booking.getId()))
+                .filteredOn(transaction -> transaction.getPaymentRequest() != null
+                        && transaction.getPaymentRequest().getId().equals(request.getId()))
+                .anySatisfy(transaction -> {
+                    assertThat(transaction.getDirection()).isEqualTo(PaymentDirection.IN);
+                    assertThat(transaction.getAmount()).isEqualByComparingTo(received);
+                    assertThat(transaction.getAppliedAmount()).isEqualByComparingTo(request.getAmount());
+                })
+                .anySatisfy(transaction -> {
+                    assertThat(transaction.getType()).isEqualTo(PaymentType.REFUND);
+                    assertThat(transaction.getDirection()).isEqualTo(PaymentDirection.OUT);
+                    assertThat(transaction.getStatus()).isEqualTo(PaymentStatus.PENDING);
+                    assertThat(transaction.getAmount()).isEqualByComparingTo("100000.00");
+                });
     }
 
     @Test
@@ -323,7 +358,7 @@ class PaymentRequestLifecycleIntegrationTest {
         bookingService.openDispute(
                 booking.getRenter().getUser().getId(),
                 booking.getBookingCode(),
-                new OpenDisputeRequest(DisputeCategory.CHARGE, ChargeType.WAITING));
+                new OpenDisputeRequest(DisputeCategory.CHARGE, extra.getId()));
 
         PaymentRequest held = paymentRequestRepository
                 .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
@@ -341,6 +376,43 @@ class PaymentRequestLifecycleIntegrationTest {
         PaymentRequest reopened = paymentRequestRepository.findById(held.getId()).orElseThrow();
         assertThat(reopened.getStatus()).isEqualTo(PaymentRequestStatus.PENDING);
         assertThat(reopened.getAmount()).isEqualByComparingTo("700000.00");
+    }
+
+    @Test
+    void renterCanReissueAnExpiredDepositUsingTheSameRequest() {
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        booking.setStatus(BookingStatus.AWAITING_DEPOSIT);
+        bookingRepository.saveAndFlush(booking);
+        ensureBankAccount(booking);
+        PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
+        request.setStatus(PaymentRequestStatus.EXPIRED);
+        request.setExpiresAt(Instant.now().minusSeconds(1));
+        paymentRequestRepository.saveAndFlush(request);
+
+        var reissued = paymentRequestService.reissuePaymentRequest(
+                request.getId(), booking.getRenter().getUser().getId());
+
+        assertThat(reissued.id()).isEqualTo(request.getId());
+        assertThat(reissued.status()).isEqualTo(PaymentRequestStatus.PENDING);
+        assertThat(reissued.expiresAt()).isAfter(Instant.now().plusSeconds(14 * 60));
+    }
+
+    @Test
+    void cancellingAfterProofSubmissionMovesBookingAndPaymentToReview() {
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        booking.setStatus(BookingStatus.AWAITING_DEPOSIT);
+        bookingRepository.saveAndFlush(booking);
+        ensureBankAccount(booking);
+        PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
+        request.setStatus(PaymentRequestStatus.PROOF_SUBMITTED);
+        paymentRequestRepository.saveAndFlush(request);
+
+        bookingService.cancel(booking.getRenter().getUser().getId(), booking.getBookingCode());
+
+        assertThat(bookingRepository.findById(booking.getId()).orElseThrow().getStatus())
+                .isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(paymentRequestRepository.findById(request.getId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentRequestStatus.REVIEW_REQUIRED);
     }
 
     private void ensureBankAccount(Booking booking) {

@@ -37,12 +37,17 @@ export function useProviderTripTracking(bookingCode, { enabled = true, intervalM
     isMountedRef.current = true
 
     if (!enabled || !bookingCode) {
-      setTrackingData(null)
-      return
+      const resetTimerId = window.setTimeout(() => setTrackingData(null), 0)
+      return () => {
+        isMountedRef.current = false
+        window.clearTimeout(resetTimerId)
+      }
     }
 
-    setLoading(true)
-    fetchTracking()
+    const initialFetchTimerId = window.setTimeout(() => {
+      setLoading(true)
+      fetchTracking()
+    }, 0)
 
     let timerId = null
 
@@ -76,6 +81,7 @@ export function useProviderTripTracking(bookingCode, { enabled = true, intervalM
 
     return () => {
       isMountedRef.current = false
+      window.clearTimeout(initialFetchTimerId)
       stopPolling()
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }

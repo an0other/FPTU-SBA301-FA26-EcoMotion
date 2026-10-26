@@ -28,6 +28,15 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
     @EntityGraph(attributePaths = {"booking", "booking.renter", "booking.renter.user", "evidences"})
     List<PaymentRequest> findByBooking_IdOrderByCreatedAtDesc(Long bookingId);
 
+    @EntityGraph(attributePaths = {"booking", "booking.renter", "booking.renter.user", "booking.vehicle", "booking.vehicle.provider", "booking.vehicle.provider.user", "evidences"})
+    List<PaymentRequest> findByBooking_BookingCodeOrderByCreatedAtDesc(String bookingCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT pr FROM PaymentRequest pr JOIN FETCH pr.booking b JOIN FETCH b.renter r JOIN FETCH r.user WHERE UPPER(b.bookingCode) = :bookingCode AND pr.paymentType = :paymentType")
+    Optional<PaymentRequest> findByBookingCodeAndTypeForUpdate(
+            @Param("bookingCode") String bookingCode,
+            @Param("paymentType") PaymentRequestType paymentType);
+
     @EntityGraph(attributePaths = {"booking", "booking.renter", "booking.renter.user", "evidences"})
     Optional<PaymentRequest> findByBooking_IdAndPaymentType(Long bookingId, PaymentRequestType paymentType);
 

@@ -179,4 +179,60 @@ class ProviderVehicleApiTest {
                         .content(payload))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("provider can configure a vehicle deposit policy")
+    void providerCanConfigureVehicleDepositPolicy() throws Exception {
+        User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        String token = jwtService.generateAccessToken(providerUser);
+        Provider provider = userService.findProviderByUserId(providerUser.getUserId()).orElseThrow();
+        Vehicle vehicle = vehicleRepository.findByProvider_IdOrderByIdAsc(provider.getId()).getFirst();
+
+        mockMvc.perform(patch("/api/provider/vehicles/{id}/deposit-policy", vehicle.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "depositRatioOverride": 0.5,
+                                  "minimumDepositAmount": 5000000
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.depositRatioOverride").value(0.5))
+                .andExpect(jsonPath("$.data.minimumDepositAmount").value(5000000))
+                .andExpect(jsonPath("$.data.effectiveRatio").value(0.5));
+    }
+
+    @Test
+    @DisplayName("provider can enter a plate with spaces and separators")
+    void providerCanRegisterVehicleWithFriendlyPlateInput() throws Exception {
+        User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
+        String token = jwtService.generateAccessToken(providerUser);
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+        int randomDigits = 10000 + new Random().nextInt(90000);
+        String plate = "51k " + randomDigits;
+
+        String payload = """
+                {
+                    "chassisNo": "VIN-%s",
+                    "engineNo": "ENG-%s",
+                    "licensePlate": "%s",
+                    "brand": "VinFast",
+                    "model": "VF 8 Plus",
+                    "manufactureYear": 2024,
+                    "seatCount": 5,
+                    "transmission": "AUTOMATIC",
+                    "fuelType": "EV",
+                    "color": "Xanh Lục Bảo",
+                    "maintenanceBufferMinutes": 60
+                }
+                """.formatted(uniqueSuffix, uniqueSuffix, plate);
+
+        mockMvc.perform(post("/api/provider/vehicles")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.licensePlate").value("51K-" + randomDigits));
+    }
 }

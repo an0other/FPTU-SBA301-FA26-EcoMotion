@@ -21,6 +21,8 @@ public record BookingSummaryResponse(
         Instant pickupTime,
         int passengerCount,
         BigDecimal totalAmount,
-        boolean canPay
+        boolean canPay,
+        boolean atRisk,
+        String riskMessage
 ) {
 }

@@ -25,6 +25,8 @@ public record PaymentRequestResponse(
         PaymentRequestStatus status,
         String qrCodeUrl,
         Instant expiresAt,
+        Instant firstProofAt,
+        Instant reconciliationDeadline,
         Instant createdAt,
         Instant confirmedAt,
         String rejectionReason,

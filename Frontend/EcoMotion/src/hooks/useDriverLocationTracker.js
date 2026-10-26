@@ -119,11 +119,10 @@ export function useDriverLocationTracker({
   }, [sendLocationUpdate, onError])
 
   useEffect(() => {
-    if (enabled && tripId) {
-      startTracking()
-    } else {
-      stopTracking()
-    }
+    queueMicrotask(() => {
+      if (enabled && tripId) startTracking()
+      else stopTracking()
+    })
 
     return () => {
       stopTracking()

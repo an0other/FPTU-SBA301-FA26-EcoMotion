@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
@@ -178,6 +179,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
             throw new InvalidTripTransitionException("Không thể xác nhận chuyến đi đã hoàn thành");
         }
+        if (booking.isDriverReplacementRequired()) {
+            throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
+        }
         if (booking.getDriverConfirmedAt() != null || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
             throw new TripConflictException("Chuyến đi đã được xác nhận trước đó");
         }
@@ -229,6 +233,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
             throw new InvalidTripTransitionException("Không thể cập nhật chuyến đi đã hoàn thành");
         }
+        if (booking.isDriverReplacementRequired()) {
+            throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
+        }
         if (booking.getDriverConfirmedAt() == null && booking.getStatus() != BookingStatus.DRIVER_CONFIRMED) {
             throw new InvalidTripTransitionException("Tài xế phải xác nhận nhận chuyến trước khi báo đã đến");
         }
@@ -272,8 +279,11 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
             throw new InvalidTripTransitionException("Không thể bắt đầu chuyến đi đã bị hủy");
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
+        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getDriverEndConfirmedAt() != null) {
             throw new InvalidTripTransitionException("Không thể bắt đầu chuyến đi đã hoàn thành");
+        }
+        if (booking.isDriverReplacementRequired()) {
+            throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
         }
         if (booking.getDriverConfirmedAt() == null && booking.getStatus() != BookingStatus.DRIVER_CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ARRIVED) {
             throw new InvalidTripTransitionException("Tài xế phải xác nhận nhận chuyến trước khi bắt đầu");
@@ -281,13 +291,18 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getActualArrivedAt() == null && booking.getStatus() != BookingStatus.DRIVER_ARRIVED) {
             throw new InvalidTripTransitionException("Tài xế phải báo đã đến điểm đón trước khi bắt đầu chuyến");
         }
-        if (booking.getActualStartAt() != null || booking.getStatus() == BookingStatus.IN_PROGRESS) {
-            throw new TripConflictException("Chuyến đi đã được bắt đầu trước đó");
+        if (booking.getDriverStartConfirmedAt() != null) {
+            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
         }
 
         Instant now = clock.instant();
-        booking.setActualStartAt(now);
-        booking.setStatus(BookingStatus.IN_PROGRESS);
+        booking.setDriverStartConfirmedAt(now);
+        if (booking.getRenterStartConfirmedAt() != null) {
+            booking.setActualStartAt(now);
+            booking.setStatus(BookingStatus.IN_PROGRESS);
+        } else {
+            booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
+        }
         Booking saved = bookingRepository.saveAndFlush(booking);
 
         log.info(
@@ -318,8 +333,8 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
             throw new InvalidTripTransitionException("Không thể kết thúc chuyến đi đã bị hủy");
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
-            throw new TripConflictException("Chuyến đi đã được kết thúc trước đó");
+        if (booking.getDriverEndConfirmedAt() != null) {
+            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
         }
         if (booking.getStatus() != BookingStatus.IN_PROGRESS || booking.getActualStartAt() == null) {
             throw new InvalidTripTransitionException("Chỉ có thể kết thúc chuyến đi đang thực hiện (IN_PROGRESS)");
@@ -327,7 +342,10 @@ public class DriverTripServiceImpl implements DriverTripService {
 
         Instant now = clock.instant();
         booking.setActualEndAt(now);
-        booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+        booking.setDriverEndConfirmedAt(now);
+        booking.setStatus(booking.getRenterEndConfirmedAt() != null
+                ? BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
+                : BookingStatus.AWAITING_END_CONFIRMATION);
         if (booking.getProviderConfirmedAt() == null) {
             booking.setProviderConfirmedAt(now);
         }
@@ -340,6 +358,32 @@ public class DriverTripServiceImpl implements DriverTripService {
                 deriveExecutionStatus(saved),
                 saved.getStatus()
         );
+        return toDetailResponse(saved, getCoverUrl(saved), getLatestLocationForBooking(saved.getId()));
+    }
+
+    @Override
+    @Transactional
+    public DriverTripDetailResponse reportUnavailable(Long currentUserId, String tripIdOrCode,
+                                                      ReportDriverIssueRequest request) {
+        Driver driver = resolveDriver(currentUserId);
+        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        if (booking.getActualStartAt() != null || booking.getStatus() == BookingStatus.IN_PROGRESS) {
+            throw new InvalidTripTransitionException("Chuyến đi đã bắt đầu; hãy dùng quy trình báo sự cố đang vận hành");
+        }
+        if (booking.getStatus() == BookingStatus.CANCELLED
+                || booking.getStatus() == BookingStatus.REJECTED
+                || booking.getStatus() == BookingStatus.COMPLETED) {
+            throw new InvalidTripTransitionException("Không thể báo sự cố cho chuyến đi đã kết thúc");
+        }
+        if (booking.isDriverReplacementRequired()) {
+            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
+        }
+        booking.setDriverReplacementRequired(true);
+        booking.setDriverIssueReason(request.reason().trim());
+        booking.setDriverIssueReportedAt(clock.instant());
+        booking.setDriverIssueReportedBy(driver.getUser());
+        booking.setDriverIssueResolvedAt(null);
+        Booking saved = bookingRepository.saveAndFlush(booking);
         return toDetailResponse(saved, getCoverUrl(saved), getLatestLocationForBooking(saved.getId()));
     }
 
@@ -579,17 +623,26 @@ public class DriverTripServiceImpl implements DriverTripService {
     }
 
     public static String deriveExecutionStatus(Booking booking) {
+        if (booking.isDriverReplacementRequired()) {
+            return "DRIVER_REPLACEMENT_REQUIRED";
+        }
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
             return "CANCELLED";
         }
         if (booking.getStatus() == BookingStatus.REJECTED) {
             return "REJECTED";
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
-            return "COMPLETED";
+        if (booking.getStatus() == BookingStatus.AWAITING_START_CONFIRMATION) {
+            return "AWAITING_START_CONFIRMATION";
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION) {
+            return "AWAITING_END_CONFIRMATION";
         }
         if (booking.getStatus() == BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
             return "AWAITING_EXTRA_CHARGE_CONFIRMATION";
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
+            return "COMPLETED";
         }
         if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getActualStartAt() != null) {
             return "IN_PROGRESS";

@@ -14,6 +14,7 @@ public record BookableVehicleResponse(
         FuelType fuelType,
         String imageUrl,
         BigDecimal depositRatio,
+        BigDecimal minimumDepositAmount,
         List<RentalPlanResponse> plans
 ) {
 }
