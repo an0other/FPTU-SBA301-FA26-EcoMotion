@@ -64,6 +64,15 @@ export async function openDispute(bookingCode, body) {
   return data.data
 }
 
+export async function uploadDisputeEvidence(bookingCode, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/disputes/upload-evidence`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data?.data?.url
+}
+
 export async function createVnpayPaymentUrl(payload) {
   const { data } = await apiClient.post('/v1/payment/vnpay/create-url', payload)
   return data?.data
@@ -80,6 +89,7 @@ export const bookingService = {
   cancelMyBooking,
   confirmTripEnd,
   openDispute,
+  uploadDisputeEvidence,
   createVnpayPaymentUrl,
 
   // Provider methods
