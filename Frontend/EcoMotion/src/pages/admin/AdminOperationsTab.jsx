@@ -19,6 +19,22 @@ function formatVND(amount) {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
 }
 
+function countEvidence(urls) {
+  if (!urls) return 0
+  if (Array.isArray(urls)) return urls.filter(Boolean).length
+  if (typeof urls === 'string') {
+    const trimmed = urls.trim()
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) return parsed.filter(Boolean).length
+      } catch {}
+    }
+    return trimmed ? 1 : 0
+  }
+  return 0
+}
+
 const BOOKING_STATUS_BADGES = {
   PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
   ACCEPTED: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -386,10 +402,10 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                           <p className="line-clamp-2 font-medium text-slate-800" title={d.description || ''}>
                             {d.description || <span className="text-slate-400 italic font-normal">Chưa có mô tả</span>}
                           </p>
-                          {d.evidenceUrls && d.evidenceUrls.length > 0 && (
+                          {countEvidence(d.evidenceUrls) > 0 && (
                             <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 border border-purple-200">
                               <IconImage className="h-3 w-3" />
-                              {d.evidenceUrls.length} ảnh bằng chứng
+                              {countEvidence(d.evidenceUrls)} ảnh bằng chứng
                             </span>
                           )}
                         </td>
