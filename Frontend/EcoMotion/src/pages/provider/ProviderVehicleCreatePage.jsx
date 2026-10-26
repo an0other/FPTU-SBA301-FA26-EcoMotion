@@ -31,6 +31,7 @@ export default function ProviderVehicleCreatePage() {
   const [summary, setSummary] = useState(null);
   const [toast, setToast] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [showTierModal, setShowTierModal] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -92,31 +93,44 @@ export default function ProviderVehicleCreatePage() {
     });
   }
 
-  function handleImageFileSelected(e) {
+  async function handleImageFileSelected(e) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const validExts = ["jpg", "jpeg", "png", "webp"];
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
       setToast({
-        message: "Vui lòng chọn tệp định dạng hình ảnh.",
+        message: "Hệ thống chỉ chấp nhận hình ảnh định dạng JPG, PNG hoặc WEBP.",
         type: "error",
       });
+      e.target.value = "";
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setToast({ message: "Dung lượng ảnh tối đa là 10MB.", type: "error" });
+    if (file.size > 8 * 1024 * 1024) {
+      setToast({ message: "Dung lượng ảnh tối đa là 8MB.", type: "error" });
+      e.target.value = "";
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        handleChange("coverImageUrl", event.target.result);
-        setToast({ message: `Đã chọn ảnh: ${file.name}`, type: "success" });
+    try {
+      setUploadingImage(true);
+      const res = await providerService.uploadVehicleImage(file);
+      if (res?.imageUrl) {
+        handleChange("coverImageUrl", res.imageUrl);
+        setToast({ message: `Tải ảnh lên thành công: ${file.name}`, type: "success" });
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      setToast({
+        message: err.response?.data?.message || err.message || "Lỗi khi tải ảnh lên máy chủ",
+        type: "error",
+      });
+    } finally {
+      setUploadingImage(false);
+      e.target.value = "";
+    }
   }
 
   async function handleSubmit(e) {
@@ -1095,6 +1109,12 @@ export default function ProviderVehicleCreatePage() {
                           </span>
                           <span>ẢNH BÌA CHÍNH THỨC · 16:9</span>
                         </div>
+                        {uploadingImage && (
+                          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white z-10 gap-2">
+                            <div className="w-8 h-8 rounded-full border-3 border-emerald-400 border-t-transparent animate-spin"></div>
+                            <span className="text-xs font-semibold">Đang tải ảnh lên máy chủ...</span>
+                          </div>
+                        )}
                         <div className="absolute bottom-3 left-3 right-3 text-white">
                           <div className="font-bold text-sm leading-tight text-white drop-shadow-sm">
                             {form.brand} {form.model} ({form.manufactureYear})
@@ -1109,31 +1129,46 @@ export default function ProviderVehicleCreatePage() {
                       {/* Right: Drag & Drop Upload Zone */}
                       <div
                         onClick={() =>
-                          document.getElementById("coverImageInput")?.click()
+                          !uploadingImage && document.getElementById("coverImageInput")?.click()
                         }
-                        className="lg:col-span-7 rounded-2xl bg-slate-50 p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-emerald-50/50 transition-colors shadow-xs border-2 border-dashed border-slate-300 hover:border-emerald-500"
+                        className={`lg:col-span-7 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-xs border-2 border-dashed transition-colors ${
+                          uploadingImage
+                            ? "bg-emerald-50/50 border-emerald-400 cursor-wait"
+                            : "bg-slate-50 cursor-pointer hover:bg-emerald-50/50 border-slate-300 hover:border-emerald-500"
+                        }`}
                       >
                         <input
                           id="coverImageInput"
                           type="file"
                           accept="image/png, image/jpeg, image/webp"
                           className="hidden"
+                          disabled={uploadingImage}
                           onChange={handleImageFileSelected}
                         />
                         <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center justify-center mb-3 shadow-xs">
-                          <span className="material-symbols-outlined text-[26px]">
-                            cloud_upload
-                          </span>
+                          {uploadingImage ? (
+                            <div className="w-6 h-6 rounded-full border-2 border-emerald-700 border-t-transparent animate-spin"></div>
+                          ) : (
+                            <span className="material-symbols-outlined text-[26px]">
+                              cloud_upload
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm font-bold text-[#0b1c30] mb-1">
-                          Kéo thả ảnh mới hoặc{" "}
-                          <span className="text-emerald-700 underline font-semibold">
-                            Duyệt tệp từ máy
-                          </span>
+                          {uploadingImage ? (
+                            "Đang xử lý tải tệp lên máy chủ..."
+                          ) : (
+                            <>
+                              Kéo thả ảnh mới hoặc{" "}
+                              <span className="text-emerald-700 underline font-semibold">
+                                Duyệt tệp từ máy
+                              </span>
+                            </>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
                           Hỗ trợ định dạng WEBP, PNG, JPG. Dung lượng tối đa
-                          10MB. Khuyến nghị ảnh chụp thực tế góc 3/4 mặt trước
+                          8MB. Khuyến nghị ảnh chụp thực tế góc 3/4 mặt trước
                           xe với tỷ lệ 16:9.
                         </p>
                         <div className="mt-4 inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold shadow-xs">
