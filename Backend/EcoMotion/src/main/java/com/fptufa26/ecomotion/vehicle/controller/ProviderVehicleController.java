@@ -191,4 +191,46 @@ public class ProviderVehicleController {
             throw new IllegalStateException("Không thể đọc tệp tải lên: " + e.getMessage());
         }
     }
+
+    @PostMapping(value = "/vehicles/images/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload vehicle cover image (JPG, PNG, WEBP)")
+    public ApiResponse<java.util.Map<String, String>> uploadVehicleImage(
+            @AuthenticationPrincipal SecurityUser user,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn tệp hình ảnh xe");
+        }
+        String contentType = file.getContentType();
+        boolean isImage = contentType != null && (
+                contentType.equalsIgnoreCase("image/jpeg") ||
+                contentType.equalsIgnoreCase("image/png") ||
+                contentType.equalsIgnoreCase("image/webp")
+        );
+        if (!isImage) {
+            throw new IllegalArgumentException("Hệ thống chỉ chấp nhận hình ảnh định dạng JPG, PNG hoặc WEBP");
+        }
+
+        try {
+            String originalFilename = file.getOriginalFilename();
+            String safeName = (originalFilename != null && !originalFilename.isBlank())
+                    ? originalFilename.replaceAll("[^a-zA-Z0-9._-]", "_")
+                    : "vehicle_cover.png";
+            String uniqueFilename = System.currentTimeMillis() + "_" + safeName;
+            String storedKey = fileStorageService.store(
+                    "vehicle",
+                    user.getUserId(),
+                    uniqueFilename,
+                    file.getBytes(),
+                    contentType
+            );
+            String imageUrl = "/api/files/" + storedKey;
+            return ApiResponse.success(java.util.Map.of(
+                    "imageUrl", imageUrl,
+                    "fileName", originalFilename != null ? originalFilename : "vehicle_image"
+            ));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Không thể đọc tệp tải lên: " + e.getMessage());
+        }
+    }
 }
