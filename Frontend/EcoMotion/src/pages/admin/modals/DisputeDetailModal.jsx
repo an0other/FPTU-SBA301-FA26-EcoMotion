@@ -26,6 +26,22 @@ export default function DisputeDetailModal({ dispute, onClose, onResolve, action
   })
   const [previewImage, setPreviewImage] = useState(null)
 
+  const evidenceUrls = (() => {
+    if (!dispute?.evidenceUrls) return []
+    if (Array.isArray(dispute.evidenceUrls)) return dispute.evidenceUrls.filter(Boolean)
+    if (typeof dispute.evidenceUrls === 'string') {
+      const trimmed = dispute.evidenceUrls.trim()
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          if (Array.isArray(parsed)) return parsed.filter(Boolean)
+        } catch {}
+      }
+      return trimmed ? [trimmed] : []
+    }
+    return []
+  })()
+
   function handleSubmit(e) {
     e.preventDefault()
     if (!form.resolution.trim()) {
@@ -115,16 +131,18 @@ export default function DisputeDetailModal({ dispute, onClose, onResolve, action
           </div>
 
           {/* Evidence Photos Gallery */}
-          {dispute.evidenceUrls && dispute.evidenceUrls.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="block font-bold text-slate-700 uppercase tracking-wider text-[11px]">
-                  Hình ảnh bằng chứng khiếu nại đính kèm ({dispute.evidenceUrls.length} ảnh)
-                </span>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="block font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                Hình ảnh bằng chứng đính kèm ({evidenceUrls.length} ảnh)
+              </span>
+              {evidenceUrls.length > 0 && (
                 <span className="text-[10px] text-slate-500">Bấm ảnh để phóng to</span>
-              </div>
+              )}
+            </div>
+            {evidenceUrls.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-                {dispute.evidenceUrls.map((url, idx) => (
+                {evidenceUrls.map((url, idx) => (
                   <div
                     key={idx}
                     onClick={() => setPreviewImage(url)}
@@ -141,8 +159,12 @@ export default function DisputeDetailModal({ dispute, onClose, onResolve, action
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-xs text-slate-400 italic py-1">
+                Khách thuê không đính kèm hình ảnh bằng chứng cho khiếu nại này.
+              </p>
+            )}
+          </div>
 
           {/* Charge in Dispute */}
           {dispute.chargeId && (
