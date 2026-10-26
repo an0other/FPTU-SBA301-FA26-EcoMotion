@@ -690,6 +690,11 @@ public class DevDataSeeder implements ApplicationRunner {
             dispute.setRaisedBy(userRepository.findById(1L).orElseThrow());
             dispute.setCategory(DisputeCategory.CHARGE);
             dispute.setStatus(DisputeStatus.OPEN);
+            dispute.setDescription("Khách khiếu nại phụ phí vệ sinh: Khách ói ra sàn xe nhưng đã tự lau dọn kỹ và khử mùi bằng tinh dầu, đề nghị giảm phí vệ sinh chuyên sâu.");
+            dispute.setEvidenceUrlList(java.util.List.of(
+                    "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80",
+                    "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80"
+            ));
             dispute.setResolution(null);
             disputeRepository.save(dispute);
         }

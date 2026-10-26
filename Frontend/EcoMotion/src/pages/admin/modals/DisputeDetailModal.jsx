@@ -24,6 +24,7 @@ export default function DisputeDetailModal({ dispute, onClose, onResolve, action
     decision: 'KEEP_CHARGE',
     resolution: dispute.resolution || '',
   })
+  const [previewImage, setPreviewImage] = useState(null)
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -97,6 +98,51 @@ export default function DisputeDetailModal({ dispute, onClose, onResolve, action
               </strong>
             </div>
           </div>
+
+          {/* Description of Dispute from User */}
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/40 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-100 text-rose-700">
+                <IconAlertTriangle className="h-3.5 w-3.5" />
+              </span>
+              <span className="font-bold uppercase tracking-wider text-rose-900 text-[11px]">
+                Nội dung khiếu nại / Lý do chi tiết từ khách thuê
+              </span>
+            </div>
+            <p className="rounded-xl border border-rose-200 bg-white p-3 font-semibold text-slate-800 text-xs whitespace-pre-wrap leading-relaxed shadow-2xs">
+              {dispute.description || <span className="text-slate-400 italic">Không có mô tả chi tiết</span>}
+            </p>
+          </div>
+
+          {/* Evidence Photos Gallery */}
+          {dispute.evidenceUrls && dispute.evidenceUrls.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="block font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                  Hình ảnh bằng chứng khiếu nại đính kèm ({dispute.evidenceUrls.length} ảnh)
+                </span>
+                <span className="text-[10px] text-slate-500">Bấm ảnh để phóng to</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                {dispute.evidenceUrls.map((url, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => setPreviewImage(url)}
+                    className="group relative aspect-video overflow-hidden rounded-xl border border-slate-200 bg-white cursor-pointer shadow-xs hover:border-brand-500 hover:shadow-md transition-all"
+                  >
+                    <img
+                      src={url}
+                      alt={`Bằng chứng ${idx + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-bold backdrop-blur-2xs">
+                      Xem ảnh lớn
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Charge in Dispute */}
           {dispute.chargeId && (
@@ -224,6 +270,30 @@ export default function DisputeDetailModal({ dispute, onClose, onResolve, action
           )}
         </div>
       </div>
+
+      {/* Full-size Image Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={previewImage}
+              alt="Ảnh bằng chứng kích thước lớn"
+              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-3 -right-3 rounded-full bg-white p-1.5 text-slate-800 shadow-lg hover:bg-slate-100"
+              title="Đóng ảnh xem trước"
+            >
+              <IconX className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
