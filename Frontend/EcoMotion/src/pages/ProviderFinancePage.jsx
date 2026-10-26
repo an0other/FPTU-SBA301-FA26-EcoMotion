@@ -1704,7 +1704,7 @@ export default function ProviderFinancePage() {
                       <span className="text-slate-500">{formatDateTime(ev.createdAt)}</span>
                     </div>
                     <div className="text-xs mb-3 text-slate-600">
-                      Số tiền khai báo: <span className="font-bold text-emerald-700">{formatVnd(ev.transferredAmount)}</span>
+                      Số trên VietQR: <span className="font-bold text-emerald-700">{formatVnd(viewProofModalData.amount)}</span>
                       {ev.transactionReference && (
                         <span className="ml-3 font-mono text-[11px]">Mã GD: {ev.transactionReference}</span>
                       )}

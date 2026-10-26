@@ -61,7 +61,6 @@ export default function CustomerPaymentPage() {
   // Proof form states
   const [proofModalOpen, setProofModalOpen] = useState(false)
   const [proofFile, setProofFile] = useState(null)
-  const [transferredAmount, setTransferredAmount] = useState('')
   const [txRef, setTxRef] = useState('')
   const [proofNote, setProofNote] = useState('')
   const [submittingProof, setSubmittingProof] = useState(false)
@@ -89,7 +88,6 @@ export default function CustomerPaymentPage() {
           && request.status !== 'VOIDED')
         const current = activeFinal || activeDeposit || data[0]
         setSelectedRequest(current)
-        setTransferredAmount(String(current.remainingAmount ?? current.amount ?? ''))
       }
     } catch (err) {
       console.error('Failed to load payment requests:', err)
@@ -161,7 +159,6 @@ export default function CustomerPaymentPage() {
       setSubmittingProof(true)
       const payload = {
         file: proofFile,
-        transferredAmount: Number(transferredAmount) || (selectedRequest.remainingAmount ?? selectedRequest.amount),
         transactionReference: txRef.trim() || undefined,
         note: proofNote.trim() || undefined,
       }
@@ -184,6 +181,9 @@ export default function CustomerPaymentPage() {
       setToast({ message: 'Yêu cầu thanh toán đã hết hạn', type: 'error' })
       return
     }
+    setProofFile(null)
+    setTxRef('')
+    setProofNote('')
     setProofModalOpen(true)
   }
 
@@ -301,10 +301,7 @@ export default function CustomerPaymentPage() {
               <button
                 key={r.id}
                 type="button"
-                onClick={() => {
-                  setSelectedRequest(r)
-                  setTransferredAmount(String(r.remainingAmount ?? r.amount))
-                }}
+                onClick={() => setSelectedRequest(r)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   selectedRequest.id === r.id ? 'bg-[#064e3b] text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
@@ -470,7 +467,7 @@ export default function CustomerPaymentPage() {
                     <PaymentEvidenceImage evidence={evidence} alt={`Biên lai ${evidence.id}`} className="h-24 w-full shrink-0 rounded-lg border bg-slate-50 object-contain sm:w-32" />
                     <div className="min-w-0 flex-1 text-xs text-slate-600">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <strong className="text-sm text-slate-900">{formatVnd(evidence.transferredAmount)}</strong>
+                        <strong className="text-sm text-slate-900">{formatVnd(selectedRequest.amount)}</strong>
                         <span className={`rounded-full border px-2.5 py-1 font-semibold ${evidenceBadge.bg}`}>{evidenceBadge.label}</span>
                       </div>
                       <p className="mt-1">Đã chuyển: {formatDateTime(evidence.transferredAt)}</p>
@@ -507,6 +504,10 @@ export default function CustomerPaymentPage() {
               </div>
 
               <form onSubmit={handleSubmitProof} className="mt-4 space-y-4">
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+                  Số tiền <span className="font-bold">{formatVnd(selectedRequest.amount)}</span> và nội dung CK
+                  đã gắn trên mã VietQR. Chỉ cần ảnh biên lai ngân hàng.
+                </p>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700">Ảnh biên lai chuyển khoản *</label>
                   <input
@@ -524,18 +525,6 @@ export default function CustomerPaymentPage() {
                       className="mt-2 h-32 w-full rounded-lg border border-slate-200 object-contain bg-slate-50"
                     />
                   ) : null}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700">Số tiền thực tế đã chuyển (VND) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1000"
-                    value={transferredAmount}
-                    onChange={(e) => setTransferredAmount(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden focus:ring-1 focus:ring-[#059669]"
-                  />
                 </div>
 
                 <div>

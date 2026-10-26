@@ -96,7 +96,7 @@ public class PaymentRequestController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file,
-            @RequestParam BigDecimal transferredAmount,
+            @RequestParam(required = false) BigDecimal transferredAmount,
             @RequestParam(required = false) String transactionReference,
             @RequestParam(required = false) Instant transferredAt,
             @RequestParam(required = false) String note) {

@@ -142,7 +142,7 @@ export const providerFinanceService = {
   async submitPaymentProof(id, payload) {
     const form = new FormData()
     form.append('file', payload.file)
-    form.append('transferredAmount', payload.transferredAmount)
+    if (payload.transferredAmount != null) form.append('transferredAmount', payload.transferredAmount)
     if (payload.transactionReference) form.append('transactionReference', payload.transactionReference)
     if (payload.transferredAt) form.append('transferredAt', payload.transferredAt)
     if (payload.note) form.append('note', payload.note)
