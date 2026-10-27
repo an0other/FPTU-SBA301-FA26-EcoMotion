@@ -303,9 +303,7 @@ export default function ProviderVehicleListPage() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0b1c30] tracking-tight">
               Quản lý Đội xe
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Theo dõi tình trạng hoạt động, kiểm duyệt và bật/tắt nhận khách trực tiếp.
-            </p>
+
           </div>
           <div className="flex items-center gap-3">
             <Link
@@ -324,85 +322,145 @@ export default function ProviderVehicleListPage() {
           <button
             type="button"
             onClick={() => handleFilterStatus('')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === ''
-                ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900/20'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-4 ring-slate-900/15'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Tất cả xe</span>
-              <span className="material-symbols-outlined text-[20px] opacity-70">directions_car</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === '' ? 'text-slate-300' : 'text-slate-500'
+              }`}>
+                Tất cả xe
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === '' ? 'text-white' : 'text-slate-400'
+              }`}>
+                directions_car
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold mt-2 leading-none">{stats.total}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === '' ? 'text-white' : 'text-slate-900'
+            }`}>
+              {stats.total}
+            </p>
           </button>
 
           {/* Approved */}
           <button
             type="button"
             onClick={() => handleFilterStatus('APPROVED')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === 'APPROVED'
-                ? 'bg-emerald-700 text-white border-emerald-700 shadow-md ring-2 ring-emerald-600/30'
+                ? 'bg-emerald-50/90 text-emerald-950 border-emerald-500 ring-4 ring-emerald-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-emerald-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">Đang nhận khách</span>
-              <span className="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'APPROVED' ? 'text-emerald-800 font-bold' : 'text-emerald-600'
+              }`}>
+                Đang nhận khách
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'APPROVED' ? 'text-emerald-600' : 'text-emerald-500'
+              }`}>
+                check_circle
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 mt-2 leading-none">{stats.approved}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'APPROVED' ? 'text-emerald-700 font-black' : 'text-emerald-600'
+            }`}>
+              {stats.approved}
+            </p>
           </button>
 
           {/* Pending */}
           <button
             type="button"
             onClick={() => handleFilterStatus('PENDING')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === 'PENDING'
-                ? 'bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-500/30'
+                ? 'bg-amber-50/90 text-amber-950 border-amber-500 ring-4 ring-amber-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-amber-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">Chờ duyệt hồ sơ</span>
-              <span className="material-symbols-outlined text-[20px] text-amber-600">hourglass_top</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'PENDING' ? 'text-amber-800 font-bold' : 'text-amber-600'
+              }`}>
+                Chờ duyệt hồ sơ
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'PENDING' ? 'text-amber-600' : 'text-amber-500'
+              }`}>
+                hourglass_top
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-amber-700 mt-2 leading-none">{stats.pending}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'PENDING' ? 'text-amber-700 font-black' : 'text-amber-600'
+            }`}>
+              {stats.pending}
+            </p>
           </button>
 
           {/* Hidden */}
           <button
             type="button"
             onClick={() => handleFilterStatus('HIDDEN')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === 'HIDDEN'
-                ? 'bg-slate-700 text-white border-slate-700 shadow-md ring-2 ring-slate-500/30'
+                ? 'bg-slate-100 text-slate-900 border-slate-500 ring-4 ring-slate-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tạm ẩn</span>
-              <span className="material-symbols-outlined text-[20px] text-slate-500">visibility_off</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'HIDDEN' ? 'text-slate-800 font-bold' : 'text-slate-500'
+              }`}>
+                Tạm ẩn
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'HIDDEN' ? 'text-slate-700' : 'text-slate-400'
+              }`}>
+                visibility_off
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-700 mt-2 leading-none">{stats.hidden}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'HIDDEN' ? 'text-slate-900 font-black' : 'text-slate-600'
+            }`}>
+              {stats.hidden}
+            </p>
           </button>
 
           {/* Rejected */}
           <button
             type="button"
             onClick={() => handleFilterStatus('REJECTED')}
-            className={`p-4 rounded-2xl border text-left transition-all col-span-2 sm:col-span-1 ${
+            className={`p-4 rounded-2xl border text-left transition-all col-span-2 sm:col-span-1 cursor-pointer ${
               statusFilter === 'REJECTED'
-                ? 'bg-rose-700 text-white border-rose-700 shadow-md ring-2 ring-rose-500/30'
+                ? 'bg-rose-50/90 text-rose-950 border-rose-500 ring-4 ring-rose-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-rose-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-rose-600">Cần bổ sung</span>
-              <span className="material-symbols-outlined text-[20px] text-rose-600">error</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'REJECTED' ? 'text-rose-800 font-bold' : 'text-rose-600'
+              }`}>
+                Cần bổ sung
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'REJECTED' ? 'text-rose-600' : 'text-rose-500'
+              }`}>
+                error
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-rose-700 mt-2 leading-none">{stats.rejected}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'REJECTED' ? 'text-rose-700 font-black' : 'text-rose-600'
+            }`}>
+              {stats.rejected}
+            </p>
           </button>
         </div>
 
