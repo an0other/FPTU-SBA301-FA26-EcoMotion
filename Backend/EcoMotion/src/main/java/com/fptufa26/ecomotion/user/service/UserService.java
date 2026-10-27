@@ -123,5 +123,9 @@ public interface UserService {
 
     Optional<Driver> findDriverByIdAndProviderId(Long driverId, Long providerId);
 
+    Optional<Driver> findDriverByIdForUpdate(Long driverId);
+
+    Driver saveDriver(Driver driver);
+
     Provider saveProvider(Provider provider);
 }

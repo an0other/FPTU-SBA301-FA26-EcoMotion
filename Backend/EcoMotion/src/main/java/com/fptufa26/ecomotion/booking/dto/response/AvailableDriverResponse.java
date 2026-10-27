@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.booking.dto.response;
 
+import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
+import com.fptufa26.ecomotion.user.enums.DriverOperationalStatus;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 
 import java.math.BigDecimal;
@@ -15,8 +17,12 @@ public record AvailableDriverResponse(
         LocalDate licenseExpiry,
         String portraitUrl,
         DriverStatus status,
+        DriverActivityStatus activityStatus,
+        DriverOperationalStatus operationalStatus,
         BigDecimal ratingAvg,
         Integer ratingCount,
-        long activeBookingsCount
+        long activeBookingsCount,
+        boolean eligible,
+        String ineligibilityReason
 ) {
 }

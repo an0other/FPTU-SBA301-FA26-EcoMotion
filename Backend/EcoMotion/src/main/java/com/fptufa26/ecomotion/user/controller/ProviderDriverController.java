@@ -56,9 +56,10 @@ public class ProviderDriverController {
             @AuthenticationPrincipal SecurityUser principal,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) com.fptufa26.ecomotion.user.enums.DriverOperationalStatus operationalStatus,
             @RequestParam(required = false) String sort
     ) {
-        return ApiResponse.success(providerDriverService.getDrivers(principal.getUserId(), search, status, sort));
+        return ApiResponse.success(providerDriverService.getDrivers(principal.getUserId(), search, status, operationalStatus, sort));
     }
 
     @GetMapping("/stats")

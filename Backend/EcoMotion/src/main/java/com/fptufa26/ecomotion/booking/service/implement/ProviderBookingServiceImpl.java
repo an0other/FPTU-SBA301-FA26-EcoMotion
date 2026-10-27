@@ -571,11 +571,45 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         List<Driver> drivers = userService.findDriversByProviderIdAndStatus(provider.getId(), DriverStatus.APPROVED);
 
         List<BookingStatus> activeStatuses = List.of(BookingStatus.ACCEPTED, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
+        Instant now = clock.instant();
 
         return drivers.stream().map(driver -> {
             long activeBookings = bookingRepository.countByDriver_IdAndStatusIn(driver.getId(), activeStatuses);
             String fullName = driver.getUser() != null ? driver.getUser().getFullName() : null;
             String phone = driver.getUser() != null ? driver.getUser().getPhone() : null;
+
+            com.fptufa26.ecomotion.user.enums.DriverActivityStatus act = driver.getActivityStatus() != null
+                    ? driver.getActivityStatus()
+                    : com.fptufa26.ecomotion.user.enums.DriverActivityStatus.AVAILABLE;
+            boolean onTrip = bookingRepository.existsByDriver_IdAndStatus(driver.getId(), BookingStatus.IN_PROGRESS);
+
+            com.fptufa26.ecomotion.user.enums.DriverOperationalStatus op;
+            boolean eligible;
+            String ineligibilityReason = null;
+
+            if (onTrip) {
+                op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.ON_TRIP;
+                eligible = false;
+                ineligibilityReason = "Tài xế đang thực hiện chuyến đi khác (ON_TRIP)";
+            } else if (act == com.fptufa26.ecomotion.user.enums.DriverActivityStatus.OFFLINE) {
+                op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.OFFLINE;
+                eligible = false;
+                ineligibilityReason = "Tài xế đang ngoại tuyến (OFFLINE)";
+            } else if (act == com.fptufa26.ecomotion.user.enums.DriverActivityStatus.UNAVAILABLE) {
+                op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.UNAVAILABLE;
+                eligible = false;
+                ineligibilityReason = "Tài xế đang chủ động tạm nghỉ (UNAVAILABLE)";
+            } else {
+                List<Booking> upcoming = bookingRepository.findUpcomingDriverBookings(driver.getId(), List.of(
+                        BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED
+                ), now);
+                if (!upcoming.isEmpty()) {
+                    op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.SCHEDULED;
+                } else {
+                    op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.AVAILABLE;
+                }
+                eligible = true;
+            }
 
             return new AvailableDriverResponse(
                     driver.getId(),
@@ -587,9 +621,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                     driver.getLicenseExpiry(),
                     driver.getPortraitUrl(),
                     driver.getStatus(),
+                    act,
+                    op,
                     driver.getRatingAvg(),
                     driver.getRatingCount(),
-                    activeBookings
+                    activeBookings,
+                    eligible,
+                    ineligibilityReason
             );
         }).toList();
     }

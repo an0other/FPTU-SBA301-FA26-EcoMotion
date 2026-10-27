@@ -589,6 +589,21 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<Driver> findDriverByIdForUpdate(Long driverId) {
+        if (driverId == null) {
+            return Optional.empty();
+        }
+        return driverRepository.findByIdForUpdate(driverId);
+    }
+
+    @Override
+    @Transactional
+    public Driver saveDriver(Driver driver) {
+        return driverRepository.save(driver);
+    }
+
+    @Override
     @Transactional
     public Provider saveProvider(Provider provider) {
         return providerRepository.save(provider);

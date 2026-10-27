@@ -187,4 +187,22 @@ public class BookingQueryServiceImpl implements BookingQueryService {
     public BookingPolicySnapshot savePolicySnapshot(BookingPolicySnapshot snapshot) {
         return bookingPolicySnapshotRepository.save(snapshot);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status) {
+        return bookingRepository.existsByDriver_IdAndStatus(driverId, status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Booking> findFirstByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status) {
+        return bookingRepository.findFirstByDriver_IdAndStatus(driverId, status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Booking> findUpcomingDriverBookings(Long driverId, java.util.Collection<com.fptufa26.ecomotion.booking.enums.BookingStatus> statuses, java.time.Instant now) {
+        return bookingRepository.findUpcomingDriverBookings(driverId, statuses, now);
+    }
 }

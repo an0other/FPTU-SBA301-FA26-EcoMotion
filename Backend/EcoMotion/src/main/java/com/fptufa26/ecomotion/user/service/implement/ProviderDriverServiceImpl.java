@@ -19,12 +19,20 @@ import com.fptufa26.ecomotion.user.repository.DriverRepository;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
 import com.fptufa26.ecomotion.user.service.ProviderDriverService;
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.service.BookingQueryService;
+import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
+import com.fptufa26.ecomotion.user.enums.DriverOperationalStatus;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -36,11 +44,14 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
     private final DriverRepository driverRepository;
     private final UserRepository userRepository;
     private final ProviderRepository providerRepository;
+    private final BookingQueryService bookingQueryService;
+    private final DriverStatusService driverStatusService;
     private final PasswordEncoder passwordEncoder;
+    private final Clock clock;
 
     @Override
     @Transactional(readOnly = true)
-    public List<ProviderDriverItemResponse> getDrivers(Long providerUserId, String search, DriverStatus status, String sort) {
+    public List<ProviderDriverItemResponse> getDrivers(Long providerUserId, String search, DriverStatus status, DriverOperationalStatus operationalStatus, String sort) {
         Provider provider = getProviderByUserId(providerUserId);
         List<Driver> drivers = driverRepository.findByProvider_IdWithUser(provider.getId());
 
@@ -48,19 +59,19 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
 
         return drivers.stream()
                 .filter(d -> status == null || d.getStatus() == status)
+                .map(this::toResponse)
+                .filter(res -> operationalStatus == null || res.operationalStatus() == operationalStatus)
                 .filter(d -> {
                     if (cleanSearch.isEmpty()) {
                         return true;
                     }
-                    User u = d.getUser();
-                    String name = u != null && u.getFullName() != null ? u.getFullName().toLowerCase(Locale.ROOT) : "";
-                    String email = u != null && u.getEmail() != null ? u.getEmail().toLowerCase(Locale.ROOT) : "";
-                    String phone = u != null && u.getPhone() != null ? u.getPhone().toLowerCase(Locale.ROOT) : "";
-                    String licenseNo = d.getLicenseNo() != null ? d.getLicenseNo().toLowerCase(Locale.ROOT) : "";
+                    String name = d.fullName() != null ? d.fullName().toLowerCase(Locale.ROOT) : "";
+                    String email = d.email() != null ? d.email().toLowerCase(Locale.ROOT) : "";
+                    String phone = d.phone() != null ? d.phone().toLowerCase(Locale.ROOT) : "";
+                    String licenseNo = d.licenseNo() != null ? d.licenseNo().toLowerCase(Locale.ROOT) : "";
                     return name.contains(cleanSearch) || email.contains(cleanSearch) || phone.contains(cleanSearch) || licenseNo.contains(cleanSearch);
                 })
-                .sorted(getDriverComparator(sort))
-                .map(this::toResponse)
+                .sorted(getItemComparator(sort))
                 .toList();
     }
 
@@ -76,7 +87,28 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
         long suspended = driverRepository.countByProvider_IdAndStatus(providerId, DriverStatus.SUSPENDED);
         long rejected = driverRepository.countByProvider_IdAndStatus(providerId, DriverStatus.REJECTED);
 
-        return new ProviderDriverStatsResponse(total, approved, pending, suspended, rejected);
+        List<Driver> approvedDrivers = driverRepository.findByProvider_IdAndStatus(providerId, DriverStatus.APPROVED);
+        long available = 0;
+        long onTrip = 0;
+        long scheduled = 0;
+        long unavailable = 0;
+        long offline = 0;
+
+        for (Driver d : approvedDrivers) {
+            DriverOperationalStatus op = driverStatusService.calculateOperationalStatus(d);
+            switch (op) {
+                case AVAILABLE -> available++;
+                case ON_TRIP -> onTrip++;
+                case SCHEDULED -> scheduled++;
+                case UNAVAILABLE -> unavailable++;
+                case OFFLINE -> offline++;
+            }
+        }
+
+        return new ProviderDriverStatsResponse(
+                total, approved, pending, suspended, rejected,
+                available, onTrip, scheduled, unavailable, offline
+        );
     }
 
     @Override
@@ -223,20 +255,46 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy hồ sơ Nhà xe tương ứng với tài khoản này"));
     }
 
-    private Comparator<Driver> getDriverComparator(String sort) {
+    private Comparator<ProviderDriverItemResponse> getItemComparator(String sort) {
+        if ("status_updated_at".equalsIgnoreCase(sort) || "updated".equalsIgnoreCase(sort)) {
+            return Comparator.comparing(ProviderDriverItemResponse::statusUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
+        }
         if ("rating".equalsIgnoreCase(sort)) {
-            return Comparator.comparing(Driver::getRatingAvg, Comparator.nullsLast(Comparator.reverseOrder()))
-                    .thenComparing(Driver::getRatingCount, Comparator.nullsLast(Comparator.reverseOrder()));
+            return Comparator.comparing(ProviderDriverItemResponse::ratingAvg, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(ProviderDriverItemResponse::ratingCount, Comparator.nullsLast(Comparator.reverseOrder()));
         }
         if ("license_expiry".equalsIgnoreCase(sort) || "expiry".equalsIgnoreCase(sort)) {
-            return Comparator.comparing(Driver::getLicenseExpiry, Comparator.nullsLast(Comparator.naturalOrder()));
+            return Comparator.comparing(ProviderDriverItemResponse::licenseExpiry, Comparator.nullsLast(Comparator.naturalOrder()));
         }
         // Default: newest first
-        return Comparator.comparing(Driver::getId, Comparator.nullsLast(Comparator.reverseOrder()));
+        return Comparator.comparing(ProviderDriverItemResponse::id, Comparator.nullsLast(Comparator.reverseOrder()));
     }
 
     private ProviderDriverItemResponse toResponse(Driver d) {
         User u = d.getUser();
+        DriverOperationalStatus opStatus = driverStatusService.calculateOperationalStatus(d);
+
+        String currentTripBookingCode = null;
+        if (opStatus == DriverOperationalStatus.ON_TRIP) {
+            currentTripBookingCode = bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.IN_PROGRESS)
+                    .map(Booking::getBookingCode)
+                    .orElse(null);
+        }
+
+        String nextTripBookingCode = null;
+        Instant nextTripPickupTime = null;
+        List<Booking> upcoming = bookingQueryService.findUpcomingDriverBookings(d.getId(), List.of(
+                BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED
+        ), clock.instant());
+        if (!upcoming.isEmpty()) {
+            Booking next = upcoming.getFirst();
+            nextTripBookingCode = next.getBookingCode();
+            nextTripPickupTime = next.getPickupTime();
+        }
+
+        Instant statusUpdatedAt = d.getStatusUpdatedAt() != null ? d.getStatusUpdatedAt() : d.getCreatedAt();
+        DriverActivityStatus activityStatus = d.getActivityStatus() != null ? d.getActivityStatus() : DriverActivityStatus.AVAILABLE;
+
         return new ProviderDriverItemResponse(
                 d.getId(),
                 u != null ? u.getId() : null,
@@ -250,6 +308,12 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
                 d.getPortraitUrl(),
                 d.getLicenseImageUrl(),
                 d.getStatus(),
+                activityStatus,
+                opStatus,
+                statusUpdatedAt,
+                currentTripBookingCode,
+                nextTripBookingCode,
+                nextTripPickupTime,
                 d.getRejectReason(),
                 d.getRatingAvg() != null ? d.getRatingAvg() : BigDecimal.ZERO,
                 d.getRatingCount() != null ? d.getRatingCount() : 0,

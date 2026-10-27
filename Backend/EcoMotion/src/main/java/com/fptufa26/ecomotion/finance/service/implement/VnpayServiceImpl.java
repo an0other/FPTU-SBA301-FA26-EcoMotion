@@ -57,12 +57,18 @@ import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.fptufa26.ecomotion.finance.service.gateway.PaymentGatewayResolver;
+import com.fptufa26.ecomotion.finance.service.gateway.PaymentGatewayStrategy;
+import com.fptufa26.ecomotion.finance.service.gateway.dto.PaymentUrlCommand;
+import com.fptufa26.ecomotion.finance.service.gateway.dto.PaymentUrlResult;
+import com.fptufa26.ecomotion.finance.service.gateway.dto.PaymentVerificationResult;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class VnpayServiceImpl implements VnpayService {
 
-    private final VnpayConfig vnpayConfig;
+    private final PaymentGatewayResolver paymentGatewayResolver;
     private final BookingQueryService bookingQueryService;
     private final PaymentRequestRepository paymentRequestRepository;
     private final DisputeService disputeService;
@@ -71,10 +77,6 @@ public class VnpayServiceImpl implements VnpayService {
     private final ScheduleService scheduleService;
     private final DriverOptimizationService driverOptimizationService;
     private final Clock clock;
-
-    private static final DateTimeFormatter VNP_DATE_FORMATTER = DateTimeFormatter
-            .ofPattern("yyyyMMddHHmmss")
-            .withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
 
     @Override
     @Transactional
@@ -184,35 +186,22 @@ public class VnpayServiceImpl implements VnpayService {
 
         String vnpTxnRef = transaction.getVnpTxnRef();
         Instant expireTime = transaction.getCreatedAt().plus(Duration.ofMinutes(15));
-        String vnpCreateDate = VNP_DATE_FORMATTER.format(transaction.getCreatedAt());
-        String vnpExpireDate = VNP_DATE_FORMATTER.format(expireTime);
-        long vnpAmount = amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).longValue();
+        PaymentGatewayStrategy gateway = paymentGatewayResolver.resolve(PaymentMethod.VNPAY);
 
-        Map<String, String> vnpParams = new HashMap<>();
-        vnpParams.put("vnp_Version", vnpayConfig.getVersion());
-        vnpParams.put("vnp_Command", vnpayConfig.getCommand());
-        vnpParams.put("vnp_TmnCode", vnpayConfig.getTmnCode());
-        vnpParams.put("vnp_Amount", String.valueOf(vnpAmount));
-        vnpParams.put("vnp_CurrCode", vnpayConfig.getCurrCode());
-        vnpParams.put("vnp_TxnRef", vnpTxnRef);
-        vnpParams.put("vnp_OrderInfo", (isFinalPayment ? "Quyet toan don thue " : "Dat coc thue xe ") + booking.getBookingCode());
-        vnpParams.put("vnp_OrderType", vnpayConfig.getOrderType());
-        vnpParams.put("vnp_Locale", request.language() != null && !request.language().isBlank() ? request.language() : "vn");
-        vnpParams.put("vnp_ReturnUrl", vnpayConfig.getReturnUrl());
-        vnpParams.put("vnp_IpAddr", clientIp != null && !clientIp.isBlank() ? clientIp : "127.0.0.1");
-        vnpParams.put("vnp_CreateDate", vnpCreateDate);
-        vnpParams.put("vnp_ExpireDate", vnpExpireDate);
+        PaymentUrlCommand command = new PaymentUrlCommand(
+                booking.getBookingCode(),
+                vnpTxnRef,
+                amount,
+                (isFinalPayment ? "Quyet toan don thue " : "Dat coc thue xe ") + booking.getBookingCode(),
+                clientIp != null && !clientIp.isBlank() ? clientIp : "127.0.0.1",
+                request.language() != null && !request.language().isBlank() ? request.language() : "vn",
+                request.bankCode(),
+                transaction.getCreatedAt(),
+                expireTime
+        );
 
-        if (request.bankCode() != null && !request.bankCode().isBlank()) {
-            vnpParams.put("vnp_BankCode", request.bankCode().trim());
-        }
-
-        String hashData = VnpayUtils.buildHashData(vnpParams);
-        String vnpSecureHash = VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData);
-        String queryUrl = VnpayUtils.buildQueryUrl(vnpParams) + "&vnp_SecureHash=" + vnpSecureHash;
-        String paymentUrl = vnpayConfig.getPaymentUrl() + "?" + queryUrl;
-
-        return new VnpayPaymentUrlResponse(paymentUrl, vnpTxnRef, amount, booking.getBookingCode(), expireTime);
+        PaymentUrlResult urlResult = gateway.generatePaymentUrl(command);
+        return new VnpayPaymentUrlResponse(urlResult.paymentUrl(), urlResult.txnRef(), amount, booking.getBookingCode(), expireTime);
     }
 
     @Override
@@ -313,11 +302,14 @@ public class VnpayServiceImpl implements VnpayService {
     @Override
     @Transactional
     public VnpayIpnResponse processIpn(Map<String, String> params) {
-        if (!verifySignature(params)) {
+        PaymentGatewayStrategy gateway = paymentGatewayResolver.resolve(PaymentMethod.VNPAY);
+        PaymentVerificationResult verification = gateway.verifyIpn(params);
+
+        if (!verification.validSignature()) {
             return new VnpayIpnResponse("97", "Invalid Checksum");
         }
 
-        String vnpTxnRef = params.get("vnp_TxnRef");
+        String vnpTxnRef = verification.txnRef();
         if (vnpTxnRef == null || vnpTxnRef.isBlank()) {
             return new VnpayIpnResponse("01", "Order not found");
         }
@@ -339,13 +331,13 @@ public class VnpayServiceImpl implements VnpayService {
             return new VnpayIpnResponse("02", "Order already confirmed");
         }
 
-        String responseCode = params.get("vnp_ResponseCode");
-        boolean success = "00".equals(responseCode);
+        String responseCode = verification.responseCode();
+        boolean success = verification.success();
 
-        transaction.setVnpTransactionNo(params.get("vnp_TransactionNo"));
-        transaction.setVnpBankCode(params.get("vnp_BankCode"));
-        transaction.setVnpCardType(params.get("vnp_CardType"));
-        transaction.setVnpPayDate(params.get("vnp_PayDate"));
+        transaction.setVnpTransactionNo(verification.gatewayTransactionNo());
+        transaction.setVnpBankCode(verification.bankCode());
+        transaction.setVnpCardType(verification.cardType());
+        transaction.setVnpPayDate(verification.payDate());
         transaction.setVnpResponseCode(responseCode);
         transaction.setUpdatedAt(clock.instant());
 
@@ -440,13 +432,14 @@ public class VnpayServiceImpl implements VnpayService {
     @Override
     @Transactional
     public VnpayCallbackResultResponse processCallback(Map<String, String> params) {
-        boolean valid = verifySignature(params);
-        String vnpTxnRef = params.get("vnp_TxnRef");
-        String responseCode = params.get("vnp_ResponseCode");
-        String transactionNo = params.get("vnp_TransactionNo");
-        String bankCode = params.get("vnp_BankCode");
-        String cardType = params.get("vnp_CardType");
-        String payDate = params.get("vnp_PayDate");
+        PaymentGatewayStrategy gateway = paymentGatewayResolver.resolve(PaymentMethod.VNPAY);
+        PaymentVerificationResult verification = gateway.verifyCallback(params);
+        String vnpTxnRef = verification.txnRef();
+        String responseCode = verification.responseCode();
+        String transactionNo = verification.gatewayTransactionNo();
+        String bankCode = verification.bankCode();
+        String cardType = verification.cardType();
+        String payDate = verification.payDate();
 
         PaymentTransaction transaction = vnpTxnRef != null
                 ? bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(null)
@@ -457,13 +450,13 @@ public class VnpayServiceImpl implements VnpayService {
         }
 
         Booking booking = transaction.getBooking();
-        boolean success = valid && "00".equals(responseCode);
+        boolean success = verification.success();
 
         if (success && transaction.getStatus() != PaymentStatus.PAID) {
             processIpn(params);
         }
 
-        String message = success ? "Thanh toán VNPAY thành công" : "Thanh toán không thành công (Mã phản hồi: " + responseCode + ")";
+        String message = verification.message();
         return new VnpayCallbackResultResponse(
                 booking.getBookingCode(),
                 vnpTxnRef,
@@ -499,25 +492,7 @@ public class VnpayServiceImpl implements VnpayService {
         );
     }
 
-    private boolean verifySignature(Map<String, String> params) {
-        String vnpSecureHash = params.get("vnp_SecureHash");
-        if (vnpSecureHash == null || vnpSecureHash.isBlank()) {
-            return false;
-        }
 
-        Map<String, String> cleanParams = new HashMap<>();
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (!"vnp_SecureHash".equals(entry.getKey()) && !"vnp_SecureHashType".equals(entry.getKey())) {
-                if (entry.getValue() != null && !entry.getValue().isBlank()) {
-                    cleanParams.put(entry.getKey(), entry.getValue());
-                }
-            }
-        }
-
-        String hashData = VnpayUtils.buildHashData(cleanParams);
-        String expectedHash = VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData);
-        return expectedHash.equalsIgnoreCase(vnpSecureHash);
-    }
 
     private BigDecimal calculateDepositAmount(Booking booking) {
         Optional<BookingCharge> depositCharge = bookingQueryService.findChargeByBookingIdAndType(booking.getId(), ChargeType.DEPOSIT);
