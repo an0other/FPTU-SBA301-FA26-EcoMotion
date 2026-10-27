@@ -283,9 +283,7 @@ export default function ProviderSchedulePage() {
             <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
               Quản lý Chặn lịch & Bảo dưỡng đội xe
             </h1>
-            <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-              Thiết lập lịch bảo dưỡng định kỳ hoặc khóa xe bận việc riêng. Hệ thống tự động mở bán các khoảng trống và chống trùng lịch đặt xe.
-            </p>
+
           </div>
 
           <div className="shrink-0">
