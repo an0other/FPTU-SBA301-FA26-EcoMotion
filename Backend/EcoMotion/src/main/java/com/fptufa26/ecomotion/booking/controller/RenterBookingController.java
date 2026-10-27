@@ -64,10 +64,11 @@ public class RenterBookingController {
             @RequestParam(required = false) BookingStatus status,
             @RequestParam(required = false) String group,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ApiResponse.success(bookingService.listMinePage(
-                user.getUserId(), status, group, keyword, page, size));
+                user.getUserId(), status, group, keyword, sort, page, size));
     }
 
     @GetMapping("/vehicles")

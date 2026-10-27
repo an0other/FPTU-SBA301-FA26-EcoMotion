@@ -45,6 +45,7 @@ public record BookingDetailResponse(
         boolean canConfirmStart,
         boolean canConfirmEnd,
         List<DisputeCategory> disputeCategories,
-        String providerName
+        String providerName,
+        Instant holdExpiresAt
 ) {
 }

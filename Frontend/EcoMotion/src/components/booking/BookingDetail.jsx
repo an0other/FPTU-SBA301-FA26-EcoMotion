@@ -5,6 +5,7 @@ import { bookingStatusMeta } from '../../utils/bookingStatus';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
+import { HoldCountdown } from '../payments/HoldCountdown';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
@@ -271,9 +272,20 @@ export const BookingDetail = ({
             <div className="p-5 bg-[#E8F6EE] border border-[#15803D]/30 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-[#15803D]">Lịch xe đang được giữ cho bạn</h2>
-                <p className="text-xs text-gray-600 mt-1">Hãy thanh toán cọc bằng VietQR và gửi biên lai trong thời hạn hiển thị.</p>
+                <p className="text-xs text-gray-600 mt-1">Thanh toán cọc VietQR hoặc VNPAY trong 15 phút. Sau khi một cổng xác nhận, cổng còn lại tự đóng.</p>
               </div>
-              {booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-[#15803D] text-white font-semibold text-sm rounded-[12px]">Thanh toán cọc</button> : null}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <HoldCountdown expiresAt={booking.holdExpiresAt} />
+                {booking.canPay ? (
+                  <button
+                    onClick={() => onPayDeposit(booking)}
+                    type="button"
+                    className="px-6 py-2.5 bg-[#15803D] text-white font-semibold text-sm rounded-[12px] focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                  >
+                    Thanh toán cọc
+                  </button>
+                ) : null}
+              </div>
             </div>
           )}
 

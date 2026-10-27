@@ -35,6 +35,8 @@ async function selectPickup(page, name) {
 }
 
 test('pickup fees update with the point and are included once in confirmation totals', async ({ page }, testInfo) => {
+  const pageErrors = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.route('**/api/renter/bookings/pickup-quote', (route) => {
     const request = route.request().postDataJSON()
     expect(request.vehicleId).toBe(3)
@@ -55,11 +57,12 @@ test('pickup fees update with the point and are included once in confirmation to
   await expect(total).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('pickup-fee-confirmation-mobile.png') })
-  await page.getByRole('button', { name: 'Quay lại' }).click()
+  await page.getByRole('button', { name: 'Quay lại chỉnh sửa' }).click()
   await selectPickup(page, 'Điểm đón gần')
   await expect(page.getByText('Điểm đón trong bán kính miễn phí:', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: 'Tiếp tục: Xác nhận' }).click()
   await expect(page.getByText('Tổng dự kiến (gồm phí đón)').locator('..')).toContainText('3.000.000')
+  expect(pageErrors).toEqual([])
 })
 
 test('a failed quote blocks continuing until retry succeeds', async ({ page }) => {

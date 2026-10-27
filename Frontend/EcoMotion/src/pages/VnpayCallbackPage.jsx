@@ -36,7 +36,6 @@ export default function VnpayCallbackPage() {
       try {
         setLoading(true)
         setError(null)
-        // Strictly verify with Backend HMAC validation & booking state update
         const data = await paymentService.processVnpayCallback(params)
         setResult(data)
       } catch (err) {
@@ -44,7 +43,7 @@ export default function VnpayCallbackPage() {
         setError(
           err?.response?.data?.message ||
           err?.message ||
-          'Chữ ký bảo mật không hợp lệ hoặc không thể xác minh giao dịch với ngân hàng.'
+          'Không thể xác minh giao dịch với ngân hàng.'
         )
       } finally {
         setLoading(false)
@@ -63,7 +62,7 @@ export default function VnpayCallbackPage() {
             Đang xác minh giao dịch với VNPAY...
           </h2>
           <p className="text-xs text-slate-500">
-            Hệ thống đang kiểm tra chữ ký điện tử HMAC-SHA512 và xác nhận thanh toán với ngân hàng. Vui lòng không đóng trình duyệt.
+            Hệ thống đang xác nhận thanh toán với ngân hàng. Vui lòng không đóng trình duyệt.
           </p>
         </div>
       </div>
@@ -90,9 +89,6 @@ export default function VnpayCallbackPage() {
 
         {/* Title & Subtitle */}
         <div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 font-mono text-[11px] font-bold text-slate-600 border border-slate-200 inline-block mb-2">
-            VNPAY SANDBOX TEST ENVIRONMENT
-          </span>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
             {isSuccess ? 'Thanh toán thành công!' : 'Thanh toán không thành công'}
           </h1>
@@ -148,22 +144,28 @@ export default function VnpayCallbackPage() {
           {isSuccess && result?.bookingCode ? (
             <Link
               to={`/renter/bookings/${result.bookingCode}`}
-              className="rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition"
+              className="rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               Xem chi tiết đơn thuê
             </Link>
           ) : (
             <Link
               to={result?.bookingCode ? `/renter/bookings/${result.bookingCode}/payment` : '/renter/bookings'}
-              className="rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition"
+              className="rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               Thử lại thanh toán
             </Link>
           )}
 
           <Link
+            to="/renter/bookings"
+            className="rounded-lg border border-brand-200 bg-brand-50 px-5 py-2.5 text-xs font-semibold text-brand-800 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          >
+            Đơn của tôi
+          </Link>
+          <Link
             to="/"
-            className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+            className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
           >
             Về trang chủ
           </Link>
