@@ -4,12 +4,14 @@ import { BookingWizardShell } from '../../components/booking/BookingWizardShell'
 import { ChoosePlanStep } from '../../components/booking/ChoosePlanStep'
 import { ConfirmRequestStep } from '../../components/booking/ConfirmRequestStep'
 import { PickupStep } from '../../components/booking/PickupStep'
-import { createBooking, listVehiclesForBooking } from '../../services/bookingService'
+import { createBooking, listVehiclesForBooking, quotePickup } from '../../services/bookingService'
 import { readErrorMessage } from '../../services/apiClient'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatSlotPrice, planLabel, rentalSpanLabel } from '../../utils/planLabels'
 import { formatBookingWhen, parseVietnamDateTime } from '../../utils/bookingDateTime'
-import { buildBookingPayload, estimateBookingTotals } from '../../utils/bookingAvailability'
+import { buildBookingPayload, estimateBookingTotals, hasValidPickup } from '../../utils/bookingAvailability'
+
+import { BookingErrorDialog } from '../../components/booking/BookingErrorDialog'
 
 export function BookingRequestPage() {
   const navigate = useNavigate()
@@ -27,6 +29,10 @@ export function BookingRequestPage() {
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  const [loadingVehicles, setLoadingVehicles] = useState(true)
+  const [vehicleRetry, setVehicleRetry] = useState(0)
+  const [quoteState, setQuoteState] = useState(null)
+  const [quoteRetry, setQuoteRetry] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -34,6 +40,7 @@ export function BookingRequestPage() {
       .then((rows) => {
         if (cancelled) return
         setVehicles(rows)
+        setStep(1)
         const requested = Number(searchParams.get('vehicleId'))
         const match = rows.find((row) => row.id === requested) ?? rows[0]
         if (!match) return
@@ -46,10 +53,11 @@ export function BookingRequestPage() {
       .catch((err) => {
         if (!cancelled) setError(readErrorMessage(err))
       })
+      .finally(() => { if (!cancelled) setLoadingVehicles(false) })
     return () => {
       cancelled = true
     }
-  }, [searchParams])
+  }, [searchParams, vehicleRetry])
 
   const vehicle = vehicles.find((row) => row.id === vehicleId) ?? null
   const plan = vehicle?.plans.find((row) => row.id === selectedPlanId) ?? null
@@ -60,7 +68,28 @@ export function BookingRequestPage() {
       : vehicle.seatCount
     : 1
   const effectivePassengerCount = Math.min(passengerCount, maxPassengers)
-  const { totalAmount, depositAmount } = plan
+  const quoteSelection = useMemo(() => vehicleId && selectedPlanId && hasValidPickup(pickup)
+    ? { vehicleId, planId: selectedPlanId, pickupLatitude: Number(pickup.latitude), pickupLongitude: Number(pickup.longitude) }
+    : null, [vehicleId, selectedPlanId, pickup])
+  const currentQuote = quoteState?.selection === quoteSelection && quoteState?.retry === quoteRetry ? quoteState : null
+  const pickupQuote = currentQuote?.data ?? null
+  const quotePending = Boolean(quoteSelection && !currentQuote)
+  const quoteError = currentQuote?.error ?? ''
+
+  useEffect(() => {
+    if (!quoteSelection) return undefined
+    let cancelled = false
+    quotePickup(quoteSelection)
+      .then((data) => {
+        if (!cancelled) setQuoteState({ selection: quoteSelection, retry: quoteRetry, data })
+      })
+      .catch((err) => {
+        if (!cancelled) setQuoteState({ selection: quoteSelection, retry: quoteRetry, error: readErrorMessage(err) })
+      })
+    return () => { cancelled = true }
+  }, [quoteSelection, quoteRetry])
+
+  const { totalAmount: baseRentalAmount, depositAmount } = plan
     ? estimateBookingTotals({
       slotPrice: plan.slotPrice,
       slots,
@@ -70,6 +99,8 @@ export function BookingRequestPage() {
       upfrontAmount: plan.upfrontAmount,
     })
     : { totalAmount: 0, depositAmount: 0 }
+
+  const totalAmount = baseRentalAmount + Number(pickupQuote?.pickupFee ?? 0)
 
   const startInstant = useMemo(
     () => parseVietnamDateTime(startDate, startTime),
@@ -89,18 +120,15 @@ export function BookingRequestPage() {
     ? `${spanLabel}${slots > 1 ? ` (${slots} slot liên tiếp)` : ''}`
     : plan ? `${slots} slot` : ''
 
-  useEffect(() => {
-    if (plan?.planType === 'YEARLY' && step !== 1) setStep(1)
-  }, [plan?.planType, step])
-
   function selectPlan(nextPlanId) {
     if (nextPlanId === selectedPlanId) return
     setSelectedPlanId(nextPlanId)
+    setStep(1)
     setFieldErrors({})
   }
 
   async function handleSubmit() {
-    if (!vehicle || !plan || submitting || !startInstant || plan.planType === 'YEARLY') return
+    if (!vehicle || !plan || submitting || !startInstant || plan.planType === 'YEARLY' || !pickupQuote || quotePending || quoteError) return
     setSubmitting(true)
     setError('')
     try {
@@ -141,15 +169,27 @@ export function BookingRequestPage() {
     }
   }
 
-  if (!vehicle) {
-    return <p className="mx-auto max-w-3xl px-6 py-16 text-sm text-[#14221A]">{error || 'Đang tải xe...'}</p>
+  const retryVehicles = () => {
+    setError('')
+    setLoadingVehicles(true)
+    setVehicleRetry((value) => value + 1)
   }
+
+  const errorDialog = <BookingErrorDialog message={error} onClose={() => setError('')}
+    title={vehicle ? 'Chưa thể gửi yêu cầu đặt xe' : 'Không tải được thông tin xe'}
+    onRetry={vehicle ? undefined : retryVehicles} />
+
+  if (!vehicle) return (
+    <div className="mx-auto max-w-3xl space-y-4 px-6 py-16 text-sm text-[#14221A]">
+      {errorDialog}
+      <p>{loadingVehicles ? 'Đang tải xe...' : 'Chưa tải được thông tin xe để đặt.'}</p>
+      {!loadingVehicles ? <button type="button" onClick={retryVehicles} className="rounded-xl border border-[#E6EBE8] px-4 py-2 font-semibold text-[#15803D]">Tải lại thông tin xe</button> : null}
+    </div>
+  )
 
   return (
     <div>
-      {error ? (
-        <p role="alert" className="mx-auto max-w-7xl px-6 pt-4 text-sm text-[#B42318]">{error}</p>
-      ) : null}
+      {errorDialog}
       <BookingWizardShell
         vehicleId={vehicle.id}
         vehicleName={vehicle.name}
@@ -203,6 +243,10 @@ export function BookingRequestPage() {
           <PickupStep
             pickup={pickup}
             setPickup={setPickup}
+            pickupQuote={pickupQuote}
+            quotePending={quotePending}
+            quoteError={quoteError}
+            onRetryQuote={() => setQuoteRetry((value) => value + 1)}
             driverNote={driverNote}
             setDriverNote={setDriverNote}
             passengerCount={effectivePassengerCount}
@@ -211,7 +255,7 @@ export function BookingRequestPage() {
             driverIncluded={driverIncluded}
             maxPassengers={maxPassengers}
             onBack={() => setStep(1)}
-            onNext={() => setStep(3)}
+            onNext={() => { if (pickupQuote && !quotePending && !quoteError) setStep(3) }}
           />
         ) : null}
         {step === 3 ? (
@@ -227,8 +271,10 @@ export function BookingRequestPage() {
             priceNote={plan ? `${slots} × ${formatSlotPrice(plan.slotPrice, plan.slotLengthMinutes)}` : ''}
             depositNote={plan?.planType === 'YEARLY'
               ? 'Trả trước theo hợp đồng'
-              : `${formatCurrency(totalAmount)} × ${Math.round(Number(vehicle.depositRatio ?? 0) * 100)}%`}
+              : `${formatCurrency(baseRentalAmount)} × ${Math.round(Number(vehicle.depositRatio ?? 0) * 100)}%`}
             pickupAddress={pickup.address}
+            pickupQuote={pickupQuote}
+            baseRentalAmount={baseRentalAmount}
             pickup={pickup}
             driverNote={driverNote}
             passengerCount={effectivePassengerCount}

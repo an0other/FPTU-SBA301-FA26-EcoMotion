@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.finance.service.implement;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
@@ -68,6 +69,7 @@ public class VnpayServiceImpl implements VnpayService {
 
     private final VnpayConfig vnpayConfig;
     private final BookingRepository bookingRepository;
+    private final BookingNotificationService bookingNotificationService;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final BookingChargeRepository bookingChargeRepository;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
@@ -427,6 +429,7 @@ public class VnpayServiceImpl implements VnpayService {
                 }
                 booking.setStatus(BookingStatus.CONFIRMED);
                 bookingRepository.save(booking);
+                bookingNotificationService.depositPaid(booking, transaction.getAmount());
 
                 paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
                         .ifPresent(pr -> {
