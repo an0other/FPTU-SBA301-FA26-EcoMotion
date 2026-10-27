@@ -22,6 +22,11 @@ export async function createBooking(body) {
   return data.data
 }
 
+export async function quotePickup(body) {
+  const { data } = await apiClient.post('/renter/bookings/pickup-quote', body)
+  return data.data
+}
+
 export async function getMyBooking(bookingCode) {
   const { data } = await apiClient.get(`/renter/bookings/${bookingPath(bookingCode)}`)
   return data.data

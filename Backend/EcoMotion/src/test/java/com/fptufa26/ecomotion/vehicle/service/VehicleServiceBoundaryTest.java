@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.vehicle.service;
 
+import com.fptufa26.ecomotion.location.service.MapLocationService;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.service.UserService;
@@ -48,12 +49,16 @@ class VehicleServiceBoundaryTest {
     @Mock
     private ScheduleService scheduleService;
 
+    @Mock
+    private MapLocationService mapLocationService;
+
     private VehicleService service;
 
     @BeforeEach
     void setUp() {
         service = new VehicleServiceImpl(
-                vehicleRepository, vehicleImageService, rentalPlanService, userService, scheduleService);
+                vehicleRepository, vehicleImageService, rentalPlanService, userService, scheduleService,
+                mapLocationService);
     }
 
     @Test
@@ -87,6 +92,7 @@ class VehicleServiceBoundaryTest {
 
     @Test
     void mapUsesCoordinatesFromProviderServiceAndLoadsVehiclesOnce() {
+        when(mapLocationService.distanceKm(10.7733, 106.7036, 10.7733, 106.7036)).thenReturn(2.5);
         Vehicle vehicle = vehicle(11L);
         when(vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED)).thenReturn(List.of(vehicle));
         when(userService.findProvidersByIds(List.of(7L))).thenReturn(Map.of(7L, provider()));
@@ -98,7 +104,8 @@ class VehicleServiceBoundaryTest {
                 new BigDecimal("106.703600"), 10, null, null, null, null, null, VehicleSort.DEFAULT);
 
         assertThat(results).hasSize(1);
-        assertThat(results.getFirst().distanceKm()).isZero();
+        assertThat(results.getFirst().distanceKm()).isEqualTo(2.5);
+        verify(mapLocationService).distanceKm(10.7733, 106.7036, 10.7733, 106.7036);
         verify(vehicleRepository).findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
         verify(userService).findProvidersByIds(List.of(7L));
         verify(vehicle, never()).getProvider();

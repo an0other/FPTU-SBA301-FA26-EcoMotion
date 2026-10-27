@@ -30,16 +30,9 @@ SELECT
     CASE WHEN s.status = 'CANCELLED' THEN now() END
 FROM (VALUES
     -- Provider A (vehicles 1-4)
-    ('BK-8F3K29', 1, 'PENDING',     '214 Nguyen Trai, P. Pham Ngu Lao, Q.1',     interval '1 day',    3, 1250000.00),
-    ('BK-7N2W90', 2, 'PENDING',     'Landmark 81, Vinhomes Central Park',        interval '2 days',   1,  980000.00),
-    ('BK-4M1P88', 3, 'ACCEPTED',    'Ga Quoc te, San bay Tan Son Nhat',          interval '3 days',   4, 2100000.00),
     ('BK-9Q2Z11', 4, 'CONFIRMED',   'Sheraton Saigon, 88 Dong Khoi, Q.1',        interval '4 days',   2, 1750000.00),
     ('BK-1X8C44', 1, 'IN_PROGRESS', 'Tuyen TP.HCM - Ho Tram Resort',             interval '-3 hours', 5, 3400000.00),
     ('BK-6T9V32', 2, 'COMPLETED',   'Khu do thi Sala, TP. Thu Duc',              interval '-5 days',  2,  860000.00),
-    ('BK-2R5Y78', 3, 'REJECTED',    'Ben xe Mien Dong moi',                      interval '-2 days',  4, 1500000.00),
-    ('BK-5L3M91', 4, 'CANCELLED',   'Thao Dien Pearl, TP. Thu Duc',              interval '-1 day',   1,  720000.00),
-    -- Provider B (vehicles 5-6): must NOT appear for provider.a
-    ('BK-B0A111', 5, 'PENDING',     '1 Le Duan, Q.1',                            interval '1 day',    2, 2600000.00),
-    ('BK-B0A222', 6, 'ACCEPTED',    '72 Le Thanh Ton, Q.1',                      interval '2 days',   2, 5200000.00)
+    ('BK-5L3M91', 4, 'CANCELLED',   'Thao Dien Pearl, TP. Thu Duc',              interval '-1 day',   1,  720000.00)
 ) AS s(booking_code, vehicle_id, status, pickup_address, pickup_offset, passenger_count, total_amount)
 ON CONFLICT (booking_code) DO NOTHING;

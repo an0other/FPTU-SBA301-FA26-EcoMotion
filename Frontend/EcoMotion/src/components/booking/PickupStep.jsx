@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PickupMap } from './PickupMap';
 import { hasValidPickup } from '../../utils/bookingAvailability';
+import { BookingErrorDialog } from './BookingErrorDialog';
+import { PickupFeeSummary } from './PickupFeeSummary';
 
 
 export const PickupStep = ({
@@ -15,6 +17,10 @@ export const PickupStep = ({
   priceLabel,
   pickup,
   setPickup,
+  pickupQuote,
+  quotePending,
+  quoteError,
+  onRetryQuote,
   driverNote,
   setDriverNote,
   passengerCount,
@@ -26,6 +32,7 @@ export const PickupStep = ({
   onNext,
 }) => {
   const [errorMsg, setErrorMsg] = useState(null);
+  const [requestError, setRequestError] = useState('');
 
   const handleNextClick = () => {
     if (!hasValidPickup(pickup)) {
@@ -33,11 +40,13 @@ export const PickupStep = ({
       return;
     }
     setErrorMsg(null);
+    if (!pickupQuote || quotePending || quoteError) return;
     onNext();
   };
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+      <BookingErrorDialog title="Chưa xác định được điểm đón" message={requestError} onClose={() => setRequestError('')} />
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs sm:text-sm text-[#64748B]">
         <Link to="/" className="hover:text-[#15803D] transition-colors">Trang chủ</Link>
@@ -136,7 +145,18 @@ export const PickupStep = ({
               </label>
               <span className="text-xs text-[#565E74]">{pickup.address.length}/500 ký tự</span>
             </div>
-            <PickupMap value={pickup} onChange={(next) => { setPickup(next); setErrorMsg(null) }} onError={setErrorMsg} />
+            <PickupMap value={pickup} onChange={(next) => { setPickup(next); setErrorMsg(null) }} onError={setRequestError} />
+
+            <div aria-live="polite" aria-atomic="true">
+              {quotePending ? <p className="text-sm text-[#3D4A42]">Đang tính khoảng cách và phí đón...</p> : null}
+              {quoteError ? (
+                <p className="text-sm text-red-700">
+                  {quoteError}{' '}
+                  <button type="button" onClick={onRetryQuote} className="font-semibold underline">Thử lại phí đón</button>
+                </p>
+              ) : null}
+              <PickupFeeSummary quote={pickupQuote} />
+            </div>
 
             {errorMsg ? (
               <p className="text-xs font-medium text-red-600 flex items-center gap-1">
@@ -213,7 +233,8 @@ export const PickupStep = ({
           </button>
           <button
             onClick={handleNextClick}
-            className="inline-flex items-center justify-center gap-1.5 px-7 py-3 rounded-[12px] bg-[#15803D] text-white font-semibold shadow-md hover:bg-[#166534] active:scale-[0.98] transition-all duration-180 cursor-pointer"
+            disabled={quotePending || Boolean(quoteError) || (hasValidPickup(pickup) && !pickupQuote)}
+            className="inline-flex items-center justify-center gap-1.5 px-7 py-3 rounded-[12px] bg-[#15803D] text-white font-semibold shadow-md hover:bg-[#166534] active:scale-[0.98] transition-all duration-180 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
           >
             <span>Tiếp tục: Xác nhận</span>

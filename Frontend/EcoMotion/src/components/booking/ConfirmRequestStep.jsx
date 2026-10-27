@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PickupFeeSummary } from './PickupFeeSummary';
 
 
 export const ConfirmRequestStep = ({
@@ -19,6 +20,8 @@ export const ConfirmRequestStep = ({
   depositNote,
   vehicleYear,
   totalAmount,
+  baseRentalAmount = totalAmount,
+  pickupQuote,
   depositAmount,
   planType,
   onBack,
@@ -213,13 +216,19 @@ export const ConfirmRequestStep = ({
                 <span className="text-xs text-gray-500 ml-2">({priceNote})</span>
               </div>
               <div className="text-xl font-bold text-[#14221A]">
-                {totalAmount.toLocaleString('vi-VN')} đ
+                {baseRentalAmount.toLocaleString('vi-VN')} đ
               </div>
             </div>
             <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-600">
               <span className="material-symbols-outlined text-gray-400 text-[16px]">info</span>
               <span>Đây là khoản tiền thuê, <strong className="text-[#14221A]">chưa thu lúc này</strong>.</span>
             </div>
+          </div>
+
+          <PickupFeeSummary quote={pickupQuote} />
+          <div className="flex flex-wrap justify-between gap-2 text-base font-bold text-[#14221A]">
+            <span>Tổng dự kiến (gồm phí đón)</span>
+            <span>{totalAmount.toLocaleString('vi-VN')} đ</span>
           </div>
 
           {/* Cọc */}
