@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { yearlyRentalService } from '../../services/yearlyRentalService'
+import { BookingErrorDialog } from '../booking/BookingErrorDialog'
 
 function todayInVietnam() {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -21,6 +22,7 @@ export default function DrivingLicenseForm({ license, onSaved }) {
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [requestError, setRequestError] = useState('')
   const submitting = useRef(false)
 
   const expired = Boolean(
@@ -55,7 +57,7 @@ export default function DrivingLicenseForm({ license, onSaved }) {
       await yearlyRentalService.updateDrivingLicense(request)
       onSaved()
     } catch (error) {
-      setError(error.message || 'Không lưu được GPLX.')
+      setRequestError(error.message || 'Không lưu được GPLX.')
     } finally {
       submitting.current = false
       setSaving(false)
@@ -67,6 +69,7 @@ export default function DrivingLicenseForm({ license, onSaved }) {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+      <BookingErrorDialog title="Chưa lưu được thông tin GPLX" message={requestError} onClose={() => setRequestError('')} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">Giấy phép lái xe</h2>

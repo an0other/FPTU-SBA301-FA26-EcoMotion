@@ -1,7 +1,7 @@
-package com.fptufa26.ecomotion.vehicle.service.implement;
+package com.fptufa26.ecomotion.location.service.implement;
 
-import com.fptufa26.ecomotion.vehicle.dto.response.AddressSearchResult;
-import com.fptufa26.ecomotion.vehicle.service.MapLocationService;
+import com.fptufa26.ecomotion.location.dto.response.AddressSearchResult;
+import com.fptufa26.ecomotion.location.service.MapLocationService;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 class MapLocationServiceFallbackTest {
 
@@ -89,6 +91,31 @@ class MapLocationServiceFallbackTest {
         String address = service.reverseGeocode(new BigDecimal("10.7949"), new BigDecimal("106.7218"));
 
         assertThat(address).contains("Vinhomes Central Park", "Thành phố Hồ Chí Minh");
+    }
+
+    @Test
+    void distanceUsesDegreesAndHandlesCoincidentAndAntipodalPoints() {
+        MapLocationService service = context.getBean(MapLocationService.class);
+
+        assertThat(service.distanceKm(10.7733, 106.7036, 10.7733, 106.7036)).isZero();
+        assertThat(service.distanceKm(0, 0, 0, 1)).isCloseTo(111.19508, within(0.00001));
+        assertThat(service.distanceKm(0, 1, 0, 0)).isCloseTo(111.19508, within(0.00001));
+        assertThat(service.distanceKm(0, 0, 0, 180)).isCloseTo(20015.11444, within(0.00001));
+    }
+
+    @Test
+    void distanceRejectsInvalidCoordinatesAtEitherPoint() {
+        MapLocationService service = context.getBean(MapLocationService.class);
+
+        for (double[] point : new double[][]{
+                {91, 0}, {-91, 0}, {0, 181}, {0, -181},
+                {Double.NaN, 0}, {0, Double.NaN},
+                {Double.POSITIVE_INFINITY, 0}, {0, Double.NEGATIVE_INFINITY}}) {
+            assertThatThrownBy(() -> service.distanceKm(point[0], point[1], 0, 0))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> service.distanceKm(0, 0, point[0], point[1]))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {

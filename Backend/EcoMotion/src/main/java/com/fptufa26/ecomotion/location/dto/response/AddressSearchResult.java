@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.vehicle.dto.response;
+package com.fptufa26.ecomotion.location.dto.response;
 
 import java.math.BigDecimal;
 

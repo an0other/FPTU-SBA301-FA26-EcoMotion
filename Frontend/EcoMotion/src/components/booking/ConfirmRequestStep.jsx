@@ -1,4 +1,5 @@
 import { formatCurrency } from '../../utils/formatCurrency'
+import { PickupFeeSummary } from './PickupFeeSummary'
 import { DEPOSIT_HOLD_COPY } from '../../utils/bookingCopy'
 
 function SectionHeader({ icon, children, accent }) {
@@ -58,6 +59,8 @@ export const ConfirmRequestStep = ({
   priceNote,
   depositNote,
   totalAmount,
+  baseRentalAmount = totalAmount,
+  pickupQuote,
   depositAmount,
   submitting = false,
   onBack,
@@ -173,7 +176,12 @@ export const ConfirmRequestStep = ({
                 <p className="text-[15px] font-bold text-[#14221A]">Tổng tiền thuê</p>
                 <p className="mt-0.5 text-xs font-medium text-[#14221A]/55">{priceNote}</p>
               </div>
-              <p className="text-xl font-extrabold tabular-nums text-[#14221A]">{formatCurrency(totalAmount)}</p>
+              <p className="text-xl font-extrabold tabular-nums text-[#14221A]">{formatCurrency(baseRentalAmount)}</p>
+            </div>
+            <PickupFeeSummary quote={pickupQuote} />
+            <div className="flex flex-wrap justify-between gap-2 font-bold text-[#14221A]">
+              <span>Tổng dự kiến (gồm phí đón)</span>
+              <span>{formatCurrency(totalAmount)}</span>
             </div>
             <div className="border-t-2 border-dashed border-[#E6EBE8]" />
             <div className="flex items-start justify-between gap-4 rounded-xl bg-brand-50/50 p-3 -mx-1">
