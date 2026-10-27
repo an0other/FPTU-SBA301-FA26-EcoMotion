@@ -1093,9 +1093,15 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     }
 
     private String generateTransferReference(String bookingCode, PaymentRequestType type) {
-        String cleanCode = bookingCode.replace("-", "").toUpperCase(Locale.ROOT);
+        String cleanCode = bookingCode == null ? "" : bookingCode.replace("-", "").toUpperCase(Locale.ROOT);
+        while (cleanCode.startsWith("EMEM")) {
+            cleanCode = cleanCode.substring(2);
+        }
+        if (!cleanCode.startsWith("EM")) {
+            cleanCode = "EM" + cleanCode;
+        }
         String suffix = (type == PaymentRequestType.DEPOSIT) ? "DEP" : "FIN";
-        return "EM" + cleanCode + suffix;
+        return cleanCode + suffix;
     }
 
     private void validateAccessToBooking(Booking booking, Long currentUserId) {

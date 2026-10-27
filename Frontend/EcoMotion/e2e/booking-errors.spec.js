@@ -64,7 +64,7 @@ test('booking submission errors preserve the form, restore focus and reopen on r
   await page.keyboard.press('Escape')
   await expect(dialog).not.toBeVisible()
   await expect(submit).toBeFocused()
-  await expect(page.getByText('Ghi chú: Gọi trước khi đến điểm đón', { exact: true })).toBeVisible()
+  await expect(page.getByText('Gọi trước khi đến điểm đón', { exact: true })).toBeVisible()
   await submit.click()
   await expect(dialog).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
@@ -93,7 +93,8 @@ test('submitted booking fetch errors can be retried without showing exceptions a
   fail = false
   await dialog.getByRole('button', { name: 'Thử lại', exact: true }).click()
   await expect(dialog).not.toBeVisible()
-  await expect(page.getByText('Chi tiết đơn BK-ERROR', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Lịch xe đã được giữ thành công!' })).toBeVisible()
+  await expect(page.getByText('Đơn BK-ERROR', { exact: true })).toBeVisible()
 })
 
 test('yearly rental loading errors use the same dialog and retry successfully', async ({ page }) => {
