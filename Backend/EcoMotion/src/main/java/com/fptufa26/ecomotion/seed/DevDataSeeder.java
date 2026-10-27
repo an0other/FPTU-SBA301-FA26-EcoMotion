@@ -129,7 +129,6 @@ public class DevDataSeeder implements ApplicationRunner {
     private final ScheduleService scheduleService;
     private final RenterPaymentDataSeeder renterPaymentDataSeeder;
     private final RenterReviewDataSeeder renterReviewDataSeeder;
-    private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
 
     private record PlanPrices(String hourly, String daily, String monthly) {
@@ -275,10 +274,6 @@ public class DevDataSeeder implements ApplicationRunner {
         User renterUser = userRepository.findById(1L).orElseThrow();
         Renter renter = renterRepository.findByUser_Id(renterUser.getId()).orElseThrow();
         Vehicle bookingVehicle = vehicleRepository.findByLicensePlate(VEHICLE_PLATE).orElseThrow();
-        seedSampleBooking(renter, renterUser, providerA, bookingVehicle,
-                ACCEPTED_BOOKING_CODE, BookingStatus.ACCEPTED, Instant.parse("2026-12-20T01:00:00Z"));
-        seedSampleBooking(renter, renterUser, providerA, bookingVehicle,
-                PENDING_BOOKING_CODE, BookingStatus.PENDING, Instant.parse("2026-12-28T01:00:00Z"));
         seedInProgressBooking(renter, renterUser, providerA, bookingVehicle);
         seedBookings(driverNam, driverCuong, driverKiet);
 
@@ -290,45 +285,10 @@ public class DevDataSeeder implements ApplicationRunner {
         realignPinnedIdentitySequences();
         renterReviewDataSeeder.seed();
         realignPinnedIdentitySequences();
-        renterYearlyBookingDataSeeder.seed();
-        realignPinnedIdentitySequences();
     }
 
     private void seedBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
         Instant now = Instant.now();
-
-        // PENDING Bookings (3) for Provider A
-        seedBooking("BK-8F3K29", 101L, 4L, PlanType.DAILY, null, BookingStatus.PENDING,
-                "214 Nguyễn Trãi, P. Phạm Ngũ Lão, Q.1",
-                now.plus(1, ChronoUnit.DAYS),
-                3, "1400000.00", null, null, null, null, null);
-
-        seedBooking("BK-7N2W90", 102L, 1L, PlanType.HOURLY, null, BookingStatus.PENDING,
-                "Landmark 81, Vinhomes Central Park", now.plus(2, ChronoUnit.DAYS),
-                1, "720000.00", null, null, null, null, null);
-
-        seedBooking("BK-3D9F12", 5L, 2L, PlanType.DAILY, null, BookingStatus.PENDING,
-                "123 Nguyễn Thị Minh Khai, Q.3", now.plus(12, ChronoUnit.HOURS),
-                2, "900000.00", null, null, null, null, null);
-
-        // ACCEPTED Bookings (4) for Provider A
-        seedBooking("BK-4M1P88", 103L, 3L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "Ga Quốc tế Tân Sơn Nhất (Cột 12)",
-                now.plus(2, ChronoUnit.DAYS),
-                4, "3200000.00", null, null, null, null, null);
-
-        seedBooking("BK-4A2K91", 104L, 3L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "Bitexco Financial Tower, Q.1", now.plus(1, ChronoUnit.DAYS),
-                2, "1600000.00", null, null, null, null, null);
-
-        seedBooking("BK-4B3L92", 105L, 2L, PlanType.HOURLY, null, BookingStatus.ACCEPTED,
-                "Estella Heights, An Phú, TP. Thủ Đức",
-                now.plus(18, ChronoUnit.HOURS),
-                1, "600000.00", null, null, null, null, null);
-
-        seedBooking("BK-4C4M93", 101L, 4L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "Kumho Asiana Plaza, Lê Duẩn, Q.1", now.plus(3, ChronoUnit.DAYS),
-                3, "1400000.00", null, null, null, null, null);
 
         // CONFIRMED Bookings (5) for Provider A
         seedBooking("BK-9Q2Z11", 104L, 4L, PlanType.DAILY, driverNam, BookingStatus.CONFIRMED,
@@ -419,11 +379,6 @@ public class DevDataSeeder implements ApplicationRunner {
                 2, "1600000.00", now.minus(13, ChronoUnit.DAYS), now.minus(12, ChronoUnit.DAYS), null,
                 null, null);
 
-        // REJECTED Booking (1) for Provider A
-        seedBooking("BK-2R5Y78", 106L, 4L, PlanType.DAILY, null, BookingStatus.REJECTED,
-                "Bến Xe Miền Đông Mới", now.minus(2, ChronoUnit.DAYS),
-                4, "1400000.00", null, null, null, null, null);
-
         // CANCELLED Bookings (2) for Provider A
         seedBooking("BK-5L3M91", 107L, 1L, PlanType.HOURLY, null, BookingStatus.CANCELLED,
                 "Thảo Điền Pearl, TP. Thủ Đức",
@@ -436,14 +391,6 @@ public class DevDataSeeder implements ApplicationRunner {
                 2, "1600000.00", null, null, 102L, CancelReason.RENTER_REQUEST,
                 now.minus(4, ChronoUnit.DAYS));
 
-        // Provider B Bookings (2)
-        seedBooking("BK-B0A111", 101L, 5L, PlanType.DAILY, null, BookingStatus.PENDING,
-                "1 Lê Duẩn, Q.1", now.plus(1, ChronoUnit.DAYS),
-                2, "2000000.00", null, null, null, null, null);
-
-        seedBooking("BK-B0A222", 103L, 6L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "72 Lê Thánh Tôn, Q.1", now.plus(2, ChronoUnit.DAYS),
-                2, "4500000.00", null, null, null, null, null);
     }
 
     private void seedBooking(String bookingCode, Long renterUserId, Long vehicleId, PlanType planType,
@@ -472,12 +419,9 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setDriver(driver);
         booking.setStatus(status);
         booking.setPickupAddress(pickupAddress);
-        // Keep one legacy row without coordinates to exercise address-geocoding fallback.
-        if (!PENDING_BOOKING_CODE.equals(bookingCode)) {
-            booking.setPickupLatitude(vehicle.getProvider().getDepotLatitude());
-            booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
-            booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
-        }
+        booking.setPickupLatitude(vehicle.getProvider().getDepotLatitude());
+        booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
+        booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
         booking.setPickupTime(pickupTime);
         booking.setPassengerCount(passengerCount);
         booking.setTotalAmount(new BigDecimal(totalAmountStr));
@@ -525,18 +469,16 @@ public class DevDataSeeder implements ApplicationRunner {
         snapshot.setHourlyToDailyThresholdMinutes(plan.getHourlyToDailyThresholdMinutes());
         snapshotRepository.save(snapshot);
 
-        if (!"BK-4A2K91".equals(bookingCode)) {
-            BookingCharge charge = new BookingCharge();
-            charge.setBooking(booking);
-            charge.setChargeType(ChargeType.BASE_RENTAL);
-            charge.setDescription("Thuê " + passengerCount + " hành khách (" + plan.getPlanType() + ")");
-            charge.setQuantity(1);
-            charge.setUnitPrice(plan.getSlotPrice());
-            charge.setAmount(new BigDecimal(totalAmountStr));
-            charge.setCreatedBy(renter.getUser());
-            charge.setWaived(false);
-            chargeRepository.save(charge);
-        }
+        BookingCharge charge = new BookingCharge();
+        charge.setBooking(booking);
+        charge.setChargeType(ChargeType.BASE_RENTAL);
+        charge.setDescription("Thuê " + passengerCount + " hành khách (" + plan.getPlanType() + ")");
+        charge.setQuantity(1);
+        charge.setUnitPrice(plan.getSlotPrice());
+        charge.setAmount(new BigDecimal(totalAmountStr));
+        charge.setCreatedBy(renter.getUser());
+        charge.setWaived(false);
+        chargeRepository.save(charge);
     }
 
     private void seedAdminDemonstrationData(Provider providerA, Provider providerB) {
@@ -974,64 +916,6 @@ public class DevDataSeeder implements ApplicationRunner {
 
     private static String encodePathSegment(String segment) {
         return segment.replace(" ", "%20");
-    }
-
-    private void seedSampleBooking(Renter renter,
-                                   User renterUser,
-                                   Provider provider,
-                                   Vehicle vehicle,
-                                   String bookingCode,
-                                   BookingStatus status,
-                                   Instant pickupTime) {
-        if (bookingRepository.existsByBookingCode(bookingCode)) {
-            return;
-        }
-        RentalPlan daily = rentalPlanRepository
-                .findByVehicle_IdAndStatusOrderByIdAsc(vehicle.getId(), PlanStatus.ACTIVE)
-                .stream()
-                .filter(plan -> plan.getPlanType() == PlanType.DAILY)
-                .findFirst()
-                .orElseThrow();
-
-        Booking booking = new Booking();
-        booking.setBookingCode(bookingCode);
-        booking.setRenter(renter);
-        booking.setVehicle(vehicle);
-        booking.setPlan(daily);
-        booking.setStatus(status);
-        booking.setPickupAddress(provider.getDepotAddress());
-        booking.setPickupTime(pickupTime);
-        booking.setPassengerCount(2);
-        booking.setTotalAmount(daily.getSlotPrice());
-        bookingRepository.save(booking);
-
-        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
-        snapshot.setBooking(booking);
-        snapshot.setSlotPrice(daily.getSlotPrice());
-        snapshot.setSlotLengthMinutes(daily.getSlotLengthMinutes());
-        snapshot.setPlanType(daily.getPlanType());
-        snapshot.setDepositRatio(provider.getDepositRatio());
-        snapshot.setUpfrontAmount(null);
-        snapshot.setAllowedOvertimeMinutes(daily.getAllowedOvertimeMinutes());
-        snapshot.setOvertimeSurchargeRatio(daily.getOvertimeSurchargeRatio());
-        snapshot.setWaitingFreeMinutes(daily.getWaitingFreeMinutes());
-        snapshot.setWaitingRate(daily.getWaitingRate());
-        snapshot.setWeekendSurchargeRatio(daily.getWeekendSurchargeRatio());
-        snapshot.setFreeRadiusKm(daily.getFreeRadiusKm());
-        snapshot.setOutOfRadiusRate(daily.getOutOfRadiusRate());
-        snapshot.setHourlyToDailyThresholdMinutes(daily.getHourlyToDailyThresholdMinutes());
-        snapshotRepository.save(snapshot);
-
-        BookingCharge charge = new BookingCharge();
-        charge.setBooking(booking);
-        charge.setChargeType(ChargeType.BASE_RENTAL);
-        charge.setDescription("Thuê 1 slot");
-        charge.setQuantity(1);
-        charge.setUnitPrice(daily.getSlotPrice());
-        charge.setAmount(daily.getSlotPrice());
-        charge.setCreatedBy(renterUser);
-        charge.setWaived(false);
-        chargeRepository.save(charge);
     }
 
     private void seedInProgressBooking(Renter renter, User renterUser, Provider provider, Vehicle vehicle) {

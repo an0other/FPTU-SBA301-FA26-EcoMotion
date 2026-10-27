@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { vehicleService } from '../../services/vehicleService'
+import { locationService } from '../../services/locationService'
 
 const DEFAULT_CENTER = [10.7769, 106.7009]
 const PIN = L.divIcon({
@@ -28,7 +28,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
     if (readOnly) return
     setLoading(true)
     try {
-      const address = knownAddress || await vehicleService.reverseGeocode({ latitude, longitude })
+      const address = knownAddress || await locationService.reverseGeocode({ latitude, longitude })
       if (!address) throw new Error('Không tìm được địa chỉ tại điểm này')
       const next = { address, latitude: Number(latitude), longitude: Number(longitude) }
       setQuery(address)
@@ -79,7 +79,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
     if (readOnly || query.trim().length < 3 || query === value?.address) return undefined
     const timer = window.setTimeout(async () => {
       try {
-        setSuggestions(await vehicleService.searchAddress(query.trim()))
+        setSuggestions(await locationService.searchAddress(query.trim()))
       } catch (error) {
         onError?.(error.message || 'Không thể tìm địa chỉ')
       }

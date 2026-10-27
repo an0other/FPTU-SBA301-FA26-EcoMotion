@@ -2,6 +2,8 @@ package com.fptufa26.ecomotion.booking.service;
 
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
+import com.fptufa26.ecomotion.booking.dto.response.PickupQuoteResponse;
 import com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest;
 import com.fptufa26.ecomotion.booking.dto.request.UpdateBookingRequestDetails;
 import com.fptufa26.ecomotion.booking.dto.response.BookingDetailResponse;
@@ -28,6 +30,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface BookingService {
+
+    PickupQuoteResponse quotePickup(PickupQuoteRequest request);
 
     CreateBookingResponse create(Long userId, CreateBookingRequest request);
 

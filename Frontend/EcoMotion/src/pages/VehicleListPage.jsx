@@ -5,7 +5,7 @@ import VehicleCard from '../components/vehicles/VehicleCard'
 import Pagination from '../components/vehicles/Pagination'
 import { useVehicles } from '../hooks/useVehicles'
 import { useMapVehicles } from '../hooks/useMapVehicles'
-import { vehicleService } from '../services/vehicleService'
+import { locationService } from '../services/locationService'
 
 const VehicleMap = lazy(() => import('../components/vehicles/VehicleMap'))
 
@@ -78,7 +78,7 @@ export default function VehicleListPage() {
     let active = true
     setPinLookup({ key, address: '', loading: true })
     const timer = window.setTimeout(() => {
-      vehicleService.reverseGeocode({ latitude: pinnedLatitude, longitude: pinnedLongitude })
+      locationService.reverseGeocode({ latitude: pinnedLatitude, longitude: pinnedLongitude })
         .then((address) => {
           if (!active) return
           if (address) addressCacheRef.current.set(key, address)
@@ -114,7 +114,7 @@ export default function VehicleListPage() {
     setAddressError('')
     setAddressResults([])
     try {
-      const results = await vehicleService.searchAddress(query)
+      const results = await locationService.searchAddress(query)
       setAddressResults(results)
       if (!results.length) setAddressError('Không tìm thấy địa chỉ phù hợp tại Việt Nam.')
     } catch (error) {
