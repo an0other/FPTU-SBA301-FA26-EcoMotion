@@ -67,4 +67,10 @@ public interface BookingQueryService {
     Optional<BookingPolicySnapshot> findPolicySnapshotByBookingId(Long bookingId);
 
     BookingPolicySnapshot savePolicySnapshot(BookingPolicySnapshot snapshot);
+
+    boolean existsByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status);
+
+    Optional<Booking> findFirstByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status);
+
+    List<Booking> findUpcomingDriverBookings(Long driverId, java.util.Collection<com.fptufa26.ecomotion.booking.enums.BookingStatus> statuses, java.time.Instant now);
 }

@@ -26,6 +26,8 @@ import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
+import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -88,6 +90,12 @@ class DriverTripServiceUnitTest {
     @Mock
     private MapGeocodingService mapGeocodingService;
 
+    @Mock
+    private DriverStatusService driverStatusService;
+
+    @Mock
+    private NotificationStreamService notificationStreamService;
+
     private Clock fixedClock;
     private DriverTripService driverTripService;
 
@@ -109,6 +117,8 @@ class DriverTripServiceUnitTest {
                 userService,
                 vehicleService,
                 mapGeocodingService,
+                driverStatusService,
+                notificationStreamService,
                 fixedClock
         );
 

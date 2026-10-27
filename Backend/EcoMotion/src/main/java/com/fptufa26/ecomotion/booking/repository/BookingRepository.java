@@ -208,4 +208,17 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
             @Param("start") Instant start,
             @Param("end") Instant end
     );
+
+    boolean existsByDriver_IdAndStatus(Long driverId, BookingStatus status);
+
+    Optional<Booking> findFirstByDriver_IdAndStatus(Long driverId, BookingStatus status);
+
+    @Query("SELECT b FROM Booking b WHERE b.driver.id = :driverId AND b.status IN :statuses " +
+            "AND (b.pickupTime >= :now OR b.status IN ('DRIVER_ASSIGNED', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED')) " +
+            "ORDER BY b.pickupTime ASC")
+    List<Booking> findUpcomingDriverBookings(
+            @Param("driverId") Long driverId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("now") Instant now
+    );
 }

@@ -227,6 +227,8 @@ CREATE TABLE driver (
     portrait_url       varchar(500) NOT NULL,
     license_image_url  varchar(500) NOT NULL,
     status             varchar(20)  NOT NULL DEFAULT 'PENDING',
+    activity_status    varchar(20)  NOT NULL DEFAULT 'AVAILABLE',
+    status_updated_at  timestamptz  NOT NULL DEFAULT now(),
     reject_reason      varchar(500),
     rating_avg         numeric(3,2) NOT NULL DEFAULT 0,
     rating_count       integer      NOT NULL DEFAULT 0,
@@ -236,6 +238,7 @@ CREATE TABLE driver (
     CONSTRAINT fk_driver_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_driver_provider FOREIGN KEY (provider_id) REFERENCES provider (id) ON DELETE RESTRICT,
     CONSTRAINT ck_driver_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED')),
+    CONSTRAINT ck_driver_activity_status CHECK (activity_status IN ('OFFLINE', 'AVAILABLE', 'UNAVAILABLE')),
     CONSTRAINT ck_driver_reject_reason CHECK (
         (status = 'REJECTED' AND reject_reason IS NOT NULL)
         OR (status <> 'REJECTED' AND reject_reason IS NULL)
@@ -250,6 +253,8 @@ CREATE TABLE driver (
 
 CREATE INDEX idx_driver_provider_id ON driver (provider_id);
 CREATE INDEX idx_driver_status ON driver (status);
+CREATE INDEX idx_driver_activity_status ON driver (activity_status);
+CREATE INDEX idx_driver_status_updated_at ON driver (status_updated_at);
 CREATE INDEX idx_driver_license_expiry ON driver (license_expiry);
 
 -- ---------------------------------------------------------------------------

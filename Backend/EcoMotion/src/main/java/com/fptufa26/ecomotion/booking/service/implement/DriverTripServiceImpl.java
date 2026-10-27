@@ -39,6 +39,8 @@ import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
+import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,6 +94,8 @@ public class DriverTripServiceImpl implements DriverTripService {
     private final UserService userService;
     private final VehicleService vehicleService;
     private final MapGeocodingService mapGeocodingService;
+    private final DriverStatusService driverStatusService;
+    private final NotificationStreamService notificationStreamService;
     private final Clock clock;
 
     @Override
@@ -205,6 +209,23 @@ public class DriverTripServiceImpl implements DriverTripService {
             driverAssignmentRepository.save(da);
         });
 
+        driverStatusService.updateStatusTimestamp(driver.getId());
+
+        Long providerId = (saved.getVehicle() != null && saved.getVehicle().getProvider() != null)
+                ? saved.getVehicle().getProvider().getId()
+                : null;
+        if (providerId != null) {
+            notificationStreamService.sendEventToProvider(providerId, "DRIVER_CONFIRMED", Map.of(
+                    "bookingCode", saved.getBookingCode(),
+                    "driverId", driver.getId(),
+                    "confirmedAt", now.toString()
+            ));
+            notificationStreamService.sendEventToProvider(providerId, "DRIVER_STATUS_CHANGED", Map.of(
+                    "driverId", driver.getId(),
+                    "updatedAt", now.toString()
+            ));
+        }
+
         log.info(
                 "Trip status changed: tripId={}, bookingId={}, tripStatus={}, bookingStatus={}",
                 saved.getId(),
@@ -297,6 +318,32 @@ public class DriverTripServiceImpl implements DriverTripService {
         booking.setStatus(BookingStatus.IN_PROGRESS);
         Booking saved = bookingRepository.saveAndFlush(booking);
 
+        driverStatusService.updateStatusTimestamp(driver.getId());
+
+        Long providerId = (saved.getVehicle() != null && saved.getVehicle().getProvider() != null)
+                ? saved.getVehicle().getProvider().getId()
+                : null;
+        if (providerId != null) {
+            notificationStreamService.sendEventToProvider(providerId, "TRIP_STARTED", Map.of(
+                    "bookingCode", saved.getBookingCode(),
+                    "driverId", driver.getId(),
+                    "operationalStatus", "ON_TRIP",
+                    "startedAt", now.toString()
+            ));
+            notificationStreamService.sendEventToProvider(providerId, "DRIVER_STATUS_CHANGED", Map.of(
+                    "driverId", driver.getId(),
+                    "operationalStatus", "ON_TRIP",
+                    "updatedAt", now.toString()
+            ));
+        }
+        if (driver.getUser() != null) {
+            notificationStreamService.sendEventToUser(driver.getUser().getId(), "DRIVER_STATUS_CHANGED", Map.of(
+                    "driverId", driver.getId(),
+                    "operationalStatus", "ON_TRIP",
+                    "updatedAt", now.toString()
+            ));
+        }
+
         log.info(
                 "Trip status changed: tripId={}, bookingId={}, tripStatus={}, bookingStatus={}",
                 saved.getId(),
@@ -339,6 +386,29 @@ public class DriverTripServiceImpl implements DriverTripService {
             booking.setProviderConfirmedAt(now);
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
+
+        driverStatusService.updateStatusTimestamp(driver.getId());
+
+        Long finishProviderId = (saved.getVehicle() != null && saved.getVehicle().getProvider() != null)
+                ? saved.getVehicle().getProvider().getId()
+                : null;
+        if (finishProviderId != null) {
+            notificationStreamService.sendEventToProvider(finishProviderId, "TRIP_COMPLETED", Map.of(
+                    "bookingCode", saved.getBookingCode(),
+                    "driverId", driver.getId(),
+                    "completedAt", now.toString()
+            ));
+            notificationStreamService.sendEventToProvider(finishProviderId, "DRIVER_STATUS_CHANGED", Map.of(
+                    "driverId", driver.getId(),
+                    "updatedAt", now.toString()
+            ));
+        }
+        if (driver.getUser() != null) {
+            notificationStreamService.sendEventToUser(driver.getUser().getId(), "DRIVER_STATUS_CHANGED", Map.of(
+                    "driverId", driver.getId(),
+                    "updatedAt", now.toString()
+            ));
+        }
 
         log.info(
                 "Trip status changed: tripId={}, bookingId={}, tripStatus={}, bookingStatus={}",
@@ -505,6 +575,25 @@ public class DriverTripServiceImpl implements DriverTripService {
         driverOptimizationService.triggerAutoReassign(
                 booking.getId(), driver.getId(), request.rejectionReason().name() + ": " + request.rejectionNote()
         );
+
+        driverStatusService.updateStatusTimestamp(driver.getId());
+
+        Long rejectProviderId = (booking.getVehicle() != null && booking.getVehicle().getProvider() != null)
+                ? booking.getVehicle().getProvider().getId()
+                : null;
+        if (rejectProviderId != null) {
+            notificationStreamService.sendEventToProvider(rejectProviderId, "DRIVER_REJECTED", Map.of(
+                    "bookingCode", booking.getBookingCode(),
+                    "driverId", driver.getId(),
+                    "reason", request.rejectionReason() != null ? request.rejectionReason().name() : "",
+                    "note", request.rejectionNote() != null ? request.rejectionNote() : "",
+                    "rejectedAt", now.toString()
+            ));
+            notificationStreamService.sendEventToProvider(rejectProviderId, "DRIVER_STATUS_CHANGED", Map.of(
+                    "driverId", driver.getId(),
+                    "updatedAt", now.toString()
+            ));
+        }
 
         Booking refreshed = bookingRepository.findById(booking.getId())
                 .orElse(booking);

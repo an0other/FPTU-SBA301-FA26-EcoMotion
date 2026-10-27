@@ -17,18 +17,19 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.service.UserService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class TripEvidenceServiceImpl implements TripEvidenceService {
 
@@ -36,9 +37,31 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
     private final TripEvidenceRepository tripEvidenceRepository;
     private final CloudinaryService cloudinaryService;
     private final UserService userService;
+    private final TransactionTemplate transactionTemplate;
+
+    @Autowired
+    public TripEvidenceServiceImpl(
+            BookingRepository bookingRepository,
+            TripEvidenceRepository tripEvidenceRepository,
+            CloudinaryService cloudinaryService,
+            UserService userService,
+            @Autowired(required = false) PlatformTransactionManager transactionManager) {
+        this.bookingRepository = bookingRepository;
+        this.tripEvidenceRepository = tripEvidenceRepository;
+        this.cloudinaryService = cloudinaryService;
+        this.userService = userService;
+        this.transactionTemplate = transactionManager != null ? new TransactionTemplate(transactionManager) : null;
+    }
+
+    public TripEvidenceServiceImpl(
+            BookingRepository bookingRepository,
+            TripEvidenceRepository tripEvidenceRepository,
+            CloudinaryService cloudinaryService,
+            UserService userService) {
+        this(bookingRepository, tripEvidenceRepository, cloudinaryService, userService, null);
+    }
 
     @Override
-    @Transactional
     public TripEvidenceResponse uploadEvidence(
             Long currentUserId,
             Role currentUserRole,
@@ -58,17 +81,11 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         Booking booking = resolveBooking(bookingIdOrCode);
-
-        // Security / Business Rule (Requirement 8)
         Driver assignedDriver = validateAndResolveAccess(currentUser, currentUserRole, booking);
-
-        // Booking status validation (Requirement 9)
         validateBookingStatusForEvidenceType(booking.getStatus(), type);
 
-        // Step 1: Upload to Cloudinary
         CloudinaryUploadResult uploadResult = cloudinaryService.uploadTripEvidence(file, booking.getId());
 
-        // Step 2: Create TripEvidence entity
         Instant now = Instant.now();
         TripEvidence evidence = new TripEvidence();
         evidence.setBooking(booking);
@@ -85,11 +102,15 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         evidence.setRecordedAt(now);
         evidence.setCreatedAt(now);
 
-        // Step 3: Save to DB with rollback / cleanup if DB save fails (Requirement 10)
         try {
-            TripEvidence saved = tripEvidenceRepository.save(evidence);
+            TripEvidence saved;
+            if (transactionTemplate != null) {
+                saved = transactionTemplate.execute(status -> tripEvidenceRepository.save(evidence));
+            } else {
+                saved = tripEvidenceRepository.save(evidence);
+            }
             log.info("Saved trip evidence #{} for booking {} with Cloudinary publicId {}",
-                    saved.getId(), booking.getBookingCode(), uploadResult.publicId());
+                    saved != null ? saved.getId() : null, booking.getBookingCode(), uploadResult.publicId());
             return TripEvidenceResponse.fromEntity(saved);
         } catch (Exception ex) {
             log.error("Failed to save trip evidence record to DB for booking {}. Cleaning up Cloudinary image: {}",
@@ -119,7 +140,6 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
     }
 
     @Override
-    @Transactional
     public void deleteEvidence(
             Long currentUserId,
             Role currentUserRole,
@@ -135,8 +155,6 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         TripEvidence evidence = tripEvidenceRepository.findByIdAndBooking_Id(evidenceId, booking.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy minh chứng #" + evidenceId));
 
-        // Delete authorization check (Requirement 16):
-        // Only uploader, vehicle provider, or ADMIN can delete
         boolean isAdmin = currentUserRole == Role.ADMIN;
         boolean isUploader = evidence.getUploadedBy() != null && evidence.getUploadedBy().getId().equals(currentUser.getId());
         boolean isProvider = false;
@@ -151,12 +169,18 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
             throw new AccessDeniedException("Bạn không có quyền xóa ảnh minh chứng này");
         }
 
-        // Delete image from Cloudinary (Requirement 16)
-        if (evidence.getCloudinaryPublicId() != null && !evidence.getCloudinaryPublicId().isBlank()) {
-            cloudinaryService.deleteImage(evidence.getCloudinaryPublicId());
+        String publicId = evidence.getCloudinaryPublicId();
+
+        if (transactionTemplate != null) {
+            transactionTemplate.executeWithoutResult(status -> tripEvidenceRepository.delete(evidence));
+        } else {
+            tripEvidenceRepository.delete(evidence);
         }
 
-        tripEvidenceRepository.delete(evidence);
+        if (publicId != null && !publicId.isBlank()) {
+            cloudinaryService.deleteImage(publicId);
+        }
+
         log.info("Deleted trip evidence #{} for booking {}", evidenceId, booking.getBookingCode());
     }
 
@@ -266,7 +290,6 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
                 }
             }
             case OTHER -> {
-                // Permitted on active/completed bookings
             }
         }
     }
