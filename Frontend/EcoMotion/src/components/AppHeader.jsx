@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import {
   IconBell,
   IconChevronDown,
+  IconLayoutDashboard,
   IconList,
   IconMap,
   IconMapPin,
@@ -122,6 +123,12 @@ function AccountDisclosure({ user, onLogout }) {
             ) : null}
           </div>
           <div className="p-1.5">
+            {user.role === 'ADMIN' ? (
+              <NavLink to="/admin" end className={panelItemClass} onClick={() => setOpen(false)}>
+                <IconLayoutDashboard className="h-4 w-4 shrink-0 text-brand-600" />
+                Dashboard
+              </NavLink>
+            ) : null}
             {user.role === 'RENTER' ? (
               <NavLink to="/renter/bookings" end className={panelItemClass} onClick={() => setOpen(false)}>
                 <IconList className="h-4 w-4 shrink-0 text-brand-600" />
@@ -290,6 +297,15 @@ export default function AppHeader({ filters, onSearchSubmit, showViewSwitch = fa
                 <IconBell className="h-4 w-4" />
                 <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
               </button>
+
+              {user.role === 'ADMIN' && (
+                <Link
+                  to="/admin"
+                  className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                >
+                  Dashboard
+                </Link>
+              )}
 
               {user.role === 'DRIVER' && (
                 <Link
