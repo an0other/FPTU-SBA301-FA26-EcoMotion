@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import {
   IconBell,
   IconChevronDown,
+  IconLayoutDashboard,
   IconList,
   IconMap,
   IconMapPin,
@@ -122,6 +123,12 @@ function AccountDisclosure({ user, onLogout }) {
             ) : null}
           </div>
           <div className="p-1.5">
+            {user.role === 'ADMIN' ? (
+              <NavLink to="/admin" end className={panelItemClass} onClick={() => setOpen(false)}>
+                <IconLayoutDashboard className="h-4 w-4 shrink-0 text-brand-600" />
+                Dashboard
+              </NavLink>
+            ) : null}
             {user.role === 'RENTER' ? (
               <NavLink to="/renter/bookings" end className={panelItemClass} onClick={() => setOpen(false)}>
                 <IconList className="h-4 w-4 shrink-0 text-brand-600" />

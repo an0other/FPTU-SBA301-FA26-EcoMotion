@@ -129,7 +129,6 @@ public class DevDataSeeder implements ApplicationRunner {
     private final ScheduleService scheduleService;
     private final RenterPaymentDataSeeder renterPaymentDataSeeder;
     private final RenterReviewDataSeeder renterReviewDataSeeder;
-    private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
 
     private record PlanPrices(String hourly, String daily, String monthly) {
@@ -138,14 +137,12 @@ public class DevDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        // Core users
         seedUser(1L, "renter01@ecomotion.vn", "0901000001", "Renter 01", Role.RENTER);
         seedUser(PROVIDER_A_USER_ID, "provider.a@ecomotion.vn", "0901000010", NAME_PROVIDER_A, Role.PROVIDER);
         seedUser(3L, "admin01@ecomotion.vn", "0901000003", "Admin 01", Role.ADMIN);
         seedUser(PROVIDER_B_USER_ID, "provider.b@ecomotion.vn", "0901000011", NAME_PROVIDER_B, Role.PROVIDER);
         seedUser(5L, "renter.demo@ecomotion.vn", "0901000012", NAME_RENTER, Role.RENTER);
 
-        // Additional Renters
         seedUser(101L, "duc.tran@ecomotion.vn", "0901000021", "Trần Minh Đức", Role.RENTER);
         seedUser(102L, "nam.le@ecomotion.vn", "0901000022", "Lê Hoàng Nam", Role.RENTER);
         seedUser(103L, "kieu.vo@ecomotion.vn", "0901000023", "Võ Thụy Kiều", Role.RENTER);
@@ -154,7 +151,6 @@ public class DevDataSeeder implements ApplicationRunner {
         seedUser(106L, "cuong.nguyen@ecomotion.vn", "0901000026", "Nguyễn Việt Cường", Role.RENTER);
         seedUser(107L, "mai.truong@ecomotion.vn", "0901000027", "Trương Thanh Mai", Role.RENTER);
 
-        // Drivers for Provider A
         User driverUser1 = seedUser(201L, "driver.nam@ecomotion.vn", "0901000031", "Nguyễn Văn Nam", Role.DRIVER);
         User driverUser2 = seedUser(202L, "driver.cuong@ecomotion.vn", "0901000032", "Trương Hùng Cường", Role.DRIVER);
         User driverUser3 = seedUser(203L, "driver.kiet@ecomotion.vn", "0901000033", "Vũ Tuấn Kiệt", Role.DRIVER);
@@ -166,7 +162,6 @@ public class DevDataSeeder implements ApplicationRunner {
         seedVietQrReceivingAccount(providerA, "VCB", "Vietcombank", "0123456789", "NGUYEN VAN A");
         seedVietQrReceivingAccount(providerB, "VCB", "Vietcombank", "0987654321", "TRAN THI B");
 
-        // Seed Renter profiles
         seedRenterProfile(userRepository.findById(1L).orElseThrow());
         seedRenterProfile(userRepository.findById(5L).orElseThrow());
         seedRenterProfile(userRepository.findById(101L).orElseThrow());
@@ -177,12 +172,10 @@ public class DevDataSeeder implements ApplicationRunner {
         seedRenterProfile(userRepository.findById(106L).orElseThrow());
         seedRenterProfile(userRepository.findById(107L).orElseThrow());
 
-        // Seed Drivers for Provider A
         Driver driverNam = seedDriver(driverUser1, providerA, "7901230001", "B2");
         Driver driverCuong = seedDriver(driverUser2, providerA, "7901230002", "D");
         Driver driverKiet = seedDriver(driverUser3, providerA, "7901230003", "B2");
 
-        // Seed exactly the 4 vehicles for Provider A (pinned fleet size = 8 across provider A and B)
         seedVehicle(providerA.getId(), 1L, PROVIDER_A_USER_ID, "VinFast", "VF 6", 2024, 5,
                 Transmission.AUTOMATIC,
                 COLOR_WHITE, FuelType.EV, "51A-11111",
@@ -226,7 +219,6 @@ public class DevDataSeeder implements ApplicationRunner {
                         "camry-exterior-right-front-three-quarter-7.webp"),
                 DESC_CAMRY);
 
-        // Seed Vehicles for Provider B (vehicles 5..8)
         seedVehicle(providerB.getId(), 5L, PROVIDER_B_USER_ID, "BMW", "320i M Sport", 2023, 5,
                 Transmission.AUTOMATIC,
                 COLOR_BLACK, FuelType.GASOLINE, "51A-55555",
@@ -271,18 +263,12 @@ public class DevDataSeeder implements ApplicationRunner {
                         "range-rover-sport-in-monte-carlo-monaco.webp"),
                 DESC_RANGE_ROVER);
 
-        // Seed 100% Real Bookings into Database across Provider A's 4 vehicles
         User renterUser = userRepository.findById(1L).orElseThrow();
         Renter renter = renterRepository.findByUser_Id(renterUser.getId()).orElseThrow();
         Vehicle bookingVehicle = vehicleRepository.findByLicensePlate(VEHICLE_PLATE).orElseThrow();
-        seedSampleBooking(renter, renterUser, providerA, bookingVehicle,
-                ACCEPTED_BOOKING_CODE, BookingStatus.ACCEPTED, Instant.parse("2026-12-20T01:00:00Z"));
-        seedSampleBooking(renter, renterUser, providerA, bookingVehicle,
-                PENDING_BOOKING_CODE, BookingStatus.PENDING, Instant.parse("2026-12-28T01:00:00Z"));
         seedInProgressBooking(renter, renterUser, providerA, bookingVehicle);
         seedBookings(driverNam, driverCuong, driverKiet);
 
-        // Seed demonstration data for TV6 Admin Management
         seedAdminDemonstrationData(providerA, providerB);
 
         realignPinnedIdentitySequences();
@@ -290,47 +276,11 @@ public class DevDataSeeder implements ApplicationRunner {
         realignPinnedIdentitySequences();
         renterReviewDataSeeder.seed();
         realignPinnedIdentitySequences();
-        renterYearlyBookingDataSeeder.seed();
-        realignPinnedIdentitySequences();
     }
 
     private void seedBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
         Instant now = Instant.now();
 
-        // PENDING Bookings (3) for Provider A
-        seedBooking("BK-8F3K29", 101L, 4L, PlanType.DAILY, null, BookingStatus.PENDING,
-                "214 Nguyễn Trãi, P. Phạm Ngũ Lão, Q.1",
-                now.plus(1, ChronoUnit.DAYS),
-                3, "1400000.00", null, null, null, null, null);
-
-        seedBooking("BK-7N2W90", 102L, 1L, PlanType.HOURLY, null, BookingStatus.PENDING,
-                "Landmark 81, Vinhomes Central Park", now.plus(2, ChronoUnit.DAYS),
-                1, "720000.00", null, null, null, null, null);
-
-        seedBooking("BK-3D9F12", 5L, 2L, PlanType.DAILY, null, BookingStatus.PENDING,
-                "123 Nguyễn Thị Minh Khai, Q.3", now.plus(12, ChronoUnit.HOURS),
-                2, "900000.00", null, null, null, null, null);
-
-        // ACCEPTED Bookings (4) for Provider A
-        seedBooking("BK-4M1P88", 103L, 3L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "Ga Quốc tế Tân Sơn Nhất (Cột 12)",
-                now.plus(2, ChronoUnit.DAYS),
-                4, "3200000.00", null, null, null, null, null);
-
-        seedBooking("BK-4A2K91", 104L, 3L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "Bitexco Financial Tower, Q.1", now.plus(1, ChronoUnit.DAYS),
-                2, "1600000.00", null, null, null, null, null);
-
-        seedBooking("BK-4B3L92", 105L, 2L, PlanType.HOURLY, null, BookingStatus.ACCEPTED,
-                "Estella Heights, An Phú, TP. Thủ Đức",
-                now.plus(18, ChronoUnit.HOURS),
-                1, "600000.00", null, null, null, null, null);
-
-        seedBooking("BK-4C4M93", 101L, 4L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "Kumho Asiana Plaza, Lê Duẩn, Q.1", now.plus(3, ChronoUnit.DAYS),
-                3, "1400000.00", null, null, null, null, null);
-
-        // CONFIRMED Bookings (5) for Provider A
         seedBooking("BK-9Q2Z11", 104L, 4L, PlanType.DAILY, driverNam, BookingStatus.CONFIRMED,
                 "Sheraton Saigon, 88 Đồng Khởi, Q.1", now.plus(1, ChronoUnit.DAYS),
                 2, "1400000.00", null, null, null, null, null);
@@ -352,7 +302,6 @@ public class DevDataSeeder implements ApplicationRunner {
                 "Park Hyatt Saigon, Q.1", now.plus(3, ChronoUnit.DAYS),
                 4, "3200000.00", null, null, null, null, null);
 
-        // IN_PROGRESS Bookings (2) for Provider A
         seedBooking("BK-1X8C44", 5L, 4L, PlanType.DAILY, driverCuong, BookingStatus.IN_PROGRESS,
                 "Tuyến: TP.HCM - Hồ Tràm Resort", now.minus(3, ChronoUnit.HOURS),
                 5, "2800000.00", now.minus(3, ChronoUnit.HOURS), null, null, null, null);
@@ -362,7 +311,6 @@ public class DevDataSeeder implements ApplicationRunner {
                 now.minus(1, ChronoUnit.HOURS),
                 2, "720000.00", now.minus(1, ChronoUnit.HOURS), null, null, null, null);
 
-        // COMPLETED Bookings (11) for Provider A
         seedBooking("BK-6T9V32", 105L, 4L, PlanType.HOURLY, driverKiet, BookingStatus.COMPLETED,
                 "Khu đô thị Sala, TP. Thủ Đức",
                 now.minus(3, ChronoUnit.DAYS),
@@ -419,12 +367,6 @@ public class DevDataSeeder implements ApplicationRunner {
                 2, "1600000.00", now.minus(13, ChronoUnit.DAYS), now.minus(12, ChronoUnit.DAYS), null,
                 null, null);
 
-        // REJECTED Booking (1) for Provider A
-        seedBooking("BK-2R5Y78", 106L, 4L, PlanType.DAILY, null, BookingStatus.REJECTED,
-                "Bến Xe Miền Đông Mới", now.minus(2, ChronoUnit.DAYS),
-                4, "1400000.00", null, null, null, null, null);
-
-        // CANCELLED Bookings (2) for Provider A
         seedBooking("BK-5L3M91", 107L, 1L, PlanType.HOURLY, null, BookingStatus.CANCELLED,
                 "Thảo Điền Pearl, TP. Thủ Đức",
                 now.minus(1, ChronoUnit.DAYS),
@@ -436,14 +378,6 @@ public class DevDataSeeder implements ApplicationRunner {
                 2, "1600000.00", null, null, 102L, CancelReason.RENTER_REQUEST,
                 now.minus(4, ChronoUnit.DAYS));
 
-        // Provider B Bookings (2)
-        seedBooking("BK-B0A111", 101L, 5L, PlanType.DAILY, null, BookingStatus.PENDING,
-                "1 Lê Duẩn, Q.1", now.plus(1, ChronoUnit.DAYS),
-                2, "2000000.00", null, null, null, null, null);
-
-        seedBooking("BK-B0A222", 103L, 6L, PlanType.DAILY, null, BookingStatus.ACCEPTED,
-                "72 Lê Thánh Tôn, Q.1", now.plus(2, ChronoUnit.DAYS),
-                2, "4500000.00", null, null, null, null, null);
     }
 
     private void seedBooking(String bookingCode, Long renterUserId, Long vehicleId, PlanType planType,
@@ -472,12 +406,9 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setDriver(driver);
         booking.setStatus(status);
         booking.setPickupAddress(pickupAddress);
-        // Keep one legacy row without coordinates to exercise address-geocoding fallback.
-        if (!PENDING_BOOKING_CODE.equals(bookingCode)) {
-            booking.setPickupLatitude(vehicle.getProvider().getDepotLatitude());
-            booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
-            booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
-        }
+        booking.setPickupLatitude(vehicle.getProvider().getDepotLatitude());
+        booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
+        booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
         booking.setPickupTime(pickupTime);
         booking.setPassengerCount(passengerCount);
         booking.setTotalAmount(new BigDecimal(totalAmountStr));
@@ -525,22 +456,19 @@ public class DevDataSeeder implements ApplicationRunner {
         snapshot.setHourlyToDailyThresholdMinutes(plan.getHourlyToDailyThresholdMinutes());
         snapshotRepository.save(snapshot);
 
-        if (!"BK-4A2K91".equals(bookingCode)) {
-            BookingCharge charge = new BookingCharge();
-            charge.setBooking(booking);
-            charge.setChargeType(ChargeType.BASE_RENTAL);
-            charge.setDescription("Thuê " + passengerCount + " hành khách (" + plan.getPlanType() + ")");
-            charge.setQuantity(1);
-            charge.setUnitPrice(plan.getSlotPrice());
-            charge.setAmount(new BigDecimal(totalAmountStr));
-            charge.setCreatedBy(renter.getUser());
-            charge.setWaived(false);
-            chargeRepository.save(charge);
-        }
+        BookingCharge charge = new BookingCharge();
+        charge.setBooking(booking);
+        charge.setChargeType(ChargeType.BASE_RENTAL);
+        charge.setDescription("Thuê " + passengerCount + " hành khách (" + plan.getPlanType() + ")");
+        charge.setQuantity(1);
+        charge.setUnitPrice(plan.getSlotPrice());
+        charge.setAmount(new BigDecimal(totalAmountStr));
+        charge.setCreatedBy(renter.getUser());
+        charge.setWaived(false);
+        chargeRepository.save(charge);
     }
 
     private void seedAdminDemonstrationData(Provider providerA, Provider providerB) {
-        // 1. Pending Driver
         User driverUser = seedUser(6L, "driver.pending@ecomotion.vn", "0901000020", "Phạm Văn Tài", Role.DRIVER);
         if (driverRepository.findByUser_Id(driverUser.getId()).isEmpty()) {
             Driver driver = new Driver();
@@ -557,7 +485,6 @@ public class DevDataSeeder implements ApplicationRunner {
             driverRepository.save(driver);
         }
 
-        // 2. Pending Provider
         User providerUserC = seedUser(7L, "provider.pending@ecomotion.vn", "0901000030", "Công ty TNHH Vận tải Toàn Cầu", Role.PROVIDER);
         if (providerRepository.findByUser_Id(providerUserC.getId()).isEmpty()) {
             Provider providerC = new Provider();
@@ -577,7 +504,6 @@ public class DevDataSeeder implements ApplicationRunner {
             providerRepository.save(providerC);
         }
 
-        // 3. User with PENDING eKYC
         User renterEkyc = seedUser(8L, "renter.pending@ecomotion.vn", "0901000040", "Lê Hoàng Long", Role.RENTER);
         renterEkyc.setEkycStatus(EkycStatus.PENDING);
         userRepository.save(renterEkyc);
@@ -594,7 +520,6 @@ public class DevDataSeeder implements ApplicationRunner {
             renterRepository.save(renter);
         }
 
-        // 4. Vehicle 9: Pending approval
         if (vehicleRepository.findById(9L).isEmpty()) {
             seedVehicle(providerA.getId(), 9L, PROVIDER_A_USER_ID, "VinFast", "VF 7 Plus", 2024, 5, Transmission.AUTOMATIC,
                     "Xám", FuelType.EV, "51A-99999",
@@ -638,7 +563,6 @@ public class DevDataSeeder implements ApplicationRunner {
             vehicleImageRepository.save(image);
         });
 
-        // 5. Booking, Charges, Payments, Dispute
         if (bookingRepository.findByBookingCode("BK-ECO-001").isEmpty()) {
             Renter renter1 = renterRepository.findByUser_Id(1L).orElseGet(() -> renterRepository.findAll().get(0));
             Vehicle v1 = vehicleRepository.findById(1L).orElseThrow();
@@ -974,64 +898,6 @@ public class DevDataSeeder implements ApplicationRunner {
 
     private static String encodePathSegment(String segment) {
         return segment.replace(" ", "%20");
-    }
-
-    private void seedSampleBooking(Renter renter,
-                                   User renterUser,
-                                   Provider provider,
-                                   Vehicle vehicle,
-                                   String bookingCode,
-                                   BookingStatus status,
-                                   Instant pickupTime) {
-        if (bookingRepository.existsByBookingCode(bookingCode)) {
-            return;
-        }
-        RentalPlan daily = rentalPlanRepository
-                .findByVehicle_IdAndStatusOrderByIdAsc(vehicle.getId(), PlanStatus.ACTIVE)
-                .stream()
-                .filter(plan -> plan.getPlanType() == PlanType.DAILY)
-                .findFirst()
-                .orElseThrow();
-
-        Booking booking = new Booking();
-        booking.setBookingCode(bookingCode);
-        booking.setRenter(renter);
-        booking.setVehicle(vehicle);
-        booking.setPlan(daily);
-        booking.setStatus(status);
-        booking.setPickupAddress(provider.getDepotAddress());
-        booking.setPickupTime(pickupTime);
-        booking.setPassengerCount(2);
-        booking.setTotalAmount(daily.getSlotPrice());
-        bookingRepository.save(booking);
-
-        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
-        snapshot.setBooking(booking);
-        snapshot.setSlotPrice(daily.getSlotPrice());
-        snapshot.setSlotLengthMinutes(daily.getSlotLengthMinutes());
-        snapshot.setPlanType(daily.getPlanType());
-        snapshot.setDepositRatio(provider.getDepositRatio());
-        snapshot.setUpfrontAmount(null);
-        snapshot.setAllowedOvertimeMinutes(daily.getAllowedOvertimeMinutes());
-        snapshot.setOvertimeSurchargeRatio(daily.getOvertimeSurchargeRatio());
-        snapshot.setWaitingFreeMinutes(daily.getWaitingFreeMinutes());
-        snapshot.setWaitingRate(daily.getWaitingRate());
-        snapshot.setWeekendSurchargeRatio(daily.getWeekendSurchargeRatio());
-        snapshot.setFreeRadiusKm(daily.getFreeRadiusKm());
-        snapshot.setOutOfRadiusRate(daily.getOutOfRadiusRate());
-        snapshot.setHourlyToDailyThresholdMinutes(daily.getHourlyToDailyThresholdMinutes());
-        snapshotRepository.save(snapshot);
-
-        BookingCharge charge = new BookingCharge();
-        charge.setBooking(booking);
-        charge.setChargeType(ChargeType.BASE_RENTAL);
-        charge.setDescription("Thuê 1 slot");
-        charge.setQuantity(1);
-        charge.setUnitPrice(daily.getSlotPrice());
-        charge.setAmount(daily.getSlotPrice());
-        charge.setCreatedBy(renterUser);
-        charge.setWaived(false);
-        chargeRepository.save(charge);
     }
 
     private void seedInProgressBooking(Renter renter, User renterUser, Provider provider, Vehicle vehicle) {

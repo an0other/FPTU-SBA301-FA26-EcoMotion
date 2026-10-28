@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.notification.external.service.implement;
 
 import com.fptufa26.ecomotion.notification.external.dto.request.OtpNotificationRequest;
+import com.fptufa26.ecomotion.notification.external.dto.request.BookingNotificationRequest;
 import com.fptufa26.ecomotion.notification.external.dto.response.NotificationResult;
 import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
 import jakarta.validation.Validation;
@@ -17,6 +18,8 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import java.util.stream.Stream;
+import java.math.BigDecimal;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +35,9 @@ class SmtpEmailNotificationServiceImplTest {
     private static final String FROM = "no-reply@ecomotion.test";
     private static final OtpNotificationRequest REQUEST = new OtpNotificationRequest(
             "customer@example.com", "482915", 300, NotificationChannel.EMAIL);
+    private static final BookingNotificationRequest BOOKING = new BookingNotificationRequest(
+            "renter@example.com", "EM-2026-000001", "VinFast VF 8", "Điểm đón",
+            Instant.parse("2026-12-01T01:00:00Z"), new BigDecimal("300000"), NotificationChannel.EMAIL);
     private static ValidatorFactory validatorFactory;
     private JavaMailSender mailSender;
     private SmtpEmailNotificationServiceImpl service;
@@ -103,6 +109,38 @@ class SmtpEmailNotificationServiceImplTest {
                 new OtpNotificationRequest("a@example.com", "482915", 300, null),
                 new OtpNotificationRequest("a@example.com", "482915", 300, NotificationChannel.SMS)
         );
+    }
+
+    @Test
+    void sendsBookingPlacedAndDepositPaidEmailsToRenterWithVietnamTime() {
+        assertThat(service.sendBookingPlaced(BOOKING).success()).isTrue();
+        assertThat(service.sendDepositPaid(BOOKING).success()).isTrue();
+        ArgumentCaptor<SimpleMailMessage> messages = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        org.mockito.Mockito.verify(mailSender, org.mockito.Mockito.times(2)).send(messages.capture());
+        assertThat(messages.getAllValues()).allSatisfy(message -> {
+            assertThat(message.getTo()).containsExactly("renter@example.com");
+            assertThat(message.getFrom()).isEqualTo(FROM);
+            assertThat(message.getText()).contains("EM-2026-000001", "VinFast VF 8", "Điểm đón", "01/12/2026 08:00", "300.000 VND");
+        });
+        assertThat(messages.getAllValues().getFirst().getSubject()).contains("Đã tạo đơn thuê");
+        assertThat(messages.getAllValues().getLast().getSubject()).contains("Đã nhận tiền cọc");
+    }
+
+    @Test
+    void rejectsInvalidBookingEmailBeforeDelivery() {
+        assertThat(service.sendBookingPlaced(null).success()).isFalse();
+        BookingNotificationRequest invalid = new BookingNotificationRequest("invalid", BOOKING.bookingCode(),
+                BOOKING.vehicleName(), BOOKING.pickupAddress(), BOOKING.pickupTime(), BOOKING.depositAmount(), BOOKING.channel());
+        assertThat(service.sendDepositPaid(invalid).success()).isFalse();
+        verifyNoInteractions(mailSender);
+    }
+
+    @Test
+    void reportsBookingEmailDeliveryFailure() {
+        doThrow(new MailSendException("Internal SMTP server details")).when(mailSender).send(any(SimpleMailMessage.class));
+        NotificationResult result = service.sendDepositPaid(BOOKING);
+        assertThat(result.success()).isFalse();
+        assertThat(result.errorMessage()).doesNotContain("Internal SMTP");
     }
 
     @Test

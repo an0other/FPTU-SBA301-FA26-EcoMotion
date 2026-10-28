@@ -3,6 +3,15 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { providerService } from "../../services/providerService";
 
+const NAV_ITEMS = [
+  { key: "home", to: "/provider", label: "Tổng quan", labelFull: "Tổng quan", icon: "dashboard" },
+  { key: "vehicles", to: "/provider/vehicles", label: "Đội xe", labelFull: "Đội xe của tôi", icon: "directions_car" },
+  { key: "schedules", to: "/provider/schedules", label: "Chặn lịch", labelFull: "Chặn lịch", icon: "event_busy" },
+  { key: "drivers", to: "/provider/drivers", label: "Tài xế", labelFull: "Quản lý tài xế", icon: "badge" },
+  { key: "bookings", to: "/provider/bookings", label: "Đơn thuê", labelFull: "Đơn thuê", icon: "assignment" },
+  { key: "finance", to: "/provider/finance", label: "Tài chính", labelFull: "Tài chính", icon: "payments" },
+];
+
 export default function ProviderHeader({
   activeTab,
   providerName,
@@ -12,8 +21,13 @@ export default function ProviderHeader({
   const navigate = useNavigate();
   const location = useLocation(); 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Tự động nhận diện tab dựa trên pathname nếu activeTab không được truyền cụ thể
+  useEffect(() => {
+    setUserMenuOpen(false);
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
   const currentTab = (() => {
     if (activeTab) return activeTab;
     const path = location.pathname;
@@ -26,7 +40,6 @@ export default function ProviderHeader({
     return "home";
   })();
 
-  // Cache thông tin Depot để đồng bộ trên mọi trang
   const [depotInfo, setDepotInfo] = useState(() => {
     try {
       const cached = sessionStorage.getItem("ecomotion_provider_depot");
@@ -53,7 +66,6 @@ export default function ProviderHeader({
       return;
     }
 
-    // Nếu trang hiện tại không truyền prop (như Finance, Bookings), tự động fetch từ API hoặc cache
     let isMounted = true;
     async function fetchDepot() {
       try {
@@ -83,146 +95,100 @@ export default function ProviderHeader({
     navigate("/login", { replace: true });
   }
 
-  const displayName =
+  const depotDisplayName =
     (providerName && providerName !== "Chủ xe" ? providerName : null) ||
     (depotInfo.name && depotInfo.name !== "Chủ xe" ? depotInfo.name : null) ||
-    user?.fullName ||
     "EcoMotion Depot";
   const displayAddress =
     depotAddress || depotInfo.address || "Hệ thống Depot EcoMotion";
-  const initialsSource =
-    (user?.fullName && user.fullName !== "Chủ xe" ? user.fullName : null) ||
-    (displayName && displayName !== "Chủ xe" ? displayName : null) ||
-    "PV";
-  const initials = initialsSource
-    .trim()
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(-2)
-    .join("")
-    .toUpperCase();
+
+  const userDisplayName =
+    (user?.fullName && user.fullName.trim() !== "" && user.fullName !== "Chủ xe")
+      ? user.fullName.trim()
+      : (user?.email || "Chủ xe");
+
+  const initials = (() => {
+    const parts = userDisplayName.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "CX";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  })();
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-[0_1px_8px_rgba(11,28,48,0.04)] border-b border-slate-200">
-      <div className="h-20 w-full px-6 lg:px-8 xl:px-12 flex items-center justify-between gap-4">
-        {/* Left: Brand Logo & Depot Chip */}
-        <div className="flex items-center gap-4 shrink-0">
-          <Link to="/provider" className="flex items-center gap-3 shrink-0">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25">
+    <header className="sticky top-0 z-40 bg-white shadow-[0_1px_8px_rgba(11,28,48,0.04)] border-b border-slate-200">
+      <div className="h-20 w-full px-4 sm:px-6 lg:px-8 xl:px-12 flex items-center justify-between gap-2 sm:gap-4">
+        
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0 min-w-0">
+          <Link to="/provider" className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25 shrink-0">
               <span className="material-symbols-outlined text-[24px]">
                 electric_car
               </span>
             </span>
             <div className="flex flex-col">
-              <span className="text-[19px] font-bold text-[#0b1c30] leading-tight">
+              <span className="text-[17px] sm:text-[19px] font-bold text-[#0b1c30] leading-tight">
                 EcoMotion VN
               </span>
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 Provider Portal
               </span>
             </div>
           </Link>
 
           <div
-            className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/60 w-[280px] xl:w-[320px] shrink-0"
-            title={`${displayName} - ${displayAddress}`}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/60 max-w-[180px] xl:max-w-[260px] 2xl:max-w-[320px] shrink min-w-0"
+            title={`${depotDisplayName} - ${displayAddress}`}
           >
-            <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0">
+            <span className="material-symbols-outlined text-emerald-600 text-[20px] xl:text-[22px] shrink-0">
               storefront
             </span>
             <div className="flex flex-col text-left leading-tight truncate min-w-0 flex-1">
               <span className="font-bold text-slate-900 text-xs truncate">
-                {displayName}
+                {depotDisplayName}
               </span>
-              <span className="text-[11px] text-slate-500 font-normal truncate">
+              <span className="hidden xl:block text-[11px] text-slate-500 font-normal truncate">
                 {displayAddress}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Center: Main Navigation */}
-        <nav className="hidden lg:flex items-center justify-center flex-1 mx-4 gap-1.5 xl:gap-2">
-          <Link
-            to="/provider"
-            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              currentTab === "home"
-                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
-            }`}
-          >
-            Tổng quan
-          </Link>
-          <Link
-            to="/provider/vehicles"
-            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              currentTab === "vehicles"
-                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
-            }`}
-          >
-            Đội xe của tôi
-          </Link>
-          <Link
-            to="/provider/schedules"
-            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              currentTab === "schedules"
-                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
-            }`}
-          >
-            Chặn lịch
-          </Link>
-          <Link
-            to="/provider/drivers"
-            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              currentTab === "drivers"
-                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
-            }`}
-          >
-            Quản lý tài xế
-          </Link>
-          <Link
-            to="/provider/bookings"
-            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              currentTab === "bookings"
-                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
-            }`}
-          >
-            Đơn thuê
-          </Link>
-          <Link
-            to="/provider/finance"
-            className={`px-3.5 py-2 rounded-xl text-[13.5px] whitespace-nowrap transition-colors ${
-              currentTab === "finance"
-                ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
-            }`}
-          >
-            Tài chính
-          </Link>
+        <nav className="hidden lg:flex items-center justify-center flex-1 mx-2 xl:mx-4 gap-1 xl:gap-1.5 2xl:gap-2 min-w-0">
+          {NAV_ITEMS.map((item) => {
+            const isActive = currentTab === item.key;
+            return (
+              <Link
+                key={item.key}
+                to={item.to}
+                className={`px-2.5 xl:px-3.5 py-1.5 xl:py-2 rounded-xl text-xs xl:text-[13.5px] whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
+                }`}
+              >
+                <span className="xl:hidden">{item.label}</span>
+                <span className="hidden xl:inline">{item.labelFull}</span>
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* Right: User Profile (Đã bỏ chuông thông báo) */}
-        <div className="flex items-center shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <div className="relative">
             <button
               type="button"
               onClick={() => setUserMenuOpen((prev) => !prev)}
-              className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-[12px] font-bold text-emerald-700 ring-2 ring-emerald-500/20">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-[12px] font-bold text-emerald-700 ring-2 ring-emerald-500/20 shrink-0">
                 {initials}
               </span>
-              <div className="hidden sm:flex flex-col text-left leading-tight">
-                <span className="text-[13px] font-bold text-slate-800 max-w-[120px] truncate">
-                  {user?.fullName && user.fullName !== "Chủ xe"
-                    ? user.fullName
-                    : displayName && displayName !== "Chủ xe"
-                    ? displayName
-                    : "Provider"}
+              <div className="hidden sm:flex flex-col text-left leading-tight min-w-0">
+                <span
+                  className="text-[13px] font-bold text-slate-800 max-w-[100px] md:max-w-[130px] xl:max-w-[160px] truncate"
+                  title={userDisplayName}
+                >
+                  {userDisplayName}
                 </span>
                 <span className="text-[11px] text-slate-500 font-medium">
                   Provider
@@ -261,8 +227,142 @@ export default function ProviderHeader({
               </div>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen((prev) => !prev)}
+            className="lg:hidden flex items-center justify-center h-10 w-10 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            aria-label="Mở menu điều hướng"
+          >
+            <span className="material-symbols-outlined text-[24px]">menu</span>
+          </button>
         </div>
       </div>
+
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex justify-end">
+          
+          <div
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileNavOpen(false)}
+          />
+
+          <div className="relative w-full max-w-[320px] sm:max-w-[360px] bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-200">
+            
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
+                  <span className="material-symbols-outlined text-[20px]">
+                    electric_car
+                  </span>
+                </span>
+                <span className="font-bold text-slate-900 text-base">
+                  EcoMotion Provider
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Đóng menu"
+              >
+                <span className="material-symbols-outlined text-[22px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-slate-100 bg-slate-50/70">
+              <div className="flex items-start gap-2.5">
+                <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0 mt-0.5">
+                  storefront
+                </span>
+                <div className="flex flex-col text-left leading-tight min-w-0">
+                  <span className="font-bold text-slate-900 text-xs truncate">
+                    {depotDisplayName}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-normal mt-0.5 line-clamp-2">
+                    {displayAddress}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                Menu Quản lý
+              </div>
+              {NAV_ITEMS.map((item) => {
+                const isActive = currentTab === item.key;
+                return (
+                  <Link
+                    key={item.key}
+                    to={item.to}
+                    onClick={() => setMobileNavOpen(false)}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                      isActive
+                        ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
+                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-[20px] ${
+                        isActive ? "text-emerald-600" : "text-slate-400"
+                      }`}
+                    >
+                      {item.icon}
+                    </span>
+                    <span className="flex-1">{item.labelFull}</span>
+                    {isActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-[13px] font-bold text-emerald-700 ring-2 ring-emerald-500/20 shrink-0">
+                  {initials}
+                </span>
+                <div className="flex flex-col text-left min-w-0 flex-1 leading-tight">
+                  <span className="font-bold text-slate-900 text-sm truncate">
+                    {userDisplayName}
+                  </span>
+                  <span className="text-xs text-slate-500 truncate mt-0.5">
+                    {user?.email}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Link
+                  to="/me"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-slate-500">
+                    account_circle
+                  </span>
+                  Hồ sơ
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    handleLogout();
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 bg-red-50/60 border border-red-100 hover:bg-red-50 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    logout
+                  </span>
+                  Đăng xuất
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

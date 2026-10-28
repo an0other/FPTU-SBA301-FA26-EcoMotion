@@ -2,6 +2,9 @@ package com.fptufa26.ecomotion.booking.service.implement;
 
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
+import com.fptufa26.ecomotion.booking.dto.response.PickupQuoteResponse;
+import com.fptufa26.ecomotion.location.service.MapLocationService;
 import com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest;
 import com.fptufa26.ecomotion.booking.dto.request.UpdateBookingRequestDetails;
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeLineResponse;
@@ -35,6 +38,7 @@ import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.booking.service.BookingTrackingService;
 import com.fptufa26.ecomotion.booking.service.DriverAvailabilityService;
 import com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService;
@@ -115,6 +119,7 @@ public class BookingServiceImpl implements BookingService {
             BookingStatus.IN_PROGRESS);
 
     private final BookingRepository bookingRepository;
+    private final BookingNotificationService bookingNotificationService;
     private final BookingPolicySnapshotRepository snapshotRepository;
     private final BookingChargeRepository chargeRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
@@ -126,6 +131,7 @@ public class BookingServiceImpl implements BookingService {
     private final DisputeService disputeService;
     private final PaymentRequestService paymentRequestService;
     private final VehicleDepositPolicyService vehicleDepositPolicyService;
+    private final MapLocationService mapLocationService;
     private final BookingTrackingService bookingTrackingService;
     private final DriverAvailabilityService driverAvailabilityService;
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
@@ -162,6 +168,54 @@ public class BookingServiceImpl implements BookingService {
     private static final Set<BookingStatus> CHARGE_DISPUTE = EnumSet.of(
             BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
             BookingStatus.AWAITING_FINAL_PAYMENT);
+
+    @Override
+    @Transactional(readOnly = true)
+    public PickupQuoteResponse quotePickup(PickupQuoteRequest request) {
+        Vehicle vehicle = vehicleCatalogService.requireApproved(request.vehicleId());
+        RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(), request.planId());
+        if (plan.getPlanType() == PlanType.YEARLY) {
+            throw new ConflictException("Yearly plans must use the dedicated contract flow");
+        }
+        return calculatePickupQuote(vehicle.getProvider(), plan.getFreeRadiusKm(), plan.getOutOfRadiusRate(),
+                request.pickupLatitude(), request.pickupLongitude());
+    }
+
+    private PickupQuoteResponse calculatePickupQuote(Provider provider, Integer freeRadiusKm,
+                                                      BigDecimal rate, BigDecimal latitude, BigDecimal longitude) {
+        if (provider == null || provider.getDepotLatitude() == null || provider.getDepotLongitude() == null) {
+            throw new ConflictException("Nhà cung cấp chưa cấu hình vị trí bãi xe để tính phí đón");
+        }
+        if (freeRadiusKm == null || freeRadiusKm < 0 || rate == null || rate.signum() < 0) {
+            throw new ConflictException("Gói thuê chưa cấu hình hợp lệ bán kính miễn phí và đơn giá vượt bán kính");
+        }
+        if (latitude == null || longitude == null) {
+            throw new BadRequestException("Vui lòng chọn tọa độ điểm đón hợp lệ");
+        }
+        double distance = mapLocationService.distanceKm(provider.getDepotLatitude().doubleValue(),
+                provider.getDepotLongitude().doubleValue(), latitude.doubleValue(), longitude.doubleValue());
+        int chargeableKm = (int) Math.ceil(Math.max(0, distance - freeRadiusKm));
+        return new PickupQuoteResponse(distance, freeRadiusKm, chargeableKm, rate,
+                rate.multiply(BigDecimal.valueOf(chargeableKm)));
+    }
+
+    private void savePickupCharge(Booking booking, PickupQuoteResponse quote, User actor) {
+        BookingCharge charge = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.OUT_OF_RADIUS)
+                .orElseGet(BookingCharge::new);
+        if (quote.pickupFee().signum() == 0) {
+            if (charge.getId() != null) chargeRepository.delete(charge);
+            return;
+        }
+        charge.setBooking(booking);
+        charge.setChargeType(ChargeType.OUT_OF_RADIUS);
+        charge.setDescription("Phí đón vượt bán kính miễn phí " + quote.freeRadiusKm() + " km");
+        charge.setQuantity(quote.chargeableKm());
+        charge.setUnitPrice(quote.outOfRadiusRate());
+        charge.setAmount(quote.pickupFee());
+        charge.setCreatedBy(actor);
+        charge.setWaived(false);
+        chargeRepository.save(charge);
+    }
 
     @Override
     @Transactional
@@ -204,6 +258,8 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Bạn đã có đơn thuê trùng khoảng thời gian này");
         }
 
+        PickupQuoteResponse pickupQuote = calculatePickupQuote(vehicle.getProvider(), plan.getFreeRadiusKm(),
+                plan.getOutOfRadiusRate(), request.pickupLatitude(), request.pickupLongitude());
         BigDecimal total = plan.getSlotPrice().multiply(BigDecimal.valueOf(request.slotCount()));
         User actor = renter.getUser();
 
@@ -261,9 +317,12 @@ public class BookingServiceImpl implements BookingService {
         charge.setWaived(false);
         chargeRepository.save(charge);
 
+        savePickupCharge(booking, pickupQuote, actor);
+
         Instant holdExpiresAt = clock.instant().plus(INITIAL_HOLD_DURATION);
         scheduleService.hold(vehicle, booking, start, end, holdExpiresAt);
         paymentRequestService.createDepositPaymentRequest(booking);
+        bookingNotificationService.bookingPlaced(booking, snapshot.getDepositAmount());
 
         return bookingMapper.toCreateBookingResponse(booking, end, charge, snapshot.getDepositAmount());
     }
@@ -575,6 +634,15 @@ public class BookingServiceImpl implements BookingService {
         }
         if (renterOverlaps(booking.getRenter().getId(), request.pickupTime(), end, booking.getId())) {
             throw new ConflictException("Bạn đang có một đơn đặt xe khác trùng khung giờ này. Vui lòng kiểm tra lại đơn của bạn.");
+        }
+
+        if (booking.getPickupLatitude() == null || booking.getPickupLongitude() == null
+                || booking.getPickupLatitude().compareTo(request.pickupLatitude()) != 0
+                || booking.getPickupLongitude().compareTo(request.pickupLongitude()) != 0) {
+            PickupQuoteResponse quote = calculatePickupQuote(booking.getVehicle().getProvider(),
+                    snapshot.getFreeRadiusKm(), snapshot.getOutOfRadiusRate(),
+                    request.pickupLatitude(), request.pickupLongitude());
+            savePickupCharge(booking, quote, booking.getRenter().getUser());
         }
 
         booking.setPickupTime(request.pickupTime());

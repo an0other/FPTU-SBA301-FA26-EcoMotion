@@ -46,8 +46,14 @@ export function AuthProvider({ children }) {
     const data = await authService.login(email, password, rememberMe, captchaToken)
     setAccessToken(data.accessToken)
     setTokenState(data.accessToken)
-    setUser(data.user)
-    return data.user
+    let resolvedUser = data.user
+    try {
+      const me = await authService.fetchMe()
+      if (me) resolvedUser = me
+    } catch {
+    }
+    setUser(resolvedUser)
+    return resolvedUser
   }, [])
 
   const logout = useCallback(async () => {

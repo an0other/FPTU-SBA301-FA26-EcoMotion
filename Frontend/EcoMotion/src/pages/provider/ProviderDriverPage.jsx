@@ -20,7 +20,6 @@ export default function ProviderDriverPage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
 
-  // Filters & Controls
   const [searchTerm, setSearchTerm] = useState('')
   const [operationalStatus, setOperationalStatus] = useState('')
   const loadSequence = useRef(0)
@@ -38,13 +37,11 @@ export default function ProviderDriverPage() {
   }
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
 
-  // Modal State (Create / Edit)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editingDriverId, setEditingDriverId] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Form Fields
   const [formFullName, setFormFullName] = useState('')
   const [formEmail, setFormEmail] = useState('')
   const [formPhone, setFormPhone] = useState('')
@@ -57,10 +54,8 @@ export default function ProviderDriverPage() {
   const [uploadingPortrait, setUploadingPortrait] = useState(false)
   const [uploadingLicense, setUploadingLicense] = useState(false)
 
-  // Lightbox Preview Modal
   const [previewData, setPreviewData] = useState(null)
 
-  // File Inputs Ref
   const portraitInputRef = useRef(null)
   const licenseInputRef = useRef(null)
 
@@ -114,7 +109,6 @@ export default function ProviderDriverPage() {
 
   const filteredDrivers = drivers
 
-  // Open modal for Create
   const handleOpenCreateModal = () => {
     setIsEditing(false)
     setEditingDriverId(null)
@@ -130,7 +124,6 @@ export default function ProviderDriverPage() {
     setIsModalOpen(true)
   }
 
-  // Open modal for Edit
   const handleOpenEditModal = (driver) => {
     setIsEditing(true)
     setEditingDriverId(driver.id)
@@ -151,7 +144,6 @@ export default function ProviderDriverPage() {
     setEditingDriverId(null)
   }
 
-  // Handle Image Upload
   const handleFileUpload = async (file, type) => {
     if (!file) return
     try {
@@ -175,7 +167,6 @@ export default function ProviderDriverPage() {
     }
   }
 
-  // Handle Form Submit (Create or Update)
   const handleSubmitForm = async (e) => {
     e.preventDefault()
     if (!formPortraitUrl) {
@@ -232,7 +223,6 @@ export default function ProviderDriverPage() {
     }
   }
 
-  // Handle Toggle Status (APPROVED <-> SUSPENDED)
   const handleToggleStatus = async (driver) => {
     if (driver.status === 'PENDING' || driver.status === 'REJECTED') {
       setToast({
@@ -259,7 +249,6 @@ export default function ProviderDriverPage() {
     }
   }
 
-  // Format date helper
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A'
     try {
@@ -277,12 +266,11 @@ export default function ProviderDriverPage() {
 
   return (
     <div className="bg-slate-50 min-h-screen flex flex-col font-sans text-slate-800">
-      {/* Provider Header Component */}
+
       <ProviderHeader activeTab="drivers" />
 
-      {/* Main Content Area */}
       <main className="w-full flex-1 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Top Header & Action */}
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -306,9 +294,8 @@ export default function ProviderDriverPage() {
           </div>
         </div>
 
-        {/* 4 Metric KPI Mosaic Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          {/* Card 1: Tổng số tài xế */}
+
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng số tài xế</span>
@@ -325,7 +312,6 @@ export default function ProviderDriverPage() {
             </div>
           </div>
 
-          {/* Card 2: Đang hoạt động */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Đang hoạt động</span>
@@ -345,7 +331,6 @@ export default function ProviderDriverPage() {
             </div>
           </div>
 
-          {/* Card 3: Chờ Admin duyệt */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Chờ Admin duyệt</span>
@@ -365,7 +350,6 @@ export default function ProviderDriverPage() {
             </div>
           </div>
 
-          {/* Card 4: Tạm ngưng hoạt động */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tạm ngưng hoạt động</span>
@@ -385,9 +369,8 @@ export default function ProviderDriverPage() {
           </div>
         </div>
 
-        {/* Filter Toolbar & Search Bar */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 mb-8 flex flex-col lg:flex-row items-center justify-between gap-4">
-          {/* Left: Search Box */}
+
           <div className="relative w-full lg:w-96 flex-shrink-0">
             <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
               search
@@ -401,7 +384,6 @@ export default function ProviderDriverPage() {
             />
           </div>
 
-          {/* Center: Filter Pills */}
           <div className="flex items-center gap-2 overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 scrollbar-none">
             <button
               onClick={() => changeFilter(setSelectedStatus, 'ALL')}
@@ -574,7 +556,7 @@ export default function ProviderDriverPage() {
             </button>
           </div>
         ) : viewMode === 'grid' ? (
-          /* GRID VIEW */
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {filteredDrivers.map((driver) => (
               <div
@@ -584,7 +566,7 @@ export default function ProviderDriverPage() {
                 }`}
               >
                 <div>
-                  {/* Driver Header Info */}
+
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3.5">
                       <div className="relative">
@@ -637,7 +619,6 @@ export default function ProviderDriverPage() {
                       </div>
                     </div>
 
-                    {/* Status Badge */}
                     {driver.status === 'APPROVED' && (
                       <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
@@ -664,7 +645,6 @@ export default function ProviderDriverPage() {
                     )}
                   </div>
 
-                  {/* Contact details */}
                   <div className="space-y-1.5 mb-5 text-slate-600 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-[17px] text-slate-400">call</span>
@@ -676,7 +656,6 @@ export default function ProviderDriverPage() {
                     </div>
                   </div>
 
-                  {/* GPLX Information Box */}
                   <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 mb-4">
                     <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200/80">
                       <div className="flex items-center gap-2">
@@ -718,7 +697,6 @@ export default function ProviderDriverPage() {
                     </div>
                   </div>
 
-                  {/* Reject Reason Alert Box (when REJECTED) */}
                   {driver.status === 'REJECTED' && (
                     <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 mb-4 text-xs leading-relaxed">
                       <div className="flex items-start gap-2">
@@ -737,7 +715,6 @@ export default function ProviderDriverPage() {
                   )}
                 </div>
 
-                {/* Card Footer Actions */}
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                   {driver.status === 'APPROVED' || driver.status === 'SUSPENDED' ? (
                     <label className="relative inline-flex items-center cursor-pointer">
@@ -776,7 +753,7 @@ export default function ProviderDriverPage() {
             ))}
           </div>
         ) : (
-          /* TABLE VIEW */
+
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-600">
@@ -895,11 +872,10 @@ export default function ProviderDriverPage() {
         </div>
       </main>
 
-      {/* MODAL: Tạo hộ tài khoản tài xế / Cập nhật hồ sơ */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300">
           <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto transform transition-all flex flex-col">
-            {/* Modal Header */}
+
             <div className="p-6 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-20">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700">
@@ -926,9 +902,8 @@ export default function ProviderDriverPage() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6 space-y-6">
-              {/* Notice Alert */}
+
               <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-start gap-3">
                 <span className="material-symbols-outlined text-amber-600 text-[20px] mt-0.5">info</span>
                 <p className="text-xs text-amber-800 leading-relaxed">
@@ -938,7 +913,7 @@ export default function ProviderDriverPage() {
 
               <form onSubmit={handleSubmitForm}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Column 1: User Info */}
+
                   <div className="space-y-4">
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
@@ -1017,7 +992,6 @@ export default function ProviderDriverPage() {
                       </div>
                     )}
 
-                    {/* Portrait Upload */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1.5">
                         Ảnh chân dung đại diện (portrait_url) *
@@ -1067,7 +1041,6 @@ export default function ProviderDriverPage() {
                     </div>
                   </div>
 
-                  {/* Column 2: License Info */}
                   <div className="space-y-4">
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
@@ -1119,7 +1092,6 @@ export default function ProviderDriverPage() {
                       />
                     </div>
 
-                    {/* License Image Upload */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1.5">
                         Ảnh chụp bằng lái 2 mặt (license_image_url) *
@@ -1172,7 +1144,6 @@ export default function ProviderDriverPage() {
                   </div>
                 </div>
 
-                {/* Modal Action Buttons */}
                 <div className="pt-6 mt-6 border-t border-slate-200 flex items-center justify-end gap-3">
                   <button
                     type="button"
@@ -1205,7 +1176,6 @@ export default function ProviderDriverPage() {
         </div>
       )}
 
-      {/* LIGHTBOX PREVIEW MODAL FOR GPLX */}
       {previewData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6">
@@ -1254,7 +1224,6 @@ export default function ProviderDriverPage() {
         </div>
       )}
 
-      {/* Toast Notification */}
       {toast && (
         <Toast
           type={toast.type}

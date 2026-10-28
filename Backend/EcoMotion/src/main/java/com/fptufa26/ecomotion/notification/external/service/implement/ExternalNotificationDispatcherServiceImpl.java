@@ -1,6 +1,8 @@
 package com.fptufa26.ecomotion.notification.external.service.implement;
 
 import com.fptufa26.ecomotion.notification.external.dto.request.OtpNotificationRequest;
+import com.fptufa26.ecomotion.notification.external.dto.request.BookingNotificationRequest;
+import com.fptufa26.ecomotion.notification.external.service.BookingExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.dto.response.NotificationResult;
 import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
 import com.fptufa26.ecomotion.notification.external.service.ExternalNotificationDispatcherService;
@@ -53,6 +55,27 @@ public class ExternalNotificationDispatcherServiceImpl implements ExternalNotifi
                     : unsupported(channel);
         }
         return unsupported(request.channel());
+    }
+
+    @Override
+    public NotificationResult sendBookingPlaced(BookingNotificationRequest request) {
+        return sendBooking(request, false);
+    }
+
+    @Override
+    public NotificationResult sendDepositPaid(BookingNotificationRequest request) {
+        return sendBooking(request, true);
+    }
+
+    private NotificationResult sendBooking(BookingNotificationRequest request, boolean depositPaid) {
+        if (request == null || request.channel() == null) {
+            return new NotificationResult(false, "Notification channel is required");
+        }
+        ExternalNotificationService service = services.get(request.channel());
+        if (!fallbackOrder.contains(request.channel()) || !(service instanceof BookingExternalNotificationService bookingService)) {
+            return unsupported(request.channel());
+        }
+        return depositPaid ? bookingService.sendDepositPaid(request) : bookingService.sendBookingPlaced(request);
     }
 
     private NotificationResult unsupported(NotificationChannel channel) {

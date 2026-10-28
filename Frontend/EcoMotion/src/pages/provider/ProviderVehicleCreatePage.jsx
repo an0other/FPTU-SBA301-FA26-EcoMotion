@@ -82,7 +82,6 @@ export default function ProviderVehicleCreatePage() {
     }
   }
 
-
   function adjustBuffer(delta) {
     setForm((prev) => {
       const next = Math.max(
@@ -320,7 +319,6 @@ export default function ProviderVehicleCreatePage() {
         />
       )}
 
-      {/* Header dùng chung của dự án */}
       <ProviderHeader
         activeTab="vehicles"
         providerName={providerName}
@@ -331,7 +329,7 @@ export default function ProviderVehicleCreatePage() {
         <div className="flex flex-col w-full">
           <form className="w-full pb-36" onSubmit={handleSubmit}>
             <div className="max-w-[1440px] mx-auto px-6 lg:px-12 py-6">
-              {/* Breadcrumb */}
+              
               <nav
                 aria-label="Breadcrumb"
                 className="flex items-center gap-2 text-xs mb-3 text-slate-500"
@@ -350,7 +348,6 @@ export default function ProviderVehicleCreatePage() {
                 </span>
               </nav>
 
-              {/* Main Header with Status Badge */}
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6">
                 <div className="flex flex-col gap-1.5">
                   <div className="flex flex-wrap items-center gap-3">
@@ -383,7 +380,6 @@ export default function ProviderVehicleCreatePage() {
                 </button>
               </div>
 
-              {/* Architecture Overview Banner */}
               <div className="rounded-2xl p-5 bg-gradient-to-r from-emerald-50 via-slate-50 to-emerald-50 border border-emerald-100 shadow-xs mb-8">
                 <div className="flex items-start gap-4">
                   <div className="w-10 h-10 rounded-xl bg-emerald-700 flex items-center justify-center text-white shrink-0 shadow-sm mt-0.5">
@@ -420,9 +416,8 @@ export default function ProviderVehicleCreatePage() {
                 </div>
               </div>
 
-              {/* Form Content: 3 Tier Cards */}
               <div className="flex flex-col space-y-8">
-                {/* ================= TẦNG 1: ĐỊNH DANH VẬT LÝ ================= */}
+                
                 <section className="bg-white rounded-2xl p-6 lg:p-8 shadow-sm flex flex-col gap-6 border border-slate-200">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
                     <div className="flex items-center gap-3">
@@ -462,7 +457,7 @@ export default function ProviderVehicleCreatePage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Field 1: chassis_no */}
+                    
                     <div className="flex flex-col gap-1.5">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -510,7 +505,6 @@ export default function ProviderVehicleCreatePage() {
                       )}
                     </div>
 
-                    {/* Field 2: engine_no */}
                     <div className="flex flex-col gap-1.5">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -560,7 +554,6 @@ export default function ProviderVehicleCreatePage() {
                   </div>
                 </section>
 
-                {/* ================= TẦNG 2: ĐỊNH DANH PHÁP LÝ ================= */}
                 <section className="bg-white rounded-2xl p-6 lg:p-8 shadow-sm flex flex-col gap-6 border border-slate-200">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
                     <div className="flex items-center gap-3">
@@ -602,7 +595,7 @@ export default function ProviderVehicleCreatePage() {
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center pt-2">
-                    {/* Left Column: License Plate Input */}
+                    
                     <div className="flex flex-col gap-2">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -660,7 +653,6 @@ export default function ProviderVehicleCreatePage() {
                       )}
                     </div>
 
-                    {/* Right Column: Live Plate Preview Container */}
                     <div className="flex flex-col gap-2">
                       <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1">
                         <span>Mô phỏng biển số thực tế (Live Preview):</span>
@@ -725,7 +717,6 @@ export default function ProviderVehicleCreatePage() {
                   </div>
                 </section>
 
-                {/* ================= TẦNG 3: THÔNG TIN MÔ TẢ & VẬN HÀNH ================= */}
                 <section className="bg-white rounded-2xl p-6 lg:p-8 shadow-sm flex flex-col gap-6 border border-slate-200">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
                     <div className="flex items-center gap-3">
@@ -764,9 +755,8 @@ export default function ProviderVehicleCreatePage() {
                     </span>
                   </div>
 
-                  {/* Grid 1: brand, model, manufacture_year, seat_count */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* brand */}
+                    
                     <div className="flex flex-col gap-1.5">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -809,7 +799,6 @@ export default function ProviderVehicleCreatePage() {
                       )}
                     </div>
 
-                    {/* model */}
                     <div className="flex flex-col gap-1.5">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -842,7 +831,6 @@ export default function ProviderVehicleCreatePage() {
                       )}
                     </div>
 
-                    {/* manufacture_year */}
                     <div className="flex flex-col gap-1.5">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -877,7 +865,6 @@ export default function ProviderVehicleCreatePage() {
                       )}
                     </div>
 
-                    {/* seat_count */}
                     <div className="flex flex-col gap-1.5">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -908,9 +895,8 @@ export default function ProviderVehicleCreatePage() {
                     </div>
                   </div>
 
-                  {/* Grid 2: transmission, fuel_type, color */}
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-                    {/* transmission */}
+                    
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1">
                         <span>Hộp số truyền động</span>
@@ -950,7 +936,6 @@ export default function ProviderVehicleCreatePage() {
                       </div>
                     </div>
 
-                    {/* fuel_type */}
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1">
                         <span>Loại nhiên liệu</span>
@@ -982,7 +967,6 @@ export default function ProviderVehicleCreatePage() {
                       </div>
                     </div>
 
-                    {/* color */}
                     <div className="flex flex-col gap-1.5">
                       <label
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
@@ -1021,7 +1005,6 @@ export default function ProviderVehicleCreatePage() {
                     </div>
                   </div>
 
-                  {/* Maintenance Buffer Field: maintenance_buffer_minutes */}
                   <div className="p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
                     <div className="flex items-start sm:items-center gap-4 max-w-2xl">
                       <div className="w-11 h-11 rounded-xl bg-white border border-emerald-200 shadow-xs flex items-center justify-center shrink-0 text-emerald-700">
@@ -1082,7 +1065,6 @@ export default function ProviderVehicleCreatePage() {
                     </div>
                   </div>
 
-                  {/* Vehicle Cover Image: vehicle_image table (display_order = 0) */}
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                       <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1">
@@ -1095,7 +1077,7 @@ export default function ProviderVehicleCreatePage() {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-                      {/* Left: Image Preview (Ratio 16:9) */}
+                      
                       <div className="lg:col-span-5 relative rounded-2xl overflow-hidden shadow-sm aspect-video bg-slate-100 group border border-slate-200">
                         <img
                           src={form.coverImageUrl}
@@ -1126,7 +1108,6 @@ export default function ProviderVehicleCreatePage() {
                         </div>
                       </div>
 
-                      {/* Right: Drag & Drop Upload Zone */}
                       <div
                         onClick={() =>
                           !uploadingImage && document.getElementById("coverImageInput")?.click()
@@ -1184,7 +1165,6 @@ export default function ProviderVehicleCreatePage() {
               </div>
             </div>
 
-            {/* Sticky Bottom Action Bar */}
             <aside
               aria-label="Thanh tác vụ đăng ký xe"
               className="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] py-4 px-6 lg:px-12"
@@ -1238,11 +1218,10 @@ export default function ProviderVehicleCreatePage() {
         </div>
       </main>
 
-      {/* MODAL: Chi tiết Quy chuẩn kiến trúc 3 Tầng v10.1 */}
       {showTierModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1c30]/60 backdrop-blur-xs p-4">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
-            {/* Modal Header */}
+            
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-emerald-700 flex items-center justify-center text-white">
@@ -1270,7 +1249,6 @@ export default function ProviderVehicleCreatePage() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6 overflow-y-auto flex flex-col gap-4 text-xs sm:text-sm">
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
@@ -1324,7 +1302,6 @@ export default function ProviderVehicleCreatePage() {
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end">
               <button
                 type="button"
