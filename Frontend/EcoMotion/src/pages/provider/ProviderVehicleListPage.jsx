@@ -288,24 +288,20 @@ export default function ProviderVehicleListPage() {
         />
       )}
 
-      {/* Header */}
       <ProviderHeader
         activeTab="vehicles"
         providerName={summary?.providerName}
         depotAddress={summary?.depotAddress}
       />
 
-      {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-6 lg:px-12 py-8 space-y-8">
-        {/* Title and Top Actions */}
+        
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0b1c30] tracking-tight">
               Quản lý Đội xe
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Theo dõi tình trạng hoạt động, kiểm duyệt và bật/tắt nhận khách trực tiếp.
-            </p>
+
           </div>
           <div className="flex items-center gap-3">
             <Link
@@ -318,98 +314,152 @@ export default function ProviderVehicleListPage() {
           </div>
         </div>
 
-        {/* 5 Mosaic KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          {/* All */}
+          
           <button
             type="button"
             onClick={() => handleFilterStatus('')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === ''
-                ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900/20'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-4 ring-slate-900/15'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider opacity-80">Tất cả xe</span>
-              <span className="material-symbols-outlined text-[20px] opacity-70">directions_car</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === '' ? 'text-slate-300' : 'text-slate-500'
+              }`}>
+                Tất cả xe
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === '' ? 'text-white' : 'text-slate-400'
+              }`}>
+                directions_car
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold mt-2 leading-none">{stats.total}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === '' ? 'text-white' : 'text-slate-900'
+            }`}>
+              {stats.total}
+            </p>
           </button>
 
-          {/* Approved */}
           <button
             type="button"
             onClick={() => handleFilterStatus('APPROVED')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === 'APPROVED'
-                ? 'bg-emerald-700 text-white border-emerald-700 shadow-md ring-2 ring-emerald-600/30'
+                ? 'bg-emerald-50/90 text-emerald-950 border-emerald-500 ring-4 ring-emerald-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-emerald-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">Đang nhận khách</span>
-              <span className="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'APPROVED' ? 'text-emerald-800 font-bold' : 'text-emerald-600'
+              }`}>
+                Đang nhận khách
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'APPROVED' ? 'text-emerald-600' : 'text-emerald-500'
+              }`}>
+                check_circle
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 mt-2 leading-none">{stats.approved}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'APPROVED' ? 'text-emerald-700 font-black' : 'text-emerald-600'
+            }`}>
+              {stats.approved}
+            </p>
           </button>
 
-          {/* Pending */}
           <button
             type="button"
             onClick={() => handleFilterStatus('PENDING')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === 'PENDING'
-                ? 'bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-500/30'
+                ? 'bg-amber-50/90 text-amber-950 border-amber-500 ring-4 ring-amber-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-amber-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">Chờ duyệt hồ sơ</span>
-              <span className="material-symbols-outlined text-[20px] text-amber-600">hourglass_top</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'PENDING' ? 'text-amber-800 font-bold' : 'text-amber-600'
+              }`}>
+                Chờ duyệt hồ sơ
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'PENDING' ? 'text-amber-600' : 'text-amber-500'
+              }`}>
+                hourglass_top
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-amber-700 mt-2 leading-none">{stats.pending}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'PENDING' ? 'text-amber-700 font-black' : 'text-amber-600'
+            }`}>
+              {stats.pending}
+            </p>
           </button>
 
-          {/* Hidden */}
           <button
             type="button"
             onClick={() => handleFilterStatus('HIDDEN')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
               statusFilter === 'HIDDEN'
-                ? 'bg-slate-700 text-white border-slate-700 shadow-md ring-2 ring-slate-500/30'
+                ? 'bg-slate-100 text-slate-900 border-slate-500 ring-4 ring-slate-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tạm ẩn</span>
-              <span className="material-symbols-outlined text-[20px] text-slate-500">visibility_off</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'HIDDEN' ? 'text-slate-800 font-bold' : 'text-slate-500'
+              }`}>
+                Tạm ẩn
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'HIDDEN' ? 'text-slate-700' : 'text-slate-400'
+              }`}>
+                visibility_off
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-700 mt-2 leading-none">{stats.hidden}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'HIDDEN' ? 'text-slate-900 font-black' : 'text-slate-600'
+            }`}>
+              {stats.hidden}
+            </p>
           </button>
 
-          {/* Rejected */}
           <button
             type="button"
             onClick={() => handleFilterStatus('REJECTED')}
-            className={`p-4 rounded-2xl border text-left transition-all col-span-2 sm:col-span-1 ${
+            className={`p-4 rounded-2xl border text-left transition-all col-span-2 sm:col-span-1 cursor-pointer ${
               statusFilter === 'REJECTED'
-                ? 'bg-rose-700 text-white border-rose-700 shadow-md ring-2 ring-rose-500/30'
+                ? 'bg-rose-50/90 text-rose-950 border-rose-500 ring-4 ring-rose-500/15 shadow-sm'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:border-rose-300 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-rose-600">Cần bổ sung</span>
-              <span className="material-symbols-outlined text-[20px] text-rose-600">error</span>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${
+                statusFilter === 'REJECTED' ? 'text-rose-800 font-bold' : 'text-rose-600'
+              }`}>
+                Cần bổ sung
+              </span>
+              <span className={`material-symbols-outlined text-[20px] ${
+                statusFilter === 'REJECTED' ? 'text-rose-600' : 'text-rose-500'
+              }`}>
+                error
+              </span>
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-rose-700 mt-2 leading-none">{stats.rejected}</p>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2 leading-none ${
+              statusFilter === 'REJECTED' ? 'text-rose-700 font-black' : 'text-rose-600'
+            }`}>
+              {stats.rejected}
+            </p>
           </button>
         </div>
 
-        {/* Control Toolbar */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-[0_1px_6px_rgba(11,28,48,0.03)] space-y-4">
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
-            {/* Search Input */}
+            
             <div className="relative flex-1">
               <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
                 search
@@ -432,9 +482,8 @@ export default function ProviderVehicleListPage() {
               )}
             </div>
 
-            {/* Filter & Sort Controls */}
             <div className="flex flex-wrap items-center gap-2.5">
-              {/* Fuel Filter */}
+              
               <select
                 value={fuelFilter}
                 onChange={(e) => {
@@ -450,7 +499,6 @@ export default function ProviderVehicleListPage() {
                 <option value="HYBRID">Hybrid</option>
               </select>
 
-              {/* Sort By */}
               <select
                 value={sortBy}
                 onChange={(e) => {
@@ -466,7 +514,6 @@ export default function ProviderVehicleListPage() {
                 <option value="name-asc">Tên xe: A → Z</option>
               </select>
 
-              {/* Grid / Table Switch */}
               <div className="inline-flex rounded-xl border border-slate-200 p-0.5 bg-slate-100">
                 <button
                   type="button"
@@ -492,7 +539,6 @@ export default function ProviderVehicleListPage() {
             </div>
           </div>
 
-          {/* Active Filter Chips */}
           {(statusFilter || fuelFilter || debouncedKeyword) && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
               <span className="text-slate-400">Đang lọc theo:</span>
@@ -531,7 +577,6 @@ export default function ProviderVehicleListPage() {
           )}
         </div>
 
-        {/* Loading / Error States */}
         {loading && (
           <div className="py-20 text-center">
             <span className="material-symbols-outlined animate-spin text-4xl text-emerald-600">
@@ -555,7 +600,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Empty State */}
         {!loading && !error && vehicles.length === 0 && (
           <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center shadow-xs">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
@@ -575,7 +619,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Vehicles List (Grid View) */}
         {!loading && !error && vehicles.length > 0 && viewMode === 'grid' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {vehicles.map((vehicle) => {
@@ -588,7 +631,7 @@ export default function ProviderVehicleListPage() {
                   key={vehicle.id}
                   className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-[0_2px_12px_rgba(11,28,48,0.04)] hover:shadow-[0_8px_24px_rgba(11,28,48,0.08)] transition-all flex flex-col"
                 >
-                  {/* Vehicle Image Cover */}
+                  
                   <div className="relative aspect-16/10 bg-slate-100 overflow-hidden group">
                     <img
                       src={vehicle.coverImageUrl || '/placeholder-car.jpg'}
@@ -600,20 +643,17 @@ export default function ProviderVehicleListPage() {
                       }}
                     />
 
-                    {/* Top Overlay Badges */}
                     <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
-                      {/* Top-Left: Status Badge (e.g. • Đã duyệt / • Chờ duyệt) */}
+                      
                       <div className="pointer-events-auto">
                         {renderStatusBadge(vehicle.status)}
                       </div>
 
-                      {/* Top-Right: Fuel Badge (e.g. EV / Xăng / Dầu / Hybrid) */}
                       <div className="pointer-events-auto">
                         {renderFuelBadge(vehicle.fuelType, true)}
                       </div>
                     </div>
 
-                    {/* Bottom-Left: License Plate Badge with Red Dot */}
                     <div className="absolute bottom-3 left-3 pointer-events-none">
                       <div className="pointer-events-auto">
                         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200/90 shadow-md">
@@ -626,7 +666,6 @@ export default function ProviderVehicleListPage() {
                     </div>
                   </div>
 
-                  {/* Vehicle Details */}
                   <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                     <div>
                       <div className="flex items-start justify-between gap-2">
@@ -647,7 +686,6 @@ export default function ProviderVehicleListPage() {
                         )}
                       </div>
 
-                      {/* Vehicle Specs Box (Gộp chung 1 ô) */}
                       <div className="mt-3 p-3 rounded-2xl bg-slate-50/80 border border-slate-100 grid grid-cols-2 gap-y-2.5 gap-x-3 text-xs">
                         <div className="flex items-center gap-1.5">
                           <span className="material-symbols-outlined text-[16px] text-slate-500 flex-shrink-0">
@@ -686,7 +724,6 @@ export default function ProviderVehicleListPage() {
                         </div>
                       </div>
 
-                      {/* Active Rental Plans Table */}
                       <div className="mt-3.5">
                         {(() => {
                           const plans = getActivePlans(vehicle)
@@ -726,7 +763,6 @@ export default function ProviderVehicleListPage() {
                       </div>
                     </div>
 
-                    {/* Bottom Controls: Direct Visibility Toggle Switch */}
                     <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button
@@ -773,7 +809,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Vehicles List (Table View) */}
         {!loading && !error && vehicles.length > 0 && viewMode === 'table' && (
           <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
@@ -882,7 +917,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Pagination Controls */}
         {!loading && !error && totalPages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200">
             <span className="text-xs text-slate-500 font-medium">

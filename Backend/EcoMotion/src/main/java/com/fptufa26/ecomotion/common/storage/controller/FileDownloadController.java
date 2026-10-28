@@ -42,8 +42,6 @@ public class FileDownloadController {
             return ResponseEntity.notFound().build();
         }
 
-        // Payment proofs contain financial data and must only be served by the
-        // booking-authorized payment-evidence endpoint.
         if (storedPath.startsWith("payment-evidence/")
                 || storedPath.startsWith("refund-proof/")
                 || storedPath.matches("booking/[0-9]+/payment-proof-.*")) {
