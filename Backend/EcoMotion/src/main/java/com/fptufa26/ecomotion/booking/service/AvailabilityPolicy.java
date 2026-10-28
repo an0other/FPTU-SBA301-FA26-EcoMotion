@@ -20,4 +20,14 @@ public final class AvailabilityPolicy {
 
     public record Window(Instant start, Instant end) {
     }
+
+    public static boolean overlaps(Vehicle requestedVehicle, Instant start, Instant end,
+            Vehicle occupiedVehicle, Instant occupiedStart, Instant occupiedEnd) {
+        int before = requestedVehicle.getMaintenanceBufferMinutes() == null ? 0
+                : Math.max(0, requestedVehicle.getMaintenanceBufferMinutes());
+        int after = occupiedVehicle.getMaintenanceBufferMinutes() == null ? 0
+                : Math.max(0, occupiedVehicle.getMaintenanceBufferMinutes());
+        return start.isBefore(occupiedEnd.plus(Duration.ofMinutes(after)))
+                && end.plus(Duration.ofMinutes(before)).isAfter(occupiedStart);
+    }
 }

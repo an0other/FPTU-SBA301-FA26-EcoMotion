@@ -584,7 +584,7 @@ public class UserServiceImpl implements UserService {
         if (providerId == null) {
             return List.of();
         }
-        return driverRepository.findByProvider_Id(providerId);
+        return driverRepository.findByProvider_IdWithUser(providerId);
     }
 
     @Override

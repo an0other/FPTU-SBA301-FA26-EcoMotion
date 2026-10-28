@@ -648,6 +648,10 @@ public class BookingServiceImpl implements BookingService {
         } else {
             booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
         }
+        bookingRepository.saveAndFlush(booking);
+        if (booking.getDriver() != null) {
+            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
+        }
         return toConfirmStart(booking);
     }
 
@@ -670,6 +674,10 @@ public class BookingServiceImpl implements BookingService {
             booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         } else {
             booking.setStatus(BookingStatus.IN_PROGRESS);
+        }
+        bookingRepository.saveAndFlush(booking);
+        if (booking.getDriver() != null) {
+            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
         }
         return bookingMapper.toConfirmEnd(booking);
     }

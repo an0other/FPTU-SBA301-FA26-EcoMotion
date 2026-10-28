@@ -180,6 +180,23 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
             @Param("windowEnd") Instant windowEnd
     );
 
+    @Query("SELECT b FROM Booking b JOIN FETCH b.vehicle v JOIN FETCH b.plan " +
+            "JOIN FETCH b.driver d WHERE v.provider.id = :providerId AND b.status IN :statuses")
+    List<Booking> findDriverScheduleForProvider(@Param("providerId") Long providerId,
+            @Param("statuses") Collection<BookingStatus> statuses);
+
+    @Query("SELECT b.driver.id AS driverId, COUNT(b) AS tripCount FROM Booking b " +
+            "WHERE b.driver.id IN :driverIds AND b.status IN :statuses " +
+            "AND b.pickupTime >= :start AND b.pickupTime < :end GROUP BY b.driver.id")
+    List<DriverWorkload> countTripsForDrivers(@Param("driverIds") List<Long> driverIds,
+            @Param("statuses") Collection<BookingStatus> statuses, @Param("start") Instant start,
+            @Param("end") Instant end);
+
+    interface DriverWorkload {
+        Long getDriverId();
+        Long getTripCount();
+    }
+
     @Query("SELECT b FROM Booking b " +
             "JOIN FETCH b.plan pl " +
             "WHERE b.vehicle.id = :vehicleId " +

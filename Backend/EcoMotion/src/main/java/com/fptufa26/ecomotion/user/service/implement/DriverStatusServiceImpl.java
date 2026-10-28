@@ -53,7 +53,8 @@ public class DriverStatusServiceImpl implements DriverStatusService {
         }
 
         // 1. Kiểm tra xem tài xế có chuyến đang chạy không (ON_TRIP)
-        boolean hasActiveTrip = bookingQueryService.existsByDriverIdAndStatus(driver.getId(), BookingStatus.IN_PROGRESS);
+        boolean hasActiveTrip = bookingQueryService.existsByDriverIdAndStatus(driver.getId(), BookingStatus.IN_PROGRESS)
+                || bookingQueryService.existsByDriverIdAndStatus(driver.getId(), BookingStatus.AWAITING_END_CONFIRMATION);
         if (hasActiveTrip) {
             return DriverOperationalStatus.ON_TRIP;
         }
@@ -166,6 +167,7 @@ public class DriverStatusServiceImpl implements DriverStatusService {
         DriverTripSummaryResponse activeTrip = null;
         if (opStatus == DriverOperationalStatus.ON_TRIP) {
             activeTrip = bookingQueryService.findFirstByDriverIdAndStatus(driver.getId(), BookingStatus.IN_PROGRESS)
+                    .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(driver.getId(), BookingStatus.AWAITING_END_CONFIRMATION))
                     .map(this::toTripSummary)
                     .orElse(null);
         }

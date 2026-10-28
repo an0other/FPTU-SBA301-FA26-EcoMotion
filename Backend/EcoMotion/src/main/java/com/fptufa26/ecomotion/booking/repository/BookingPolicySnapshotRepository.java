@@ -10,4 +10,6 @@ import java.util.Optional;
 public interface BookingPolicySnapshotRepository extends JpaRepository<BookingPolicySnapshot, Long> {
 
     Optional<BookingPolicySnapshot> findByBooking_Id(Long bookingId);
+
+    java.util.List<BookingPolicySnapshot> findByBooking_IdIn(java.util.Collection<Long> bookingIds);
 }
