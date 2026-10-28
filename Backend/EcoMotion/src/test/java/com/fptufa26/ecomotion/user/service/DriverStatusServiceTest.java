@@ -48,6 +48,12 @@ class DriverStatusServiceTest {
         assertThatThrownBy(() -> service.updateActivityStatus(10L, DriverActivityStatus.AVAILABLE)).isInstanceOf(ConflictException.class);
         verify(repository, never()).save(any());
     }
+    @Test void awaitingValidEndStillBlocksReadinessChanges() {
+        when(bookings.existsByDriverIdAndStatus(1L, BookingStatus.AWAITING_END_CONFIRMATION)).thenReturn(true);
+        assertThat(service.calculateOperationalStatus(driver)).isEqualTo(DriverOperationalStatus.ON_TRIP);
+        assertThatThrownBy(() -> service.updateActivityStatus(10L, DriverActivityStatus.AVAILABLE)).isInstanceOf(ConflictException.class);
+        verify(repository, never()).save(any());
+    }
     @Test void futureScheduleIsDerivedAndCompletionRecalculates() {
         when(bookings.findUpcomingDriverBookings(eq(1L), anyList(), any())).thenReturn(List.of(new Booking()));
         assertThat(service.calculateOperationalStatus(driver)).isEqualTo(DriverOperationalStatus.SCHEDULED);

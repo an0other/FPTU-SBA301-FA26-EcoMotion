@@ -2,6 +2,8 @@ package com.fptufa26.ecomotion.booking.service.implement;
 
 import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
+import com.fptufa26.ecomotion.booking.dto.response.AssignmentAvailabilityResponse;
+import com.fptufa26.ecomotion.booking.service.DriverAvailabilityService;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
@@ -47,13 +49,11 @@ import com.fptufa26.ecomotion.common.service.NotificationStreamService;
 import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
 
 import java.util.Map;
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -68,7 +68,6 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
     private static final int MAX_AUTO_REASSIGN_RETRIES = 3;
     private static final Duration ASSIGNMENT_TIMEOUT_DURATION = Duration.ofMinutes(15);
-    private static final Duration DEFAULT_BUFFER_DURATION = Duration.ofMinutes(30);
     private static final double SOLVER_MAX_TIME_SECONDS = 5.0;
 
     private static final List<BookingStatus> ACTIVE_DRIVER_STATUSES = List.of(
@@ -98,6 +97,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     private final MapGeocodingService mapGeocodingService;
     private final NotificationStreamService notificationStreamService;
     private final Clock clock;
+    private final DriverAvailabilityService driverAvailabilityService;
 
     @Override
     @Transactional(readOnly = true)
@@ -117,6 +117,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
         MapGeocodingService.GeoPoint pickupPoint = resolvePickupCoordinates(booking);
 
+        var context = evaluationContext(booking, allDrivers);
         List<DriverCandidateResponse> evaluatedList = new ArrayList<>();
         for (Driver driver : allDrivers) {
             DriverCandidateResponse response = evaluateDriver(
@@ -125,8 +126,8 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                     bookingStart,
                     bookingEnd,
                     pickupPoint,
-                    rejectedDriverIds
-            );
+                    rejectedDriverIds, context
+            ).withAvailability(context.availability().get(driver.getId()));
             evaluatedList.add(response);
         }
 
@@ -143,7 +144,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                     best.portraitUrl(), best.ratingAvg(), best.ratingCount(),
                     best.etaMinutes(), best.distanceKm(), best.activeTripsCount(),
                     best.suitabilityScore(), best.eligible(), best.ineligibilityReason(),
-                    best.recommendationReason(), true
+                    best.recommendationReason(), true, best.availability()
             ));
         }
 
@@ -219,7 +220,8 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
         DriverCandidateResponse validated = evaluateDriver(driver, booking, booking.getPickupTime(),
                 calculateBookingEndTime(booking), resolvePickupCoordinates(booking),
-                driverAssignmentRepository.findRejectedDriverIdsForBooking(bookingId));
+                driverAssignmentRepository.findRejectedDriverIdsForBooking(bookingId),
+                evaluationContext(booking, List.of(driver)));
         if (!validated.eligible()) {
             log.warn("Driver {} became ineligible: {}", driverId, validated.ineligibilityReason());
             return null;
@@ -289,7 +291,8 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
         DriverCandidateResponse validated = evaluateDriver(driver, booking, booking.getPickupTime(),
                 calculateBookingEndTime(booking), resolvePickupCoordinates(booking),
-                driverAssignmentRepository.findRejectedDriverIdsForBooking(bookingId));
+                driverAssignmentRepository.findRejectedDriverIdsForBooking(bookingId),
+                evaluationContext(booking, List.of(driver)));
         if (!validated.eligible()) {
             throw new ConflictException(validated.ineligibilityReason());
         }
@@ -351,6 +354,9 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                     && booking.getDriver().getId().equals(da.getDriver().getId())) {
                 triggerAutoReassign(booking.getId(), da.getDriver().getId(), "Tài xế không phản hồi trong thời hạn quy định (TIMEOUT)");
             }
+            notificationStreamService.sendEventToProvider(booking.getVehicle().getProvider().getId(),
+                    "DRIVER_STATUS_CHANGED", Map.of("driverId", da.getDriver().getId(),
+                            "bookingCode", booking.getBookingCode()));
         }
     }
 
@@ -391,7 +397,8 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
             Instant bookingStart,
             Instant bookingEnd,
             MapGeocodingService.GeoPoint pickupPoint,
-            List<Long> rejectedDriverIds
+            List<Long> rejectedDriverIds,
+            EvaluationContext context
     ) {
         Long driverId = driver.getId();
         String fullName = driver.getUser() != null ? driver.getUser().getFullName() : "Tài xế #" + driverId;
@@ -428,54 +435,19 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                     + " không tương thích xe " + vehicle.getSeatCount() + " chỗ, hộp số " + vehicle.getTransmission());
         }
 
-        if (tripIncidentRepository.existsByDriver_IdAndStatusIn(driverId, List.of(TripIncidentStatus.OPEN, TripIncidentStatus.INVESTIGATING))) {
+        if (context.blockedDrivers().contains(driverId)) {
             return buildIneligible(driver, fullName, phone, "Tài xế đang có sự cố chưa xử lý (OPEN / INVESTIGATING)");
         }
 
-        Duration buffer = vehicle.getMaintenanceBufferMinutes() != null && vehicle.getMaintenanceBufferMinutes() > 0
-                ? Duration.ofMinutes(vehicle.getMaintenanceBufferMinutes())
-                : DEFAULT_BUFFER_DURATION;
-
-        Instant bufferedStart = bookingStart.minus(buffer);
-        Instant bufferedEnd = bookingEnd.plus(buffer);
-
-        List<Booking> candidates = bookingRepository.findPotentialDriverConflicts(
-                driverId,
-                ACTIVE_DRIVER_STATUSES,
-                booking.getId(),
-                bufferedEnd
-        );
-
-        List<Booking> overlapping = candidates.stream()
-                .filter(b -> {
-                    Instant bStart = b.getPickupTime();
-                    Instant bEnd = b.getActualEndAt() != null ? b.getActualEndAt() : calculateBookingEndTime(b);
-                    Duration bBuf = b.getVehicle() != null && b.getVehicle().getMaintenanceBufferMinutes() != null && b.getVehicle().getMaintenanceBufferMinutes() > 0
-                            ? Duration.ofMinutes(b.getVehicle().getMaintenanceBufferMinutes())
-                            : DEFAULT_BUFFER_DURATION;
-                    Instant bEffectiveStart = bStart.minus(bBuf);
-                    Instant bEffectiveEnd = bEnd.plus(bBuf);
-                    return bEffectiveStart.isBefore(bufferedEnd) && bEffectiveEnd.isAfter(bufferedStart);
-                })
-                .toList();
-
-        if (!overlapping.isEmpty()) {
-            Booking conflict = overlapping.getFirst();
-            return buildIneligible(driver, fullName, phone, "Trùng lịch chuyến đi khác: " + conflict.getBookingCode());
+        var availability = context.availability().get(driverId);
+        if (availability.reason() != null) {
+            return buildIneligible(driver, fullName, phone, availability.reason()
+                    + (availability.conflictingBookingCode() == null ? "" : ": " + availability.conflictingBookingCode()));
         }
+        long activeTripsToday = context.workloads().getOrDefault(driverId, 0L);
 
-        LocalDate today = LocalDate.now(clock.withZone(ClockConfig.VIETNAM_ZONE));
-        Instant startOfToday = today.atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant();
-        Instant startOfTomorrow = today.plusDays(1).atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant();
-
-        long activeTripsToday = bookingRepository.countDriverTripsBetween(
-                driverId,
-                ACTIVE_DRIVER_STATUSES,
-                startOfToday,
-                startOfTomorrow
-        );
-
-        DistanceAndEta distanceAndEta = calculateDistanceAndEta(driver, pickupPoint, booking.getVehicle().getProvider());
+        DistanceAndEta distanceAndEta = calculateDistanceAndEta(
+                Optional.ofNullable(context.locations().get(driverId)), pickupPoint, booking.getVehicle().getProvider());
 
         double rating = driver.getRatingAvg() != null ? driver.getRatingAvg().doubleValue() : 5.0;
         double suitabilityScore = calculateSuitabilityScore(distanceAndEta.etaMinutes(), activeTripsToday, rating);
@@ -630,14 +602,13 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private DistanceAndEta calculateDistanceAndEta(
-            Driver driver,
+            Optional<VehicleLocation> latestLoc,
             MapGeocodingService.GeoPoint pickupPoint,
             Provider provider
     ) {
         double driverLat;
         double driverLon;
 
-        Optional<VehicleLocation> latestLoc = vehicleLocationRepository.findFirstByDriver_IdOrderByReceivedAtDesc(driver.getId());
         if (latestLoc.isPresent()) {
             driverLat = latestLoc.get().getLatitude();
             driverLon = latestLoc.get().getLongitude();
@@ -699,6 +670,30 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private record DistanceAndEta(Double distanceKm, Integer etaMinutes) {
+    }
+
+    private EvaluationContext evaluationContext(Booking booking, List<Driver> drivers) {
+        List<Long> ids = drivers.stream().map(Driver::getId).toList();
+        var availability = driverAvailabilityService.inspect(booking.getVehicle().getProvider().getId(),
+                drivers, booking.getVehicle(), booking.getPickupTime(), calculateBookingEndTime(booking), booking.getId());
+        Map<Long, Long> workloads = new java.util.HashMap<>();
+        Map<Long, VehicleLocation> locations = new java.util.HashMap<>();
+        List<Long> blocked = List.of();
+        if (!ids.isEmpty()) {
+            LocalDate today = LocalDate.now(clock.withZone(ClockConfig.VIETNAM_ZONE));
+            bookingRepository.countTripsForDrivers(ids, ACTIVE_DRIVER_STATUSES,
+                    today.atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant(),
+                    today.plusDays(1).atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant())
+                    .forEach(row -> workloads.put(row.getDriverId(), row.getTripCount()));
+            vehicleLocationRepository.findLatestForDrivers(ids).forEach(location -> locations.put(location.getDriver().getId(), location));
+            blocked = tripIncidentRepository.findBlockedDriverIds(ids, List.of(TripIncidentStatus.OPEN, TripIncidentStatus.INVESTIGATING));
+        }
+        return new EvaluationContext(availability, workloads, locations, blocked);
+    }
+
+    private record EvaluationContext(
+            Map<Long, AssignmentAvailabilityResponse> availability,
+            Map<Long, Long> workloads, Map<Long, VehicleLocation> locations, List<Long> blockedDrivers) {
     }
 
     private record SolverOptimizationResult(String status, DriverCandidateResponse selectedCandidate) {

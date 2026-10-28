@@ -171,6 +171,13 @@ public class DriverTripServiceImpl implements DriverTripService {
     public DriverTripDetailResponse confirmTrip(Long currentUserId, String tripIdOrCode) {
         Driver driver = resolveDriver(currentUserId);
         Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        booking = bookingRepository.findByIdForUpdate(booking.getId())
+                .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy chuyến đi"));
+        userService.findDriverByIdForUpdate(driver.getId())
+                .orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài xế"));
+        if (booking.getDriver() == null || !booking.getDriver().getId().equals(driver.getId())) {
+            throw new AccessDeniedException("Chuyến đi đã được phân công cho tài xế khác");
+        }
 
         log.info(
                 "Driver {} confirms trip {}, booking {}, oldTripStatus={}, oldBookingStatus={}",
@@ -201,6 +208,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
 
         Instant now = clock.instant();
+        if (booking.getAssignmentExpiresAt() != null && !booking.getAssignmentExpiresAt().isAfter(now)) {
+            throw new TripConflictException("Yêu cầu phân công đã hết hạn, vui lòng tải lại lịch trình");
+        }
         booking.setDriverConfirmedAt(now);
         booking.setStatus(BookingStatus.DRIVER_CONFIRMED);
         Booking saved = bookingRepository.saveAndFlush(booking);

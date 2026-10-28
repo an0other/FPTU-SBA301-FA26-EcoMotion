@@ -75,6 +75,28 @@ class ProviderBookingApiIntegrationTest {
         }
 
         @Test
+        void assignmentCandidatesExposeAvailabilityAndKeepOfflineDriversVisible() throws Exception {
+                var provider = providerRepository.findByUser_Id(2L).orElseThrow();
+                var driver = driverRepository.findByProvider_Id(provider.getId()).getFirst();
+                driver.setActivityStatus(com.fptufa26.ecomotion.user.enums.DriverActivityStatus.OFFLINE);
+                driverRepository.saveAndFlush(driver);
+                var result = mockMvc.perform(get("/api/provider/bookings/BK-4M1P88/assign-candidates")
+                                .header(HttpHeaders.AUTHORIZATION, "Bearer " + getProviderToken()))
+                        .andExpect(status().isOk()).andReturn();
+                var candidates = objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8)).get("data");
+                boolean found = false;
+                for (var candidate : candidates) {
+                        assertThat(candidate.get("availability").get("lastUpdatedAt").asText()).isNotBlank();
+                        if (candidate.get("driverId").asLong() == driver.getId()) {
+                                found = true;
+                                assertThat(candidate.get("eligible").asBoolean()).isFalse();
+                                assertThat(candidate.get("availability").get("workStatus").asText()).isEqualTo("OFFLINE");
+                        }
+                }
+                assertThat(found).isTrue();
+        }
+
+        @Test
         @DisplayName("Provider A has 100% DB bookings loaded across all statuses")
         void providerBookingsAreSeededAndAccessible() throws Exception {
                 String token = getProviderToken();

@@ -60,6 +60,23 @@ class BookingConflictRegressionIntegrationTest {
     @Autowired
     private ScheduleService scheduleService;
 
+    @Autowired
+    private com.fptufa26.ecomotion.user.repository.DriverRepository driverRepository;
+
+    @org.junit.jupiter.api.BeforeEach
+    void isolateRenterConflictScenariosFromUnfinishedSeedTrips() {
+        driverRepository.findAll().forEach(driver -> {
+            driver.setLicenseExpiry(java.time.LocalDate.of(2040, 12, 31));
+            driver.setActivityStatus(com.fptufa26.ecomotion.user.enums.DriverActivityStatus.AVAILABLE);
+        });
+        driverRepository.flush();
+        bookingRepository.findAll().stream()
+                .filter(b -> b.getStatus() == BookingStatus.IN_PROGRESS
+                        || b.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION)
+                .forEach(b -> b.setStatus(BookingStatus.COMPLETED));
+        bookingRepository.flush();
+    }
+
     @Test
     @DisplayName("Đặt xe thành công với slot hợp lệ")
     void createBookingSuccessWithValidSlot() throws Exception {
@@ -92,7 +109,7 @@ class BookingConflictRegressionIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.status").value("AWAITING_DEPOSIT"))
                 .andExpect(jsonPath("$.data.bookingCode").exists());
     }
 
@@ -129,7 +146,12 @@ class BookingConflictRegressionIntegrationTest {
                         .content(body1))
                 .andExpect(status().isCreated());
 
-        // 2. Second booking overlapping the exact same range
+        Vehicle secondVehicle = vehicleRepository.findAll().stream()
+                .filter(v -> !v.getId().equals(vehicle.getId()))
+                .filter(v -> v.getProvider().getId().equals(vehicle.getProvider().getId()))
+                .filter(v -> "APPROVED".equals(v.getStatus().name())).findFirst().orElseThrow();
+        RentalPlan secondPlan = rentalPlanRepository.findByVehicle_IdOrderByIdAsc(secondVehicle.getId()).stream()
+                .filter(p -> "DAILY".equals(p.getPlanType().name())).findFirst().orElseThrow();
         String body2 = """
                 {
                   "vehicleId": %d,
@@ -141,14 +163,14 @@ class BookingConflictRegressionIntegrationTest {
                   "pickupLongitude": 106.652345,
                   "passengerCount": 2
                 }
-                """.formatted(vehicle.getId(), daily.getId());
+                """.formatted(secondVehicle.getId(), secondPlan.getId());
 
         mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body2))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Bạn đang có một đơn đặt xe khác trùng khung giờ này. Vui lòng kiểm tra lại đơn của bạn."));
+                .andExpect(jsonPath("$.message").value("Bạn đã có đơn thuê trùng khoảng thời gian này"));
     }
 
     @Test
@@ -196,7 +218,7 @@ class BookingConflictRegressionIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.status").value("PENDING"));
+                .andExpect(jsonPath("$.data.status").value("AWAITING_DEPOSIT"));
     }
 
     @Test
@@ -236,7 +258,7 @@ class BookingConflictRegressionIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Xe không còn trống trong khoảng thời gian đã chọn (bao gồm thời gian dọn xe giữa các chuyến). Vui lòng chọn xe khác hoặc khung giờ khác."));
+                .andExpect(jsonPath("$.message").value("Xe không còn trống trong khoảng thời gian đã chọn, bao gồm thời gian đệm"));
     }
 
     @Test

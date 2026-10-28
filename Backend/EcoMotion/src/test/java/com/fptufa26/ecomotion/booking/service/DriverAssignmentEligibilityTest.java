@@ -24,9 +24,14 @@ class DriverAssignmentEligibilityTest {
     UserService users = mock(UserService.class);
     DriverAssignmentRepository assignments = mock(DriverAssignmentRepository.class);
     TripIncidentRepository incidents = mock(TripIncidentRepository.class);
+    NotificationStreamService notifications = mock(NotificationStreamService.class);
     DriverOptimizationServiceImpl service = new DriverOptimizationServiceImpl(bookings, users, assignments, incidents,
             mock(VehicleLocationRepository.class), mock(BookingPolicySnapshotRepository.class), mock(BookingChargeRepository.class),
-            mock(MapGeocodingService.class), mock(NotificationStreamService.class), Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC));
+            mock(MapGeocodingService.class), notifications, Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC),
+            new com.fptufa26.ecomotion.booking.service.implement.DriverAvailabilityServiceImpl(bookings,
+                    mock(BookingPolicySnapshotRepository.class), mock(BookingChargeRepository.class),
+                    mock(com.fptufa26.ecomotion.user.service.DriverAssignmentService.class),
+                    Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC)));
     Driver driver; Booking booking;
     @BeforeEach void setup() {
         Provider provider = new Provider(); provider.setId(1L);
@@ -49,8 +54,8 @@ class DriverAssignmentEligibilityTest {
         verify(bookings, never()).saveAndFlush(any());
     }
     @Test void overlappingScheduleIsRejectedByBothPaths() {
-        Booking conflict = new Booking(); conflict.setPickupTime(booking.getPickupTime()); conflict.setBookingCode("conflict");
-        when(bookings.findPotentialDriverConflicts(eq(3L), anyList(), eq(4L), any())).thenReturn(List.of(conflict));
+        Booking conflict = new Booking(); conflict.setPickupTime(booking.getPickupTime()); conflict.setBookingCode("conflict"); conflict.setId(5L); conflict.setDriver(driver); conflict.setVehicle(booking.getVehicle()); conflict.setPlan(new com.fptufa26.ecomotion.vehicle.entity.RentalPlan()); conflict.getPlan().setSlotLengthMinutes(60);
+        when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(conflict));
         assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class).hasMessageContaining("conflict");
         assertThat(service.autoAssign(4L)).isNull();
     }
@@ -59,7 +64,10 @@ class DriverAssignmentEligibilityTest {
     void nonOverlappingFutureScheduleAllowsAnotherBooking(String licenseClass) {
         driver.setLicenseClass(licenseClass);
         Booking future = new Booking(); future.setPickupTime(booking.getPickupTime().plus(Duration.ofDays(1)));
-        when(bookings.findPotentialDriverConflicts(eq(3L), anyList(), eq(4L), any())).thenReturn(List.of(future));
+        future.setId(5L); future.setDriver(driver); future.setVehicle(booking.getVehicle());
+        future.setPlan(new com.fptufa26.ecomotion.vehicle.entity.RentalPlan()); future.getPlan().setSlotLengthMinutes(60);
+        future.setStatus(BookingStatus.DRIVER_CONFIRMED);
+        when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(future));
         assertThat(service.manualAssign(4L, 3L, 1L)).isSameAs(driver);
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.DRIVER_ASSIGNED);
         verify(users).findDriverByIdForUpdate(3L);
@@ -70,5 +78,38 @@ class DriverAssignmentEligibilityTest {
         assertThat(service.autoAssign(4L)).isNull();
         verify(users).findDriverByIdForUpdate(3L);
         verify(bookings, never()).saveAndFlush(any());
+    }
+    @ParameterizedTest
+    @EnumSource(value = DriverStatus.class, names = {"PENDING", "REJECTED", "SUSPENDED"})
+    void unapprovedDriversAreExcludedFromManualAndAuto(DriverStatus status) {
+        driver.setStatus(status);
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class);
+        assertThat(service.suggestDriver(4L, 1L).solverStatus()).isEqualTo("INFEASIBLE");
+        assertThat(service.autoAssign(4L)).isNull();
+    }
+    @Test void providerCannotInspectAnotherProvidersBooking() {
+        assertThatThrownBy(() -> service.evaluateCandidates(4L, 999L))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 999L))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+    @Test void providerCannotAssignAnotherProvidersDriver() {
+        Provider foreignProvider = new Provider(); foreignProvider.setId(999L);
+        driver.setProvider(foreignProvider);
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        verify(bookings, never()).saveAndFlush(any());
+    }
+    @Test void timeoutReleasesSlotAndNotifiesProviderEvenWithoutReplacement() {
+        var pending = new com.fptufa26.ecomotion.booking.entity.DriverAssignment();
+        pending.setDriver(driver); pending.setBooking(booking);
+        pending.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE);
+        booking.setDriver(driver); booking.setReassignCount(3); booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
+        when(assignments.findExpiredAssignments(any())).thenReturn(List.of(pending));
+        service.processPendingAssignmentTimeouts();
+        assertThat(pending.getStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.TIMEOUT);
+        assertThat(booking.getDriver()).isNull();
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+        verify(notifications).sendEventToProvider(eq(1L), eq("DRIVER_STATUS_CHANGED"), any());
     }
 }

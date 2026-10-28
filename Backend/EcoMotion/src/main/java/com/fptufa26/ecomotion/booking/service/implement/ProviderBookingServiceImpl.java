@@ -448,7 +448,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     public ProviderBookingResponse assignDriver(Long currentUserId, String bookingCodeOrId,
                                                 Long driverId, DriverAssignmentMode mode) {
         Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
 
         BookingStatus oldStatus = booking.getStatus();
         boolean replacingUnavailableDriver = booking.isDriverReplacementRequired()
