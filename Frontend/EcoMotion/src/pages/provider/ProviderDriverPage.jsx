@@ -2,6 +2,9 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
+import DriverStatusBadge from '../../components/driver/DriverStatusBadge'
+import { DRIVER_STATUS_LABELS } from '../../utils/driverStatus'
+import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { getErrorMessage } from '../../utils/errorMessage'
 
 export default function ProviderDriverPage() {
@@ -18,8 +21,10 @@ export default function ProviderDriverPage() {
 
   // Filters & Controls
   const [searchTerm, setSearchTerm] = useState('')
+  const [operationalStatus, setOperationalStatus] = useState('')
+  const loadSequence = useRef(0)
   const [selectedStatus, setSelectedStatus] = useState('ALL')
-  const [sortBy, setSortBy] = useState('newest')
+  const [sortBy, setSortBy] = useState('status_updated_at')
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
 
   // Modal State (Create / Edit)
@@ -49,18 +54,20 @@ export default function ProviderDriverPage() {
   const licenseInputRef = useRef(null)
 
   // Load drivers and stats
-  const loadData = async () => {
+  const loadData = async (quiet = false) => {
+    const sequence = ++loadSequence.current
     try {
-      setLoading(true)
+      if (!quiet) setLoading(true)
       const [driversRes, statsRes] = await Promise.all([
         providerService.getDrivers({
-          search: searchTerm || undefined,
+          operationalStatus: operationalStatus || undefined,
           status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
           sort: sortBy,
         }),
         providerService.getDriverStats(),
       ])
 
+      if (sequence !== loadSequence.current) return
       if (driversRes) setDrivers(driversRes)
       if (statsRes) setStats(statsRes)
     } catch (err) {
@@ -69,13 +76,15 @@ export default function ProviderDriverPage() {
         message: getErrorMessage(err, 'Không thể tải danh sách tài xế của nhà xe'),
       })
     } finally {
-      setLoading(false)
+      if (sequence === loadSequence.current) setLoading(false)
     }
   }
 
   useEffect(() => {
     loadData()
-  }, [selectedStatus, sortBy])
+  }, [selectedStatus, sortBy, operationalStatus])
+
+  useRealtimeSync({ onResync: () => loadData(true) })
 
   // Client-side search for instant filtering
   const filteredDrivers = useMemo(() => {
@@ -223,7 +232,8 @@ export default function ProviderDriverPage() {
       await providerService.toggleDriverStatus(driver.id, newStatus)
       setToast({
         type: 'success',
-        message: `Đã ${newStatus === 'APPROVED' ? 'kích hoạt hoạt động' : 'tạm ngưng'} tài xế ${driver.fullName}`,
+        message: `Đã ${newStatus === 'APPROVED' ? 'kích hoạt hoạt động' : 'tạm ngưng'} tài xế ${driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
+{(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}`,
       })
       loadData()
     } catch (err) {
@@ -454,13 +464,18 @@ export default function ProviderDriverPage() {
           </div>
 
           {/* Right: View Controls & Sort */}
-          <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
-            <div className="relative">
-              <select
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+            <div className="relative flex flex-wrap items-center gap-2">
+              <select aria-label="Lọc trạng thái nhận chuyến" value={operationalStatus} onChange={e => setOperationalStatus(e.target.value)} className="rounded-lg border border-slate-200 p-2 text-sm">
+<option value="">Tất cả trạng thái nhận chuyến</option>
+{Object.entries(DRIVER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+</select>
+<select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 pl-3.5 pr-8 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
               >
+                <option value="status_updated_at">Cập nhật trạng thái mới nhất</option>
                 <option value="newest">Mới nhất</option>
                 <option value="rating">Đánh giá cao nhất</option>
                 <option value="expiry">GPLX sắp hết hạn</option>
@@ -570,7 +585,8 @@ export default function ProviderDriverPage() {
                       </div>
                       <div>
                         <h3 className="font-bold text-base text-slate-900 leading-tight group-hover:text-emerald-700 transition-colors">
-                          {driver.fullName}
+                          {driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
+{(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}
                         </h3>
                         <div className="flex items-center gap-1.5 mt-1">
                           {driver.ratingCount > 0 ? (
@@ -759,7 +775,8 @@ export default function ProviderDriverPage() {
                             }}
                           />
                           <div>
-                            <div className="font-bold text-slate-900">{driver.fullName}</div>
+                            <div className="font-bold text-slate-900">{driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
+{(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}</div>
                             <div className="text-[11px] text-slate-400 font-mono">ID #{driver.id}</div>
                           </div>
                         </div>

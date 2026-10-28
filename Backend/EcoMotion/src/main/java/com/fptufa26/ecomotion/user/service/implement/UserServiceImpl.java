@@ -22,6 +22,8 @@ import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
 import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -46,6 +48,7 @@ public class UserServiceImpl implements UserService {
     private final ProviderRepository providerRepository;
     private final DriverRepository driverRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional(readOnly = true)
@@ -589,12 +592,15 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Optional<Driver> findDriverByIdForUpdate(Long driverId) {
         if (driverId == null) {
             return Optional.empty();
         }
-        return driverRepository.findByIdForUpdate(driverId);
+        Optional<Driver> result = driverRepository.findByIdForUpdate(driverId);
+        // Candidate evaluation may already have loaded this driver before waiting for the lock.
+        result.ifPresent(driver -> entityManager.refresh(driver, LockModeType.PESSIMISTIC_WRITE));
+        return result;
     }
 
     @Override

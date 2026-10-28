@@ -64,7 +64,11 @@ export const providerBookingService = {
     return data?.data
   },
 
-  async getAvailableDrivers() {
+  async getAvailableDrivers(bookingId) {
+    if (bookingId) {
+      const candidates = await this.getAssignmentCandidates(bookingId)
+      return candidates.map(driver => ({ ...driver, id: driver.driverId }))
+    }
     const { data } = await apiClient.get('/provider/drivers/available')
     return data?.data ?? []
   },

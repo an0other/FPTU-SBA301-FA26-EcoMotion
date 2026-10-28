@@ -8,6 +8,8 @@ public interface NotificationStreamService {
 
     void removeEmitter(Long userId);
 
+    void removeEmitter(Long userId, SseEmitter emitter);
+
     void sendEventToUser(Long userId, String eventType, Object payload);
 
     void sendEventToProvider(Long providerId, String eventType, Object payload);

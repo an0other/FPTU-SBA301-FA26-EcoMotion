@@ -8,6 +8,7 @@ import { getAccessToken } from '../utils/tokenStore.js'
 export const TV5_REALTIME_EVENTS = {
   BOOKING_CONFIRMED: 'BOOKING_CONFIRMED',
   DRIVER_ASSIGNED: 'DRIVER_ASSIGNED',
+  DRIVER_STATUS_CHANGED: 'DRIVER_STATUS_CHANGED',
   DRIVER_ACCEPTED: 'DRIVER_ACCEPTED',
   DRIVER_REJECTED: 'DRIVER_REJECTED',
   DRIVER_REASSIGNED: 'DRIVER_REASSIGNED',
@@ -79,7 +80,7 @@ export function useRealtimeSync({
     if (!enabled || isConnected || !pollIntervalMs) return
 
     const timer = setInterval(() => {
-      triggerSync()
+      if (document.visibilityState === 'visible') triggerSync()
     }, pollIntervalMs)
 
     return () => clearInterval(timer)
@@ -110,6 +111,7 @@ export function useRealtimeSync({
       eventSource.onopen = () => {
         setIsConnected(true)
         setSseAvailable(true)
+        triggerSync()
       }
 
       eventSource.onerror = () => {

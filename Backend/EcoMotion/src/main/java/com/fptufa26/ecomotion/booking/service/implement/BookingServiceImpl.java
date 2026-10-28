@@ -52,6 +52,7 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
@@ -96,6 +97,7 @@ public class BookingServiceImpl implements BookingService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final BookingMapper bookingMapper;
     private final UserService userService;
+    private final DriverStatusService driverStatusService;
     private final VehicleCatalogService vehicleCatalogService;
     private final ScheduleService scheduleService;
     private final DisputeService disputeService;
@@ -297,6 +299,9 @@ public class BookingServiceImpl implements BookingService {
         booking.setCancelledAt(cancelledAt);
         booking.setStatus(BookingStatus.CANCELLED);
         scheduleService.release(booking.getId());
+        if (booking.getDriver() != null) {
+            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
+        }
         return bookingMapper.toCancel(booking, refundAmount);
     }
 
