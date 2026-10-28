@@ -3,7 +3,7 @@ package com.fptufa26.ecomotion.dispute.service.implement;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.service.BookingQueryService;
+import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
@@ -33,12 +33,19 @@ public class DisputeServiceImpl implements DisputeService {
 
     private final DisputeRepository disputeRepository;
     private final UserService userService;
-    private final BookingQueryService bookingQueryService;
+    private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
 
     @Override
     @Transactional
     public DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge) {
+        return open(booking, raisedBy, category, charge, null, null);
+    }
+
+    @Override
+    @Transactional
+    public DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge,
+                                      String description, List<String> evidenceUrls) {
         if (category == DisputeCategory.CHARGE) {
             if (disputeRepository.existsByBooking_IdAndCategoryAndStatusAndCharge_Id(
                     booking.getId(), category, DisputeStatus.OPEN, charge.getId())) {
@@ -56,8 +63,16 @@ public class DisputeServiceImpl implements DisputeService {
         dispute.setHandledBy(null);
         dispute.setCategory(category);
         dispute.setStatus(DisputeStatus.OPEN);
+        dispute.setDescription(description);
+        dispute.setEvidenceUrlList(evidenceUrls);
         disputeRepository.save(dispute);
-        return new DisputeOpenedResponse(dispute.getCategory(), dispute.getStatus());
+        return new DisputeOpenedResponse(
+                dispute.getCategory(),
+                dispute.getStatus(),
+                dispute.getId(),
+                dispute.getDescription(),
+                dispute.getEvidenceUrlList()
+        );
     }
 
     @Override
@@ -110,7 +125,7 @@ public class DisputeServiceImpl implements DisputeService {
                 .orElseThrow(() -> new ConflictException("Tranh chấp không liên kết với phụ phí"));
         Booking booking = dispute.getBooking();
         Optional<PaymentRequest> finalRequest = paymentRequestService
-                .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
+                .findPaymentRequest(booking.getId(), PaymentRequestType.FINAL_BALANCE);
         finalRequest.ifPresent(request -> {
             if (request.getStatus() == PaymentRequestStatus.CONFIRMED
                     || request.getPaidAmount().signum() > 0) {
@@ -139,13 +154,19 @@ public class DisputeServiceImpl implements DisputeService {
             }
             paymentRequestService.savePaymentRequest(request);
         });
-        bookingQueryService.saveBooking(booking);
+        bookingPaymentLedgerService.saveBooking(booking);
     }
 
     @Override
     @Transactional(readOnly = true)
     public long countOpenOrInReview() {
         return disputeRepository.countOpenOrInReview();
+    }
+
+    @Override
+    public boolean hasOpenDispute(Long bookingId) {
+        return disputeRepository.existsByBooking_IdAndStatusIn(
+                bookingId, java.util.List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
     }
 
     @Override

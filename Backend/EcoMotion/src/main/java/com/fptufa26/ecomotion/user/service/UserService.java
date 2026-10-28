@@ -97,6 +97,9 @@ public interface UserService {
 
     Provider updateProviderStatus(Long providerId, ProviderStatus status);
 
+    Provider updateProviderBankSnapshot(Long providerId, String bankCode, String bankName,
+                                        String accountNumber, String accountHolder);
+
     List<Driver> listDrivers(DriverStatus status);
 
     Driver updateDriverStatus(Long driverId, DriverStatus status, String rejectReason);

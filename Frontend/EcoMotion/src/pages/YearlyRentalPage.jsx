@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import AppHeader from '../components/AppHeader'
 import DrivingLicenseForm from '../components/yearly-rental/DrivingLicenseForm'
 import YearlyContractPanel from '../components/yearly-rental/YearlyContractPanel'
 import { useYearlyRental } from '../hooks/useYearlyRental'
@@ -27,10 +26,8 @@ export default function YearlyRentalPage() {
   const [message, setMessage] = useState('')
 
   return (
-    <div className="min-h-screen bg-surface">
-      <AppHeader />
-
-      <main className="mx-auto max-w-[1200px] space-y-6 px-4 py-8 sm:px-6">
+    <div className="bg-surface">
+      <div className="mx-auto max-w-[1200px] space-y-6 px-4 py-8 sm:px-6">
         <nav aria-label="Đường dẫn trang" className="flex flex-wrap gap-2 text-xs">
           <Link to="/" className="text-slate-500 hover:text-brand-700">
             Trang chủ
@@ -84,8 +81,7 @@ export default function YearlyRentalPage() {
                   Hợp đồng của đơn thuê
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                  Sau khi gửi yêu cầu thuê năm và được chủ xe chấp nhận,
-                  bạn mở hồ sơ của đơn để upload hợp đồng.
+                  Sau khi gửi yêu cầu thuê năm, mở hồ sơ của đơn để tải hợp đồng.
                 </p>
                 <Link
                   to="/"
@@ -112,7 +108,7 @@ export default function YearlyRentalPage() {
             ) : null}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

@@ -4,6 +4,8 @@ import { CancelBookingModal } from './CancelBookingModal';
 import { bookingStatusMeta } from '../../utils/bookingStatus';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
+import LiveMapViewer from '../map/LiveMapViewer';
+import { HoldCountdown } from '../payments/HoldCountdown';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
@@ -14,35 +16,120 @@ const DISPUTE_LABELS = {
 
 export const BookingDetail = ({
   booking,
+  operationalRisk,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
   onCancelBooking,
   onCompleteBooking,
+  onConfirmStart,
   onOpenDispute,
+  onUploadDisputeEvidence,
   onEditRequest,
+  trackingData,
+  trackingLoading,
+  trackingError,
+  onRefreshTracking,
 }) => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [complaintCategory, setComplaintCategory] = useState('');
   const [complaintCharge, setComplaintCharge] = useState('');
+  const [complaintDescription, setComplaintDescription] = useState('');
+  const [evidenceList, setEvidenceList] = useState([]);
+  const [submittingDispute, setSubmittingDispute] = useState(false);
   const [actionError, setActionError] = useState('');
   const [disputeNote, setDisputeNote] = useState('');
   const [editing, setEditing] = useState(false);
   const statusMeta = bookingStatusMeta(booking.status);
 
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setActionError('Chỉ hỗ trợ tệp định dạng hình ảnh (JPG, PNG, WebP).');
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setActionError('Dung lượng ảnh không được vượt quá 10MB.');
+        continue;
+      }
+
+      const tempId = String(Date.now() + Math.random());
+      const previewUrl = URL.createObjectURL(file);
+
+      setEvidenceList((prev) => [
+        ...prev,
+        { id: tempId, file, previewUrl, url: null, uploading: true, error: null },
+      ]);
+
+      if (onUploadDisputeEvidence) {
+        try {
+          const uploadedUrl = await onUploadDisputeEvidence(file);
+          setEvidenceList((prev) =>
+            prev.map((item) =>
+              item.id === tempId ? { ...item, url: uploadedUrl, uploading: false } : item
+            )
+          );
+        } catch (err) {
+          setEvidenceList((prev) =>
+            prev.map((item) =>
+              item.id === tempId
+                ? { ...item, uploading: false, error: 'Tải ảnh thất bại' }
+                : item
+            )
+          );
+        }
+      }
+    }
+    e.target.value = '';
+  };
+
+  const handleRemoveEvidence = (idToRemove) => {
+    setEvidenceList((prev) => {
+      const target = prev.find((item) => item.id === idToRemove);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((item) => item.id !== idToRemove);
+    });
+  };
+
   const handleComplaintSubmit = async (e) => {
     e.preventDefault();
     setActionError('');
+
+    if (!complaintDescription.trim()) {
+      setActionError('Vui lòng nhập mô tả chi tiết lý do khiếu nại (ví dụ: Khách ói ra xe).');
+      return;
+    }
+
+    const isStillUploading = evidenceList.some((item) => item.uploading);
+    if (isStillUploading) {
+      setActionError('Hình ảnh bằng chứng đang được tải lên, vui lòng đợi một chút.');
+      return;
+    }
+
+    setSubmittingDispute(true);
     try {
+      const evidenceUrls = evidenceList.map((item) => item.url).filter(Boolean);
       await onOpenDispute({
         category: complaintCategory,
+        chargeId: complaintCategory === 'CHARGE' ? Number(complaintCharge) : undefined,
         chargeType: complaintCategory === 'CHARGE' ? complaintCharge : undefined,
+        description: complaintDescription.trim(),
+        evidenceUrls,
       });
-      setDisputeNote('Đã gửi khiếu nại. Admin sẽ xem xét.');
+      setDisputeNote('Đã gửi khiếu nại thành công kèm hình ảnh minh chứng. Ban quản trị sẽ thụ lý và phản hồi.');
       setComplaintCategory('');
       setComplaintCharge('');
+      setComplaintDescription('');
+      setEvidenceList([]);
     } catch (err) {
       setActionError(readErrorMessage(err));
+    } finally {
+      setSubmittingDispute(false);
     }
   };
 
@@ -72,6 +159,13 @@ export const BookingDetail = ({
           </div>
         </div>
         {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
+        {operationalRisk?.atRisk && (
+          <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-bold">Nguy cơ xe về trễ</p>
+            <p className="mt-1">{operationalRisk.message}</p>
+            <p className="mt-1 text-xs">Nhà cung cấp sẽ chủ động đổi xe, dời lịch hoặc hủy và hoàn tiền nếu cần.</p>
+          </div>
+        )}
       </div>
 
       {/* Main 2-Column Grid */}
@@ -120,11 +214,32 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {['IN_PROGRESS', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking.status) && (
+          {['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION'].includes(booking.status) && (
+            <div className="p-5 text-white bg-cyan-700 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold">Tài xế đã đến điểm đón</h2>
+                <p className="text-xs sm:text-sm text-white/90 mt-1">Chuyến chỉ bắt đầu sau khi cả bạn và tài xế cùng xác nhận.</p>
+              </div>
+              {booking.canConfirmStart ? <button
+                onClick={async () => {
+                  setActionError('');
+                  try {
+                    await onConfirmStart(booking.id);
+                  } catch (err) {
+                    setActionError(readErrorMessage(err));
+                  }
+                }}
+                type="button"
+                className="px-5 py-2.5 bg-white text-cyan-800 font-bold text-sm rounded-[12px]"
+              >Xác nhận bắt đầu chuyến</button> : <p className="text-sm font-medium">Đã xác nhận, đang chờ tài xế</p>}
+            </div>
+          )}
+
+          {['IN_PROGRESS', 'AWAITING_END_CONFIRMATION', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking.status) && (
             <div className="p-5 text-white bg-[#15803D] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <h2 className="text-base font-bold text-white">
-                  {booking.status === 'IN_PROGRESS' ? 'Chuyến đang diễn ra' : 'Tài xế đã kết thúc chuyến'}
+                  {booking.status === 'IN_PROGRESS' ? 'Chuyến đang diễn ra' : 'Đang xác nhận kết thúc chuyến'}
                 </h2>
                 <p className="text-xs sm:text-sm text-white/90">
                   {booking.actualStartTime
@@ -150,6 +265,34 @@ export const BookingDetail = ({
               ) : (
                 <p className="text-sm font-medium text-white">Đang chờ phía nhà cung cấp xác nhận</p>
               )}
+            </div>
+          )}
+
+          {booking.status === 'AWAITING_DEPOSIT' && (
+            <div className="p-5 bg-[#E8F6EE] border border-[#15803D]/30 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-[#15803D]">Lịch xe đang được giữ cho bạn</h2>
+                <p className="text-xs text-gray-600 mt-1">Thanh toán cọc VietQR hoặc VNPAY trong 15 phút. Sau khi một cổng xác nhận, cổng còn lại tự đóng.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <HoldCountdown expiresAt={booking.holdExpiresAt} />
+                {booking.canPay ? (
+                  <button
+                    onClick={() => onPayDeposit(booking)}
+                    type="button"
+                    className="px-6 py-2.5 bg-[#15803D] text-white font-semibold text-sm rounded-[12px] focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                  >
+                    Thanh toán cọc
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {booking.status === 'CANCELLATION_REVIEW' && (
+            <div className="p-5 bg-orange-50 border border-orange-200 rounded-[16px]">
+              <h2 className="text-base font-bold text-orange-900">Đang đối soát yêu cầu huỷ</h2>
+              <p className="text-xs text-orange-800 mt-1">Biên lai đã được gửi nên hệ thống cần kiểm tra khoản tiền trước khi huỷ hoặc hoàn tiền.</p>
             </div>
           )}
 
@@ -214,6 +357,31 @@ export const BookingDetail = ({
               >
                 Huỷ đơn
               </button> : null}
+            </div>
+          )}
+
+          {['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(booking.status) && (
+            <div className="bg-white p-5 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-[#14221A]">Vị trí xe theo thời gian thực</h3>
+                  <p className="mt-1 text-xs text-[#6D7A72]">
+                    {trackingData?.latestLocation?.receivedAt
+                      ? `Cập nhật lúc ${new Date(trackingData.latestLocation.receivedAt).toLocaleTimeString('vi-VN')}${trackingData.latestLocation.accuracyMeters ? ` • sai số khoảng ${Math.round(trackingData.latestLocation.accuracyMeters)} m` : ''}`
+                      : 'Đang chờ tín hiệu GPS từ tài xế.'}
+                  </p>
+                </div>
+                <button type="button" onClick={onRefreshTracking} disabled={trackingLoading} className="rounded-lg border border-[#15803D] px-3 py-2 text-xs font-semibold text-[#15803D] disabled:opacity-50">
+                  {trackingLoading ? 'Đang cập nhật...' : 'Làm mới vị trí'}
+                </button>
+              </div>
+              {trackingError ? <p className="mb-3 text-xs text-[#B42318]">{trackingError}</p> : null}
+              <LiveMapViewer
+                vehicleLocation={trackingData?.latestLocation}
+                pickupLocation={{ latitude: booking.pickupLatitude, longitude: booking.pickupLongitude, address: booking.pickupAddress }}
+                vehicleInfo={{ licensePlate: booking.vehicle.plateNumber, name: booking.vehicle.name }}
+                height="340px"
+              />
             </div>
           )}
 
@@ -354,7 +522,7 @@ export const BookingDetail = ({
                 </thead>
                 <tbody className="divide-y divide-[#E6EBE8]">
                   {booking.charges.map((charge) => (
-                    <tr key={`${charge.chargeType}-${charge.description}`}>
+                    <tr key={charge.chargeId ?? `${charge.chargeType}-${charge.description}`}>
                       <td className="py-3 px-3 font-medium text-[#14221A]">{charge.label}</td>
                       <td className="py-3 px-3 text-[#6D7A72]">{charge.description}</td>
                       <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">{charge.formula}</td>
@@ -397,22 +565,97 @@ export const BookingDetail = ({
                       className="w-full h-11 px-3.5 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none cursor-pointer"
                     >
                       <option value="" disabled>-- Chọn khoản --</option>
-                      {booking.charges.map((charge) => (
-                        <option key={charge.chargeType} value={charge.chargeType}>{charge.label}</option>
+                      {booking.charges.filter((charge) => !charge.isWaived && !['BASE_RENTAL', 'DEPOSIT'].includes(charge.chargeType)).map((charge) => (
+                        <option key={charge.chargeId} value={charge.chargeId}>{charge.label}</option>
                       ))}
                     </select>
                   </div>
                 )}
 
-                {disputeNote && <p className="text-sm text-[#15803D]">{disputeNote}</p>}
-                {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
+                {/* Description of Dispute */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-[#14221A]">
+                    Mô tả chi tiết / Lý do khiếu nại <span className="text-[#B42318]">*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={complaintDescription}
+                    onChange={(e) => setComplaintDescription(e.target.value)}
+                    placeholder="Nhập lý do khiếu nại cụ thể (ví dụ: Khách ói ra xe gây ố bẩn nội thất, phụ phí vệ sinh tính chưa hợp lý...)"
+                    className="w-full p-3 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none focus:border-[#15803D] focus:bg-white transition-all resize-none"
+                  />
+                </div>
+
+                {/* Evidence Image Upload */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-[#14221A]">
+                      Hình ảnh bằng chứng đính kèm
+                    </label>
+                    <span className="text-[11px] text-[#6D7A72]">
+                      {evidenceList.length} ảnh đã chọn
+                    </span>
+                  </div>
+
+                  <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] hover:bg-[#F1F5F9] cursor-pointer transition-colors text-xs font-medium text-[#475569]">
+                    <svg className="w-4 h-4 text-[#64748B]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Chọn ảnh minh chứng (JPG, PNG, WebP)</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* Thumbnail Previews */}
+                  {evidenceList.length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
+                      {evidenceList.map((item) => (
+                        <div key={item.id} className="relative group rounded-xl overflow-hidden border border-[#E2E8F0] aspect-square bg-slate-100">
+                          <img
+                            src={item.previewUrl}
+                            alt="Bằng chứng"
+                            className="w-full h-full object-cover"
+                          />
+                          {item.uploading && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-[10px] font-bold">
+                              Đang tải...
+                            </div>
+                          )}
+                          {item.error && (
+                            <div className="absolute inset-0 bg-rose-600/70 flex items-center justify-center text-white text-[10px] p-1 text-center font-bold">
+                              Lỗi tải ảnh
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEvidence(item.id)}
+                            className="absolute top-1 right-1 w-5 h-5 bg-black/60 hover:bg-black/80 rounded-full text-white text-xs flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Xóa ảnh"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {disputeNote && <p className="text-sm text-[#15803D] font-medium">{disputeNote}</p>}
+                {actionError && <p className="text-sm text-[#B42318] font-medium">{actionError}</p>}
 
                 <div className="flex justify-end pt-1">
                   <button
                     type="submit"
-                    className="px-5 py-2 font-semibold text-xs border border-[#B42318] text-[#B42318] rounded-xl hover:bg-rose-50 transition-colors cursor-pointer active:scale-95"
+                    disabled={submittingDispute}
+                    className="px-5 py-2 font-semibold text-xs border border-[#B42318] text-[#B42318] hover:bg-rose-50 rounded-xl transition-colors cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    Gửi khiếu nại
+                    {submittingDispute ? 'Đang gửi...' : 'Gửi khiếu nại'}
                   </button>
                 </div>
               </form>
@@ -492,7 +735,7 @@ export const BookingDetail = ({
 
       {/* Cancel Confirmation Dialog Modal */}
       <CancelBookingModal
-        bookingId={booking.id}
+        bookingCode={booking.id}
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
         refundExplanation={booking.refundExplanation}

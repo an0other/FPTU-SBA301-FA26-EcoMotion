@@ -11,7 +11,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Optional;
 import java.util.List;
 
@@ -31,6 +30,9 @@ public interface PaymentTransactionRepository
 
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM PaymentTransaction p WHERE p.status = 'PAID' AND p.direction = 'IN'")
     BigDecimal sumTotalPaidIn();
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM PaymentTransaction p JOIN p.booking b WHERE p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PAID AND p.type = com.fptufa26.ecomotion.booking.enums.PaymentType.DEPOSIT_PAY AND p.direction = com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN AND b.status IN (com.fptufa26.ecomotion.booking.enums.BookingStatus.CONFIRMED, com.fptufa26.ecomotion.booking.enums.BookingStatus.DRIVER_ASSIGNED, com.fptufa26.ecomotion.booking.enums.BookingStatus.DRIVER_CONFIRMED, com.fptufa26.ecomotion.booking.enums.BookingStatus.DRIVER_ARRIVED, com.fptufa26.ecomotion.booking.enums.BookingStatus.IN_PROGRESS, com.fptufa26.ecomotion.booking.enums.BookingStatus.AWAITING_END_CONFIRMATION, com.fptufa26.ecomotion.booking.enums.BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION)")
+    BigDecimal sumEscrowDeposits();
 
     List<PaymentTransaction> findByBooking_IdOrderByCreatedAtAsc(Long bookingId);
 
@@ -64,6 +66,8 @@ public interface PaymentTransactionRepository
     Optional<PaymentTransaction> findByGatewayRef(String gatewayRef);
 
     boolean existsByGatewayRef(String gatewayRef);
+
+boolean existsByReceivingBankAccount_IdAndGatewayRef(Long receivingBankAccountId, String gatewayRef);
 
     Optional<PaymentTransaction> findByVnpTxnRef(String vnpTxnRef);
 

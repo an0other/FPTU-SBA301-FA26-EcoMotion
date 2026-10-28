@@ -46,6 +46,24 @@ public class VehicleCatalogServiceImpl implements VehicleCatalogService {
     }
 
     @Override
+    @Transactional
+    public Vehicle requireApprovedForUpdate(Long vehicleId) {
+        Vehicle vehicle = vehicleRepository.findByIdForUpdate(vehicleId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy xe"));
+        if (vehicle.getStatus() != VehicleStatus.APPROVED) {
+            throw new NotFoundException("Không tìm thấy xe");
+        }
+        return vehicle;
+    }
+
+    @Override
+    public Vehicle requireOwnedByProvider(Long vehicleId, Long providerId) {
+        return vehicleRepository.findByIdAndProvider_Id(vehicleId, providerId)
+                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.NotFoundException(
+                        "Phương tiện không tồn tại hoặc không thuộc sở hữu của nhà xe"));
+    }
+
+    @Override
     public RentalPlan requireActivePlan(Long vehicleId, Long planId) {
         return rentalPlanRepository.findByIdAndVehicle_Id(planId, vehicleId)
                 .filter(plan -> plan.getStatus() == PlanStatus.ACTIVE)

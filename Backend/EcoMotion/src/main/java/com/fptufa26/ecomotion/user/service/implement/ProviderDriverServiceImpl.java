@@ -33,6 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import com.fptufa26.ecomotion.common.response.PageResponse;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -73,6 +76,31 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
                 })
                 .sorted(getItemComparator(sort))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<ProviderDriverItemResponse> getDriversPaged(Long providerUserId, String search, DriverStatus status,
+            DriverOperationalStatus operationalStatus, String sort, LocalDate updatedFrom, LocalDate updatedTo,
+            int offset, int limit) {
+        if (offset < 0 || limit < 1 || limit > 100) {
+            throw new BadRequestException("Phân trang không hợp lệ: offset >= 0, limit từ 1 đến 100");
+        }
+        if (updatedFrom != null && updatedTo != null && updatedFrom.isAfter(updatedTo)) {
+            throw new BadRequestException("Ngày bắt đầu không được sau ngày kết thúc");
+        }
+        if (LocalDate.MAX.equals(updatedTo)) {
+            throw new BadRequestException("Ngày kết thúc nằm ngoài phạm vi hỗ trợ");
+        }
+        ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
+        Instant from = updatedFrom == null ? null : updatedFrom.atStartOfDay(zone).toInstant();
+        Instant toExclusive = updatedTo == null ? null : updatedTo.plusDays(1).atStartOfDay(zone).toInstant();
+        List<ProviderDriverItemResponse> matching = getDrivers(providerUserId, search, status, operationalStatus, sort).stream()
+                .filter(d -> (from == null && toExclusive == null)
+                        || (d.updatedAt() != null && (from == null || !d.updatedAt().isBefore(from))
+                        && (toExclusive == null || d.updatedAt().isBefore(toExclusive))))
+                .toList();
+        return PageResponse.of(matching, offset, limit);
     }
 
     @Override
@@ -225,7 +253,8 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
             driver.setRejectReason(null);
         }
 
-        Driver updatedDriver = driverRepository.save(driver);
+        driver.setUpdatedAt(clock.instant());
+        Driver updatedDriver = driverRepository.saveAndFlush(driver);
         return toResponse(updatedDriver);
     }
 
@@ -256,18 +285,24 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
     }
 
     private Comparator<ProviderDriverItemResponse> getItemComparator(String sort) {
-        if ("status_updated_at".equalsIgnoreCase(sort) || "updated".equalsIgnoreCase(sort)) {
-            return Comparator.comparing(ProviderDriverItemResponse::statusUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
-        }
-        if ("rating".equalsIgnoreCase(sort)) {
-            return Comparator.comparing(ProviderDriverItemResponse::ratingAvg, Comparator.nullsLast(Comparator.reverseOrder()))
+        Comparator<ProviderDriverItemResponse> byId = Comparator.comparing(ProviderDriverItemResponse::id,
+                Comparator.nullsLast(Comparator.reverseOrder()));
+        Comparator<ProviderDriverItemResponse> comparator;
+        if ("updated_asc".equalsIgnoreCase(sort)) {
+            comparator = Comparator.comparing(ProviderDriverItemResponse::updatedAt, Comparator.nullsLast(Comparator.naturalOrder()));
+        } else if ("status_updated_at".equalsIgnoreCase(sort)) {
+            comparator = Comparator.comparing(ProviderDriverItemResponse::statusUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
+        } else if ("rating".equalsIgnoreCase(sort)) {
+            comparator = Comparator.comparing(ProviderDriverItemResponse::ratingAvg, Comparator.nullsLast(Comparator.reverseOrder()))
                     .thenComparing(ProviderDriverItemResponse::ratingCount, Comparator.nullsLast(Comparator.reverseOrder()));
+        } else if ("license_expiry".equalsIgnoreCase(sort) || "expiry".equalsIgnoreCase(sort)) {
+            comparator = Comparator.comparing(ProviderDriverItemResponse::licenseExpiry, Comparator.nullsLast(Comparator.naturalOrder()));
+        } else if ("newest".equalsIgnoreCase(sort)) {
+            comparator = byId;
+        } else {
+            comparator = Comparator.comparing(ProviderDriverItemResponse::updatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
         }
-        if ("license_expiry".equalsIgnoreCase(sort) || "expiry".equalsIgnoreCase(sort)) {
-            return Comparator.comparing(ProviderDriverItemResponse::licenseExpiry, Comparator.nullsLast(Comparator.naturalOrder()));
-        }
-        // Default: newest first
-        return Comparator.comparing(ProviderDriverItemResponse::id, Comparator.nullsLast(Comparator.reverseOrder()));
+        return comparator.thenComparing(byId);
     }
 
     private ProviderDriverItemResponse toResponse(Driver d) {

@@ -26,6 +26,8 @@ import {
 } from '../components/icons/Icons'
 import { useVehicle } from '../hooks/useVehicle'
 import { formatCurrency, FUEL_LABELS, PLAN_LABELS, TRANSMISSION_LABELS } from '../utils/formatCurrency'
+import { formatSlotPrice, planLabel, slotDurationLabel } from '../utils/planLabels'
+import { DEPOSIT_HOLD_COPY } from '../utils/bookingCopy'
 
 function bookingRequestPath(vehicleId, planId) {
   const params = new URLSearchParams({ vehicleId: String(vehicleId) })
@@ -34,30 +36,32 @@ function bookingRequestPath(vehicleId, planId) {
 }
 
 
-function formatDuration(minutes) {
-  const value = Number(minutes)
-  if (!Number.isFinite(value) || value <= 0) return null
-  if (value % 1440 === 0) return `${value / 1440} ngày`
-  if (value % 60 === 0) return `${value / 60} giờ`
-  return `${value} phút`
-}
-
 function formatRatioPercent(ratio) {
   if (ratio === null || ratio === undefined || ratio === '') return null
   const value = Number(ratio) * 100
   if (Number.isNaN(value)) return null
-  return `${Number(value.toFixed(2))}%`
+  return `${Number(value.toFixed(0))}%`
 }
 
 function policyRowsOf(plan) {
   if (!plan) return []
   const rows = []
 
-  const overtime = formatDuration(plan.allowedOvertimeMinutes)
-  if (overtime) rows.push({ label: 'Vượt giờ cho phép', value: overtime, Icon: IconClock })
-
   const overtimeRate = formatRatioPercent(plan.overtimeSurchargeRatio)
-  if (overtimeRate) rows.push({ label: 'Phụ thu vượt giờ', value: overtimeRate, Icon: IconPercent })
+  if (overtimeRate) {
+    rows.push({ label: 'Phụ thu vượt giờ', value: `${overtimeRate} đơn giá slot`, Icon: IconPercent })
+  }
+
+  if (plan.waitingRate !== null && plan.waitingRate !== undefined) {
+    const waitingFree = slotDurationLabel(plan.waitingFreeMinutes)
+    rows.push({
+      label: 'Phụ thu thời gian chờ',
+      value: waitingFree
+        ? `${formatCurrency(plan.waitingRate)} / phút chờ sau ${waitingFree} miễn phí`
+        : `${formatCurrency(plan.waitingRate)} / phút chờ`,
+      Icon: IconClock,
+    })
+  }
 
   if (plan.freeRadiusKm !== null && plan.freeRadiusKm !== undefined) {
     rows.push({ label: 'Miễn phí trong bán kính', value: `${plan.freeRadiusKm} km`, Icon: IconRoute })
@@ -65,22 +69,18 @@ function policyRowsOf(plan) {
   if (plan.outOfRadiusRate !== null && plan.outOfRadiusRate !== undefined) {
     rows.push({
       label: 'Phụ thu ngoài bán kính',
-      value: `${formatCurrency(plan.outOfRadiusRate)}/km`,
+      value: `${formatCurrency(plan.outOfRadiusRate)} / km`,
       Icon: IconRoute,
     })
   }
 
-  const waitingFree = formatDuration(plan.waitingFreeMinutes)
-  if (waitingFree) rows.push({ label: 'Chờ miễn phí', value: waitingFree, Icon: IconClock })
-
-  if (plan.waitingRate !== null && plan.waitingRate !== undefined) {
-    rows.push({ label: 'Phụ thu thời gian chờ', value: formatCurrency(plan.waitingRate), Icon: IconClock })
-  }
+  const overtime = slotDurationLabel(plan.allowedOvertimeMinutes)
+  if (overtime) rows.push({ label: 'Vượt giờ cho phép', value: overtime, Icon: IconClock })
 
   const weekend = formatRatioPercent(plan.weekendSurchargeRatio)
-  if (weekend) rows.push({ label: 'Phụ thu cuối tuần', value: weekend, Icon: IconPercent })
+  if (weekend) rows.push({ label: 'Phụ thu cuối tuần', value: `${weekend} đơn giá slot`, Icon: IconPercent })
 
-  const threshold = formatDuration(plan.hourlyToDailyThresholdMinutes)
+  const threshold = slotDurationLabel(plan.hourlyToDailyThresholdMinutes)
   if (threshold) rows.push({ label: 'Ngưỡng quy đổi sang ngày', value: threshold, Icon: IconClock })
 
   return rows
@@ -276,7 +276,7 @@ export default function VehicleDetailPage() {
                   <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-brand-50/50 px-4 py-3">
                     <IconStar className="h-5 w-5 text-amber-500" />
                     <span className="text-xl font-extrabold text-ink">{hasRating ? ratingAvg.toFixed(1) : 'Mới'}</span>
-                    {hasRating && <span className="text-xs text-slate-500">({ratingCount} đánh giá)</span>}
+                    {hasRating && <span className="text-xs text-slate-500">({ratingCount} đánh giá xe)</span>}
                   </div>
                 </div>
                 {provider?.depotAddress && <p className="mt-3 flex items-start gap-2 text-sm text-slate-500"><IconMapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />{provider.depotAddress}</p>}
@@ -349,14 +349,16 @@ export default function VehicleDetailPage() {
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       Giá thuê theo gói
                     </span>
-                    <p className="mt-2 flex items-end gap-1">
-                      <span className="text-3xl font-bold tracking-tight text-brand-700">
-                        {selectedPlan ? formatCurrency(selectedPlan.slotPrice) : 'Chưa có giá'}
-                      </span>
-                      <span className="pb-1 text-[13px] font-medium text-slate-500">
-                        / slot
-                      </span>
+                    <p className="mt-2 text-2xl font-bold tracking-tight text-brand-700 sm:text-3xl">
+                      {selectedPlan
+                        ? formatSlotPrice(selectedPlan.slotPrice, selectedPlan.slotLengthMinutes)
+                        : 'Chưa có giá'}
                     </p>
+                    {selectedPlan?.planType === 'YEARLY' ? (
+                      <p className="mt-2 text-xs font-medium text-[#14221A]/70">
+                        {planLabel('YEARLY').footer}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="p-5 sm:p-6">
@@ -388,7 +390,7 @@ export default function VehicleDetailPage() {
                         <div className="flex items-center justify-between gap-3">
                           <dt className="text-slate-500">Độ dài mỗi slot</dt>
                           <dd className="font-semibold text-slate-900">
-                            {formatDuration(selectedPlan.slotLengthMinutes) ?? '—'}
+                            {slotDurationLabel(selectedPlan.slotLengthMinutes) ?? '—'}
                           </dd>
                         </div>
                         {selectedPlan.upfrontAmount !== null &&
@@ -411,7 +413,9 @@ export default function VehicleDetailPage() {
                         <div>
                           <h2 className="text-lg font-bold text-ink">Đặt xe</h2>
                           <p className="mt-1 text-sm text-slate-500">
-                            Chọn gói bên trên rồi gửi yêu cầu. Bạn sẽ chọn lịch và điểm đón ở bước tiếp theo.
+                            {selectedPlan?.planType === 'YEARLY'
+                              ? 'Gói năm dùng hợp đồng riêng. Bước tiếp theo chuyển sang quy trình thuê năm.'
+                              : DEPOSIT_HOLD_COPY.submitHint}
                             {!selectedPlan ? ' Xe này chưa có gói đang mở bán.' : ''}
                           </p>
                         </div>
@@ -430,7 +434,7 @@ export default function VehicleDetailPage() {
                               : 'cursor-not-allowed bg-slate-200 text-slate-500'
                           }`}
                         >
-                          Gửi yêu cầu đặt xe
+                          {selectedPlan?.planType === 'YEARLY' ? 'Tiếp tục sang thuê năm' : 'Gửi yêu cầu đặt xe'}
                         </button>
                       </div>
                     </div>
@@ -452,9 +456,21 @@ export default function VehicleDetailPage() {
                     </p>
                   ) : (
                     <div className="mt-3 space-y-1.5">
-                      {selectedPolicyRows.map((row) => (
+                      {selectedPolicyRows.slice(0, 4).map((row) => (
                         <PolicyRow key={row.label} {...row} />
                       ))}
+                      {selectedPolicyRows.length > 4 ? (
+                        <details className="pt-1">
+                          <summary className="cursor-pointer text-[12px] font-semibold text-brand-800">
+                            Xem thêm chính sách
+                          </summary>
+                          <div className="mt-1.5 space-y-1.5">
+                            {selectedPolicyRows.slice(4).map((row) => (
+                              <PolicyRow key={row.label} {...row} />
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
                   )}
                 </div>

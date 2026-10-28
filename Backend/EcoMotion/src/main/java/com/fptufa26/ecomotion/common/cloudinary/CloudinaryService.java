@@ -6,5 +6,7 @@ public interface CloudinaryService {
 
     CloudinaryUploadResult uploadTripEvidence(MultipartFile file, Long bookingId);
 
+    CloudinaryUploadResult uploadDisputeEvidence(MultipartFile file, Long bookingId);
+
     void deleteImage(String publicId);
 }

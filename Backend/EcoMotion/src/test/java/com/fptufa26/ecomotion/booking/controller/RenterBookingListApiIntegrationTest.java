@@ -36,10 +36,11 @@ class RenterBookingListApiIntegrationTest {
     @DisplayName("renter sees seeded bookings by public code and no sequential id")
     void listsOwnBookingsWithoutId() throws Exception {
         JsonNode data = list(null);
-        assertThat(codes(data)).contains(
+        assertThat(data.get("total").asLong()).isGreaterThanOrEqualTo(2);
+        assertThat(codes(data.get("items"))).contains(
                 DevDataSeeder.ACCEPTED_BOOKING_CODE,
                 DevDataSeeder.PENDING_BOOKING_CODE);
-        for (JsonNode row : data) {
+        for (JsonNode row : data.get("items")) {
             assertThat(row.has("id")).isFalse();
             assertThat(row.has("cancelReason")).isFalse();
         }
@@ -48,12 +49,31 @@ class RenterBookingListApiIntegrationTest {
     @Test
     @DisplayName("status filter keeps the matching seed code")
     void filtersByStatus() throws Exception {
-        assertThat(codes(list("ACCEPTED")))
+        assertThat(codes(list("ACCEPTED").get("items")))
                 .contains(DevDataSeeder.ACCEPTED_BOOKING_CODE)
                 .doesNotContain(DevDataSeeder.PENDING_BOOKING_CODE);
-        assertThat(codes(list("PENDING")))
+        assertThat(codes(list("PENDING").get("items")))
                 .contains(DevDataSeeder.PENDING_BOOKING_CODE)
                 .doesNotContain(DevDataSeeder.ACCEPTED_BOOKING_CODE);
+    }
+
+    @Test
+    @DisplayName("server-side keyword, group and paging filters are applied")
+    void filtersAndPagesOnServer() throws Exception {
+        String token = login();
+        String body = mockMvc.perform(get("/api/renter/bookings")
+                        .param("group", "PROCESSING")
+                        .param("keyword", DevDataSeeder.ACCEPTED_BOOKING_CODE.toLowerCase())
+                        .param("page", "0")
+                        .param("size", "1")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode page = objectMapper.readTree(body).get("data");
+        assertThat(page.get("limit").asInt()).isEqualTo(1);
+        assertThat(page.get("offset").asInt()).isZero();
+        assertThat(codes(page.get("items"))).containsExactly(DevDataSeeder.ACCEPTED_BOOKING_CODE);
     }
 
     @Test
@@ -65,6 +85,54 @@ class RenterBookingListApiIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    @DisplayName("unknown group and excessive page size are rejected")
+    void rejectsInvalidPagingFilters() throws Exception {
+        String token = login();
+        mockMvc.perform(get("/api/renter/bookings")
+                        .param("group", "UNKNOWN")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/renter/bookings")
+                        .param("size", "51")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/renter/bookings")
+                        .param("sort", "UNKNOWN")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("summary exposes action contract without list cancel rights")
+    void summaryIncludesActionContract() throws Exception {
+        JsonNode items = list(null).get("items");
+        assertThat(items).isNotEmpty();
+        for (JsonNode row : items) {
+            assertThat(row.has("canCancel")).isFalse();
+            assertThat(row.get("actionKind").isTextual()).isTrue();
+            assertThat(row.has("endTime")).isTrue();
+            assertThat(row.has("depositAmount")).isTrue();
+            assertThat(row.has("driverName")).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("pending bookings stay out of action-needed and keep NONE")
+    void pendingIsNotActionNeeded() throws Exception {
+        JsonNode actionNeeded = listGroup("ACTION_NEEDED");
+        assertThat(codes(actionNeeded.get("items"))).doesNotContain(DevDataSeeder.PENDING_BOOKING_CODE);
+        for (JsonNode row : actionNeeded.get("items")) {
+            assertThat(row.get("actionKind").asText()).isNotEqualTo("NONE");
+        }
+
+        JsonNode pendingPage = list("PENDING");
+        JsonNode pending = pendingPage.get("items").get(0);
+        assertThat(pending.get("bookingCode").asText()).isEqualTo(DevDataSeeder.PENDING_BOOKING_CODE);
+        assertThat(pending.get("actionKind").asText()).isEqualTo("NONE");
+        assertThat(pending.get("canPay").asBoolean()).isFalse();
+    }
+
     private JsonNode list(String status) throws Exception {
         var request = get("/api/renter/bookings")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + login());
@@ -72,6 +140,17 @@ class RenterBookingListApiIntegrationTest {
             request.param("status", status);
         }
         String body = mockMvc.perform(request)
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return objectMapper.readTree(body).get("data");
+    }
+
+    private JsonNode listGroup(String group) throws Exception {
+        String body = mockMvc.perform(get("/api/renter/bookings")
+                        .param("group", group)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + login()))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

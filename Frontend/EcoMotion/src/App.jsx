@@ -1,7 +1,6 @@
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
 import AppHeader from './components/AppHeader'
-import { BookingSubnav } from './components/booking/BookingSubnav'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -40,7 +39,6 @@ function BookingShell({ children }) {
   return (
     <div className="flex min-h-screen flex-col bg-surface font-sans text-slate-900 antialiased">
       <AppHeader />
-      <BookingSubnav />
       <main className="w-full flex-1">{children}</main>
     </div>
   )
@@ -68,7 +66,14 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/activate" element={<ActivatePage />} />
-      <Route path="/payment/vnpay/callback" element={<VnpayCallbackPage />} />
+      <Route
+        path="/payment/vnpay/callback"
+        element={
+          <BookingShell>
+            <VnpayCallbackPage />
+          </BookingShell>
+        }
+      />
 
       <Route
         path="/policy"
@@ -89,12 +94,12 @@ export default function App() {
 
       <Route element={<ProtectedRoute allowedRoles={['RENTER']} />}>
         <Route
-          path="/bookings/:bookingId/payment"
-          element={<CustomerPaymentPage />}
-        />
-        <Route
-          path="/renter/bookings/:bookingId/payment"
-          element={<CustomerPaymentPage />}
+          path="/renter/bookings/:bookingCode/payment"
+          element={
+            <BookingShell>
+              <CustomerPaymentPage />
+            </BookingShell>
+          }
         />
 
         <Route
@@ -109,9 +114,9 @@ export default function App() {
         <Route
           path="/renter/bookings/:bookingCode/submitted"
           element={
-            <BookingWizardShell>
+            <BookingShell>
               <SubmittedBookingPage />
-            </BookingWizardShell>
+            </BookingShell>
           }
         />
 
@@ -135,7 +140,11 @@ export default function App() {
 
         <Route
           path="/renter/payments"
-          element={<PaymentHistoryPage />}
+          element={
+            <BookingShell>
+              <PaymentHistoryPage />
+            </BookingShell>
+          }
         />
 
         <Route
@@ -145,12 +154,20 @@ export default function App() {
 
         <Route
           path="/renter/yearly-rental"
-          element={<YearlyRentalPage />}
+          element={
+            <BookingShell>
+              <YearlyRentalPage />
+            </BookingShell>
+          }
         />
 
         <Route
           path="/renter/bookings/:bookingCode/yearly-rental"
-          element={<YearlyRentalPage />}
+          element={
+            <BookingShell>
+              <YearlyRentalPage />
+            </BookingShell>
+          }
         />
       </Route>
 

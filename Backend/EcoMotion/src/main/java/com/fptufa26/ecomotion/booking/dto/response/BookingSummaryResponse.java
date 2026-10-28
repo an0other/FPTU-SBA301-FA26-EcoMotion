@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.dto.response;
 
+import com.fptufa26.ecomotion.booking.enums.BookingActionKind;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 
@@ -21,6 +22,13 @@ public record BookingSummaryResponse(
         Instant pickupTime,
         int passengerCount,
         BigDecimal totalAmount,
-        boolean canPay
+        boolean canPay,
+        boolean atRisk,
+        String riskMessage,
+        Instant holdExpiresAt,
+        Instant endTime,
+        BigDecimal depositAmount,
+        String driverName,
+        BookingActionKind actionKind
 ) {
 }

@@ -6,6 +6,7 @@ import com.fptufa26.ecomotion.common.storage.FileStorageService;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
+import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDepositPolicyRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.VehicleVisibilityRequest;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderDashboardSummaryResponse;
@@ -14,9 +15,11 @@ import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDetailResponse
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleDocumentResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehicleItemResponse;
 import com.fptufa26.ecomotion.vehicle.dto.response.ProviderVehiclePageResponse;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDepositPolicyResponse;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.service.ProviderVehicleService;
+import com.fptufa26.ecomotion.vehicle.service.LicensePlateHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -40,12 +43,15 @@ import java.util.List;
 public class ProviderVehicleController {
 
     private final ProviderVehicleService providerVehicleService;
-    private final FileStorageService fileStorageService;
+    private final com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService;
+    private final LicensePlateHistoryService licensePlateHistoryService;
 
     public ProviderVehicleController(ProviderVehicleService providerVehicleService,
-                                     FileStorageService fileStorageService) {
+                                     com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService,
+                                     LicensePlateHistoryService licensePlateHistoryService) {
         this.providerVehicleService = providerVehicleService;
         this.fileStorageService = fileStorageService;
+        this.licensePlateHistoryService = licensePlateHistoryService;
     }
 
     @GetMapping("/dashboard/summary")
@@ -110,6 +116,13 @@ public class ProviderVehicleController {
         return ApiResponse.success(providerVehicleService.getVehicleDetail(user.getUserId(), id));
     }
 
+    @GetMapping("/vehicles/{id}/license-plate-history")
+    @Operation(summary = "Xem lịch sử thay đổi biển số xe")
+    public ApiResponse<List<com.fptufa26.ecomotion.vehicle.dto.response.VehicleLicensePlateHistoryResponse>>
+    getLicensePlateHistory(@AuthenticationPrincipal SecurityUser user, @PathVariable Long id) {
+        return ApiResponse.success(licensePlateHistoryService.listForProvider(user.getUserId(), id));
+    }
+
     @PutMapping("/vehicles/{id}")
     @Operation(summary = "Update provider vehicle profile (O04)")
     public ApiResponse<ProviderVehicleDetailResponse> updateVehicle(
@@ -118,6 +131,25 @@ public class ProviderVehicleController {
             @Valid @RequestBody UpdateVehicleRequest request
     ) {
         return ApiResponse.success(providerVehicleService.updateVehicle(user.getUserId(), id, request));
+    }
+
+    @PatchMapping("/vehicles/{id}/deposit-policy")
+    @Operation(summary = "Cập nhật chính sách đặt cọc của xe")
+    public ApiResponse<VehicleDepositPolicyResponse> updateDepositPolicy(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateVehicleDepositPolicyRequest request
+    ) {
+        return ApiResponse.success(providerVehicleService.updateDepositPolicy(user.getUserId(), id, request));
+    }
+
+    @GetMapping("/vehicles/{id}/deposit-policy")
+    @Operation(summary = "Xem chính sách đặt cọc của xe")
+    public ApiResponse<VehicleDepositPolicyResponse> getDepositPolicy(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.success(providerVehicleService.getDepositPolicy(user.getUserId(), id));
     }
 
     @GetMapping("/vehicles/{id}/plans")
@@ -187,6 +219,48 @@ public class ProviderVehicleController {
             return ApiResponse.success(java.util.Map.of(
                     "fileUrl", fileUrl,
                     "fileName", originalFilename != null ? originalFilename : "document"
+            ));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Không thể đọc tệp tải lên: " + e.getMessage());
+        }
+    }
+
+    @PostMapping(value = "/vehicles/images/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload vehicle cover image (JPG, PNG, WEBP)")
+    public ApiResponse<java.util.Map<String, String>> uploadVehicleImage(
+            @AuthenticationPrincipal SecurityUser user,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn tệp hình ảnh xe");
+        }
+        String contentType = file.getContentType();
+        boolean isImage = contentType != null && (
+                contentType.equalsIgnoreCase("image/jpeg") ||
+                contentType.equalsIgnoreCase("image/png") ||
+                contentType.equalsIgnoreCase("image/webp")
+        );
+        if (!isImage) {
+            throw new IllegalArgumentException("Hệ thống chỉ chấp nhận hình ảnh định dạng JPG, PNG hoặc WEBP");
+        }
+
+        try {
+            String originalFilename = file.getOriginalFilename();
+            String safeName = (originalFilename != null && !originalFilename.isBlank())
+                    ? originalFilename.replaceAll("[^a-zA-Z0-9._-]", "_")
+                    : "vehicle_cover.png";
+            String uniqueFilename = System.currentTimeMillis() + "_" + safeName;
+            String storedKey = fileStorageService.store(
+                    "vehicle",
+                    user.getUserId(),
+                    uniqueFilename,
+                    file.getBytes(),
+                    contentType
+            );
+            String imageUrl = "/api/files/" + storedKey;
+            return ApiResponse.success(java.util.Map.of(
+                    "imageUrl", imageUrl,
+                    "fileName", originalFilename != null ? originalFilename : "vehicle_image"
             ));
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Không thể đọc tệp tải lên: " + e.getMessage());

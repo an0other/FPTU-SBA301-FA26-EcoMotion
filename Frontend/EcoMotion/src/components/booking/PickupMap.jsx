@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { vehicleService } from '../../services/vehicleService'
+import { pickupAfterAddressEdit } from '../../utils/bookingAvailability'
 
 const DEFAULT_CENTER = [10.7769, 106.7009]
 const PIN = L.divIcon({
@@ -72,7 +73,14 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || value?.latitude == null || value?.longitude == null) return
+    if (!map) return
+    if (value?.latitude == null || value?.longitude == null) {
+      if (markerRef.current) {
+        map.removeLayer(markerRef.current)
+        markerRef.current = null
+      }
+      return
+    }
     const latLng = [Number(value.latitude), Number(value.longitude)]
     if (!markerRef.current) {
       markerRef.current = L.marker(latLng, { icon: PIN, draggable: !readOnly }).addTo(map)
@@ -85,7 +93,8 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
   }, [readOnly, selectPoint, value?.latitude, value?.longitude])
 
   useEffect(() => {
-    if (readOnly || query.trim().length < 3 || query === value?.address) return undefined
+    if (readOnly || query.trim().length < 3) return undefined
+    if (value?.latitude != null && query === value?.address) return undefined
     const timer = window.setTimeout(async () => {
       try {
         setSuggestions(await vehicleService.searchAddress(query.trim()))
@@ -94,7 +103,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
       }
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [onError, query, readOnly, value?.address])
+  }, [onError, query, readOnly, value?.address, value?.latitude])
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) return onError?.('Trình duyệt không hỗ trợ định vị')
@@ -112,11 +121,14 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
         <div className="relative">
           <div className="flex gap-2">
             <input value={query} onChange={(event) => {
-              setQuery(event.target.value)
-              if (event.target.value.trim().length < 3) setSuggestions([])
+              const nextText = event.target.value
+              setQuery(nextText)
+              const nextPickup = pickupAfterAddressEdit(value, nextText)
+              if (nextPickup !== value) onChangeRef.current(nextPickup)
+              if (nextText.trim().length < 3) setSuggestions([])
             }}
               placeholder="Tìm số nhà, tên đường hoặc địa điểm"
-              className="min-w-0 flex-1 rounded-xl border border-[#BEC9C1] px-3 py-2.5 text-sm focus:border-[#15803D] focus:outline-none" />
+              className="min-w-0 flex-1 rounded-xl border border-[#BEC9C1] px-3 py-2.5 text-sm focus:border-[#15803D] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" />
             <button type="button" onClick={useCurrentLocation}
               className="rounded-xl border border-[#15803D] px-3 text-sm font-semibold text-[#15803D] hover:bg-[#E8F6EE]">
               Vị trí của tôi
@@ -135,7 +147,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
           ) : null}
         </div>
       ) : null}
-      <div ref={containerRef} className="h-56 w-full overflow-hidden rounded-xl border border-[#E6EBE8] bg-slate-100" />
+      <div ref={containerRef} className="h-40 w-full overflow-hidden rounded-xl border border-[#E6EBE8] bg-slate-100 sm:h-60" />
       {loading ? <p className="text-xs text-[#15803D]">Đang xác định địa chỉ...</p> : null}
       {value?.address ? <p className="text-xs font-medium text-slate-700">Điểm đã chọn: {value.address}</p> : null}
     </div>
