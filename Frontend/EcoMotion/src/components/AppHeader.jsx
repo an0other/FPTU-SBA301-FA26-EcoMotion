@@ -298,15 +298,6 @@ export default function AppHeader({ filters, onSearchSubmit, showViewSwitch = fa
                 <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
               </button>
 
-              {user.role === 'ADMIN' && (
-                <Link
-                  to="/admin"
-                  className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
-                >
-                  Dashboard
-                </Link>
-              )}
-
               {user.role === 'DRIVER' && (
                 <Link
                   to="/driver/schedule"
