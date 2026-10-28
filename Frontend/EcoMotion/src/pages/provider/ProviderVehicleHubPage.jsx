@@ -184,7 +184,6 @@ export default function ProviderVehicleHubPage() {
         }
       }
 
-      // Fetch documents
       try {
         const docs = await providerService.getVehicleDocuments(id)
         setDocuments(docs || [])
@@ -299,7 +298,6 @@ export default function ProviderVehicleHubPage() {
         })
       }
     } catch {
-      // Ignored
     }
   }
 
@@ -309,8 +307,6 @@ export default function ProviderVehicleHubPage() {
       fetchDashboardSummary()
     }, 0)
     return () => window.clearTimeout(timerId)
-    // Reload only when navigating to another vehicle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   function handleTabChange(tabKey) {
@@ -692,16 +688,14 @@ export default function ProviderVehicleHubPage() {
         />
       )}
 
-      {/* 1. Provider Top Navigation Bar */}
       <ProviderHeader
         activeTab="vehicles"
         providerName={providerInfo.displayName}
         depotAddress={providerInfo.depotAddress}
       />
 
-      {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 w-full flex-1">
-        {/* Breadcrumb */}
+        
         <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-slate-500 mb-4">
           <Link to="/provider/vehicles" className="hover:text-emerald-700 transition-colors flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">home</span>
@@ -715,10 +709,9 @@ export default function ProviderVehicleHubPage() {
           </span>
         </nav>
 
-        {/* 2. Header Summary Card */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-            {/* Left: Car identity */}
+            
             <div className="flex items-start sm:items-center gap-4">
               <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center group shadow-sm">
                 <img
@@ -788,7 +781,6 @@ export default function ProviderVehicleHubPage() {
               )}
             </div>
 
-            {/* Right: Quick actions */}
             <div className="flex flex-wrap items-center gap-2.5 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
               <button
                 type="button"
@@ -813,7 +805,6 @@ export default function ProviderVehicleHubPage() {
           </div>
         </div>
 
-        {/* 3. Tabbed Navigation Bar (Synced with URL ?tab=...) */}
         <div className="border-b border-slate-200 mb-6 bg-white rounded-xl px-3 pt-2 shadow-sm">
           <div className="flex space-x-2 sm:space-x-4 overflow-x-auto">
             <button
@@ -859,12 +850,9 @@ export default function ProviderVehicleHubPage() {
           </div>
         </div>
 
-        {/* ======================================================== */}
-        {/* TAB 1: HỒ SƠ XE THEO KIẾN TRÚC 3 TẦNG v10.1               */}
-        {/* ======================================================== */}
         {activeTab === 'profile' && (
           <section className="space-y-6">
-            {/* Rule Banner */}
+            
             <div className="rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-white border border-emerald-200 p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
               <div className="flex items-start gap-3.5">
                 <div className="w-10 h-10 rounded-xl bg-white text-emerald-700 border border-emerald-200 flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -890,7 +878,6 @@ export default function ProviderVehicleHubPage() {
               </button>
             </div>
 
-            {/* TẦNG 1: Định danh vật lý (Physical Identity) */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 transition-all">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100">
                 <div className="flex items-center gap-3">
@@ -914,7 +901,7 @@ export default function ProviderVehicleHubPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* VIN / Chassis Number */}
+                
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
@@ -937,7 +924,6 @@ export default function ProviderVehicleHubPage() {
                   <p className="text-[11px] text-slate-400 mt-1">Đã khóa bất biến theo hồ sơ đăng kiểm gốc</p>
                 </div>
 
-                {/* Engine / Motor Number */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
@@ -962,7 +948,6 @@ export default function ProviderVehicleHubPage() {
               </div>
             </div>
 
-            {/* TẦNG 2: Định danh pháp lý (Legal Identity) */}
             <div className="bg-white rounded-2xl border-2 border-amber-300/80 shadow-sm p-5 sm:p-6 transition-all relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500"></div>
               <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100">
@@ -987,7 +972,7 @@ export default function ProviderVehicleHubPage() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                {/* Left: Input */}
+                
                 <div className="lg:col-span-6 space-y-3">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1.5" htmlFor="plate-input">
@@ -1014,7 +999,6 @@ export default function ProviderVehicleHubPage() {
                     </div>
                   </div>
 
-                  {/* Warning chip if changed */}
                   {isPlateChanged && (
                     <div className="p-3 rounded-xl bg-amber-100/70 border border-amber-300 text-xs text-amber-900 flex items-start gap-2">
                       <span className="material-symbols-outlined text-amber-700 text-base flex-shrink-0">report</span>
@@ -1031,14 +1015,13 @@ export default function ProviderVehicleHubPage() {
                   </p>
                 </div>
 
-                {/* Right: Live Preview VN License Plate */}
                 <div className="lg:col-span-6 bg-slate-50/80 p-5 rounded-2xl border border-slate-200 flex flex-col items-center justify-center">
                   <span className="text-xs font-semibold text-slate-500 mb-3 self-start">Mô phỏng biển số thực tế (Live Preview):</span>
                   <div className="vn-plate w-64 sm:w-72 h-24 rounded-2xl px-4 py-2 flex flex-col items-center justify-center relative select-none bg-gradient-to-b from-white to-slate-100 border-[3.5px] border-slate-800 shadow-md">
-                    {/* Screws */}
+                    
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-300 border border-slate-500 absolute top-2 left-3 shadow-inner"></span>
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-300 border border-slate-500 absolute top-2 right-3 shadow-inner"></span>
-                    {/* Vietnam flag */}
+                    
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <svg className="w-4 h-3 rounded-[1px] shadow-sm" viewBox="0 0 30 20">
                         <rect fill="#da251d" width="30" height="20" />
@@ -1046,11 +1029,11 @@ export default function ProviderVehicleHubPage() {
                       </svg>
                       <span className="text-[9px] font-bold tracking-widest text-slate-700 font-mono">VIETNAM</span>
                     </div>
-                    {/* License Plate number */}
+                    
                     <div className="text-xl sm:text-2xl font-black font-mono tracking-widest text-slate-900 drop-shadow-[0_1px_1px_rgba(255,255,255,1)]">
                       {form.licensePlate || '51K - XXXXX'}
                     </div>
-                    {/* Bottom accent stripe */}
+                    
                     <div className="absolute bottom-1 left-4 right-4 h-[3px] bg-emerald-600 rounded-full"></div>
                   </div>
                   <div className="mt-3 flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
@@ -1065,7 +1048,6 @@ export default function ProviderVehicleHubPage() {
               </div>
             </div>
 
-            {/* TẦNG 3: Thông số kỹ thuật & Vận hành (Operational Info) */}
             <div className="bg-white rounded-2xl border border-emerald-200 shadow-sm p-5 sm:p-6 transition-all">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100">
                 <div className="flex items-center gap-3">
@@ -1088,7 +1070,6 @@ export default function ProviderVehicleHubPage() {
                 </p>
               </div>
 
-              {/* 4 Cột: Hãng, Model, Năm SX, Số chỗ */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
@@ -1160,9 +1141,8 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
 
-              {/* Hộp số, Nhiên liệu & Màu sắc */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5 p-4 bg-slate-50/70 rounded-xl border border-slate-200/80">
-                {/* Hộp số */}
+                
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-2">Hộp số truyền động <span className="text-rose-500">*</span></label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1200,7 +1180,6 @@ export default function ProviderVehicleHubPage() {
                   </div>
                 </div>
 
-                {/* Nhiên liệu */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-2">Loại nhiên liệu <span className="text-rose-500">*</span></label>
                   <div className="grid grid-cols-4 gap-1.5">
@@ -1232,7 +1211,6 @@ export default function ProviderVehicleHubPage() {
                   </div>
                 </div>
 
-                {/* Màu sơn */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-2">Màu sắc ngoại thất <span className="text-rose-500">*</span></label>
                   <div className="flex items-center gap-2.5">
@@ -1249,7 +1227,6 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
 
-              {/* Maintenance Buffer Stepper (+/- 15 mins) */}
               <div className="mb-5 p-4 rounded-xl bg-emerald-50/50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-lg bg-white text-emerald-700 border border-emerald-200 flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -1287,7 +1264,6 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
 
-              {/* Cover Image 16:9 */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-bold text-slate-700">Ảnh bìa xe chính thức (Hero Display Image) <span className="text-rose-500">*</span></label>
@@ -1373,9 +1349,6 @@ export default function ProviderVehicleHubPage() {
           </section>
         )}
 
-        {/* ======================================================== */}
-        {/* TAB 2: GIẤY TỜ PHÁP LÝ (VEHICLE DOCUMENTS)                 */}
-        {/* ======================================================== */}
         {activeTab === 'documents' && (
           <section className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
@@ -1393,7 +1366,6 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
 
-              {/* Document Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
                 {DOC_SPECS.map(spec => {
                   const doc = documents.find(d => d.docType === spec.type)
@@ -1406,7 +1378,7 @@ export default function ProviderVehicleHubPage() {
                       className="bg-slate-50 rounded-xl border border-slate-200 p-4 hover:border-emerald-300 transition-all flex flex-col justify-between"
                     >
                       <div>
-                        {/* Header: Icon & Status */}
+                        
                         <div className="flex items-start justify-between gap-2 mb-3">
                           <div className="flex items-center gap-2.5">
                             <div className={`w-9 h-9 rounded-lg ${spec.iconBg} flex items-center justify-center font-bold text-sm shadow-xs`}>
@@ -1439,7 +1411,6 @@ export default function ProviderVehicleHubPage() {
                           )}
                         </div>
 
-                        {/* Body Details */}
                         {doc ? (
                           <div className="space-y-2 text-xs text-slate-600 mb-4 bg-white p-3 rounded-lg border border-slate-200/80 shadow-xs">
                             <div className="flex justify-between items-center">
@@ -1487,7 +1458,6 @@ export default function ProviderVehicleHubPage() {
                         )}
                       </div>
 
-                      {/* Footer Actions */}
                       <div className="flex items-center justify-between pt-2 border-t border-slate-200/70">
                         {doc ? (
                           <>
@@ -1526,9 +1496,6 @@ export default function ProviderVehicleHubPage() {
           </section>
         )}
 
-        {/* ======================================================== */}
-        {/* TAB 3: BẢNG GIÁ & GÓI CƯỚC (RENTAL PLANS)                  */}
-        {/* ======================================================== */}
         {activeTab === 'pricing' && (
           <section className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
@@ -1594,9 +1561,8 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
 
-              {/* 4 Plan Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-                {/* Gói 1: DAILY */}
+                
                 <div className={`rounded-xl border-2 p-4 relative flex flex-col justify-between shadow-sm transition-all ${pricingPlans.DAILY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/20'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
@@ -1610,7 +1576,7 @@ export default function ProviderVehicleHubPage() {
                         <span className="material-symbols-outlined text-base text-emerald-600">calendar_today</span>
                         Gói Theo Ngày (DAILY)
                       </span>
-                      {/* Toggle Switch */}
+                      
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('DAILY')}
@@ -1670,7 +1636,6 @@ export default function ProviderVehicleHubPage() {
                   </div>
                 </div>
 
-                {/* Gói 2: HOURLY */}
                 <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${pricingPlans.HOURLY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/10'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
@@ -1681,7 +1646,7 @@ export default function ProviderVehicleHubPage() {
                         <span className="material-symbols-outlined text-base text-slate-600">schedule</span>
                         Gói Theo Giờ (HOURLY)
                       </span>
-                      {/* Toggle Switch */}
+                      
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('HOURLY')}
@@ -1723,7 +1688,6 @@ export default function ProviderVehicleHubPage() {
                       </p>
                     </div>
 
-                    {/* Ngưỡng quy đổi ngày */}
                     <div className="mb-3">
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
                         Ngưỡng quy đổi trần giá ngày (phút)
@@ -1756,7 +1720,6 @@ export default function ProviderVehicleHubPage() {
                   </div>
                 </div>
 
-                {/* Gói 3: MONTHLY */}
                 <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${pricingPlans.MONTHLY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/10'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
@@ -1767,7 +1730,7 @@ export default function ProviderVehicleHubPage() {
                         <span className="material-symbols-outlined text-base text-slate-600">date_range</span>
                         Gói Theo Tháng (MONTHLY)
                       </span>
-                      {/* Toggle Switch */}
+                      
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('MONTHLY')}
@@ -1827,7 +1790,6 @@ export default function ProviderVehicleHubPage() {
                   </div>
                 </div>
 
-                {/* Gói 4: YEARLY */}
                 <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${pricingPlans.YEARLY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/10'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
@@ -1838,7 +1800,7 @@ export default function ProviderVehicleHubPage() {
                         <span className="material-symbols-outlined text-base text-slate-600">stars</span>
                         Gói Năm (YEARLY)
                       </span>
-                      {/* Toggle Switch */}
+                      
                       <button
                         type="button"
                         onClick={() => togglePlanStatus('YEARLY')}
@@ -1880,7 +1842,6 @@ export default function ProviderVehicleHubPage() {
                       </p>
                     </div>
 
-                    {/* Tiền cọc/trả trước cho YEARLY */}
                     <div className="mb-3">
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
                         Tiền trả trước / Cọc ký quỹ (VNĐ)
@@ -1917,14 +1878,13 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
 
-              {/* Phụ phí vận hành (CSDL rental_plan) */}
               <div className="mt-8 pt-6 border-t border-slate-200">
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
                   <span className="material-symbols-outlined text-base text-emerald-600">tune</span>
                   Cấu hình phụ phí vận hành & điều khoản vượt hạn mức (CSDL rental_plan)
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Phụ phí vượt giờ */}
+                  
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                     <label className="text-xs font-bold text-slate-800 block mb-1">Phụ phí vượt giờ</label>
                     <p className="text-[10px] text-slate-500 mb-2 font-mono">allowed_overtime & overtime_surcharge_ratio</p>
@@ -1953,7 +1913,6 @@ export default function ProviderVehicleHubPage() {
                     </div>
                   </div>
 
-                  {/* Bán kính đón */}
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                     <label className="text-xs font-bold text-slate-800 block mb-1">Bán kính đón miễn phí</label>
                     <p className="text-[10px] text-slate-500 mb-2 font-mono">free_radius_km & out_of_radius_rate</p>
@@ -1982,7 +1941,6 @@ export default function ProviderVehicleHubPage() {
                     </div>
                   </div>
 
-                  {/* Phí chờ */}
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                     <label className="text-xs font-bold text-slate-800 block mb-1">Phí chờ tại điểm đón</label>
                     <p className="text-[10px] text-slate-500 mb-2 font-mono">waiting_free_minutes & waiting_rate</p>
@@ -2011,7 +1969,6 @@ export default function ProviderVehicleHubPage() {
                     </div>
                   </div>
 
-                  {/* Phụ thu cuối tuần & lễ */}
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                     <label className="text-xs font-bold text-slate-800 block mb-1">Phụ thu cuối tuần & Lễ</label>
                     <p className="text-[10px] text-slate-500 mb-2 font-mono">weekend_surcharge_ratio</p>
@@ -2039,9 +1996,6 @@ export default function ProviderVehicleHubPage() {
         )}
       </main>
 
-      {/* ======================================================== */}
-      {/* FIXED BOTTOM TASKBAR (Active on Tab 1 & Tab 3)           */}
-      {/* ======================================================== */}
       {activeTab === 'profile' && (
         <aside className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-xl z-30 py-3 px-4 sm:px-8">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -2120,9 +2074,6 @@ export default function ProviderVehicleHubPage() {
         </aside>
       )}
 
-      {/* ======================================================== */}
-      {/* MODAL: CHI TIẾT QUY CHUẨN KIẾN TRÚC 3 TẦNG               */}
-      {/* ======================================================== */}
       {showRuleModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all animate-fadeIn">
@@ -2144,7 +2095,7 @@ export default function ProviderVehicleHubPage() {
             </div>
 
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto text-xs text-slate-700">
-              {/* Tầng 1 */}
+              
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <div className="flex items-center gap-2 text-slate-900 font-bold mb-1">
                   <span className="w-5 h-5 rounded bg-slate-200 text-slate-800 text-[10px] flex items-center justify-center">01</span>
@@ -2155,7 +2106,6 @@ export default function ProviderVehicleHubPage() {
                 </p>
               </div>
 
-              {/* Tầng 2 */}
               <div className="p-4 rounded-xl bg-amber-50/80 border border-amber-200">
                 <div className="flex items-center gap-2 text-amber-900 font-bold mb-1">
                   <span className="w-5 h-5 rounded bg-amber-200 text-amber-900 text-[10px] flex items-center justify-center">02</span>
@@ -2166,7 +2116,6 @@ export default function ProviderVehicleHubPage() {
                 </p>
               </div>
 
-              {/* Tầng 3 */}
               <div className="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200">
                 <div className="flex items-center gap-2 text-emerald-900 font-bold mb-1">
                   <span className="w-5 h-5 rounded bg-emerald-200 text-emerald-900 text-[10px] flex items-center justify-center">03</span>
@@ -2191,13 +2140,10 @@ export default function ProviderVehicleHubPage() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* MODAL: TẢI LÊN / CẬP NHẬT GIẤY TỜ PHÁP LÝ (JPG, PNG, PDF) */}
-      {/* ======================================================== */}
       {docModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all animate-fadeIn">
-            {/* Header */}
+            
             <div className="p-5 bg-gradient-to-r from-emerald-800 to-emerald-600 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-2xl">upload_file</span>
@@ -2217,7 +2163,6 @@ export default function ProviderVehicleHubPage() {
               </button>
             </div>
 
-            {/* Form */}
             <form onSubmit={handleSaveDocument} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2250,7 +2195,6 @@ export default function ProviderVehicleHubPage() {
                 </p>
               </div>
 
-              {/* File Attachment Upload */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Tệp đính kèm văn bản <span className="text-rose-500">*</span>
@@ -2324,7 +2268,6 @@ export default function ProviderVehicleHubPage() {
                 )}
               </div>
 
-              {/* Actions */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
