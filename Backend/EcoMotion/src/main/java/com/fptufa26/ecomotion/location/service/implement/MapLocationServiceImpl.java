@@ -1,10 +1,10 @@
-package com.fptufa26.ecomotion.vehicle.service.implement;
+package com.fptufa26.ecomotion.location.service.implement;
 
-import com.fptufa26.ecomotion.vehicle.dto.response.AddressSearchResult;
-import com.fptufa26.ecomotion.vehicle.exception.MapLocationUnavailableException;
+import com.fptufa26.ecomotion.location.dto.response.AddressSearchResult;
+import com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import com.fptufa26.ecomotion.vehicle.service.MapLocationService;
+import com.fptufa26.ecomotion.location.service.MapLocationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class MapLocationServiceImpl implements MapLocationService {
 
+    private static final double EARTH_RADIUS_KM = 6371.0088;
     private static final long MIN_REQUEST_INTERVAL_NANOS = Duration.ofSeconds(1).toNanos();
 
     private final ObjectMapper objectMapper;
@@ -59,6 +60,25 @@ public class MapLocationServiceImpl implements MapLocationService {
         this.userAgent = userAgent;
         this.requestTimeout = requestTimeout;
         this.httpClient = HttpClient.newBuilder().connectTimeout(connectTimeout).build();
+    }
+
+    @Override
+    public double distanceKm(double latitude1, double longitude1, double latitude2, double longitude2) {
+        validateCoordinates(latitude1, longitude1);
+        validateCoordinates(latitude2, longitude2);
+        double deltaLatitude = Math.toRadians(latitude2 - latitude1);
+        double deltaLongitude = Math.toRadians(longitude2 - longitude1);
+        double haversine = Math.pow(Math.sin(deltaLatitude / 2), 2)
+                + Math.cos(Math.toRadians(latitude1)) * Math.cos(Math.toRadians(latitude2))
+                * Math.pow(Math.sin(deltaLongitude / 2), 2);
+        return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(haversine)));
+    }
+
+    private void validateCoordinates(double latitude, double longitude) {
+        if (!Double.isFinite(latitude) || !Double.isFinite(longitude)
+                || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+            throw new IllegalArgumentException("Invalid latitude or longitude");
+        }
     }
 
     @Override

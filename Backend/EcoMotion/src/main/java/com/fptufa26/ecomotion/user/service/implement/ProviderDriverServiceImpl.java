@@ -168,7 +168,6 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
             throw new ConflictException("Số giấy phép lái xe này đã tồn tại trên hệ thống");
         }
 
-        // 1. Create User account for Driver
         User user = new User();
         user.setFullName(request.fullName().trim());
         user.setEmail(normalizedEmail);
@@ -186,7 +185,6 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
 
         User savedUser = userRepository.save(user);
 
-        // 2. Create Driver profile belonging strictly to this Provider
         Driver driver = new Driver();
         driver.setUser(savedUser);
         driver.setProvider(provider);
@@ -225,27 +223,23 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
         String newPortraitUrl = request.portraitUrl().trim();
         String newLicenseUrl = request.licenseImageUrl().trim();
 
-        // Check if sensitive credentials changed
         boolean sensitiveChanged = !normalizedLicenseNo.equalsIgnoreCase(driver.getLicenseNo())
                 || !request.licenseClass().trim().equalsIgnoreCase(driver.getLicenseClass())
                 || !request.licenseExpiry().isEqual(driver.getLicenseExpiry())
                 || !newLicenseUrl.equals(driver.getLicenseImageUrl())
                 || !newPortraitUrl.equals(driver.getPortraitUrl());
 
-        // Update user
         user.setFullName(request.fullName().trim());
         user.setPhone(normalizedPhone);
         user.setAvatarUrl(newPortraitUrl);
         userRepository.save(user);
 
-        // Update driver
         driver.setLicenseNo(normalizedLicenseNo);
         driver.setLicenseClass(request.licenseClass().trim().toUpperCase(Locale.ROOT));
         driver.setLicenseExpiry(request.licenseExpiry());
         driver.setPortraitUrl(newPortraitUrl);
         driver.setLicenseImageUrl(newLicenseUrl);
 
-        // Rule per SBA301_FALL26.md:237: sửa hồ sơ đã duyệt sẽ đưa tài khoản về chờ duyệt lại.
         if (driver.getStatus() == DriverStatus.APPROVED && sensitiveChanged) {
             driver.setStatus(DriverStatus.PENDING);
         } else if (driver.getStatus() == DriverStatus.REJECTED) {

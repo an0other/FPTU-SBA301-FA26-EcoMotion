@@ -1,7 +1,6 @@
 import ProviderHeader from './ProviderHeader'
 
 export default function ProviderLayout({ active, children }) {
-  // Mapping tên tab tiếng Việt của TV5 sang activeTab chuẩn của ProviderHeader
   const activeTabMap = {
     'Tổng quan': 'home',
     'Xe của tôi': 'vehicles',
@@ -15,15 +14,13 @@ export default function ProviderLayout({ active, children }) {
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-slate-800 font-sans">
-      {/* Top Header toàn màn hình chuẩn TV4 */}
+      
       <ProviderHeader activeTab={activeTab} />
 
-      {/* Main Content Area */}
       <main className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 py-8">
         {children}
       </main>
 
-      {/* Footer chuẩn EcoMotion */}
       <footer className="mt-12 border-t border-slate-200 bg-white py-6">
         <div className="w-full px-6 lg:px-8 xl:px-12 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <span>© 2026 EcoMotion VN. Nền tảng điều phối vận tải &amp; chia sẻ phương tiện di chuyển xanh.</span>

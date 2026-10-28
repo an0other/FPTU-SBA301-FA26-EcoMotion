@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.vehicle.service.implement;
 
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.location.service.MapLocationService;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleAvailabilityResponse;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
@@ -42,13 +43,12 @@ import java.util.Objects;
 @Transactional(readOnly = true)
 public class VehicleServiceImpl implements VehicleService {
 
-    private static final double EARTH_RADIUS_KM = 6371.0088;
-
     private final VehicleRepository vehicleRepository;
     private final VehicleImageService vehicleImageService;
     private final RentalPlanService rentalPlanService;
     private final UserService userService;
     private final ScheduleService scheduleService;
+    private final MapLocationService mapLocationService;
 
     private final VehicleDocumentRepository vehicleDocumentRepository;
 
@@ -72,8 +72,6 @@ public class VehicleServiceImpl implements VehicleService {
             throw new IllegalArgumentException("radiusKm must be 10 or 15");
         }
 
-        double userLatitude = Math.toRadians(latitude.doubleValue());
-        double userLongitude = Math.toRadians(longitude.doubleValue());
         List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
         Map<Long, ProviderSummary> providers = findProviders(vehicles);
         return matchingCards(vehicles, providers, keyword, location, fuelType, planType, maxPrice, sort).stream()
@@ -83,7 +81,7 @@ public class VehicleServiceImpl implements VehicleService {
                             || provider.depotLongitude() == null) {
                         return null;
                     }
-                    double distance = distanceKm(userLatitude, userLongitude,
+                    double distance = mapLocationService.distanceKm(latitude.doubleValue(), longitude.doubleValue(),
                             provider.depotLatitude().doubleValue(),
                             provider.depotLongitude().doubleValue());
                     return distance <= radiusKm
@@ -162,16 +160,6 @@ public class VehicleServiceImpl implements VehicleService {
                 || longitude.compareTo(BigDecimal.valueOf(180)) > 0) {
             throw new IllegalArgumentException("Invalid latitude or longitude");
         }
-    }
-
-    private double distanceKm(double userLatitude, double userLongitude,
-                              double depotLatitude, double depotLongitude) {
-        double deltaLatitude = Math.toRadians(depotLatitude) - userLatitude;
-        double deltaLongitude = Math.toRadians(depotLongitude) - userLongitude;
-        double haversine = Math.pow(Math.sin(deltaLatitude / 2), 2)
-                + Math.cos(userLatitude) * Math.cos(Math.toRadians(depotLatitude))
-                * Math.pow(Math.sin(deltaLongitude / 2), 2);
-        return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(haversine)));
     }
 
     @Override

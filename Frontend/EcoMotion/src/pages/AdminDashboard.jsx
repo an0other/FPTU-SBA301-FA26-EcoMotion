@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { adminService } from '../services/adminService'
@@ -12,6 +12,9 @@ import {
   IconCar,
   IconClock,
   IconShield,
+  IconChevronDown,
+  IconUser,
+  IconX,
 } from '../components/icons/Icons'
 
 function initialsOf(user) {
@@ -30,6 +33,22 @@ export default function AdminDashboard() {
   const [tabOptions, setTabOptions] = useState({})
   const [stats, setStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const profileDropdownRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target)) {
+        setProfileDropdownOpen(false)
+      }
+    }
+    if (profileDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [profileDropdownOpen])
 
   useEffect(() => {
     loadStats()
@@ -83,7 +102,7 @@ export default function AdminDashboard() {
             </Link>
           </div>
 
-          {/* User Profile & Actions */}
+          {/* User Profile Dropdown & Actions */}
           <div className="flex items-center gap-3">
             <Link
               to="/"
@@ -92,22 +111,82 @@ export default function AdminDashboard() {
               Về trang chủ
             </Link>
 
-            <div className="flex items-center gap-2 rounded-full border border-slate-200/80 bg-slate-50 py-1 pl-1 pr-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-purple-600 text-[11px] font-bold text-white">
-                {initialsOf(user)}
-              </span>
-              <span className="max-w-[150px] truncate text-xs font-bold text-slate-800">
-                {user?.fullName || user?.email}
-              </span>
-            </div>
+            {/* Admin User Info Dropdown */}
+            <div ref={profileDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                aria-expanded={profileDropdownOpen}
+                aria-haspopup="true"
+                className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-2.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  profileDropdownOpen
+                    ? 'border-slate-300 bg-slate-100 shadow-xs'
+                    : 'border-slate-200/80 bg-slate-50 hover:border-slate-300 hover:bg-slate-100/80'
+                }`}
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-purple-600 text-[11px] font-bold text-white shadow-xs">
+                  {initialsOf(user)}
+                </span>
+                <span className="max-w-[150px] truncate text-xs font-bold text-slate-800">
+                  {user?.fullName || user?.email}
+                </span>
+                <IconChevronDown
+                  className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-150 ${
+                    profileDropdownOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
 
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition-all hover:border-rose-200 hover:bg-rose-50"
-            >
-              Đăng xuất
-            </button>
+              {profileDropdownOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <div className="border-b border-slate-100 bg-slate-50/70 px-3.5 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700">
+                      Quản trị viên
+                    </p>
+                    <p className="mt-0.5 truncate text-xs font-bold text-slate-800">
+                      {user?.fullName || 'Admin User'}
+                    </p>
+                    {user?.email && (
+                      <p className="truncate text-[11px] text-slate-500">{user.email}</p>
+                    )}
+                  </div>
+
+                  <div className="p-1.5 space-y-0.5">
+                    <Link
+                      to="/"
+                      onClick={() => setProfileDropdownOpen(false)}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <IconZap className="h-4 w-4 text-slate-400" />
+                      <span>Về trang chủ</span>
+                    </Link>
+
+                    <Link
+                      to="/me"
+                      onClick={() => setProfileDropdownOpen(false)}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <IconUser className="h-4 w-4 text-slate-400" />
+                      <span>Trang cá nhân</span>
+                    </Link>
+
+                    <div className="my-1 border-t border-slate-100" />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileDropdownOpen(false)
+                        handleLogout()
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                    >
+                      <IconX className="h-4 w-4 text-rose-500" />
+                      <span>Đăng xuất</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

@@ -3,11 +3,12 @@ import { Link, useParams } from 'react-router-dom'
 import DrivingLicenseForm from '../components/yearly-rental/DrivingLicenseForm'
 import YearlyContractPanel from '../components/yearly-rental/YearlyContractPanel'
 import { useYearlyRental } from '../hooks/useYearlyRental'
+import { BookingErrorDialog } from '../components/booking/BookingErrorDialog'
 
-function ErrorPanel({ message, onRetry }) {
+function ErrorPanel({ onRetry }) {
   return (
-    <div role="alert" className="rounded-xl border border-error-container bg-white p-6">
-      <p className="text-sm text-on-error-container">{message}</p>
+    <div className="rounded-xl border border-error-container bg-white p-6">
+      <p className="text-sm text-on-error-container">Chưa tải được thông tin. Vui lòng thử lại.</p>
       <button
         type="button"
         onClick={onRetry}
@@ -24,9 +25,19 @@ export default function YearlyRentalPage() {
   const { licenseState, contractState, reloadLicense, reloadContract } =
     useYearlyRental(bookingCode)
   const [message, setMessage] = useState('')
+  const [dismissedError, setDismissedError] = useState('')
+  const loadError = [licenseState.error, contractState.error].filter(Boolean).join('\n')
+  const retryLoading = () => {
+    setDismissedError('')
+    reloadLicense()
+    if (bookingCode) reloadContract()
+  }
 
   return (
     <div className="bg-surface">
+      <BookingErrorDialog title="Không tải được hồ sơ thuê năm"
+        message={loadError === dismissedError ? '' : loadError}
+        onClose={() => setDismissedError(loadError)} onRetry={retryLoading} />
       <div className="mx-auto max-w-[1200px] space-y-6 px-4 py-8 sm:px-6">
         <nav aria-label="Đường dẫn trang" className="flex flex-wrap gap-2 text-xs">
           <Link to="/" className="text-slate-500 hover:text-brand-700">
@@ -61,7 +72,7 @@ export default function YearlyRentalPage() {
                 Đang tải GPLX…
               </p>
             ) : licenseState.error ? (
-              <ErrorPanel message={licenseState.error} onRetry={reloadLicense} />
+              <ErrorPanel onRetry={() => { setDismissedError(''); reloadLicense() }} />
             ) : licenseState.data ? (
               <DrivingLicenseForm
                 key={JSON.stringify(licenseState.data)}
@@ -95,7 +106,7 @@ export default function YearlyRentalPage() {
                 Đang tải thông tin hợp đồng…
               </p>
             ) : contractState.error ? (
-              <ErrorPanel message={contractState.error} onRetry={reloadContract} />
+              <ErrorPanel onRetry={() => { setDismissedError(''); reloadContract() }} />
             ) : contractState.data ? (
               <YearlyContractPanel
                 key={bookingCode}

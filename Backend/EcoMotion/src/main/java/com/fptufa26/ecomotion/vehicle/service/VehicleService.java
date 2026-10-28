@@ -40,7 +40,6 @@ public interface VehicleService {
 
     void updateRating(Long vehicleId, BigDecimal ratingAvg, int ratingCount);
 
-    // Admin methods (TV6 - A03)
     List<Vehicle> listAdminVehicles(VehicleStatus status, String keyword);
 
     Vehicle getAdminVehicle(Long id);

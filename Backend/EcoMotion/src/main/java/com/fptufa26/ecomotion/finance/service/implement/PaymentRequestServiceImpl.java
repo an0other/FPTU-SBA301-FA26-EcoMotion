@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.finance.service.implement;
 
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
@@ -90,6 +91,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
     private final PaymentRequestRepository paymentRequestRepository;
+    private final BookingNotificationService bookingNotificationService;
     private final PaymentEvidenceRepository paymentEvidenceRepository;
     private final FileStorageService fileStorageService;
     private final ProviderBankAccountRepository providerBankAccountRepository;
@@ -771,9 +773,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 pr.setUpdatedAt(clock.instant());
 
                 Booking booking = pr.getBooking();
-                if (pr.getPaymentType() == PaymentRequestType.DEPOSIT && booking.getStatus() == BookingStatus.ACCEPTED) {
-                    booking.setStatus(BookingStatus.CONFIRMED);
-                    bookingPaymentLedgerService.saveBooking(booking);
+                if (pr.getPaymentType() == PaymentRequestType.DEPOSIT && amount.compareTo(pr.getAmount()) >= 0) {
+                    confirmDepositAndLockSchedule(booking, tx);
                 }
                 paymentRequestRepository.save(pr);
 
@@ -972,6 +973,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             scheduleService.confirmHold(booking.getId());
             booking.setStatus(BookingStatus.CONFIRMED);
             bookingPaymentLedgerService.saveBooking(booking);
+            bookingNotificationService.depositPaid(booking, transaction.getPaymentRequest().getAmount());
             return;
         }
 
@@ -1014,6 +1016,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         scheduleService.book(lockedVehicle, booking, booking.getPickupTime(), end);
         booking.setStatus(BookingStatus.CONFIRMED);
         bookingPaymentLedgerService.saveBooking(booking);
+        bookingNotificationService.depositPaid(booking, transaction.getPaymentRequest().getAmount());
         log.info("Booking {} transitioned to CONFIRMED and its schedule was locked after DEPOSIT confirmation",
                 booking.getBookingCode());
     }

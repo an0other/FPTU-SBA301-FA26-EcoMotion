@@ -113,7 +113,6 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
             throw new BadRequestException("Không thể tự tạo lịch loại đơn đặt xe của khách hàng");
         }
 
-        // Không cho phép lịch bắt đầu trong quá khứ (cho phép sai số 60 giây do độ trễ truyền gói mạng)
         if (request.startAt().isBefore(Instant.now().minusSeconds(60))) {
             throw new BadRequestException("Thời gian bắt đầu không được ở trong quá khứ");
         }
