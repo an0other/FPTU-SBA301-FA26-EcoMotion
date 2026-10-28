@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import Toast from '../components/Toast'
+import { BookingErrorDialog } from '../components/booking/BookingErrorDialog'
 import { HoldCountdown } from '../components/payments/HoldCountdown'
 import { ReceiptDropzone } from '../components/payments/ReceiptDropzone'
 import { providerFinanceService } from '../services/providerFinanceService'
@@ -66,6 +67,7 @@ export default function CustomerPaymentPage() {
   const [submittingProof, setSubmittingProof] = useState(false)
   const [paymentCreating, setPaymentCreating] = useState(false)
   const [inlineError, setInlineError] = useState(null)
+  const [dismissedLoadError, setDismissedLoadError] = useState(null)
   const proofPreviewUrl = useMemo(
     () => (proofFile ? URL.createObjectURL(proofFile) : ''),
     [proofFile],
@@ -79,6 +81,7 @@ export default function CustomerPaymentPage() {
     try {
       if (!silent) setLoading(true)
       setError(null)
+      setDismissedLoadError(null)
       const data = await providerFinanceService.getPaymentRequestsByBooking(bookingIdentifier)
       setRequests(data || [])
       if (data && data.length > 0) {
@@ -230,23 +233,42 @@ export default function CustomerPaymentPage() {
 
   if (error || !selectedRequest) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600">
-          <Icon name="error_outline" className="text-2xl" />
-        </div>
-        <h2 className="mt-3 text-lg font-bold text-[#14221A]">Không tìm thấy yêu cầu thanh toán</h2>
-        <p className="mt-1 text-sm text-slate-600">{error || 'Chưa có yêu cầu thanh toán nào cho đơn thuê này.'}</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link to={bookingHref} className="rounded-xl border border-brand-200 px-4 py-2 text-sm font-semibold text-brand-800 hover:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-500/40">
-            Chi tiết đơn
-          </Link>
-          <button
-            type="button"
-            onClick={fetchPaymentRequests}
-            className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"
-          >
-            Thử lại
-          </button>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <BookingErrorDialog
+          title="Chưa thể tiếp tục thanh toán"
+          message={inlineError || (error === dismissedLoadError ? '' : error)}
+          onClose={() => { setInlineError(null); setDismissedLoadError(error) }}
+          onRetry={() => { setInlineError(null); fetchPaymentRequests() }}
+        />
+        <div className="rounded-2xl border border-red-200 bg-white p-8 max-w-md w-full text-center shadow-lg">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600">
+            <Icon name="error_outline" className="text-2xl" />
+          </div>
+          <h2 className="mt-3 text-lg font-bold text-slate-900">Không tìm thấy yêu cầu thanh toán</h2>
+          <p className="mt-1 text-xs text-slate-500">{error ? 'Bạn có thể tải lại thông tin thanh toán hoặc quay về chi tiết đơn.' : 'Chưa có yêu cầu thanh toán nào cho đơn thuê này.'}</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Link to="/" className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200">
+              Về trang chủ
+            </Link>
+            {bookingIdentifier ? <Link to={`/renter/bookings/${encodeURIComponent(bookingIdentifier)}`} className="rounded-lg border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700">Chi tiết đơn</Link> : null}
+            <button
+              type="button"
+              onClick={fetchPaymentRequests}
+              className="rounded-lg bg-[#059669] px-4 py-2 text-xs font-semibold text-white hover:bg-[#047857]"
+            >
+              Thử lại
+            </button>
+            {bookingIdentifier ? (
+              <button
+                type="button"
+                onClick={handlePayWithVnpay}
+                disabled={paymentCreating}
+                className="rounded-lg bg-[#1a237e] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0d1642] disabled:opacity-50"
+              >
+                {paymentCreating ? 'Đang kết nối VNPAY...' : 'Thanh toán qua VNPAY'}
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     )
@@ -265,6 +287,7 @@ export default function CustomerPaymentPage() {
 
   return (
     <div className="pb-24 sm:pb-10">
+      <BookingErrorDialog title="Chưa thể tiếp tục thanh toán" message={inlineError} onClose={() => setInlineError(null)} />
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
 
       <div className="border-b border-[#E6EBE8] bg-white px-4 py-3 sm:px-6">
@@ -307,10 +330,6 @@ export default function CustomerPaymentPage() {
             ))}
           </div>
         )}
-
-        {inlineError ? (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{inlineError}</div>
-        ) : null}
 
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button

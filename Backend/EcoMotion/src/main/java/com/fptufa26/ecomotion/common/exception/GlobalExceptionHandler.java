@@ -45,7 +45,7 @@ import com.fptufa26.ecomotion.review.exception.ReviewNotFoundException;
 import com.fptufa26.ecomotion.user.exception.CccdAlreadyExistsException;
 import com.fptufa26.ecomotion.user.exception.DrivingLicenseAlreadyExistsException;
 import com.fptufa26.ecomotion.user.exception.RenterProfileNotFoundException;
-import com.fptufa26.ecomotion.vehicle.exception.MapLocationUnavailableException;
+import com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException;
 import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
 import com.fptufa26.ecomotion.verification.ekyc.exception.EkycFailedException;
 import jakarta.persistence.OptimisticLockException;

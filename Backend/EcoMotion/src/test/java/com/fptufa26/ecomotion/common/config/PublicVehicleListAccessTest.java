@@ -48,13 +48,15 @@ class PublicVehicleListAccessTest {
     @Test
     void anonymousCallerCanSearchMapAndInvalidRadiusReturnsBadRequest() throws Exception {
         HttpResponse<String> response = get(
-                "/api/vehicles/map?latitude=10.7733&longitude=106.7036&radiusKm=10");
+                "/api/location/map?latitude=10.7733&longitude=106.7036&radiusKm=10");
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"distanceKm\"").contains("\"depotLatitude\"");
 
-        assertThat(get("/api/vehicles/map?latitude=10.7733&longitude=106.7036&radiusKm=12")
+        assertThat(get("/api/location/map?latitude=10.7733&longitude=106.7036&radiusKm=12")
                 .statusCode()).isEqualTo(400);
-        assertThat(get("/api/vehicles/map/reverse?latitude=91&longitude=106.7036")
+        assertThat(get("/api/location/map/reverse?latitude=91&longitude=106.7036")
+                .statusCode()).isEqualTo(400);
+        assertThat(get("/api/location/map/search?query=ab")
                 .statusCode()).isEqualTo(400);
     }
 

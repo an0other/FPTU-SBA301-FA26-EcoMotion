@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { vehicleService } from '../services/vehicleService'
+import { locationService } from '../services/locationService'
 
 export function useMapVehicles(filters, origin, radiusKm, enabled) {
   const { keyword, location, fuelType, planType, maxPrice, sortBy } = filters
@@ -12,7 +12,7 @@ export function useMapVehicles(filters, origin, radiusKm, enabled) {
     async function load() {
       setState((previous) => ({ ...previous, loading: true, error: null }))
       try {
-        const vehicles = await vehicleService.findNearbyVehicles({
+        const vehicles = await locationService.findNearbyVehicles({
           latitude: origin.latitude,
           longitude: origin.longitude,
           radiusKm,
