@@ -92,7 +92,7 @@ public class DriverStatusServiceImpl implements DriverStatusService {
     @Override
     @Transactional
     public DriverStatusResponse updateActivityStatus(Long currentUserId, DriverActivityStatus newStatus) {
-        Driver driver = driverRepository.findByUser_Id(currentUserId)
+        Driver driver = driverRepository.findByUserIdForUpdate(currentUserId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy hồ sơ tài xế của tài khoản này"));
 
         DriverOperationalStatus currentOpStatus = calculateOperationalStatus(driver);
@@ -137,11 +137,12 @@ public class DriverStatusServiceImpl implements DriverStatusService {
     @Transactional
     public void updateStatusTimestamp(Long driverId) {
         if (driverId == null) return;
-        driverRepository.findById(driverId).ifPresent(driver -> {
+        driverRepository.findByIdForUpdate(driverId).ifPresent(driver -> {
             Instant now = clock.instant();
             driver.setStatusUpdatedAt(now);
             driverRepository.save(driver);
 
+            notificationStreamService.sendEventToUser(driver.getUser().getId(), "DRIVER_STATUS_CHANGED", buildResponse(driver));
             DriverOperationalStatus opStatus = calculateOperationalStatus(driver);
             if (driver.getProvider() != null) {
                 notificationStreamService.sendEventToProvider(

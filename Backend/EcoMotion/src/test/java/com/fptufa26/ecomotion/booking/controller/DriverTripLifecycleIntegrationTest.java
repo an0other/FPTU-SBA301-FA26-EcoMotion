@@ -244,6 +244,7 @@ class DriverTripLifecycleIntegrationTest {
                 .filter(d -> d.getUser().getEmail().equalsIgnoreCase("driver.nam@ecomotion.vn"))
                 .findFirst().orElseThrow();
 
+        booking.setPickupTime(Instant.now().plusSeconds(10 * 86400));
         booking.setStatus(BookingStatus.CONFIRMED);
         bookingRepository.saveAndFlush(booking);
 

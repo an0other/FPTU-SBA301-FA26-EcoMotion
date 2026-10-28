@@ -9,14 +9,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
 public class NotificationStreamServiceImpl implements NotificationStreamService {
 
-    private final Map<Long, SseEmitter> activeEmitters = new ConcurrentHashMap<>();
+    private final Map<Long, Set<SseEmitter>> activeEmitters = new ConcurrentHashMap<>();
     private final UserService userService;
     private final ObjectMapper objectMapper;
 
@@ -29,7 +32,7 @@ public class NotificationStreamServiceImpl implements NotificationStreamService 
     @Override
     public void registerEmitter(Long userId, SseEmitter emitter) {
         if (userId != null && emitter != null) {
-            activeEmitters.put(userId, emitter);
+            activeEmitters.computeIfAbsent(userId, key -> ConcurrentHashMap.newKeySet()).add(emitter);
             log.debug("Registered SSE emitter for userId: {}", userId);
         }
     }
@@ -43,25 +46,42 @@ public class NotificationStreamServiceImpl implements NotificationStreamService 
     }
 
     @Override
+    public void removeEmitter(Long userId, SseEmitter emitter) {
+        activeEmitters.computeIfPresent(userId, (id, emitters) -> {
+            emitters.remove(emitter);
+            return emitters.isEmpty() ? null : emitters;
+        });
+    }
+
+    @Override
     public void sendEventToUser(Long userId, String eventType, Object payload) {
         if (userId == null) return;
-        SseEmitter emitter = activeEmitters.get(userId);
-        if (emitter == null) {
-            log.debug("No active SSE emitter for userId: {}", userId);
+        // Notify clients only after the state is committed, never on rollback.
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deliverEvent(userId, eventType, payload);
+                }
+            });
             return;
         }
+        deliverEvent(userId, eventType, payload);
+    }
 
-        try {
-            String jsonPayload = (payload instanceof String s) ? s : objectMapper.writeValueAsString(payload);
-            emitter.send(SseEmitter.event()
-                    .name(eventType)
-                    .data(jsonPayload)
-            );
-            log.debug("Sent SSE event '{}' to userId {}", eventType, userId);
-        } catch (IOException ex) {
-            log.warn("Failed to send SSE event to userId {}: {}", userId, ex.getMessage());
-            emitter.complete();
-            activeEmitters.remove(userId);
+    private void deliverEvent(Long userId, String eventType, Object payload) {
+        Set<SseEmitter> emitters = activeEmitters.get(userId);
+        if (emitters == null) return;
+        String jsonPayload = (payload instanceof String value) ? value : objectMapper.writeValueAsString(payload);
+        for (SseEmitter emitter : emitters) {
+            try {
+                emitter.send(SseEmitter.event().name(eventType).data(jsonPayload));
+            } catch (IOException | IllegalStateException ex) {
+                removeEmitter(userId, emitter);
+                emitter.complete();
+                log.debug("Closed SSE connection for user {}", userId);
+            }
         }
     }
 
@@ -77,19 +97,6 @@ public class NotificationStreamServiceImpl implements NotificationStreamService 
 
     @Override
     public void broadcastEvent(String eventType, Object payload) {
-        if (activeEmitters.isEmpty()) return;
-        try {
-            String jsonPayload = (payload instanceof String s) ? s : objectMapper.writeValueAsString(payload);
-            activeEmitters.forEach((userId, emitter) -> {
-                try {
-                    emitter.send(SseEmitter.event().name(eventType).data(jsonPayload));
-                } catch (IOException ex) {
-                    emitter.complete();
-                    activeEmitters.remove(userId);
-                }
-            });
-        } catch (Exception ex) {
-            log.warn("Failed to broadcast SSE event {}: {}", eventType, ex.getMessage());
-        }
+        activeEmitters.keySet().forEach(userId -> sendEventToUser(userId, eventType, payload));
     }
 }

@@ -35,19 +35,19 @@ public class NotificationStreamController {
 
         emitter.onCompletion(() -> {
             log.debug("SSE stream completed for user {}", userId);
-            notificationStreamService.removeEmitter(userId);
+            notificationStreamService.removeEmitter(userId, emitter);
         });
 
         emitter.onTimeout(() -> {
             log.debug("SSE stream timed out for user {}", userId);
             emitter.complete();
-            notificationStreamService.removeEmitter(userId);
+            notificationStreamService.removeEmitter(userId, emitter);
         });
 
         emitter.onError((ex) -> {
             log.debug("SSE stream error for user {}: {}", userId, ex.getMessage());
             emitter.complete();
-            notificationStreamService.removeEmitter(userId);
+            notificationStreamService.removeEmitter(userId, emitter);
         });
 
         try {
@@ -59,7 +59,7 @@ public class NotificationStreamController {
         } catch (IOException ex) {
             log.warn("Failed to send initial SSE handshake to user {}: {}", userId, ex.getMessage());
             emitter.complete();
-            notificationStreamService.removeEmitter(userId);
+            notificationStreamService.removeEmitter(userId, emitter);
         }
 
         return emitter;

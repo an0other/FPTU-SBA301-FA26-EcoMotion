@@ -23,6 +23,7 @@ import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.booking.service.MapGeocodingService;
 import com.fptufa26.ecomotion.common.config.ClockConfig;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
+import org.springframework.security.access.AccessDeniedException;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
@@ -105,7 +106,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                 .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + bookingId));
 
         if (!booking.getVehicle().getProvider().getId().equals(providerId)) {
-            throw new IllegalArgumentException("Đơn thuê không thuộc quyền quản lý của nhà cung cấp");
+            throw new AccessDeniedException("Đơn thuê không thuộc quyền quản lý của nhà cung cấp");
         }
 
         List<Driver> allDrivers = userService.findDriversByProviderId(providerId);
@@ -216,38 +217,11 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         Driver driver = userService.findDriverByIdForUpdate(driverId)
                 .orElseThrow(() -> new IllegalStateException("Driver not found: " + driverId));
 
-        if (driver.getActivityStatus() == DriverActivityStatus.OFFLINE || driver.getActivityStatus() == DriverActivityStatus.UNAVAILABLE) {
-            log.warn("Driver {} became offline/unavailable before assignment lock. Skipping.", driverId);
-            return null;
-        }
-
-        // Verify overlapping conflicts concurrently
-        Instant bookingStart = booking.getPickupTime();
-        Instant bookingEnd = calculateBookingEndTime(booking);
-        Duration buffer = booking.getVehicle() != null && booking.getVehicle().getMaintenanceBufferMinutes() != null && booking.getVehicle().getMaintenanceBufferMinutes() > 0
-                ? Duration.ofMinutes(booking.getVehicle().getMaintenanceBufferMinutes())
-                : DEFAULT_BUFFER_DURATION;
-        Instant bufferedStart = bookingStart.minus(buffer);
-        Instant bufferedEnd = bookingEnd.plus(buffer);
-
-        List<Booking> candidates = bookingRepository.findPotentialDriverConflicts(
-                driverId,
-                ACTIVE_DRIVER_STATUSES,
-                booking.getId(),
-                bufferedEnd
-        );
-
-        boolean hasOverlap = candidates.stream().anyMatch(b -> {
-            Instant bStart = b.getPickupTime();
-            Instant bEnd = b.getActualEndAt() != null ? b.getActualEndAt() : calculateBookingEndTime(b);
-            Duration bBuf = b.getVehicle() != null && b.getVehicle().getMaintenanceBufferMinutes() != null && b.getVehicle().getMaintenanceBufferMinutes() > 0
-                    ? Duration.ofMinutes(b.getVehicle().getMaintenanceBufferMinutes())
-                    : DEFAULT_BUFFER_DURATION;
-            return bStart.minus(bBuf).isBefore(bufferedEnd) && bEnd.plus(bBuf).isAfter(bufferedStart);
-        });
-
-        if (hasOverlap) {
-            log.warn("Driver {} received conflicting booking concurrently during autoAssign.", driverId);
+        DriverCandidateResponse validated = evaluateDriver(driver, booking, booking.getPickupTime(),
+                calculateBookingEndTime(booking), resolvePickupCoordinates(booking),
+                driverAssignmentRepository.findRejectedDriverIdsForBooking(bookingId));
+        if (!validated.eligible()) {
+            log.warn("Driver {} became ineligible: {}", driverId, validated.ineligibilityReason());
             return null;
         }
 
@@ -298,7 +272,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                 .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + bookingId));
 
         if (!booking.getVehicle().getProvider().getId().equals(providerId)) {
-            throw new IllegalArgumentException("Đơn thuê không thuộc quyền quản lý của nhà cung cấp");
+            throw new AccessDeniedException("Đơn thuê không thuộc quyền quản lý của nhà cung cấp");
         }
 
         if (booking.getStatus() != BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
@@ -310,74 +284,14 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                 .orElseThrow(() -> new IllegalArgumentException("Tài xế không tồn tại hoặc không thuộc nhà cung cấp"));
 
         if (!driver.getProvider().getId().equals(providerId)) {
-            throw new IllegalArgumentException("Tài xế không thuộc nhà cung cấp");
+            throw new AccessDeniedException("Tài xế không thuộc nhà cung cấp");
         }
 
-        if (driver.getStatus() != DriverStatus.APPROVED) {
-            throw new ConflictException("Hồ sơ tài xế chưa được duyệt hoặc đang bị khóa (Trạng thái: " + driver.getStatus() + ")");
-        }
-
-        if (driver.getUser() == null || driver.getUser().getStatus() != UserStatus.ACTIVE) {
-            throw new ConflictException("Tài khoản người dùng của tài xế không ở trạng thái hoạt động (ACTIVE)");
-        }
-
-        // Rule 2 & 3: Kiểm tra trạng thái hoạt động của tài xế
-        if (driver.getActivityStatus() == DriverActivityStatus.OFFLINE) {
-            throw new ConflictException("Tài xế đang ngoại tuyến (OFFLINE), không thể nhận phân công mới");
-        }
-
-        if (driver.getActivityStatus() == DriverActivityStatus.UNAVAILABLE) {
-            throw new ConflictException("Tài xế đang tạm nghỉ (UNAVAILABLE), không thể nhận phân công mới");
-        }
-
-        Instant bookingStart = booking.getPickupTime();
-        Instant bookingEnd = calculateBookingEndTime(booking);
-        LocalDate pickupDate = LocalDate.ofInstant(bookingStart, ClockConfig.VIETNAM_ZONE);
-        if (driver.getLicenseExpiry() == null || driver.getLicenseExpiry().isBefore(pickupDate)) {
-            throw new ConflictException("GPLX hết hạn vào ngày đón (" + driver.getLicenseExpiry() + " < " + pickupDate + ")");
-        }
-
-        Vehicle vehicle = booking.getVehicle();
-        if (!isLicenseClassCompatible(driver.getLicenseClass(), vehicle.getSeatCount(), vehicle.getTransmission())) {
-            throw new ConflictException("Hạng GPLX " + driver.getLicenseClass()
-                    + " không tương thích xe " + vehicle.getSeatCount() + " chỗ, hộp số " + vehicle.getTransmission());
-        }
-
-        if (tripIncidentRepository.existsByDriver_IdAndStatusIn(driverId, List.of(TripIncidentStatus.OPEN, TripIncidentStatus.INVESTIGATING))) {
-            throw new ConflictException("Tài xế đang có sự cố chưa xử lý (OPEN / INVESTIGATING)");
-        }
-
-        // Rule 8 & 9: Kiểm tra trùng lịch sau khi đã giữ lock tài xế
-        Duration buffer = vehicle.getMaintenanceBufferMinutes() != null && vehicle.getMaintenanceBufferMinutes() > 0
-                ? Duration.ofMinutes(vehicle.getMaintenanceBufferMinutes())
-                : DEFAULT_BUFFER_DURATION;
-
-        Instant bufferedStart = bookingStart.minus(buffer);
-        Instant bufferedEnd = bookingEnd.plus(buffer);
-
-        List<Booking> candidates = bookingRepository.findPotentialDriverConflicts(
-                driverId,
-                ACTIVE_DRIVER_STATUSES,
-                booking.getId(),
-                bufferedEnd
-        );
-
-        List<Booking> overlapping = candidates.stream()
-                .filter(b -> {
-                    Instant bStart = b.getPickupTime();
-                    Instant bEnd = b.getActualEndAt() != null ? b.getActualEndAt() : calculateBookingEndTime(b);
-                    Duration bBuf = b.getVehicle() != null && b.getVehicle().getMaintenanceBufferMinutes() != null && b.getVehicle().getMaintenanceBufferMinutes() > 0
-                            ? Duration.ofMinutes(b.getVehicle().getMaintenanceBufferMinutes())
-                            : DEFAULT_BUFFER_DURATION;
-                    Instant bEffectiveStart = bStart.minus(bBuf);
-                    Instant bEffectiveEnd = bEnd.plus(bBuf);
-                    return bEffectiveStart.isBefore(bufferedEnd) && bEffectiveEnd.isAfter(bufferedStart);
-                })
-                .toList();
-
-        if (!overlapping.isEmpty()) {
-            Booking conflict = overlapping.getFirst();
-            throw new ConflictException("Tài xế đã có lịch trình trùng với thời gian chuyến đi này (" + conflict.getBookingCode() + ")");
+        DriverCandidateResponse validated = evaluateDriver(driver, booking, booking.getPickupTime(),
+                calculateBookingEndTime(booking), resolvePickupCoordinates(booking),
+                driverAssignmentRepository.findRejectedDriverIdsForBooking(bookingId));
+        if (!validated.eligible()) {
+            throw new ConflictException(validated.ineligibilityReason());
         }
 
         Instant now = clock.instant();
