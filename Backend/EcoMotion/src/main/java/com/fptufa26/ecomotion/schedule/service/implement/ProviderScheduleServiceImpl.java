@@ -14,7 +14,7 @@ import com.fptufa26.ecomotion.schedule.service.ProviderScheduleService;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import com.fptufa26.ecomotion.vehicle.service.VehicleService;
+import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +27,7 @@ import java.util.List;
 public class ProviderScheduleServiceImpl implements ProviderScheduleService {
 
     private final VehicleScheduleRepository vehicleScheduleRepository;
-    private final VehicleService vehicleService;
+    private final VehicleCatalogService vehicleCatalogService;
     private final UserService userService;
 
     @Override
@@ -122,27 +122,18 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
             throw new BadRequestException("Thời gian kết thúc phải lớn hơn thời gian bắt đầu");
         }
 
-        Vehicle vehicle = vehicleService.findVehicleByIdAndProviderId(request.vehicleId(), provider.getId())
-                .orElseThrow(() -> new NotFoundException("Phương tiện không tồn tại hoặc không thuộc sở hữu của nhà xe"));
+        Vehicle vehicle = vehicleCatalogService.requireOwnedByProvider(request.vehicleId(), provider.getId());
 
-        // Kiểm tra chống trùng với đơn đặt của khách hàng
-        boolean hasConflictBooking = vehicleScheduleRepository.existsActiveBookingOverlap(
+        com.fptufa26.ecomotion.booking.service.AvailabilityPolicy.Window protectedWindow =
+                com.fptufa26.ecomotion.booking.service.AvailabilityPolicy.bufferedWindow(
+                        vehicle, request.startAt(), request.endAt());
+        boolean hasConflictSchedule = vehicleScheduleRepository.existsActiveOverlap(
                 vehicle.getId(),
-                request.startAt(),
-                request.endAt()
+                protectedWindow.start(),
+                protectedWindow.end()
         );
-        if (hasConflictBooking) {
-            throw new ConflictException("Không thể chặn lịch: Xe đã có đơn đặt của khách hàng trong khoảng thời gian này!");
-        }
-
-        // Kiểm tra chống trùng với lịch bảo trì hoặc việc riêng khác đang có hiệu lực
-        boolean hasConflictBlock = vehicleScheduleRepository.existsActiveBlockOverlap(
-                vehicle.getId(),
-                request.startAt(),
-                request.endAt()
-        );
-        if (hasConflictBlock) {
-            throw new ConflictException("Xe đã có một lịch bảo dưỡng hoặc chặn bận khác đang hiệu lực trong khoảng thời gian này!");
+        if (hasConflictSchedule) {
+            throw new ConflictException("Không thể chặn lịch vì xe đã có lịch giữ chỗ, đặt xe, bảo dưỡng hoặc khoảng đệm đang hiệu lực");
         }
 
         VehicleSchedule schedule = new VehicleSchedule();

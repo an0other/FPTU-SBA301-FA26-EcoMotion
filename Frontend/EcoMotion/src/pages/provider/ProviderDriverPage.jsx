@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
@@ -6,6 +6,7 @@ import DriverStatusBadge from '../../components/driver/DriverStatusBadge'
 import { DRIVER_STATUS_LABELS } from '../../utils/driverStatus'
 import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { getErrorMessage } from '../../utils/errorMessage'
+import { formatBookingWhen } from '../../utils/bookingDateTime'
 
 export default function ProviderDriverPage() {
   const [drivers, setDrivers] = useState([])
@@ -24,7 +25,17 @@ export default function ProviderDriverPage() {
   const [operationalStatus, setOperationalStatus] = useState('')
   const loadSequence = useRef(0)
   const [selectedStatus, setSelectedStatus] = useState('ALL')
-  const [sortBy, setSortBy] = useState('status_updated_at')
+  const [sortBy, setSortBy] = useState('updated_desc')
+  const [updatedFrom, setUpdatedFrom] = useState('')
+  const [updatedTo, setUpdatedTo] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [total, setTotal] = useState(0)
+  const pageSize = 12
+  const invalidRange = !!(updatedFrom && updatedTo && updatedFrom > updatedTo)
+  const changeFilter = (setter, value) => {
+    setOffset(0)
+    setter(value)
+  }
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
 
   // Modal State (Create / Edit)
@@ -54,8 +65,9 @@ export default function ProviderDriverPage() {
   const licenseInputRef = useRef(null)
 
   // Load drivers and stats
-  const loadData = async (quiet = false) => {
+  const loadData = useCallback(async (quiet = false) => {
     const sequence = ++loadSequence.current
+    if (invalidRange) { setDrivers([]); setTotal(0); setLoading(false); return }
     try {
       if (!quiet) setLoading(true)
       const [driversRes, statsRes] = await Promise.all([
@@ -63,14 +75,26 @@ export default function ProviderDriverPage() {
           operationalStatus: operationalStatus || undefined,
           status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
           sort: sortBy,
+          search: searchTerm.trim() || undefined,
+          updatedFrom: updatedFrom || undefined,
+          updatedTo: updatedTo || undefined,
+          offset,
+          limit: pageSize,
         }),
         providerService.getDriverStats(),
       ])
 
       if (sequence !== loadSequence.current) return
-      if (driversRes) setDrivers(driversRes)
+      if (driversRes) {
+        if (offset > 0 && offset >= driversRes.total) { setOffset(0); return }
+        setDrivers(driversRes.items)
+        setTotal(driversRes.total)
+      }
       if (statsRes) setStats(statsRes)
     } catch (err) {
+      if (sequence !== loadSequence.current) return
+      setDrivers([])
+      setTotal(0)
       setToast({
         type: 'error',
         message: getErrorMessage(err, 'Không thể tải danh sách tài xế của nhà xe'),
@@ -78,26 +102,17 @@ export default function ProviderDriverPage() {
     } finally {
       if (sequence === loadSequence.current) setLoading(false)
     }
-  }
+  }, [selectedStatus, sortBy, operationalStatus, searchTerm, updatedFrom, updatedTo, offset, invalidRange])
 
   useEffect(() => {
-    loadData()
-  }, [selectedStatus, sortBy, operationalStatus])
+    const sequenceRef = loadSequence
+    const timer = setTimeout(() => loadData(), 250)
+    return () => { clearTimeout(timer); ++sequenceRef.current }
+  }, [loadData])
 
   useRealtimeSync({ onResync: () => loadData(true) })
 
-  // Client-side search for instant filtering
-  const filteredDrivers = useMemo(() => {
-    if (!searchTerm.trim()) return drivers
-    const term = searchTerm.toLowerCase().trim()
-    return drivers.filter(
-      (d) =>
-        (d.fullName && d.fullName.toLowerCase().includes(term)) ||
-        (d.phone && d.phone.toLowerCase().includes(term)) ||
-        (d.email && d.email.toLowerCase().includes(term)) ||
-        (d.licenseNo && d.licenseNo.toLowerCase().includes(term))
-    )
-  }, [drivers, searchTerm])
+  const filteredDrivers = drivers
 
   // Open modal for Create
   const handleOpenCreateModal = () => {
@@ -380,7 +395,7 @@ export default function ProviderDriverPage() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => changeFilter(setSearchTerm, e.target.value)}
               placeholder="Tìm kiếm theo tên, SĐT, email, GPLX..."
               className="w-full bg-slate-50 pl-10 pr-4 py-2.5 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all"
             />
@@ -389,7 +404,7 @@ export default function ProviderDriverPage() {
           {/* Center: Filter Pills */}
           <div className="flex items-center gap-2 overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 scrollbar-none">
             <button
-              onClick={() => setSelectedStatus('ALL')}
+              onClick={() => changeFilter(setSelectedStatus, 'ALL')}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 selectedStatus === 'ALL'
                   ? 'bg-emerald-700 text-white shadow-sm'
@@ -407,7 +422,7 @@ export default function ProviderDriverPage() {
             </button>
 
             <button
-              onClick={() => setSelectedStatus('APPROVED')}
+              onClick={() => changeFilter(setSelectedStatus, 'APPROVED')}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 selectedStatus === 'APPROVED'
                   ? 'bg-emerald-700 text-white shadow-sm'
@@ -421,7 +436,7 @@ export default function ProviderDriverPage() {
             </button>
 
             <button
-              onClick={() => setSelectedStatus('PENDING')}
+              onClick={() => changeFilter(setSelectedStatus, 'PENDING')}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 selectedStatus === 'PENDING'
                   ? 'bg-emerald-700 text-white shadow-sm'
@@ -435,7 +450,7 @@ export default function ProviderDriverPage() {
             </button>
 
             <button
-              onClick={() => setSelectedStatus('REJECTED')}
+              onClick={() => changeFilter(setSelectedStatus, 'REJECTED')}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 selectedStatus === 'REJECTED'
                   ? 'bg-emerald-700 text-white shadow-sm'
@@ -449,7 +464,7 @@ export default function ProviderDriverPage() {
             </button>
 
             <button
-              onClick={() => setSelectedStatus('SUSPENDED')}
+              onClick={() => changeFilter(setSelectedStatus, 'SUSPENDED')}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 selectedStatus === 'SUSPENDED'
                   ? 'bg-emerald-700 text-white shadow-sm'
@@ -466,17 +481,20 @@ export default function ProviderDriverPage() {
           {/* Right: View Controls & Sort */}
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
             <div className="relative flex flex-wrap items-center gap-2">
-              <select aria-label="Lọc trạng thái nhận chuyến" value={operationalStatus} onChange={e => setOperationalStatus(e.target.value)} className="rounded-lg border border-slate-200 p-2 text-sm">
+              <select aria-label="Lọc trạng thái nhận chuyến" value={operationalStatus} onChange={e => changeFilter(setOperationalStatus, e.target.value)} className="rounded-lg border border-slate-200 p-2 text-sm">
 <option value="">Tất cả trạng thái nhận chuyến</option>
 {Object.entries(DRIVER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
 </select>
 <select
+                aria-label="Sắp xếp tài xế"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => changeFilter(setSortBy, e.target.value)}
                 className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 pl-3.5 pr-8 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
               >
+                <option value="updated_desc">Cập nhật mới nhất</option>
+                <option value="updated_asc">Cập nhật cũ nhất</option>
                 <option value="status_updated_at">Cập nhật trạng thái mới nhất</option>
-                <option value="newest">Mới nhất</option>
+                <option value="newest">Tạo mới nhất</option>
                 <option value="rating">Đánh giá cao nhất</option>
                 <option value="expiry">GPLX sắp hết hạn</option>
               </select>
@@ -506,6 +524,18 @@ export default function ProviderDriverPage() {
               </button>
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 mb-5">
+          <label className="text-sm text-slate-700">Cập nhật từ ngày
+            <input type="date" value={updatedFrom} onChange={e => changeFilter(setUpdatedFrom, e.target.value)} className="block border border-slate-200 rounded-lg p-2" />
+          </label>
+          <label className="text-sm text-slate-700">Đến ngày
+            <input type="date" value={updatedTo} onChange={e => changeFilter(setUpdatedTo, e.target.value)} className="block border border-slate-200 rounded-lg p-2" />
+          </label>
+          <button type="button" onClick={() => { changeFilter(setUpdatedFrom, ''); setUpdatedTo('') }} className="text-sm text-emerald-700 p-2">Xóa khoảng ngày</button>
+          <p className="text-xs text-slate-500">Giờ Việt Nam (UTC+7), bao gồm cả ngày kết thúc. Bản ghi chưa có thời gian cập nhật nằm cuối và không thuộc khoảng ngày.</p>
+          {invalidRange && <p role="alert" className="text-sm text-red-700">Ngày bắt đầu không được sau ngày kết thúc.</p>}
         </div>
 
         {/* Content Body: Grid or Table */}
@@ -588,6 +618,7 @@ export default function ProviderDriverPage() {
                           {driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
 {(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}
                         </h3>
+                        <p className="mt-1 text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
                         <div className="flex items-center gap-1.5 mt-1">
                           {driver.ratingCount > 0 ? (
                             <>
@@ -775,6 +806,7 @@ export default function ProviderDriverPage() {
                             }}
                           />
                           <div>
+                            <p className="text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
                             <div className="font-bold text-slate-900">{driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
 {(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}</div>
                             <div className="text-[11px] text-slate-400 font-mono">ID #{driver.id}</div>
@@ -833,6 +865,14 @@ export default function ProviderDriverPage() {
             </div>
           </div>
         )}
+
+        <nav aria-label="Phân trang tài xế" className="flex items-center justify-between gap-3 mb-6">
+          <span className="text-sm text-slate-600" aria-live="polite">{total === 0 ? '0 kết quả' : [offset + 1, '–', Math.min(offset + pageSize, total), ' / ', total, ' tài xế'].join('')}</span>
+          <div className="flex gap-3">
+            <button disabled={loading || offset === 0} onClick={() => { ++loadSequence.current; setOffset(Math.max(0, offset - pageSize)) }} className="border rounded-lg p-2 disabled:opacity-40">Trang trước</button>
+            <button disabled={loading || offset + pageSize >= total} onClick={() => { ++loadSequence.current; setOffset(offset + pageSize) }} className="border rounded-lg p-2 disabled:opacity-40">Trang sau</button>
+          </div>
+        </nav>
 
         {/* Banner: Cơ chế Điều phối Linh hoạt */}
         <div className="bg-gradient-to-r from-white via-white to-emerald-50/60 rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">

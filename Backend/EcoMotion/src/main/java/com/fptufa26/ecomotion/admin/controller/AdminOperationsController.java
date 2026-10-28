@@ -186,6 +186,8 @@ public class AdminOperationsController {
                 .handledByName(handled != null ? handled.getFullName() : null)
                 .category(d.getCategory())
                 .status(d.getStatus())
+                .description(d.getDescription())
+                .evidenceUrls(d.getEvidenceUrlList())
                 .resolution(d.getResolution())
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())

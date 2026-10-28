@@ -81,6 +81,15 @@ export const providerFinanceService = {
     return data?.data
   },
 
+  async completeRefund(transactionId, payload) {
+    const form = new FormData()
+    form.append('file', payload.file)
+    form.append('bankReference', payload.bankReference)
+    if (payload.note) form.append('note', payload.note)
+    const { data } = await apiClient.post(`/v1/payment-transactions/${transactionId}/refund-proof`, form)
+    return data?.data
+  },
+
   // ==========================================
   // Provider Payment Requests & Confirmation
   // ==========================================
@@ -119,10 +128,8 @@ export const providerFinanceService = {
 
   async getPaymentRequestsByBooking(identifier) {
     if (!identifier) return []
-    const isNumeric = /^\d+$/.test(String(identifier).trim())
-    const url = isNumeric
-      ? `/v1/bookings/${identifier}/payment-requests`
-      : `/v1/renter/bookings/${encodeURIComponent(identifier)}/payment-requests`
+    const bookingCode = String(identifier).trim().toUpperCase()
+    const url = `/v1/renter/bookings/${encodeURIComponent(bookingCode)}/payment-requests`
     const { data } = await apiClient.get(url)
     return data?.data ?? []
   },
@@ -135,11 +142,17 @@ export const providerFinanceService = {
   async submitPaymentProof(id, payload) {
     const form = new FormData()
     form.append('file', payload.file)
-    form.append('transferredAmount', payload.transferredAmount)
+    if (payload.transferredAmount != null) form.append('transferredAmount', payload.transferredAmount)
     if (payload.transactionReference) form.append('transactionReference', payload.transactionReference)
     if (payload.transferredAt) form.append('transferredAt', payload.transferredAt)
     if (payload.note) form.append('note', payload.note)
     const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs/multipart`, form)
+    return data?.data
+  },
+
+  async reissueDepositPayment(bookingCode) {
+    const normalizedCode = String(bookingCode).trim().toUpperCase()
+    const { data } = await apiClient.post(`/renter/bookings/${encodeURIComponent(normalizedCode)}/payment-requests/deposit/reissue`)
     return data?.data
   },
 

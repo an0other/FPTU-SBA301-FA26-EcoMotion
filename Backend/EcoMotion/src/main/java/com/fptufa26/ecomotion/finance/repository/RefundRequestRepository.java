@@ -8,10 +8,13 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 public interface RefundRequestRepository extends JpaRepository<RefundRequest, Long> {
 
     List<RefundRequest> findByBooking_IdOrderByCreatedAtDesc(Long bookingId);
+
+    Optional<RefundRequest> findByPaymentTransaction_Id(Long paymentTransactionId);
 
     List<RefundRequest> findByBooking_Vehicle_Provider_IdOrderByCreatedAtDesc(Long providerId);
 

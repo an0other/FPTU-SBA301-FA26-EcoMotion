@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.admin.service.implement;
 
 import com.fptufa26.ecomotion.admin.dto.response.AdminStatsResponse;
 import com.fptufa26.ecomotion.admin.service.AdminDashboardService;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.service.BookingService;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
@@ -11,6 +12,8 @@ import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +27,13 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminStatsResponse getStats() {
+        BigDecimal gmv = bookingService.sumTotalRevenue();
+        BigDecimal platformCommission = bookingService.sumAdminCommission();
+        BigDecimal grossCompleted = bookingService.sumCompletedGrossRentalVolume();
+        BigDecimal providerPayoutDue = grossCompleted.subtract(platformCommission).max(BigDecimal.ZERO);
+        BigDecimal escrowDeposits = bookingService.sumEscrowDeposits();
+        long completedBookings = bookingService.countBookingsByStatus(BookingStatus.COMPLETED);
+
         return AdminStatsResponse.builder()
                 .pendingProviders(userService.countPendingProviders())
                 .pendingDrivers(userService.countPendingDrivers())
@@ -35,7 +45,12 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .totalVehicles(vehicleService.countTotalVehicles())
                 .totalBookings(bookingService.countTotalBookings())
                 .openDisputes(disputeService.countOpenOrInReview())
-                .totalRevenue(bookingService.sumTotalRevenue())
+                .totalRevenue(gmv)
+                .grossMerchandiseValue(gmv)
+                .platformCommission(platformCommission)
+                .providerPayoutDue(providerPayoutDue)
+                .escrowDeposits(escrowDeposits)
+                .completedBookings(completedBookings)
                 .build();
     }
 }

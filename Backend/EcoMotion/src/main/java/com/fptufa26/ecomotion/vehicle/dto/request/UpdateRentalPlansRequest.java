@@ -33,8 +33,33 @@ public record UpdateRentalPlansRequest(
         BigDecimal waitingRate,
 
         @DecimalMin(value = "0.0", message = "Tỉ lệ phụ thu cuối tuần phải >= 0")
-        BigDecimal weekendSurchargeRatio
+        BigDecimal weekendSurchargeRatio,
+
+        Boolean confirmUnusualPriceChange
 ) {
+
+    public UpdateRentalPlansRequest(
+            List<PlanItemRequest> plans,
+            Integer allowedOvertimeMinutes,
+            BigDecimal overtimeSurchargeRatio,
+            Integer freeRadiusKm,
+            BigDecimal outOfRadiusRate,
+            Integer waitingFreeMinutes,
+            BigDecimal waitingRate,
+            BigDecimal weekendSurchargeRatio
+    ) {
+        this(
+                plans,
+                allowedOvertimeMinutes,
+                overtimeSurchargeRatio,
+                freeRadiusKm,
+                outOfRadiusRate,
+                waitingFreeMinutes,
+                waitingRate,
+                weekendSurchargeRatio,
+                false
+        );
+    }
 
     public record PlanItemRequest(
             @NotNull(message = "Loại gói không được để trống")

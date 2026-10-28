@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { cancelMyBooking, confirmTripEnd, getMyBooking, openDispute, updateBookingRequestDetails } from '../../services/bookingService'
+import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
+import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
 
 const CHARGE_LABELS = {
   BASE_RENTAL: 'Tiền thuê',
@@ -38,7 +39,6 @@ function formula(charge) {
 
 function toCard(detail) {
   const label = planLabel(detail.planType)
-  const deposit = (detail.charges ?? []).find((charge) => charge.chargeType === 'DEPOSIT')
   return {
     id: detail.bookingCode,
     vehicleId: detail.vehicleId,
@@ -48,19 +48,23 @@ function toCard(detail) {
     upfront: detail.planType === 'YEARLY',
     createdAt: formatWhen(detail.createdAt),
     actualStartTime: formatWhen(detail.actualStartAt),
+    canConfirmStart: detail.canConfirmStart,
     canConfirmEnd: detail.canConfirmEnd,
     canCancel: detail.canCancel,
     canEditRequest: detail.canEditRequest,
     canPay: detail.canPay,
-    depositAmount: deposit ? Number(deposit.amount) : 0,
+    holdExpiresAt: detail.holdExpiresAt,
+    depositAmount: Number(detail.depositAmount ?? 0),
     refundExplanation: detail.refundPreview?.explanation ?? '',
     disputeCategories: detail.disputeCategories ?? [],
     charges: (detail.charges ?? []).map((charge) => ({
+      chargeId: charge.chargeId,
       chargeType: charge.chargeType,
       label: CHARGE_LABELS[charge.chargeType] ?? charge.chargeType,
       description: charge.description,
       formula: formula(charge),
-      amount: Number(charge.amount),
+      amount: Number(charge.effectiveAmount ?? charge.amount),
+      isWaived: Boolean(charge.isWaived),
     })),
     driver: detail.driver
       ? {
@@ -103,12 +107,21 @@ export function BookingDetailPage() {
   const navigate = useNavigate()
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
+  const [operationalRisk, setOperationalRisk] = useState(null)
+  const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
+  const { trackingData, loading: trackingLoading, error: trackingError, refetch: refetchTracking } = useRenterTripTracking(
+    bookingCode,
+    trackingEnabled,
+  )
 
   useEffect(() => {
     let cancelled = false
-    getMyBooking(bookingCode)
-      .then((row) => {
-        if (!cancelled) setDetail(row)
+    Promise.all([getMyBooking(bookingCode), getMyBookingOperationalRisk(bookingCode)])
+      .then(([row, risk]) => {
+        if (!cancelled) {
+          setDetail(row)
+          setOperationalRisk(risk)
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(readErrorMessage(err))
@@ -128,6 +141,7 @@ export function BookingDetailPage() {
     <>
       <BookingDetail
         booking={booking}
+        operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
@@ -140,15 +154,21 @@ export function BookingDetailPage() {
           await confirmTripEnd(booking.id)
           setDetail(await getMyBooking(booking.id))
         }}
+        onConfirmStart={async () => {
+          await confirmTripStart(booking.id)
+          setDetail(await getMyBooking(booking.id))
+        }}
         onOpenDispute={(body) => openDispute(booking.id, body)}
+        onUploadDisputeEvidence={(file) => uploadDisputeEvidence(booking.id, file)}
         onEditRequest={async (body) => {
           await updateBookingRequestDetails(booking.id, body)
           setDetail(await getMyBooking(booking.id))
         }}
+        trackingData={trackingData}
+        trackingLoading={trackingLoading}
+        trackingError={trackingError}
+        onRefreshTracking={refetchTracking}
       />
-      <p className="max-w-[1120px] mx-auto px-4 pb-8 text-sm">
-        <Link to="/renter/bookings" className="text-[#15803D] font-semibold">Về đơn của tôi</Link>
-      </p>
     </>
   )
 }

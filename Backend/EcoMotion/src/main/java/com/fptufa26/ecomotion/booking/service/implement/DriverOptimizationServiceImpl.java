@@ -590,7 +590,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         }
 
         if (seatCount <= 9) {
-            return Set.of("B1", "B2", "C", "D", "E").contains(cls);
+            return Set.of("B", "B1", "B2", "C", "D", "E").contains(cls);
         } else if (seatCount <= 30) {
             return Set.of("D", "E").contains(cls);
         } else {

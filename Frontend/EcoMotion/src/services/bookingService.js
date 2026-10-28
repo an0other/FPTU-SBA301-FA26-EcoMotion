@@ -1,8 +1,16 @@
 import { apiClient } from './apiClient.js'
 
-export async function listMyBookings() {
-  const { data } = await apiClient.get('/renter/bookings')
-  return data.data ?? []
+function bookingPath(bookingCode) {
+  return encodeURIComponent(String(bookingCode ?? '').trim().toUpperCase())
+}
+
+export async function listMyBookings({ group = 'ALL', keyword = '', sort = 'PICKUP', page = 0, size = 10 } = {}) {
+  const params = { page, size }
+  if (group && group !== 'ALL') params.group = group
+  if (keyword.trim()) params.keyword = keyword.trim()
+  if (sort) params.sort = sort
+  const { data } = await apiClient.get('/renter/bookings', { params })
+  return data.data ?? { items: [], total: 0, offset: 0, limit: size, hasMore: false }
 }
 
 export async function listVehiclesForBooking() {
@@ -16,30 +24,54 @@ export async function createBooking(body) {
 }
 
 export async function getMyBooking(bookingCode) {
-  const { data } = await apiClient.get(`/renter/bookings/${bookingCode}`)
+  const { data } = await apiClient.get(`/renter/bookings/${bookingPath(bookingCode)}`)
+  return data.data
+}
+
+export async function getMyBookingTracking(bookingCode) {
+  const { data } = await apiClient.get(`/renter/bookings/${bookingPath(bookingCode)}/tracking`)
+  return data.data
+}
+
+export async function getMyBookingOperationalRisk(bookingCode) {
+  const { data } = await apiClient.get(`/renter/bookings/${bookingPath(bookingCode)}/operational-risk`)
   return data.data
 }
 
 export const getBookingDetail = getMyBooking
 
 export async function updateBookingRequestDetails(bookingCode, body) {
-  const { data } = await apiClient.patch(`/renter/bookings/${bookingCode}/request-details`, body)
+  const { data } = await apiClient.patch(`/renter/bookings/${bookingPath(bookingCode)}/request-details`, body)
   return data.data
 }
 
 export async function cancelMyBooking(bookingCode) {
-  const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/cancel`)
+  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/cancel`)
   return data.data
 }
 
 export async function confirmTripEnd(bookingCode) {
-  const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/confirm-end`)
+  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/confirm-end`)
+  return data.data
+}
+
+export async function confirmTripStart(bookingCode) {
+  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/confirm-start`)
   return data.data
 }
 
 export async function openDispute(bookingCode, body) {
-  const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/disputes`, body)
+  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/disputes`, body)
   return data.data
+}
+
+export async function uploadDisputeEvidence(bookingCode, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await apiClient.post(`/renter/bookings/${bookingCode}/disputes/upload-evidence`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data?.data?.url
 }
 
 export async function createVnpayPaymentUrl(payload) {
@@ -58,6 +90,7 @@ export const bookingService = {
   cancelMyBooking,
   confirmTripEnd,
   openDispute,
+  uploadDisputeEvidence,
   createVnpayPaymentUrl,
 
   // Provider methods
@@ -70,18 +103,18 @@ export const bookingService = {
     return data.data || data
   },
 
-  async getProviderBookingDetail(bookingId) {
-    const { data } = await apiClient.get(`/provider/bookings/${bookingId}`)
+  async getProviderBookingDetail(bookingCode) {
+    const { data } = await apiClient.get(`/provider/bookings/${bookingPath(bookingCode)}`)
     return data.data || data
   },
 
-  async acceptBooking(bookingId) {
-    const { data } = await apiClient.patch(`/provider/bookings/${bookingId}/accept`)
+  async acceptBooking(bookingCode) {
+    const { data } = await apiClient.patch(`/provider/bookings/${bookingPath(bookingCode)}/accept`)
     return data.data || data
   },
 
-  async rejectBooking(bookingId, payload) {
-    const { data } = await apiClient.patch(`/provider/bookings/${bookingId}/reject`, payload)
+  async rejectBooking(bookingCode, payload) {
+    const { data } = await apiClient.patch(`/provider/bookings/${bookingPath(bookingCode)}/reject`, payload)
     return data.data || data
   },
 
@@ -90,20 +123,21 @@ export const bookingService = {
     return (data.data || data).map(driver => ({ ...driver, id: driver.driverId, available: driver.eligible }))
   },
 
-  async assignDriver(bookingId, driverId) {
-    const { data } = await apiClient.patch(`/provider/bookings/${bookingId}/driver`, {
+  async assignDriver(bookingCode, driverId, mode = 'MANUAL') {
+    const { data } = await apiClient.patch(`/provider/bookings/${bookingPath(bookingCode)}/driver`, {
       driverId,
+      mode,
     })
     return data.data || data
   },
 
-  async addManualCharge(bookingId, payload) {
-    const { data } = await apiClient.post(`/provider/bookings/${bookingId}/charges`, payload)
+  async addManualCharge(bookingCode, payload) {
+    const { data } = await apiClient.post(`/provider/bookings/${bookingPath(bookingCode)}/charges`, payload)
     return data.data || data
   },
 
-  async removeManualCharge(bookingId, chargeId) {
-    const { data } = await apiClient.delete(`/provider/bookings/${bookingId}/charges/${chargeId}`)
+  async removeManualCharge(bookingCode, chargeId) {
+    const { data } = await apiClient.delete(`/provider/bookings/${bookingPath(bookingCode)}/charges/${chargeId}`)
     return data.data || data
   },
 }

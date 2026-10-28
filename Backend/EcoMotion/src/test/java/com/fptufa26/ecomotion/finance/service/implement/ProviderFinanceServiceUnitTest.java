@@ -9,7 +9,10 @@ import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
-import com.fptufa26.ecomotion.booking.service.BookingQueryService;
+import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
+import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
+import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.finance.dto.request.UpdateBankAccountRequest;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderBankAccountResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderPayoutDetailResponse;
@@ -26,6 +29,7 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.ProviderStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
+import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,10 +63,10 @@ class ProviderFinanceServiceUnitTest {
     private ProviderBankAccountRepository providerBankAccountRepository;
 
     @Mock
-    private BookingQueryService bookingQueryService;
+    private PaymentRequestRepository paymentRequestRepository;
 
     @Mock
-    private PaymentRequestRepository paymentRequestRepository;
+    private BookingPaymentLedgerService bookingPaymentLedgerService;
 
     @InjectMocks
     private ProviderFinanceServiceImpl providerFinanceService;
@@ -91,9 +95,7 @@ class ProviderFinanceServiceUnitTest {
     @Test
     @DisplayName("getBankAccount returns null when bank account is not set")
     void getBankAccountReturnsNullWhenEmpty() {
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
-        when(providerBankAccountRepository.findByProvider_IdAndStatus(1L, BankAccountStatus.ACTIVE))
-                .thenReturn(Optional.empty());
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
 
         ProviderBankAccountResponse response = providerFinanceService.getBankAccount(10L);
 
@@ -109,9 +111,7 @@ class ProviderFinanceServiceUnitTest {
         sampleProvider.setBankAccountHolder("NGUYEN VAN A");
         sampleProvider.setUpdatedAt(Instant.now());
 
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
-        when(providerBankAccountRepository.findByProvider_IdAndStatus(1L, BankAccountStatus.ACTIVE))
-                .thenReturn(Optional.empty());
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
 
         ProviderBankAccountResponse response = providerFinanceService.getBankAccount(10L);
 
@@ -126,7 +126,7 @@ class ProviderFinanceServiceUnitTest {
     @Test
     @DisplayName("updateBankAccount rejects unknown bank code with InvalidBankCodeException")
     void updateBankAccountRejectsUnknownBankCode() {
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
 
         UpdateBankAccountRequest request = new UpdateBankAccountRequest("UNKNOWN_CODE", "0123456789", "NGUYEN VAN A");
 
@@ -134,13 +134,13 @@ class ProviderFinanceServiceUnitTest {
                 .isInstanceOf(InvalidBankCodeException.class)
                 .hasMessageContaining("UNKNOWN_CODE");
 
-        verify(userService, never()).saveProvider(any());
+        verify(userService, never()).updateProviderBankSnapshot(any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("updateBankAccount rejects masked account number containing asterisk")
     void updateBankAccountRejectsMaskedInput() {
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
 
         UpdateBankAccountRequest request = new UpdateBankAccountRequest("VCB", "******6789", "NGUYEN VAN A");
 
@@ -148,41 +148,40 @@ class ProviderFinanceServiceUnitTest {
                 .isInstanceOf(InvalidAccountNumberException.class)
                 .hasMessageContaining("Không được sử dụng số tài khoản đã che");
 
-        verify(userService, never()).saveProvider(any());
+        verify(userService, never()).updateProviderBankSnapshot(any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("updateBankAccount rejects invalid length account number for bank")
     void updateBankAccountRejectsInvalidLength() {
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
 
         UpdateBankAccountRequest request = new UpdateBankAccountRequest("VCB", "12345", "NGUYEN VAN A");
 
         assertThatThrownBy(() -> providerFinanceService.updateBankAccount(10L, request))
                 .isInstanceOf(InvalidAccountNumberException.class);
 
-        verify(userService, never()).saveProvider(any());
+        verify(userService, never()).updateProviderBankSnapshot(any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("updateBankAccount rejects invalid characters in account holder name")
     void updateBankAccountRejectsInvalidHolderName() {
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
 
         UpdateBankAccountRequest request = new UpdateBankAccountRequest("VCB", "0123456789", "NGUYEN @#$ 123");
 
         assertThatThrownBy(() -> providerFinanceService.updateBankAccount(10L, request))
                 .isInstanceOf(InvalidAccountHolderNameException.class);
 
-        verify(userService, never()).saveProvider(any());
+        verify(userService, never()).updateProviderBankSnapshot(any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("updateBankAccount successfully saves bank account and preserves leading zeros")
     void updateBankAccountPreservesLeadingZerosAndSaves() {
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
-        when(userService.saveProvider(any(Provider.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(providerBankAccountRepository.save(any(ProviderBankAccount.class)))
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
+        when(providerBankAccountRepository.save(any(com.fptufa26.ecomotion.finance.entity.ProviderBankAccount.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         UpdateBankAccountRequest request = new UpdateBankAccountRequest("VCB", "001234567890", "nguyen van a");
@@ -194,13 +193,14 @@ class ProviderFinanceServiceUnitTest {
         assertThat(response.bankName()).isEqualTo("Vietcombank");
         assertThat(response.accountNumberMasked()).isEqualTo("********7890");
         assertThat(response.accountHolderName()).isEqualTo("NGUYEN VAN A");
-        assertThat(sampleProvider.getBankAccountNo()).isEqualTo("001234567890");
+        verify(userService).updateProviderBankSnapshot(
+                1L, "VCB", "Vietcombank", "001234567890", "NGUYEN VAN A");
     }
 
     @Test
     @DisplayName("resolveProvider throws AccessDeniedException when provider profile does not exist")
     void throwsAccessDeniedWhenNoProfile() {
-        when(userService.findProviderProfile(999L)).thenReturn(Optional.empty());
+        when(userService.findProviderByUserId(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> providerFinanceService.getBankAccount(999L))
                 .isInstanceOf(AccessDeniedException.class);
@@ -213,7 +213,7 @@ class ProviderFinanceServiceUnitTest {
         booking.setId(100L);
         booking.setStatus(BookingStatus.IN_PROGRESS);
 
-        when(bookingQueryService.findBookingById(100L)).thenReturn(Optional.of(booking));
+        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
 
         assertThatThrownBy(() -> providerFinanceService.createMockPayout(100L))
                 .isInstanceOf(PayoutIneligibleException.class)
@@ -227,8 +227,8 @@ class ProviderFinanceServiceUnitTest {
         booking.setId(100L);
         booking.setStatus(BookingStatus.COMPLETED);
 
-        when(bookingQueryService.findBookingById(100L)).thenReturn(Optional.of(booking));
-        when(bookingQueryService.findTransactionsByBookingId(100L)).thenReturn(List.of());
+        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
+        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of());
 
         assertThatThrownBy(() -> providerFinanceService.createMockPayout(100L))
                 .isInstanceOf(PayoutIneligibleException.class)
@@ -250,8 +250,8 @@ class ProviderFinanceServiceUnitTest {
         customerPayment.setType(PaymentType.DEPOSIT_PAY);
         customerPayment.setStatus(PaymentStatus.PAID);
 
-        when(bookingQueryService.findBookingById(100L)).thenReturn(Optional.of(booking));
-        when(bookingQueryService.findTransactionsByBookingId(100L)).thenReturn(List.of(customerPayment));
+        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
+        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of(customerPayment));
 
         assertThatThrownBy(() -> providerFinanceService.createMockPayout(100L))
                 .isInstanceOf(PayoutIneligibleException.class)
@@ -289,11 +289,11 @@ class ProviderFinanceServiceUnitTest {
         baseRental.setAmount(new BigDecimal("1000000.00"));
         baseRental.setWaived(false);
 
-        when(bookingQueryService.findBookingById(100L)).thenReturn(Optional.of(booking));
-        when(bookingQueryService.findTransactionsByBookingId(100L)).thenReturn(List.of(customerPayment));
-        when(bookingQueryService.existsTransactionByBookingIdAndType(100L, PaymentType.PAYOUT)).thenReturn(false);
-        when(bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(100L)).thenReturn(List.of(baseRental));
-        when(bookingQueryService.saveTransaction(any(PaymentTransaction.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
+        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of(customerPayment));
+        when(bookingPaymentLedgerService.transactionExists(100L, PaymentType.PAYOUT)).thenReturn(false);
+        when(bookingPaymentLedgerService.listCharges(100L)).thenReturn(List.of(baseRental));
+        when(bookingPaymentLedgerService.saveTransaction(any(PaymentTransaction.class))).thenAnswer(inv -> inv.getArgument(0));
 
         PaymentTransaction payout = providerFinanceService.createMockPayout(100L);
 
@@ -335,16 +335,15 @@ class ProviderFinanceServiceUnitTest {
         existingPayout.setType(PaymentType.PAYOUT);
         existingPayout.setAmount(new BigDecimal("900000.00"));
 
-        when(bookingQueryService.findBookingById(100L)).thenReturn(Optional.of(booking));
-        when(bookingQueryService.findTransactionsByBookingId(100L)).thenReturn(List.of(customerPayment));
-        when(bookingQueryService.existsTransactionByBookingIdAndType(100L, PaymentType.PAYOUT)).thenReturn(true);
-        when(bookingQueryService.findTransactionByBookingIdAndType(100L, PaymentType.PAYOUT))
-                .thenReturn(Optional.of(existingPayout));
+        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
+        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of(customerPayment));
+        when(bookingPaymentLedgerService.transactionExists(100L, PaymentType.PAYOUT)).thenReturn(true);
+        when(bookingPaymentLedgerService.findTransaction(100L, PaymentType.PAYOUT)).thenReturn(Optional.of(existingPayout));
 
         PaymentTransaction result = providerFinanceService.createMockPayout(100L);
 
         assertThat(result.getId()).isEqualTo(777L);
-        verify(bookingQueryService, never()).saveTransaction(any());
+        verify(bookingPaymentLedgerService, never()).saveTransaction(any());
     }
 
     @Test
@@ -374,8 +373,8 @@ class ProviderFinanceServiceUnitTest {
 
         pt.setBooking(booking);
 
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
-        when(bookingQueryService.findTransactionByIdAndProviderId(50L, 1L)).thenReturn(Optional.of(pt));
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
+        when(bookingPaymentLedgerService.findProviderTransaction(50L, 1L)).thenReturn(Optional.of(pt));
 
         ProviderPayoutDetailResponse detail1 = providerFinanceService.getPayoutDetail(10L, 50L);
         assertThat(detail1.destinationBank().bankCode()).isEqualTo("VCB");
@@ -395,9 +394,8 @@ class ProviderFinanceServiceUnitTest {
     @Test
     @DisplayName("getPayoutDetail throws PayoutNotFoundException for non-existent payout or unauthorized access")
     void getPayoutDetailThrowsNotFound() {
-        when(userService.findProviderProfile(10L)).thenReturn(Optional.of(sampleProvider));
-        when(bookingQueryService.findTransactionByIdAndProviderId(999L, 1L))
-                .thenReturn(Optional.empty());
+        when(userService.findProviderByUserId(10L)).thenReturn(Optional.of(sampleProvider));
+        when(bookingPaymentLedgerService.findProviderTransaction(999L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> providerFinanceService.getPayoutDetail(10L, 999L))
                 .isInstanceOf(PayoutNotFoundException.class)

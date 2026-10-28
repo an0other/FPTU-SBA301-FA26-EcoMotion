@@ -58,4 +58,5 @@ public interface VehicleService {
     Optional<Vehicle> findVehicleByIdAndProviderId(Long vehicleId, Long providerId);
 
     Optional<Vehicle> findVehicleByIdForUpdate(Long id);
+    Vehicle requireApprovedProviderVehicleForUpdate(Long vehicleId, Long providerId);
 }

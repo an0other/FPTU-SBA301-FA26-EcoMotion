@@ -97,6 +97,51 @@ public class CloudinaryServiceImpl implements CloudinaryService {
     }
 
     @Override
+    public CloudinaryUploadResult uploadDisputeEvidence(MultipartFile file, Long bookingId) {
+        validateFile(file);
+
+        if (bookingId == null) {
+            throw new IllegalArgumentException("Mã đơn đặt xe (bookingId) không được để trống");
+        }
+
+        String ext = resolveExtension(file);
+        String folder = String.format("%s/dispute-evidence/%d", folderPrefix, bookingId);
+
+        if (cloudinaryConfig != null && cloudinaryConfig.isMockOrDemo()) {
+            String mockPublicId = String.format("%s/%s_%d", folder, java.util.UUID.randomUUID().toString().substring(0, 8), System.currentTimeMillis());
+            String mockSecureUrl = String.format("https://res.cloudinary.com/%s/image/upload/v1/%s.%s",
+                    cloudinaryConfig.getCloudName(), mockPublicId, ext);
+            log.info("Simulated Cloudinary dispute upload in demo/mock mode: publicId={}, url={}", mockPublicId, mockSecureUrl);
+            return new CloudinaryUploadResult(mockSecureUrl, mockPublicId, ext, file.getSize(), 1280, 720);
+        }
+
+        Map<?, ?> params = ObjectUtils.asMap(
+                "folder", folder,
+                "resource_type", "image",
+                "overwrite", false
+        );
+
+        try {
+            log.info("Uploading dispute evidence to Cloudinary folder {} for booking {}", folder, bookingId);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> uploadResult = cloudinary.uploader().upload(file.getBytes(), params);
+
+            String secureUrl = (String) uploadResult.get("secure_url");
+            String publicId = (String) uploadResult.get("public_id");
+            String format = (String) uploadResult.get("format");
+            Long bytes = uploadResult.get("bytes") instanceof Number n ? n.longValue() : file.getSize();
+            Integer width = uploadResult.get("width") instanceof Number n ? n.intValue() : null;
+            Integer height = uploadResult.get("height") instanceof Number n ? n.intValue() : null;
+
+            log.info("Successfully uploaded dispute image to Cloudinary: publicId={}, secureUrl={}", publicId, secureUrl);
+            return new CloudinaryUploadResult(secureUrl, publicId, format != null ? format : ext, bytes, width, height);
+        } catch (Exception ex) {
+            log.error("Failed to upload dispute evidence to Cloudinary for booking {}: {}", bookingId, ex.getMessage());
+            throw new CloudinaryInfrastructureException("Không thể tải ảnh khiếu nại lên Cloudinary: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
     public void deleteImage(String publicId) {
         if (publicId == null || publicId.isBlank()) {
             return;

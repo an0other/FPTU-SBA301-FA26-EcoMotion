@@ -58,14 +58,17 @@ class ProviderBookingApiIntegrationTest {
         @Autowired
         private com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository bankAccountRepository;
 
-        private String getProviderToken() throws Exception {
-                MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(Map.of(
-                                                "email", "provider.a@ecomotion.vn",
-                                                "password", "EcoMotion@123"))))
-                                .andExpect(status().isOk())
-                                .andReturn();
+    @Autowired
+    private com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository paymentTransactionRepository;
+
+    private String getProviderToken() throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", "provider.a@ecomotion.vn",
+                                "password", "EcoMotion@123"))))
+                .andExpect(status().isOk())
+                .andReturn();
 
                 String json = loginResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
                 return objectMapper.readTree(json).get("accessToken").asText();
@@ -155,7 +158,10 @@ class ProviderBookingApiIntegrationTest {
                 account.setBankName("Vietcombank");
                 account.setAccountNumber("0123456789");
                 account.setAccountHolderName("NGUYEN VAN A");
-                bankAccountRepository.saveAndFlush(account);
+                if (!bankAccountRepository.existsByProvider_IdAndStatus(account.getProvider().getId(),
+                                com.fptufa26.ecomotion.finance.enums.BankAccountStatus.ACTIVE)) {
+                        bankAccountRepository.saveAndFlush(account);
+                }
                 String token = getProviderToken();
 
                 mockMvc.perform(post("/api/provider/bookings/BK-7N2W90/accept")
@@ -200,13 +206,14 @@ class ProviderBookingApiIntegrationTest {
                 bookingEntity.setStatus(com.fptufa26.ecomotion.booking.enums.BookingStatus.CONFIRMED);
                 bookingRepository.saveAndFlush(bookingEntity);
 
-                MvcResult driversResult = mockMvc.perform(get("/api/provider/drivers/available")
-                                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isNotEmpty())
-                                .andExpect(jsonPath("$.data[0].fullName").isNotEmpty())
-                                .andReturn();
+        MvcResult driversResult = mockMvc.perform(get("/api/provider/drivers/available")
+                        .param("bookingCode", "BK-4M1P88")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isNotEmpty())
+                .andExpect(jsonPath("$.data[0].fullName").isNotEmpty())
+                .andReturn();
 
                 String driversJson = driversResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
                 long driverId = objectMapper.readTree(driversJson).get("data").get(0).get("id").asLong();
@@ -236,14 +243,62 @@ class ProviderBookingApiIntegrationTest {
                                 .andExpect(status().isConflict());
         }
 
-        @Test
-        @DisplayName("Add manual charge updates charges list and total amount")
-        void manualChargeFlow() throws Exception {
-                String token = getProviderToken();
-                Booking booking = bookingRepository.findByBookingCode("BK-4A2K91").orElseThrow();
-                booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
-                booking.setActualEndAt(Instant.now());
-                bookingRepository.saveAndFlush(booking);
+    @Test
+    @DisplayName("Provider hủy vì xe về trễ sẽ tạo yêu cầu hoàn 100% tiền đã nhận")
+    void cancelAtRiskBookingCreatesFullRefund() throws Exception {
+        String token = getProviderToken();
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        booking.setStatus(BookingStatus.CONFIRMED);
+        bookingRepository.saveAndFlush(booking);
+
+        var paid = new com.fptufa26.ecomotion.booking.entity.PaymentTransaction();
+        paid.setBooking(booking);
+        paid.setType(com.fptufa26.ecomotion.booking.enums.PaymentType.DEPOSIT_PAY);
+        paid.setAmount(new BigDecimal("1400000"));
+        paid.setAppliedAmount(new BigDecimal("1400000"));
+        paid.setDirection(com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN);
+        paid.setMethod(com.fptufa26.ecomotion.booking.enums.PaymentMethod.BANK_TRANSFER);
+        paid.setStatus(com.fptufa26.ecomotion.booking.enums.PaymentStatus.PAID);
+        paymentTransactionRepository.saveAndFlush(paid);
+
+        var existingExcessRefund = new com.fptufa26.ecomotion.booking.entity.PaymentTransaction();
+        existingExcessRefund.setBooking(booking);
+        existingExcessRefund.setType(com.fptufa26.ecomotion.booking.enums.PaymentType.REFUND);
+        existingExcessRefund.setAmount(new BigDecimal("200000"));
+        existingExcessRefund.setAppliedAmount(new BigDecimal("200000"));
+        existingExcessRefund.setDirection(com.fptufa26.ecomotion.booking.enums.PaymentDirection.OUT);
+        existingExcessRefund.setMethod(com.fptufa26.ecomotion.booking.enums.PaymentMethod.BANK_TRANSFER);
+        existingExcessRefund.setStatus(com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING);
+        paymentTransactionRepository.saveAndFlush(existingExcessRefund);
+
+        mockMvc.perform(post("/api/provider/bookings/BK-4M1P88/operational-resolution")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "resolution", "CANCEL_AND_REFUND",
+                                "reason", "Xe của chuyến trước chưa về kịp"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLATION_REVIEW"))
+                .andExpect(jsonPath("$.data.refundAmount").value(1400000));
+
+        var refunds = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .filter(row -> row.getType() == com.fptufa26.ecomotion.booking.enums.PaymentType.REFUND)
+                .toList();
+        assertThat(refunds).hasSize(2);
+        assertThat(refunds).allMatch(row ->
+                row.getStatus() == com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING);
+        assertThat(refunds.stream().map(com.fptufa26.ecomotion.booking.entity.PaymentTransaction::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("1400000");
+    }
+
+    @Test
+    @DisplayName("Add manual charge updates charges list and total amount")
+    void manualChargeFlow() throws Exception {
+        String token = getProviderToken();
+        Booking booking = bookingRepository.findByBookingCode("BK-4A2K91").orElseThrow();
+        booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+        booking.setActualEndAt(Instant.now());
+        bookingRepository.saveAndFlush(booking);
 
                 Map<String, Object> chargePayload = Map.of(
                                 "chargeType", ChargeType.WAITING.name(),

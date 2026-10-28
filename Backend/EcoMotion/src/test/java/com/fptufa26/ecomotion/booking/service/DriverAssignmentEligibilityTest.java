@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import java.time.*;
 import java.util.*;
 import static org.mockito.Mockito.*;
@@ -53,7 +54,10 @@ class DriverAssignmentEligibilityTest {
         assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class).hasMessageContaining("conflict");
         assertThat(service.autoAssign(4L)).isNull();
     }
-    @Test void nonOverlappingFutureScheduleAllowsAnotherBooking() {
+    @ParameterizedTest
+    @ValueSource(strings = {"B", "B2"})
+    void nonOverlappingFutureScheduleAllowsAnotherBooking(String licenseClass) {
+        driver.setLicenseClass(licenseClass);
         Booking future = new Booking(); future.setPickupTime(booking.getPickupTime().plus(Duration.ofDays(1)));
         when(bookings.findPotentialDriverConflicts(eq(3L), anyList(), eq(4L), any())).thenReturn(List.of(future));
         assertThat(service.manualAssign(4L, 3L, 1L)).isSameAs(driver);

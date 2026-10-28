@@ -6,6 +6,8 @@ import com.fptufa26.ecomotion.booking.dto.request.DenyBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
 import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
 import com.fptufa26.ecomotion.booking.dto.response.AvailableDriverResponse;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest;
+import com.fptufa26.ecomotion.booking.dto.response.OperationalResolutionResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingDetailResponse;
@@ -19,6 +21,7 @@ import com.fptufa26.ecomotion.booking.entity.TripIncident;
 import com.fptufa26.ecomotion.booking.enums.TripEvidenceType;
 import com.fptufa26.ecomotion.booking.service.ProviderBookingService;
 import com.fptufa26.ecomotion.booking.service.TripEvidenceService;
+import com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
@@ -51,6 +54,7 @@ public class ProviderBookingController {
 
     private final ProviderBookingService providerBookingService;
     private final TripEvidenceService tripEvidenceService;
+    private final VehicleOperationalRiskService vehicleOperationalRiskService;
 
     @GetMapping
     @Operation(summary = "List the current provider's bookings")
@@ -86,6 +90,24 @@ public class ProviderBookingController {
         return ApiResponse.success(providerBookingService.getBookingDetail(principal.getUserId(), bookingCodeOrId));
     }
 
+    @GetMapping("/{id}/operational-risk")
+    @Operation(summary = "Kiểm tra nguy cơ xe chưa về kịp cho booking kế tiếp")
+    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse> operationalRisk(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("id") String id) {
+        return ApiResponse.success(vehicleOperationalRiskService.assessForProvider(principal.getUserId(), id));
+    }
+
+    @PostMapping("/{id}/operational-resolution")
+    @Operation(summary = "Đổi xe, dời lịch hoặc hủy hoàn tiền khi xe có nguy cơ về trễ")
+    public ApiResponse<OperationalResolutionResponse> resolveOperationalRisk(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable("id") String id,
+            @RequestBody @Valid ResolveOperationalRiskRequest request) {
+        return ApiResponse.success(providerBookingService.resolveOperationalRisk(
+                principal.getUserId(), id, request));
+    }
+
     @PostMapping("/{bookingCodeOrId}/accept")
     @Operation(summary = "Accept a pending booking")
     public ApiResponse<ProviderBookingResponse> acceptBooking(
@@ -111,10 +133,10 @@ public class ProviderBookingController {
     @Operation(summary = "Assign a driver to a confirmed booking")
     public ApiResponse<ProviderBookingResponse> assignDriver(
             @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable String bookingCodeOrId,
-            @Valid @RequestBody AssignDriverRequest request) {
+            @PathVariable("bookingCodeOrId") String id,
+            @RequestBody @Valid AssignDriverRequest request) {
         return ApiResponse.success(providerBookingService.assignDriver(
-                principal.getUserId(), bookingCodeOrId, request.driverId()));
+                principal.getUserId(), id, request.driverId(), request.mode()));
     }
 
     @GetMapping("/{bookingCodeOrId}/charges")
@@ -203,7 +225,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/incidents")
     @Operation(summary = "Get list of reported incidents for a booking")
-    public ApiResponse<List<TripIncident>> getBookingIncidents(
+    public ApiResponse<List<com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse>> getBookingIncidents(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.getBookingIncidents(principal.getUserId(), id));

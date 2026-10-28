@@ -12,12 +12,15 @@ import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
+import com.fptufa26.ecomotion.booking.dto.response.ConfirmStartResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.RefundPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TimelineStepResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
+import com.fptufa26.ecomotion.booking.enums.BookingActionKind;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
@@ -32,12 +35,16 @@ import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.booking.service.BookingTrackingService;
+import com.fptufa26.ecomotion.booking.service.DriverAvailabilityService;
+import com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService;
 import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 import com.fptufa26.ecomotion.booking.service.DepositRefundRules;
 import com.fptufa26.ecomotion.common.exception.BadRequestException;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
+import com.fptufa26.ecomotion.common.response.PageResponse;
 import org.springframework.security.access.AccessDeniedException;
 import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
@@ -57,13 +64,26 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
+import com.fptufa26.ecomotion.vehicle.service.VehicleDepositPolicyService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.Year;
 import java.time.ZoneId;
@@ -80,11 +100,14 @@ import java.util.UUID;
 public class BookingServiceImpl implements BookingService {
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final Duration MINIMUM_BOOKING_LEAD_TIME = Duration.ofHours(3);
+    private static final Duration INITIAL_HOLD_DURATION = Duration.ofMinutes(15);
 
     /** Buffer time (minutes) before/after each booking for vehicle preparation */
     private static final Set<BookingStatus> BLOCKING = EnumSet.of(
             BookingStatus.PENDING,
             BookingStatus.ACCEPTED,
+            BookingStatus.AWAITING_DEPOSIT,
             BookingStatus.CONFIRMED,
             BookingStatus.DRIVER_ASSIGNED,
             BookingStatus.DRIVER_CONFIRMED,
@@ -102,11 +125,40 @@ public class BookingServiceImpl implements BookingService {
     private final ScheduleService scheduleService;
     private final DisputeService disputeService;
     private final PaymentRequestService paymentRequestService;
+    private final VehicleDepositPolicyService vehicleDepositPolicyService;
+    private final BookingTrackingService bookingTrackingService;
+    private final DriverAvailabilityService driverAvailabilityService;
+    private final VehicleOperationalRiskService vehicleOperationalRiskService;
+    private final Clock clock;
+    private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
 
     private static final Set<BookingStatus> CANCELLABLE = EnumSet.of(
             BookingStatus.PENDING,
             BookingStatus.ACCEPTED,
+            BookingStatus.AWAITING_DEPOSIT,
             BookingStatus.CONFIRMED);
+
+    private static final Set<BookingStatus> DRIVER_NAME_STATUSES = EnumSet.of(
+            BookingStatus.DRIVER_ASSIGNED,
+            BookingStatus.DRIVER_CONFIRMED,
+            BookingStatus.DRIVER_ARRIVED,
+            BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION,
+            BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT,
+            BookingStatus.COMPLETED);
+
+    private static final Set<BookingStatus> DEPOSIT_PAYABLE_STATUSES = EnumSet.of(
+            BookingStatus.AWAITING_DEPOSIT, BookingStatus.ACCEPTED);
+
+    private static final Set<BookingStatus> CONFIRM_START_STATUSES = EnumSet.of(
+            BookingStatus.DRIVER_ARRIVED, BookingStatus.AWAITING_START_CONFIRMATION);
+
+    private static final Set<BookingStatus> CONFIRM_END_STATUSES = EnumSet.of(
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION,
+            BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
     private static final Set<BookingStatus> CHARGE_DISPUTE = EnumSet.of(
             BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
             BookingStatus.AWAITING_FINAL_PAYMENT);
@@ -115,7 +167,7 @@ public class BookingServiceImpl implements BookingService {
     @Transactional
     public CreateBookingResponse create(Long userId, CreateBookingRequest request) {
         Renter renter = userService.requireRenterByUserId(userId);
-        Vehicle vehicle = vehicleCatalogService.requireApproved(request.vehicleId());
+        Vehicle vehicle = vehicleCatalogService.requireApprovedForUpdate(request.vehicleId());
         RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(), request.planId());
 
         if (plan.getPlanType() == PlanType.YEARLY) {
@@ -132,31 +184,35 @@ public class BookingServiceImpl implements BookingService {
         }
 
         Instant start = request.pickupTime();
-        if (!start.isAfter(Instant.now())) {
-            throw new ConflictException("Thời gian đón phải ở tương lai");
+        if (start.isBefore(clock.instant().plus(MINIMUM_BOOKING_LEAD_TIME))) {
+            throw new ConflictException("Đơn thuê phải được tạo trước giờ nhận xe ít nhất 3 giờ");
         }
         Instant end = start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
         if (!end.isAfter(start)) {
             throw new ConflictException("Khoảng thời gian thuê không hợp lệ");
         }
-        // Apply buffer for vehicle preparation time between bookings
+        validateDuration(plan, request.slotCount(), Duration.between(start, end));
+        if (driverAvailabilityService.findAvailable(
+                vehicle.getProvider().getId(), vehicle, start, end, null).isEmpty()) {
+            throw new ConflictException("Không có tài xế phù hợp và còn trống trong thời gian đã chọn");
+        }
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, end);
         if (!scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
-            throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn (bao gồm thời gian dọn xe giữa các chuyến). Vui lòng chọn xe khác hoặc khung giờ khác.");
+            throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn, bao gồm thời gian đệm");
         }
         if (renterOverlaps(renter.getId(), start, end)) {
-            throw new ConflictException("Bạn đang có một đơn đặt xe khác trùng khung giờ này. Vui lòng kiểm tra lại đơn của bạn.");
+            throw new ConflictException("Bạn đã có đơn thuê trùng khoảng thời gian này");
         }
 
         BigDecimal total = plan.getSlotPrice().multiply(BigDecimal.valueOf(request.slotCount()));
         User actor = renter.getUser();
 
         Booking booking = new Booking();
-        booking.setBookingCode(nextBookingCode());
+        booking.setBookingCode("TMP-" + UUID.randomUUID().toString().substring(0, 12));
         booking.setRenter(renter);
         booking.setVehicle(vehicle);
         booking.setPlan(plan);
-        booking.setStatus(BookingStatus.PENDING);
+        booking.setStatus(BookingStatus.AWAITING_DEPOSIT);
         booking.setPickupAddress(request.pickupAddress().trim());
         booking.setPickupLatitude(request.pickupLatitude());
         booking.setPickupLongitude(request.pickupLongitude());
@@ -164,14 +220,25 @@ public class BookingServiceImpl implements BookingService {
         booking.setPickupTime(start);
         booking.setPassengerCount(request.passengerCount());
         booking.setTotalAmount(total);
+        bookingRepository.saveAndFlush(booking);
+        booking.setBookingCode(nextBookingCode(booking.getId()));
         bookingRepository.save(booking);
+
+        var depositQuote = vehicleDepositPolicyService.resolve(vehicle, total);
+        String imageUrl = vehicleCatalogService.coverImageUrl(vehicle.getId());
 
         BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
         snapshot.setBooking(booking);
         snapshot.setSlotPrice(plan.getSlotPrice());
         snapshot.setSlotLengthMinutes(plan.getSlotLengthMinutes());
         snapshot.setPlanType(plan.getPlanType());
-        snapshot.setDepositRatio(plan.getPlanType() == PlanType.YEARLY ? null : vehicle.getProvider().getDepositRatio());
+        snapshot.setDepositRatio(depositQuote.ratio());
+        snapshot.setMinimumDepositAmount(depositQuote.minimumAmount());
+        snapshot.setDepositAmount(depositQuote.amount());
+        snapshot.setVehicleName(vehicle.getBrand() + " " + vehicle.getModel());
+        snapshot.setVehicleManufactureYear(vehicle.getManufactureYear());
+        snapshot.setVehicleLicensePlate(vehicle.getLicensePlate());
+        snapshot.setVehicleImageUrl(imageUrl);
         snapshot.setUpfrontAmount(plan.getUpfrontAmount());
         snapshot.setAllowedOvertimeMinutes(plan.getAllowedOvertimeMinutes());
         snapshot.setOvertimeSurchargeRatio(plan.getOvertimeSurchargeRatio());
@@ -194,7 +261,23 @@ public class BookingServiceImpl implements BookingService {
         charge.setWaived(false);
         chargeRepository.save(charge);
 
-        return bookingMapper.toCreateBookingResponse(booking, end, charge);
+        Instant holdExpiresAt = clock.instant().plus(INITIAL_HOLD_DURATION);
+        scheduleService.hold(vehicle, booking, start, end, holdExpiresAt);
+        paymentRequestService.createDepositPaymentRequest(booking);
+
+        return bookingMapper.toCreateBookingResponse(booking, end, charge, snapshot.getDepositAmount());
+    }
+
+    private void validateDuration(RentalPlan plan, int slotCount, Duration duration) {
+        boolean valid = switch (plan.getPlanType()) {
+            case HOURLY -> duration.compareTo(Duration.ofHours(24)) <= 0;
+            case DAILY -> duration.compareTo(Duration.ofDays(30)) <= 0;
+            case MONTHLY -> slotCount <= 12;
+            case YEARLY -> false;
+        };
+        if (!valid) {
+            throw new ConflictException("Thời lượng thuê vượt quá giới hạn của gói đã chọn");
+        }
     }
 
     private String normalizeDriverNote(String note) {
@@ -220,6 +303,213 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(readOnly = true)
+    public PageResponse<BookingSummaryResponse> listMinePage(
+            Long userId, BookingStatus status, String group, String keyword, String sort, int page, int size) {
+        Renter renter = userService.requireRenterByUserId(userId);
+        if (page < 0 || size < 1 || size > 50) {
+            throw new BadRequestException("Trang phải từ 0 và số dòng phải trong khoảng 1 đến 50");
+        }
+
+        String sortKey = resolveListSort(sort);
+        Instant now = clock.instant();
+        boolean actionNeeded = isActionNeededGroup(group);
+        Set<BookingStatus> groupedStatuses = actionNeeded ? Set.of() : resolveStatusGroup(group);
+        String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+        Specification<Booking> specification = (root, query, builder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.equal(root.get("renter").get("id"), renter.getId()));
+            if (status != null) {
+                predicates.add(builder.equal(root.get("status"), status));
+            } else if (actionNeeded) {
+                predicates.add(actionNeededPredicate(root, query, builder, now));
+            } else if (!groupedStatuses.isEmpty()) {
+                predicates.add(root.get("status").in(groupedStatuses));
+            }
+            if (!normalizedKeyword.isEmpty()) {
+                String pattern = "%" + normalizedKeyword + "%";
+                var vehicle = root.join("vehicle");
+                var vehicleName = builder.lower(builder.concat(
+                        builder.concat(vehicle.get("brand"), " "), vehicle.get("model")));
+                predicates.add(builder.or(
+                        builder.like(builder.lower(root.get("bookingCode")), pattern),
+                        builder.like(vehicleName, pattern)));
+            }
+            if (query != null && !isCountQuery(query)) {
+                applyListSort(root, query, builder, sortKey, now);
+            }
+            return builder.and(predicates.toArray(Predicate[]::new));
+        };
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Booking> result = bookingRepository.findAll(specification, pageable);
+        int offset = Math.toIntExact(pageable.getOffset());
+        return new PageResponse<>(
+                result.getContent().stream().map(this::toSummary).toList(),
+                result.getTotalElements(), offset, size, result.hasNext());
+    }
+
+    private boolean isActionNeededGroup(String group) {
+        return group != null && "ACTION_NEEDED".equalsIgnoreCase(group.trim());
+    }
+
+    private String resolveListSort(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return "PICKUP";
+        }
+        String key = sort.trim().toUpperCase(Locale.ROOT);
+        if (!"PICKUP".equals(key) && !"NEWEST".equals(key)) {
+            throw new BadRequestException("Kiểu sắp xếp đơn thuê không hợp lệ");
+        }
+        return key;
+    }
+
+    private boolean isCountQuery(CriteriaQuery<?> query) {
+        Class<?> resultType = query.getResultType();
+        return resultType == Long.class || resultType == long.class;
+    }
+
+    private void applyListSort(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, String sortKey, Instant now) {
+        if ("NEWEST".equals(sortKey)) {
+            query.orderBy(builder.desc(root.get("createdAt")), builder.desc(root.get("id")));
+            return;
+        }
+        Expression<Integer> upcomingBucket = builder.<Integer>selectCase()
+                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), 0)
+                .otherwise(1);
+        Expression<Instant> upcomingPickup = builder.<Instant>selectCase()
+                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), root.get("pickupTime"))
+                .otherwise(builder.nullLiteral(Instant.class));
+        Expression<Instant> pastPickup = builder.<Instant>selectCase()
+                .when(builder.lessThan(root.get("pickupTime"), now), root.get("pickupTime"))
+                .otherwise(builder.nullLiteral(Instant.class));
+        query.orderBy(
+                builder.asc(upcomingBucket),
+                builder.asc(upcomingPickup),
+                builder.desc(pastPickup),
+                builder.desc(root.get("createdAt")));
+    }
+
+    private Predicate actionNeededPredicate(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        return builder.or(
+                payableDepositPredicate(root, query, builder, now),
+                payableSettlementPredicate(root, query, builder, now),
+                confirmStartPredicate(root, builder),
+                confirmEndPredicate(root, builder));
+    }
+
+    private Predicate payableDepositPredicate(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        Predicate pickupStillOpen = builder.or(
+                builder.isNull(root.get("pickupTime")),
+                builder.greaterThanOrEqualTo(root.get("pickupTime"), now));
+        return builder.and(
+                root.get("status").in(DEPOSIT_PAYABLE_STATUSES),
+                builder.not(builder.exists(paidTransactionExists(root, query, builder, PaymentType.DEPOSIT_PAY))),
+                builder.or(
+                        builder.exists(currentPaymentRequestExists(
+                                root, query, builder, now, PaymentRequestType.DEPOSIT)),
+                        builder.and(
+                                builder.not(builder.exists(anyPaymentRequestExists(
+                                        root, query, builder, PaymentRequestType.DEPOSIT))),
+                                pickupStillOpen)));
+    }
+
+    private Predicate payableSettlementPredicate(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        return builder.and(
+                builder.equal(root.get("status"), BookingStatus.AWAITING_FINAL_PAYMENT),
+                builder.not(builder.exists(paidTransactionExists(root, query, builder, PaymentType.SETTLEMENT))),
+                builder.or(
+                        builder.exists(currentPaymentRequestExists(
+                                root, query, builder, now, PaymentRequestType.FINAL_BALANCE)),
+                        builder.not(builder.exists(anyPaymentRequestExists(
+                                root, query, builder, PaymentRequestType.FINAL_BALANCE)))));
+    }
+
+    private Predicate confirmStartPredicate(Root<Booking> root, CriteriaBuilder builder) {
+        return builder.and(
+                root.get("status").in(CONFIRM_START_STATUSES),
+                builder.isNull(root.get("renterStartConfirmedAt")));
+    }
+
+    private Predicate confirmEndPredicate(Root<Booking> root, CriteriaBuilder builder) {
+        return builder.and(
+                root.get("status").in(CONFIRM_END_STATUSES),
+                builder.isNull(root.get("renterEndConfirmedAt")));
+    }
+
+    private Subquery<Long> currentPaymentRequestExists(
+            Root<Booking> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder builder,
+            Instant now,
+            PaymentRequestType type) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentRequest> request = subquery.from(PaymentRequest.class);
+        Predicate unexpired = builder.or(
+                builder.isNull(request.get("expiresAt")),
+                builder.greaterThan(request.get("expiresAt"), now));
+        subquery.select(request.get("id")).where(
+                builder.equal(request.get("booking").get("id"), root.get("id")),
+                builder.equal(request.get("paymentType"), type),
+                request.get("status").in(PaymentRequestStatus.PENDING, PaymentRequestStatus.REJECTED),
+                unexpired);
+        return subquery;
+    }
+
+    private Subquery<Long> anyPaymentRequestExists(
+            Root<Booking> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder builder,
+            PaymentRequestType type) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentRequest> request = subquery.from(PaymentRequest.class);
+        subquery.select(request.get("id")).where(
+                builder.equal(request.get("booking").get("id"), root.get("id")),
+                builder.equal(request.get("paymentType"), type));
+        return subquery;
+    }
+
+    private Subquery<Long> paidTransactionExists(
+            Root<Booking> root,
+            CriteriaQuery<?> query,
+            CriteriaBuilder builder,
+            PaymentType type) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentTransaction> transaction = subquery.from(PaymentTransaction.class);
+        subquery.select(transaction.get("id")).where(
+                builder.equal(transaction.get("booking").get("id"), root.get("id")),
+                builder.equal(transaction.get("type"), type),
+                builder.equal(transaction.get("status"), PaymentStatus.PAID));
+        return subquery;
+    }
+
+    private Set<BookingStatus> resolveStatusGroup(String group) {
+        if (group == null || group.isBlank() || "ALL".equalsIgnoreCase(group)) {
+            return Set.of();
+        }
+        return switch (group.trim().toUpperCase(Locale.ROOT)) {
+            case "PROCESSING" -> EnumSet.of(
+                    BookingStatus.PENDING, BookingStatus.ACCEPTED,
+                    BookingStatus.AWAITING_DEPOSIT, BookingStatus.CANCELLATION_REVIEW);
+            case "UPCOMING" -> EnumSet.of(
+                    BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED);
+            case "ACTIVE" -> EnumSet.of(
+                    BookingStatus.DRIVER_ARRIVED, BookingStatus.AWAITING_START_CONFIRMATION,
+                    BookingStatus.IN_PROGRESS, BookingStatus.AWAITING_END_CONFIRMATION);
+            case "SETTLEMENT" -> EnumSet.of(
+                    BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION, BookingStatus.AWAITING_FINAL_PAYMENT);
+            case "COMPLETED" -> EnumSet.of(BookingStatus.COMPLETED);
+            case "ENDED" -> EnumSet.of(
+                    BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.REJECTED);
+            default -> throw new BadRequestException("Nhóm trạng thái đơn thuê không hợp lệ");
+        };
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public CheckoutPreviewResponse previewCheckout(Long userId, String bookingCode) {
         throw new ConflictException("Checkout cũ đã ngừng; vui lòng thanh toán đặt cọc qua VNPAY Sandbox");
     }
@@ -233,8 +523,26 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public BookingDetailResponse detail(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, bookingCode);
+        Booking booking = bookingRepository.findByBookingCodeAndRenter_User_Id(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
         return toDetail(booking);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TripTrackingResponse getTripTracking(Long userId, String bookingCode) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenter_User_Id(
+                        bookingCode.trim().toUpperCase(Locale.ROOT), userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (!EnumSet.of(
+                BookingStatus.DRIVER_ARRIVED,
+                BookingStatus.AWAITING_START_CONFIRMATION,
+                BookingStatus.IN_PROGRESS,
+                BookingStatus.AWAITING_END_CONFIRMATION
+        ).contains(booking.getStatus())) {
+            throw new ConflictException("Chỉ được xem vị trí khi chuyến xe đang hoạt động");
+        }
+        return bookingTrackingService.buildTrackingResponse(booking);
     }
 
     @Override
@@ -260,8 +568,10 @@ public class BookingServiceImpl implements BookingService {
                 Duration.ofMinutes((long) snapshot.getSlotLengthMinutes() * slots));
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
                 booking.getVehicle(), request.pickupTime(), end);
-        if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
-            throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn (bao gồm thời gian dọn xe giữa các chuyến). Vui lòng chọn xe khác hoặc khung giờ khác.");
+        if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+            scheduleService.rescheduleHold(booking, window.start(), window.end());
+        } else if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
+            throw new ConflictException("Vehicle is not free in the selected range (including maintenance buffer)");
         }
         if (renterOverlaps(booking.getRenter().getId(), request.pickupTime(), end, booking.getId())) {
             throw new ConflictException("Bạn đang có một đơn đặt xe khác trùng khung giờ này. Vui lòng kiểm tra lại đơn của bạn.");
@@ -290,14 +600,28 @@ public class BookingServiceImpl implements BookingService {
         }
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
         Instant cancelledAt = Instant.now();
-        BigDecimal refundAmount = refundAmount(booking, snapshot, cancelledAt);
+        PaymentRequest depositRequest = paymentRequestService
+                .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
+                .orElse(null);
+        boolean hasVerifiedDeposit = depositRequest != null && depositRequest.getPaidAmount().signum() > 0;
+        boolean needsReview = depositRequest != null
+                && (hasVerifiedDeposit
+                    || depositRequest.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
+                    || depositRequest.getStatus() == PaymentRequestStatus.PARTIALLY_PAID
+                    || depositRequest.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED);
+        BigDecimal refundAmount = hasVerifiedDeposit
+                ? refundAmount(booking, snapshot, cancelledAt)
+                : BigDecimal.ZERO;
         if (refundAmount.signum() > 0) {
-            saveRefund(booking, refundAmount, cancelledAt);
+            saveRefund(booking, refundAmount);
         }
         booking.setCancelledBy(booking.getRenter().getUser());
         booking.setCancelReason(CancelReason.RENTER_REQUEST);
         booking.setCancelledAt(cancelledAt);
-        booking.setStatus(BookingStatus.CANCELLED);
+        booking.setStatus(needsReview ? BookingStatus.CANCELLATION_REVIEW : BookingStatus.CANCELLED);
+        if (depositRequest != null) {
+            depositRequest.setStatus(needsReview ? PaymentRequestStatus.REVIEW_REQUIRED : PaymentRequestStatus.VOIDED);
+        }
         scheduleService.release(booking.getId());
         if (booking.getDriver() != null) {
             driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
@@ -307,20 +631,57 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
+    public ConfirmStartResponse confirmStart(Long userId, String bookingCode) {
+        Booking booking = requireOwned(userId, normalizeBookingCode(bookingCode));
+        if (booking.getRenterStartConfirmedAt() != null) {
+            return toConfirmStart(booking);
+        }
+        if (booking.getStatus() != BookingStatus.DRIVER_ARRIVED
+                && booking.getStatus() != BookingStatus.AWAITING_START_CONFIRMATION) {
+            throw new ConflictException("Chỉ có thể xác nhận bắt đầu sau khi tài xế đã đến điểm đón");
+        }
+        Instant now = clock.instant();
+        booking.setRenterStartConfirmedAt(now);
+        if (booking.getDriverStartConfirmedAt() != null) {
+            booking.setActualStartAt(now);
+            booking.setStatus(BookingStatus.IN_PROGRESS);
+        } else {
+            booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
+        }
+        return toConfirmStart(booking);
+    }
+
+    @Override
+    @Transactional
     public ConfirmEndResponse confirmEnd(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, bookingCode);
+        Booking booking = requireOwned(userId, normalizeBookingCode(bookingCode));
         if (booking.getStatus() != BookingStatus.IN_PROGRESS
+                && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION
                 && booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
-            throw new ConflictException("Booking is not in progress or awaiting settlement");
+            throw new ConflictException("Chuyến đi chưa ở trạng thái cho phép xác nhận kết thúc");
         }
-        if (booking.getRenterConfirmedAt() != null) {
-            throw new ConflictException("Renter already confirmed the end");
+        if (booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null) {
+            return bookingMapper.toConfirmEnd(booking);
         }
-        booking.setRenterConfirmedAt(Instant.now());
-        if (booking.getProviderConfirmedAt() != null) {
+        Instant now = clock.instant();
+        booking.setRenterEndConfirmedAt(now);
+        booking.setRenterConfirmedAt(now);
+        if (booking.getDriverEndConfirmedAt() != null || booking.getProviderConfirmedAt() != null) {
             booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+        } else {
+            booking.setStatus(BookingStatus.IN_PROGRESS);
         }
         return bookingMapper.toConfirmEnd(booking);
+    }
+
+    private ConfirmStartResponse toConfirmStart(Booking booking) {
+        return new ConfirmStartResponse(
+                booking.getBookingCode(),
+                booking.getStatus(),
+                booking.getRenterStartConfirmedAt(),
+                booking.getDriverStartConfirmedAt(),
+                booking.getActualStartAt(),
+                booking.getStatus() == BookingStatus.IN_PROGRESS);
     }
 
     @Override
@@ -330,21 +691,17 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
         BookingCharge charge = null;
         if (request.category() == DisputeCategory.CHARGE) {
-            if (request.chargeType() == null) {
-                throw new BadRequestException("chargeType is required");
+            if (request.chargeId() == null) {
+                throw new BadRequestException("Mã khoản phụ phí là bắt buộc");
             }
-            if (request.chargeType() == ChargeType.BASE_RENTAL || request.chargeType() == ChargeType.DEPOSIT) {
-                throw new BadRequestException("Only supplemental charges can be disputed as a charge");
+            charge = chargeRepository.findByIdAndBooking_Id(request.chargeId(), booking.getId())
+                    .orElseThrow(() -> new NotFoundException("Không tìm thấy khoản phí trong booking này"));
+            if (charge.getChargeType() == ChargeType.BASE_RENTAL || charge.getChargeType() == ChargeType.DEPOSIT) {
+                throw new BadRequestException("Chỉ có thể tranh chấp khoản phụ phí");
             }
-            List<BookingCharge> matches = chargeRepository.findAllByBooking_IdAndChargeType(
-                    booking.getId(), request.chargeType());
-            if (matches.isEmpty()) {
-                throw new NotFoundException("Charge not found");
+            if (charge.isWaived()) {
+                throw new ConflictException("Khoản phí này đã được miễn");
             }
-            if (matches.size() > 1) {
-                throw new ConflictException("More than one charge of this type");
-            }
-            charge = matches.getFirst();
         } else if (request.category() == DisputeCategory.DEPOSIT_REFUND
                 && chargeRepository.findAllByBooking_IdAndChargeType(booking.getId(), ChargeType.DEPOSIT).isEmpty()) {
             throw new ConflictException("No deposit to dispute");
@@ -353,7 +710,7 @@ public class BookingServiceImpl implements BookingService {
         PaymentRequest finalRequest = null;
         if (request.category() == DisputeCategory.CHARGE) {
             finalRequest = paymentRequestService
-                    .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
+                    .findPaymentRequest(booking.getId(), PaymentRequestType.FINAL_BALANCE)
                     .orElse(null);
             if (finalRequest != null && (finalRequest.getStatus() == PaymentRequestStatus.CONFIRMED
                     || finalRequest.getPaidAmount().signum() > 0)) {
@@ -361,13 +718,26 @@ public class BookingServiceImpl implements BookingService {
             }
         }
         DisputeOpenedResponse response = disputeService.open(
-                booking, booking.getRenter().getUser(), request.category(), charge);
+                booking, booking.getRenter().getUser(), request.category(), charge,
+                request.description(), request.resolvedEvidenceUrls());
         if (finalRequest != null) {
             finalRequest.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
             finalRequest.setIssueNote("Payment held while a charge dispute is reviewed");
             paymentRequestService.savePaymentRequest(finalRequest);
         }
         return response;
+    }
+
+    @Override
+    @Transactional
+    public String uploadDisputeEvidence(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Vui lòng chọn hình ảnh để tải lên");
+        }
+        var uploadResult = cloudinaryService.uploadDisputeEvidence(file, booking.getId());
+        return uploadResult.secureUrl();
     }
 
     private BookingDetailResponse toDetail(Booking booking) {
@@ -377,13 +747,10 @@ public class BookingServiceImpl implements BookingService {
         List<BookingChargeLineResponse> charges = chargeRows.stream().map(bookingMapper::toChargeLine).toList();
         List<PaymentTransaction> payments = paymentTransactionRepository.findByBooking_Id(booking.getId());
         RefundPreviewResponse refundPreview = refundPreview(booking, snapshot, chargeRows, payments, Instant.now());
-        boolean canConfirm = (booking.getStatus() == BookingStatus.IN_PROGRESS
-                || booking.getStatus() == BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION)
-                && booking.getRenterConfirmedAt() == null;
         boolean canEdit = canEditRequest(booking);
         return bookingMapper.toDetail(
                 booking,
-                snapshot.getPlanType(),
+                snapshot,
                 vehicleCatalogService.coverImageUrl(booking.getVehicle().getId()),
                 endOf(booking, snapshot, slots),
                 slots,
@@ -393,8 +760,10 @@ public class BookingServiceImpl implements BookingService {
                 CANCELLABLE.contains(booking.getStatus()),
                 canEdit,
                 canPay(booking),
-                canConfirm,
-                disputeCategories(booking, chargeRows));
+                canConfirmStart(booking),
+                canConfirmEnd(booking),
+                disputeCategories(booking, chargeRows),
+                holdExpiresAt(booking));
     }
 
     private void requireDisputeAllowed(Booking booking, DisputeCategory category) {
@@ -441,7 +810,7 @@ public class BookingServiceImpl implements BookingService {
         if (snapshot.getPlanType() == PlanType.YEARLY) {
             return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Trả trước không hoàn theo chính sách gói năm");
         }
-        BigDecimal paidDeposit = paidDeposit(charges, payments);
+        BigDecimal paidDeposit = paidDeposit(payments);
         if (paidDeposit == null) {
             return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Chưa thu cọc, số hoàn là 0");
         }
@@ -457,9 +826,8 @@ public class BookingServiceImpl implements BookingService {
         if (snapshot.getPlanType() == PlanType.YEARLY) {
             return BigDecimal.ZERO;
         }
-        List<BookingCharge> charges = chargeRepository.findByBooking_IdOrderByIdAsc(booking.getId());
         List<PaymentTransaction> payments = paymentTransactionRepository.findByBooking_Id(booking.getId());
-        BigDecimal paidDeposit = paidDeposit(charges, payments);
+        BigDecimal paidDeposit = paidDeposit(payments);
         if (paidDeposit == null) {
             return BigDecimal.ZERO;
         }
@@ -467,45 +835,64 @@ public class BookingServiceImpl implements BookingService {
         return paidDeposit.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal paidDeposit(List<BookingCharge> charges, List<PaymentTransaction> payments) {
-        BookingCharge deposit = charges.stream()
-                .filter(charge -> charge.getChargeType() == ChargeType.DEPOSIT)
-                .findFirst()
-                .orElse(null);
-        if (deposit == null) {
-            return null;
-        }
-        boolean paid = payments.stream().anyMatch(payment ->
-                payment.getType() == PaymentType.DEPOSIT_PAY && payment.getStatus() == PaymentStatus.PAID);
-        return paid ? deposit.getAmount() : null;
+    private BigDecimal paidDeposit(List<PaymentTransaction> payments) {
+        BigDecimal total = payments.stream()
+                .filter(payment -> payment.getType() == PaymentType.DEPOSIT_PAY
+                        && payment.getDirection() == PaymentDirection.IN
+                        && payment.getStatus() == PaymentStatus.PAID)
+                .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
+                        ? payment.getAppliedAmount()
+                        : payment.getAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return total.signum() > 0 ? total : null;
     }
 
-    private void saveRefund(Booking booking, BigDecimal amount, Instant paidAt) {
+    private void saveRefund(Booking booking, BigDecimal amount) {
         PaymentTransaction depositPayment = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
                 .filter(payment -> payment.getType() == PaymentType.DEPOSIT_PAY && payment.getStatus() == PaymentStatus.PAID)
                 .findFirst()
                 .orElseThrow(() -> new ConflictException("Paid deposit not found"));
-        BookingCharge deposit = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.DEPOSIT)
-                .orElseThrow(() -> new ConflictException("Deposit charge not found"));
         PaymentTransaction refund = new PaymentTransaction();
         refund.setBooking(booking);
-        refund.setCharge(deposit);
         refund.setType(PaymentType.REFUND);
         refund.setAmount(amount);
         refund.setDirection(PaymentDirection.OUT);
         refund.setMethod(depositPayment.getMethod());
-        refund.setStatus(PaymentStatus.PAID);
-        refund.setPaidAt(paidAt);
+        refund.setStatus(PaymentStatus.PENDING);
+        refund.setProcessingNote("Chờ nhà cung cấp hoàn tiền và tải minh chứng");
         paymentTransactionRepository.save(refund);
     }
 
     private List<TimelineStepResponse> timeline(Booking booking, List<PaymentTransaction> payments) {
         List<TimelineStepResponse> steps = new ArrayList<>();
         steps.add(new TimelineStepResponse("Đã gửi yêu cầu", booking.getCreatedAt(), null, true, false));
+        if (booking.getOperationalResolution() != null && booking.getOperationalResolvedAt() != null) {
+            String title = switch (booking.getOperationalResolution()) {
+                case CHANGE_VEHICLE -> "Nhà cung cấp đã đổi xe";
+                case RESCHEDULE -> "Nhà cung cấp đã dời giờ nhận xe";
+                case CANCEL_AND_REFUND -> "Nhà cung cấp đã hủy và hoàn tiền";
+            };
+            steps.add(new TimelineStepResponse(
+                    title,
+                    booking.getOperationalResolvedAt(),
+                    booking.getOperationalResolutionReason(),
+                    true,
+                    booking.getOperationalResolution()
+                            == com.fptufa26.ecomotion.booking.enums.OperationalResolutionType.CANCEL_AND_REFUND));
+        }
         if (booking.getStatus() == BookingStatus.REJECTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã từ chối", null, "Không có lý do", true, true));
-        } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
+        } else if (booking.getStatus() == BookingStatus.ACCEPTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã chấp nhận", null, null, true, false));
+        } else if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+            steps.add(new TimelineStepResponse(
+                    "Đang giữ chỗ",
+                    booking.getCreatedAt(),
+                    "Thanh toán cọc trong 15 phút",
+                    true,
+                    false));
+        } else if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CANCELLED) {
+            steps.add(new TimelineStepResponse("Đã giữ chỗ", booking.getCreatedAt(), null, true, false));
         }
         payments.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID
@@ -561,17 +948,111 @@ public class BookingServiceImpl implements BookingService {
             case PROVIDER_NO_VEHICLE -> "Nhà cung cấp hết xe";
             case PROVIDER_NO_DRIVER -> "Nhà cung cấp hết tài xế";
             case PREVIOUS_RENTER_OVERDUE -> "Khách của chuyến trước chưa trả xe";
+            case DEPOSIT_TIMEOUT -> "Hết thời gian giữ lịch do chưa gửi chứng từ đặt cọc";
             case FORCE_MAJEURE -> "Bất khả kháng";
             case SYSTEM -> "Hệ thống huỷ";
         };
     }
 
     private BookingSummaryResponse toSummary(Booking booking) {
-        PlanType planType = snapshotRepository.findByBooking_Id(booking.getId())
-                .map(BookingPolicySnapshot::getPlanType)
-                .orElseGet(() -> booking.getPlan().getPlanType());
+        BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         String imageUrl = vehicleCatalogService.coverImageUrl(booking.getVehicle().getId());
-        return bookingMapper.toSummary(booking, planType, imageUrl, canPay(booking));
+        var risk = vehicleOperationalRiskService.assess(booking);
+        Instant endTime = summaryEndTime(booking, snapshot);
+        return bookingMapper.toSummary(
+                booking,
+                snapshot,
+                imageUrl,
+                canPay(booking),
+                risk.atRisk(),
+                risk.message(),
+                holdExpiresAt(booking),
+                endTime,
+                summaryDepositAmount(booking, snapshot),
+                assignedDriverName(booking),
+                actionKind(booking));
+    }
+
+    private Instant summaryEndTime(Booking booking, BookingPolicySnapshot snapshot) {
+        if (booking.getPickupTime() == null || snapshot == null || snapshot.getSlotLengthMinutes() == null) {
+            return null;
+        }
+        return endOf(booking, snapshot, baseSlots(booking));
+    }
+
+    private BigDecimal summaryDepositAmount(Booking booking, BookingPolicySnapshot snapshot) {
+        Optional<PaymentRequest> currentDeposit = currentPayableRequest(booking, PaymentRequestType.DEPOSIT);
+        if (currentDeposit.isPresent()) {
+            return currentDeposit.get().getAmount();
+        }
+        if (snapshot != null && snapshot.getDepositAmount() != null) {
+            return snapshot.getDepositAmount();
+        }
+        if (snapshot != null && snapshot.getDepositRatio() != null && booking.getTotalAmount() != null) {
+            return booking.getTotalAmount()
+                    .multiply(snapshot.getDepositRatio())
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+        return null;
+    }
+
+    private Optional<PaymentRequest> currentPayableRequest(Booking booking, PaymentRequestType type) {
+        Instant now = clock.instant();
+        return paymentRequestService.findPaymentRequest(booking.getId(), type)
+                .filter(request -> request.getStatus() == PaymentRequestStatus.PENDING
+                        || request.getStatus() == PaymentRequestStatus.REJECTED)
+                .filter(request -> request.getExpiresAt() == null || request.getExpiresAt().isAfter(now));
+    }
+
+    private String assignedDriverName(Booking booking) {
+        if (booking.getDriver() == null || !DRIVER_NAME_STATUSES.contains(booking.getStatus())) {
+            return null;
+        }
+        if (booking.getDriver().getUser() == null) {
+            return null;
+        }
+        String name = booking.getDriver().getUser().getFullName();
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        return name.trim();
+    }
+
+    private BookingActionKind actionKind(Booking booking) {
+        if (canConfirmStart(booking)) {
+            return BookingActionKind.CONFIRM_START;
+        }
+        if (canConfirmEnd(booking)) {
+            return BookingActionKind.CONFIRM_END;
+        }
+        if (!canPay(booking)) {
+            return BookingActionKind.NONE;
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT) {
+            return BookingActionKind.PAY_SETTLEMENT;
+        }
+        return BookingActionKind.PAY_DEPOSIT;
+    }
+
+    private boolean canConfirmStart(Booking booking) {
+        return CONFIRM_START_STATUSES.contains(booking.getStatus())
+                && booking.getRenterStartConfirmedAt() == null;
+    }
+
+    private boolean canConfirmEnd(Booking booking) {
+        return CONFIRM_END_STATUSES.contains(booking.getStatus())
+                && booking.getRenterEndConfirmedAt() == null;
+    }
+
+    private Instant holdExpiresAt(Booking booking) {
+        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+            return null;
+        }
+        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
+                .map(PaymentRequest::getExpiresAt)
+                .orElseGet(() -> booking.getCreatedAt() == null
+                        ? null
+                        : booking.getCreatedAt().plus(INITIAL_HOLD_DURATION));
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {
@@ -589,6 +1070,13 @@ public class BookingServiceImpl implements BookingService {
             throw new AccessDeniedException("Bạn không có quyền truy cập đơn thuê này");
         }
         return booking;
+    }
+
+    private String normalizeBookingCode(String bookingCode) {
+        if (bookingCode == null || bookingCode.isBlank()) {
+            throw new BadRequestException("Mã booking là bắt buộc");
+        }
+        return bookingCode.trim().toUpperCase(Locale.ROOT);
     }
 
     private Booking requireAccepted(Long userId, String bookingCode) {
@@ -698,11 +1186,13 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private boolean canEditRequest(Booking booking) {
-        if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.ACCEPTED) {
+        if (booking.getStatus() != BookingStatus.PENDING
+                && booking.getStatus() != BookingStatus.ACCEPTED
+                && booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
             return false;
         }
         return paymentRequestService
-                .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
+                .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
                 .stream()
                 .flatMap(request -> request.getEvidences().stream())
                 .noneMatch(evidence -> evidence.getStatus() == PaymentEvidenceStatus.PENDING
@@ -710,50 +1200,39 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private boolean canPay(Booking booking) {
-        if (booking.getStatus() != BookingStatus.ACCEPTED
-                && booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
-            return false;
-        }
-
-        if (booking.getStatus() == BookingStatus.ACCEPTED) {
+        Instant now = clock.instant();
+        if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT
+                || booking.getStatus() == BookingStatus.ACCEPTED) {
             boolean alreadyPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
                     .anyMatch(tx -> tx.getType() == PaymentType.DEPOSIT_PAY && tx.getStatus() == PaymentStatus.PAID);
             if (alreadyPaid) {
                 return false;
             }
-            Optional<PaymentRequest> depositReqOpt = paymentRequestService
-                    .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT);
-            if (depositReqOpt.isPresent()) {
-                PaymentRequest request = depositReqOpt.get();
-                if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(Instant.now())) {
+            Optional<PaymentRequest> depositReq = paymentRequestService
+                    .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT);
+            if (depositReq.isPresent()) {
+                PaymentRequest request = depositReq.get();
+                if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(now)) {
                     return false;
                 }
                 return request.getStatus() == PaymentRequestStatus.PENDING
                         || request.getStatus() == PaymentRequestStatus.REJECTED;
             }
-            if (booking.getPickupTime() != null && booking.getPickupTime().isBefore(Instant.now())) {
-                return false;
-            }
-            return true;
+            return booking.getPickupTime() == null || !booking.getPickupTime().isBefore(now);
         }
-
-        // AWAITING_FINAL_PAYMENT
+        if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
+            return false;
+        }
         boolean alreadySettled = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
                 .anyMatch(tx -> tx.getType() == PaymentType.SETTLEMENT && tx.getStatus() == PaymentStatus.PAID);
         if (alreadySettled) {
             return false;
         }
-        Optional<PaymentRequest> finalReqOpt = paymentRequestService
-                .findByBookingIdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE);
-        if (finalReqOpt.isPresent()) {
-            PaymentRequest request = finalReqOpt.get();
-            if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(Instant.now())) {
-                return false;
-            }
-            return request.getStatus() == PaymentRequestStatus.PENDING
-                    || request.getStatus() == PaymentRequestStatus.REJECTED;
-        }
-        return true;
+        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.FINAL_BALANCE)
+                .map(request -> (request.getExpiresAt() == null || request.getExpiresAt().isAfter(now))
+                        && (request.getStatus() == PaymentRequestStatus.PENDING
+                        || request.getStatus() == PaymentRequestStatus.REJECTED))
+                .orElse(true);
     }
 
     private Instant endOf(Booking booking) {
@@ -773,11 +1252,9 @@ public class BookingServiceImpl implements BookingService {
         return booking.getPickupTime().plus(Duration.ofMinutes((long) snapshot.getSlotLengthMinutes() * slots));
     }
 
-    private String nextBookingCode() {
+    private String nextBookingCode(Long bookingId) {
         int year = Year.now(ZONE).getValue();
-        String prefix = "EM-" + year + "-";
-        long sequence = bookingRepository.countByBookingCodeStartingWith(prefix) + 1;
-        return prefix + String.format("%04d", sequence);
+        return "EM-" + year + "-" + String.format("%06d", bookingId);
     }
 
     // ---------------------------------------------------------
@@ -881,5 +1358,23 @@ public class BookingServiceImpl implements BookingService {
     @Transactional(readOnly = true)
     public BigDecimal sumTotalRevenue() {
         return paymentTransactionRepository.sumTotalPaidIn();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumAdminCommission() {
+        return bookingRepository.sumAdminCommission();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumCompletedGrossRentalVolume() {
+        return bookingRepository.sumCompletedGrossRentalVolume();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumEscrowDeposits() {
+        return paymentTransactionRepository.sumEscrowDeposits();
     }
 }

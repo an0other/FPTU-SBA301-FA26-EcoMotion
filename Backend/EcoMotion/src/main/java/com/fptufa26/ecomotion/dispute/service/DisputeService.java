@@ -16,6 +16,9 @@ public interface DisputeService {
 
     DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge);
 
+    DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge,
+                               String description, List<String> evidenceUrls);
+
     List<Dispute> listDisputes(DisputeStatus status);
 
     Optional<Dispute> getDisputeById(Long disputeId);
@@ -30,4 +33,5 @@ public interface DisputeService {
     boolean hasActiveDispute(Long bookingId);
 
     List<Dispute> getDisputesByBookingId(Long bookingId);
+    boolean hasOpenDispute(Long bookingId);
 }

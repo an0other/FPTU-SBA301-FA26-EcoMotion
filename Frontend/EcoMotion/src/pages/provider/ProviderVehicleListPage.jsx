@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
 import { providerService } from '../../services/providerService'
 import { formatCurrency, TRANSMISSION_LABELS } from '../../utils/formatCurrency'
 import Toast from '../../components/Toast'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 
 export default function ProviderVehicleListPage() {
-  const { user } = useAuth()
   const [searchParams] = useSearchParams()
 
   const [summary, setSummary] = useState(null)
@@ -27,14 +25,6 @@ export default function ProviderVehicleListPage() {
   const [sortBy, setSortBy] = useState('newest')
   const [viewMode, setViewMode] = useState('grid')
   const [togglingIds, setTogglingIds] = useState(new Set())
-
-  useEffect(() => {
-    const urlStatus = searchParams.get('status')
-    if (urlStatus !== null && urlStatus !== undefined) {
-      setStatusFilter(urlStatus)
-      setPage(0)
-    }
-  }, [searchParams])
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -166,9 +156,6 @@ export default function ProviderVehicleListPage() {
     setSortBy('newest')
     setPage(0)
   }
-
-  const providerName = summary?.providerName || user?.fullName || 'Nhà xe đối tác'
-  const depotAddress = summary?.depotAddress || '120 Phổ Quang, Q. Tân Bình, TP.HCM'
 
   function renderStatusBadge(status) {
     switch (status) {

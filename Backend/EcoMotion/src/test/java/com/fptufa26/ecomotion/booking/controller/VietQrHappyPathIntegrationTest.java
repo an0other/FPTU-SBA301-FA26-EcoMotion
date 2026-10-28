@@ -9,9 +9,8 @@ import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
-import com.fptufa26.ecomotion.user.entity.Driver;
-import com.fptufa26.ecomotion.user.repository.DriverRepository;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -32,6 +32,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -46,33 +47,17 @@ class VietQrHappyPathIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired BookingRepository bookingRepository;
-    @Autowired DriverRepository driverRepository;
     @Autowired PaymentRequestRepository paymentRequestRepository;
     @Autowired ProviderBankAccountRepository bankAccountRepository;
     @Autowired ProviderRepository providerRepository;
+    @Autowired VehicleRepository vehicleRepository;
 
     @Test
     void completeRentalFlowUsesVietQrForDepositAndFinalBalance() throws Exception {
-        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
-        String renter = login(booking.getRenter().getUser().getEmail());
+        String renter = login("kieu.vo@ecomotion.vn");
         String provider = login("provider.a@ecomotion.vn");
-        String driverToken = login("driver.nam@ecomotion.vn");
-
-        booking.setStatus(BookingStatus.PENDING);
-        booking.setDriver(null);
-        booking.setAssignedAt(null);
-        booking.setDriverConfirmedAt(null);
-        booking.setActualArrivedAt(null);
-        booking.setActualStartAt(null);
-        booking.setActualEndAt(null);
-        booking.setProviderConfirmedAt(null);
-        booking.setRenterConfirmedAt(null);
-        bookingRepository.saveAndFlush(booking);
+        Booking booking = createAwaitingDepositBooking(renter);
         ensureBankAccount(booking);
-
-        call(post("/api/provider/bookings/{code}/accept", booking.getBookingCode()), provider)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("ACCEPTED"));
 
         PaymentRequest deposit = paymentRequestRepository
                 .findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT).orElseThrow();
@@ -81,22 +66,27 @@ class VietQrHappyPathIntegrationTest {
         assertThat(bookingRepository.findById(booking.getId()).orElseThrow().getStatus())
                 .isEqualTo(BookingStatus.CONFIRMED);
 
-        Driver driver = driverRepository.findAll().stream()
-                .filter(row -> row.getUser().getEmail().equalsIgnoreCase("driver.nam@ecomotion.vn"))
-                .findFirst().orElseThrow();
         call(put("/api/provider/bookings/{code}/driver", booking.getBookingCode())
-                .content(json(Map.of("driverId", driver.getId()))), provider)
+                .content(json(Map.of("mode", "AUTO"))), provider)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("DRIVER_ASSIGNED"));
 
+        Booking assigned = bookingRepository.findById(booking.getId()).orElseThrow();
+        String driverToken = login(assigned.getDriver().getUser().getEmail());
         call(post("/api/v1/driver/trips/{id}/confirm", booking.getId()), driverToken).andExpect(status().isOk());
         call(post("/api/v1/driver/trips/{id}/arrive", booking.getId()), driverToken).andExpect(status().isOk());
-        call(post("/api/v1/driver/trips/{id}/start", booking.getId()), driverToken).andExpect(status().isOk());
+        call(post("/api/v1/driver/trips/{id}/start", booking.getId()), driverToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("AWAITING_START_CONFIRMATION"));
+        call(post("/api/renter/bookings/{code}/confirm-start", booking.getBookingCode()), renter)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"));
         call(post("/api/v1/driver/trips/{id}/finish", booking.getId()), driverToken)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"));
+                .andExpect(jsonPath("$.data.status").value("AWAITING_END_CONFIRMATION"));
         call(post("/api/renter/bookings/{code}/confirm-end", booking.getBookingCode()), renter)
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"));
 
         call(post("/api/provider/bookings/{code}/charges", booking.getBookingCode())
                 .content(json(Map.of(
@@ -120,6 +110,37 @@ class VietQrHappyPathIntegrationTest {
                 .andExpect(status().isCreated());
         assertThat(bookingRepository.findById(booking.getId()).orElseThrow().getStatus())
                 .isEqualTo(BookingStatus.COMPLETED);
+    }
+
+    private Booking createAwaitingDepositBooking(String renterToken) throws Exception {
+        JsonNode vehicles = objectMapper.readTree(call(get("/api/renter/bookings/vehicles"), renterToken)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode vehicle = vehicles.get("data").get(0);
+        JsonNode dailyPlan = null;
+        for (JsonNode plan : vehicle.get("plans")) {
+            if ("DAILY".equals(plan.get("planType").asText())) {
+                dailyPlan = plan;
+                break;
+            }
+        }
+        assertThat(dailyPlan).isNotNull();
+        ensureBankAccountForVehicle(vehicle.get("id").asLong());
+
+        String response = call(post("/api/renter/bookings").content(json(Map.of(
+                        "vehicleId", vehicle.get("id").asLong(),
+                        "planId", dailyPlan.get("id").asLong(),
+                        "slotCount", 2,
+                        "pickupTime", "2027-12-15T01:00:00Z",
+                        "pickupAddress", "18 Hoàng Hoa Thám, Tân Bình",
+                        "pickupLatitude", 10.801234,
+                        "pickupLongitude", 106.652345,
+                        "driverNote", "Kiểm thử luồng VietQR V3.1",
+                        "passengerCount", 2))), renterToken)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("AWAITING_DEPOSIT"))
+                .andReturn().getResponse().getContentAsString();
+        String bookingCode = objectMapper.readTree(response).get("data").get("bookingCode").asText();
+        return bookingRepository.findByBookingCode(bookingCode).orElseThrow();
     }
 
     private void submitProof(String token, PaymentRequest request, String reference) throws Exception {
@@ -171,6 +192,20 @@ class VietQrHappyPathIntegrationTest {
         account.setBankName("Vietcombank");
         account.setAccountNumber("0123456789");
         account.setAccountHolderName("ECOMOTION E2E");
+        bankAccountRepository.saveAndFlush(account);
+    }
+
+    private void ensureBankAccountForVehicle(long vehicleId) {
+        var vehicle = vehicleRepository.findById(vehicleId).orElseThrow();
+        if (bankAccountRepository.findByProvider_IdAndStatus(
+                vehicle.getProvider().getId(), BankAccountStatus.ACTIVE).isPresent()) return;
+        ProviderBankAccount account = new ProviderBankAccount();
+        account.setProvider(providerRepository.findById(vehicle.getProvider().getId()).orElseThrow());
+        account.setBankCode("VCB");
+        account.setBankName("Vietcombank");
+        account.setAccountNumber("0123456789");
+        account.setAccountHolderName("ECOMOTION E2E");
+        account.setStatus(BankAccountStatus.ACTIVE);
         bankAccountRepository.saveAndFlush(account);
     }
 }

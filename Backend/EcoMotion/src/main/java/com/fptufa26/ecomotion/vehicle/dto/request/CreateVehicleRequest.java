@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
 public record CreateVehicleRequest(
         @NotBlank @Size(max = 50) @Pattern(regexp = "^[a-zA-Z0-9-]{6,50}$", message = "Số khung (VIN) không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối)") String chassisNo,
         @NotBlank @Size(max = 50) @Pattern(regexp = "^[a-zA-Z0-9-]{4,50}$", message = "Số máy không hợp lệ (tối thiểu 4 ký tự chữ, số hoặc gạch nối)") String engineNo,
-        @NotBlank @Size(max = 20) @Pattern(regexp = "^[0-9]{2}[a-zA-Z]{1,2}-([0-9]{3}\\.[0-9]{2}|[0-9]{4,5})$", message = "Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111)") String licensePlate,
+        @NotBlank @Size(max = 20) @Pattern(regexp = "^[0-9]{2}[a-zA-Z]{1,2}[- .]?[0-9]{3}[- .]?[0-9]{1,2}$", message = "Biển số xe không đúng định dạng quy chuẩn Việt Nam") String licensePlate,
         @NotBlank @Size(max = 50) String brand,
         @NotBlank @Size(max = 50) String model,
         @NotNull @Min(2015) @Max(2026) Integer manufactureYear,

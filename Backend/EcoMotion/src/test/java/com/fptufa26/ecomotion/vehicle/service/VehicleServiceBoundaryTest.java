@@ -3,13 +3,13 @@ package com.fptufa26.ecomotion.vehicle.service;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.enums.ProviderType;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleCardResponse;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
-import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import com.fptufa26.ecomotion.vehicle.service.implement.VehicleServiceImpl;
@@ -47,16 +47,18 @@ class VehicleServiceBoundaryTest {
     private UserService userService;
 
     @Mock
-    private VehicleDocumentRepository vehicleDocumentRepository;
+
+    private ScheduleService scheduleService;
 
     @Mock
-    private ScheduleService scheduleService;
+    private VehicleDocumentRepository vehicleDocumentRepository;
 
     private VehicleService service;
 
     @BeforeEach
     void setUp() {
-        service = new VehicleServiceImpl(vehicleRepository, vehicleImageService, rentalPlanService, userService, vehicleDocumentRepository, scheduleService);
+        service = new VehicleServiceImpl(
+                vehicleRepository, vehicleImageService, rentalPlanService, userService, scheduleService, vehicleDocumentRepository);
     }
 
     @Test

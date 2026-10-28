@@ -27,6 +27,7 @@ public record BookingDetailResponse(
         int passengerCount,
         int slotCount,
         BigDecimal totalAmount,
+        BigDecimal depositAmount,
         Instant createdAt,
         Instant actualStartAt,
         Instant actualEndAt,
@@ -41,8 +42,10 @@ public record BookingDetailResponse(
         boolean canCancel,
         boolean canEditRequest,
         boolean canPay,
+        boolean canConfirmStart,
         boolean canConfirmEnd,
         List<DisputeCategory> disputeCategories,
-        String providerName
+        String providerName,
+        Instant holdExpiresAt
 ) {
 }
