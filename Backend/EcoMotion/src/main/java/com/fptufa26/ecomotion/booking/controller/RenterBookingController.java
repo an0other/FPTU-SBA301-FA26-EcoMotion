@@ -2,6 +2,8 @@ package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
+import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
+import com.fptufa26.ecomotion.booking.dto.response.PickupQuoteResponse;
 import com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest;
 import com.fptufa26.ecomotion.booking.dto.request.UpdateBookingRequestDetails;
 import com.fptufa26.ecomotion.booking.dto.response.BookingDetailResponse;
@@ -72,6 +74,11 @@ public class RenterBookingController {
     @GetMapping("/vehicles")
     public ApiResponse<List<BookableVehicleResponse>> listVehicles() {
         return ApiResponse.success(vehicleCatalogService.listApproved());
+    }
+
+    @PostMapping("/pickup-quote")
+    public ApiResponse<PickupQuoteResponse> quotePickup(@Valid @RequestBody PickupQuoteRequest request) {
+        return ApiResponse.success(bookingService.quotePickup(request));
     }
 
     @PostMapping

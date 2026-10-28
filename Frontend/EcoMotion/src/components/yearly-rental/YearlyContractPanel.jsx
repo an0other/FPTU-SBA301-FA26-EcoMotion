@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react'
 import { yearlyRentalService } from '../../services/yearlyRentalService'
 import { BOOKING_STATUS_LABELS } from '../../utils/paymentDisplay'
+import { BookingErrorDialog } from '../booking/BookingErrorDialog'
 
 export default function YearlyContractPanel({ contract, onUploaded }) {
   const [file, setFile] = useState(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [requestError, setRequestError] = useState('')
   const inputRef = useRef(null)
   const operationInFlight = useRef(false)
 
@@ -33,7 +35,7 @@ export default function YearlyContractPanel({ contract, onUploaded }) {
       if (inputRef.current) inputRef.current.value = ''
       onUploaded()
     } catch (error) {
-      setError(error.message || 'Không upload được hợp đồng.')
+      setRequestError(error.message || 'Không upload được hợp đồng.')
     } finally {
       operationInFlight.current = false
       setBusy('')
@@ -60,7 +62,7 @@ export default function YearlyContractPanel({ contract, onUploaded }) {
 
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (error) {
-      setError(error.message || 'Không tải được hợp đồng.')
+      setRequestError(error.message || 'Không tải được hợp đồng.')
     } finally {
       operationInFlight.current = false
       setBusy('')
@@ -69,6 +71,7 @@ export default function YearlyContractPanel({ contract, onUploaded }) {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
+      <BookingErrorDialog title="Chưa thể xử lý hợp đồng" message={requestError} onClose={() => setRequestError('')} />
       <h2 className="text-lg font-bold text-slate-900">Hợp đồng gói năm</h2>
 
       <div className="mt-4 rounded-xl bg-slate-50 p-4">

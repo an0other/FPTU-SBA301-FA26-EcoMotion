@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.vehicle.exception;
+package com.fptufa26.ecomotion.location.exception;
 
 public class MapLocationUnavailableException extends RuntimeException {
     public MapLocationUnavailableException(String message) {
