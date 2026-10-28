@@ -16,21 +16,17 @@ export default function ProviderSchedulePage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
 
-  // Filters
   const [selectedVehicleId, setSelectedVehicleId] = useState('')
   const [selectedType, setSelectedType] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
   const [startDateFilter, setStartDateFilter] = useState('')
   const [endDateFilter, setEndDateFilter] = useState('')
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 6
 
-  // Real-time clock ticker (auto-detects expired schedules every 15s)
   const [nowTime, setNowTime] = useState(() => Date.now())
 
-  // Modal create
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formVehicleId, setFormVehicleId] = useState('')
@@ -40,11 +36,9 @@ export default function ProviderSchedulePage() {
   const [formReason, setFormReason] = useState('')
   const [formError, setFormError] = useState('')
 
-  // Modal unblock confirmation
   const [cancelingSchedule, setCancelingSchedule] = useState(null)
   const [cancelingLoading, setCancelingLoading] = useState(false)
 
-  // Fetch stats and vehicles
   const loadInitialData = useCallback(async () => {
     try {
       const [statsRes, vehiclesRes] = await Promise.all([
@@ -58,7 +52,6 @@ export default function ProviderSchedulePage() {
     }
   }, [])
 
-  // Fetch schedules
   const loadSchedules = useCallback(async () => {
     setLoading(true)
     try {
@@ -83,7 +76,6 @@ export default function ProviderSchedulePage() {
     queueMicrotask(loadInitialData)
   }, [loadInitialData])
 
-  // Auto-tick and refresh stats every 15 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       setNowTime(Date.now())
@@ -99,7 +91,6 @@ export default function ProviderSchedulePage() {
     })
   }, [loadSchedules])
 
-  // Helper date formatter
   const formatDateTime = (isoString) => {
     if (!isoString) return { time: '--:--', date: '--/--/----' }
     const d = new Date(isoString)
@@ -108,7 +99,6 @@ export default function ProviderSchedulePage() {
     return { time, date }
   }
 
-  // Duration calculator
   const formatDuration = (startIso, endIso) => {
     if (!startIso || !endIso) return ''
     const start = new Date(startIso).getTime()
@@ -128,7 +118,6 @@ export default function ProviderSchedulePage() {
     return remainHours > 0 ? `${days} ngày ${remainHours}h` : `${days} ngày`
   }
 
-  // Vehicle badge style
   const getVehicleBadgeClass = (model = '') => {
     const m = model.toUpperCase()
     if (m.includes('VF 6')) return 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -150,7 +139,6 @@ export default function ProviderSchedulePage() {
     return model.split(' ')[0] || vehicle.brand || 'XE'
   }
 
-  // Filtered schedules considering real-time expiration
   const displayedSchedules = useMemo(() => {
     if (!selectedStatus) return schedules
     if (selectedStatus === 'ACTIVE') {
@@ -165,7 +153,6 @@ export default function ProviderSchedulePage() {
     return schedules
   }, [schedules, selectedStatus, nowTime])
 
-  // Pagination slice
   const paginatedSchedules = useMemo(() => {
     const startIdx = (currentPage - 1) * itemsPerPage
     return displayedSchedules.slice(startIdx, startIdx + itemsPerPage)
@@ -179,7 +166,6 @@ export default function ProviderSchedulePage() {
     return new Date(d.getTime() - offset).toISOString().slice(0, 16)
   }
 
-  // Handle open create modal
   const handleOpenCreateModal = () => {
     setFormVehicleId(vehicles.length > 0 ? vehicles[0].id : '')
     setFormType('MAINTENANCE')
@@ -196,7 +182,6 @@ export default function ProviderSchedulePage() {
     setIsModalOpen(true)
   }
 
-  // Submit create block
   const handleCreateSchedule = async (e) => {
     e.preventDefault()
     setFormError('')
@@ -246,7 +231,6 @@ export default function ProviderSchedulePage() {
     }
   }
 
-  // Submit cancel unblock
   const handleConfirmCancel = async () => {
     if (!cancelingSchedule) return
     setCancelingLoading(true)
@@ -277,7 +261,7 @@ export default function ProviderSchedulePage() {
       <ProviderHeader activeTab="schedules" />
 
       <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-6 space-y-6">
-        {/* Header Title & Actions */}
+        
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -300,9 +284,8 @@ export default function ProviderSchedulePage() {
           </div>
         </div>
 
-        {/* 4 Metric KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-5">
-          {/* Card 1: Tổng lịch đang chặn */}
+          
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
@@ -328,7 +311,6 @@ export default function ProviderSchedulePage() {
             </div>
           </div>
 
-          {/* Card 2: Xe đang bảo dưỡng */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
@@ -357,7 +339,6 @@ export default function ProviderSchedulePage() {
             </div>
           </div>
 
-          {/* Card 3: Xe bận việc riêng */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
@@ -385,7 +366,6 @@ export default function ProviderSchedulePage() {
             </div>
           </div>
 
-          {/* Card 4: Lịch khách đặt sắp tới */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
@@ -414,10 +394,9 @@ export default function ProviderSchedulePage() {
           </div>
         </div>
 
-        {/* Filter Bar */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            {/* Filter: Phương tiện */}
+            
             <div className="relative min-w-[220px]">
               <select
                 value={selectedVehicleId}
@@ -443,7 +422,6 @@ export default function ProviderSchedulePage() {
               </div>
             </div>
 
-            {/* Filter: Phân loại */}
             <div className="relative min-w-[170px]">
               <select
                 value={selectedType}
@@ -467,7 +445,6 @@ export default function ProviderSchedulePage() {
               </div>
             </div>
 
-            {/* Filter: Trạng thái */}
             <div className="relative min-w-[180px]">
               <select
                 value={selectedStatus}
@@ -491,7 +468,6 @@ export default function ProviderSchedulePage() {
               </div>
             </div>
 
-            {/* Date Range Filters */}
             <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-600">
               <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -531,7 +507,6 @@ export default function ProviderSchedulePage() {
           </div>
         </div>
 
-        {/* Data Table Container */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -589,14 +564,13 @@ export default function ProviderSchedulePage() {
                           isCancelled ? 'opacity-70 bg-slate-50/30' : isPast ? 'opacity-85 bg-slate-50/20' : ''
                         }`}
                       >
-                        {/* 1. Mã lịch */}
+                        
                         <td className="py-4 px-4 lg:px-6 font-mono font-bold text-slate-800">
                           <span className={isCancelled ? 'line-through text-slate-400' : ''}>
                             #SCH-{String(item.id).padStart(3, '0')}
                           </span>
                         </td>
 
-                        {/* 2. Phương tiện */}
                         <td className="py-4 px-4 lg:px-6">
                           <div className="flex items-center gap-2.5">
                             <span
@@ -617,7 +591,6 @@ export default function ProviderSchedulePage() {
                           </div>
                         </td>
 
-                        {/* 3. Phân loại */}
                         <td className="py-4 px-4 lg:px-6">
                           {item.type === 'MAINTENANCE' ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
@@ -644,13 +617,11 @@ export default function ProviderSchedulePage() {
                           )}
                         </td>
 
-                        {/* 4. Bắt đầu */}
                         <td className="py-4 px-4 lg:px-6">
                           <div className="font-bold text-slate-900 leading-tight">{startInfo.time}</div>
                           <div className="text-[11px] text-slate-500">{startInfo.date}</div>
                         </td>
 
-                        {/* 5. Kết thúc & Thời lượng */}
                         <td className="py-4 px-4 lg:px-6">
                           <div className="flex items-center gap-2">
                             <div>
@@ -665,7 +636,6 @@ export default function ProviderSchedulePage() {
                           </div>
                         </td>
 
-                        {/* 6. Trạng thái */}
                         <td className="py-4 px-4 lg:px-6">
                           {isCancelled ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
@@ -688,7 +658,6 @@ export default function ProviderSchedulePage() {
                           )}
                         </td>
 
-                        {/* 7. Lý do / Ghi chú (Tuân thủ DB 100%, không bịa field) */}
                         <td className="py-4 px-4 lg:px-6">
                           {item.type === 'BOOKED' ? (
                             <div>
@@ -717,7 +686,6 @@ export default function ProviderSchedulePage() {
                           )}
                         </td>
 
-                        {/* 8. Hành động */}
                         <td className="py-4 px-4 lg:px-6 text-right">
                           {item.type === 'BOOKED' ? (
                             <span
@@ -764,7 +732,6 @@ export default function ProviderSchedulePage() {
             </table>
           </div>
 
-          {/* Table Bottom Notice & Pagination */}
           <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px] shrink-0">
@@ -813,7 +780,6 @@ export default function ProviderSchedulePage() {
         </div>
       </main>
 
-      {/* Modal: + Thêm lịch chặn / bảo trì */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
@@ -848,7 +814,6 @@ export default function ProviderSchedulePage() {
                 </div>
               )}
 
-              {/* 1. Chọn phương tiện */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
                   1. Chọn phương tiện <span className="text-rose-500">*</span>
@@ -870,7 +835,6 @@ export default function ProviderSchedulePage() {
                 </select>
               </div>
 
-              {/* 2. Loại lịch chặn */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
                   2. Loại lịch chặn <span className="text-rose-500">*</span>
@@ -930,7 +894,6 @@ export default function ProviderSchedulePage() {
                 </div>
               </div>
 
-              {/* 3 & 4. Thời gian bắt đầu & kết thúc */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
@@ -960,7 +923,6 @@ export default function ProviderSchedulePage() {
                 </div>
               </div>
 
-              {/* 5. Lý do / Ghi chú (Max 255 chars, đúng schema DB) */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-slate-700 uppercase">
@@ -982,7 +944,6 @@ export default function ProviderSchedulePage() {
                 ></textarea>
               </div>
 
-              {/* Actions */}
               <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -1010,7 +971,6 @@ export default function ProviderSchedulePage() {
         </div>
       )}
 
-      {/* Modal: Xác nhận Mở lại lịch */}
       {cancelingSchedule && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
