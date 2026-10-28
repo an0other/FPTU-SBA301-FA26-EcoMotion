@@ -51,7 +51,6 @@ class ProviderDriverServiceTest {
         assertThat(allDrivers).isNotEmpty();
         assertThat(allDrivers.size()).isGreaterThanOrEqualTo(3);
 
-        // Filter by status APPROVED
         List<ProviderDriverItemResponse> approvedDrivers = providerDriverService.getDrivers(
                 providerUser.getUserId(),
                 null,
@@ -60,7 +59,6 @@ class ProviderDriverServiceTest {
         );
         assertThat(approvedDrivers).allMatch(d -> d.status() == DriverStatus.APPROVED);
 
-        // Filter by search query
         List<ProviderDriverItemResponse> searchDrivers = providerDriverService.getDrivers(
                 providerUser.getUserId(),
                 "Nam",
@@ -107,7 +105,7 @@ class ProviderDriverServiceTest {
         assertThat(response.id()).isNotNull();
         assertThat(response.fullName()).isEqualTo(request.fullName());
         assertThat(response.email()).isEqualTo(request.email());
-        assertThat(response.status()).isEqualTo(DriverStatus.PENDING); // Spec rule: PENDING awaiting Admin approval
+        assertThat(response.status()).isEqualTo(DriverStatus.PENDING);
 
         User createdUser = userRepository.findById(response.userId()).orElseThrow();
         assertThat(createdUser.getRole()).isEqualTo(Role.DRIVER);
@@ -118,7 +116,6 @@ class ProviderDriverServiceTest {
     void createDriverRejectsDuplicates() {
         User providerUser = userRepository.findByEmailIgnoreCase("provider.a@ecomotion.vn").orElseThrow();
 
-        // Use existing seeded email
         CreateDriverByProviderRequest duplicateEmailReq = new CreateDriverByProviderRequest(
                 "Tài Xế Duplicate",
                 "provider.a@ecomotion.vn",
@@ -150,7 +147,6 @@ class ProviderDriverServiceTest {
         assertThat(drivers).isNotEmpty();
         Long driverId = drivers.get(0).id();
 
-        // Suspend driver
         ProviderDriverItemResponse suspended = providerDriverService.toggleDriverStatus(
                 providerUser.getUserId(),
                 driverId,
@@ -158,7 +154,6 @@ class ProviderDriverServiceTest {
         );
         assertThat(suspended.status()).isEqualTo(DriverStatus.SUSPENDED);
 
-        // Re-activate driver
         ProviderDriverItemResponse reactivated = providerDriverService.toggleDriverStatus(
                 providerUser.getUserId(),
                 driverId,
@@ -186,7 +181,7 @@ class ProviderDriverServiceTest {
                 target.phone(),
                 target.portraitUrl(),
                 target.licenseNo(),
-                "C", // Changed from B2 to C
+                "C",
                 target.licenseExpiry(),
                 target.licenseImageUrl()
         );
@@ -197,7 +192,6 @@ class ProviderDriverServiceTest {
                 updateReq
         );
 
-        // Specification requirement: modifying approved profile puts it back to PENDING for admin review
         assertThat(updated.status()).isEqualTo(DriverStatus.PENDING);
         assertThat(updated.licenseClass()).isEqualTo("C");
     }

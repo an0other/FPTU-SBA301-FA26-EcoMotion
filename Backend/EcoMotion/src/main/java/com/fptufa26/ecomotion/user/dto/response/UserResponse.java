@@ -6,6 +6,7 @@ import com.fptufa26.ecomotion.user.enums.UserStatus;
 public record UserResponse(
         Long userId,
         String email,
+        String fullName,
         Role role,
         UserStatus status
 ) {

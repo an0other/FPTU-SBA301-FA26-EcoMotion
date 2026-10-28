@@ -288,16 +288,14 @@ export default function ProviderVehicleListPage() {
         />
       )}
 
-      {/* Header */}
       <ProviderHeader
         activeTab="vehicles"
         providerName={summary?.providerName}
         depotAddress={summary?.depotAddress}
       />
 
-      {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-6 lg:px-12 py-8 space-y-8">
-        {/* Title and Top Actions */}
+        
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0b1c30] tracking-tight">
@@ -316,9 +314,8 @@ export default function ProviderVehicleListPage() {
           </div>
         </div>
 
-        {/* 5 Mosaic KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          {/* All */}
+          
           <button
             type="button"
             onClick={() => handleFilterStatus('')}
@@ -347,7 +344,6 @@ export default function ProviderVehicleListPage() {
             </p>
           </button>
 
-          {/* Approved */}
           <button
             type="button"
             onClick={() => handleFilterStatus('APPROVED')}
@@ -376,7 +372,6 @@ export default function ProviderVehicleListPage() {
             </p>
           </button>
 
-          {/* Pending */}
           <button
             type="button"
             onClick={() => handleFilterStatus('PENDING')}
@@ -405,7 +400,6 @@ export default function ProviderVehicleListPage() {
             </p>
           </button>
 
-          {/* Hidden */}
           <button
             type="button"
             onClick={() => handleFilterStatus('HIDDEN')}
@@ -434,7 +428,6 @@ export default function ProviderVehicleListPage() {
             </p>
           </button>
 
-          {/* Rejected */}
           <button
             type="button"
             onClick={() => handleFilterStatus('REJECTED')}
@@ -464,10 +457,9 @@ export default function ProviderVehicleListPage() {
           </button>
         </div>
 
-        {/* Control Toolbar */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-[0_1px_6px_rgba(11,28,48,0.03)] space-y-4">
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
-            {/* Search Input */}
+            
             <div className="relative flex-1">
               <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
                 search
@@ -490,9 +482,8 @@ export default function ProviderVehicleListPage() {
               )}
             </div>
 
-            {/* Filter & Sort Controls */}
             <div className="flex flex-wrap items-center gap-2.5">
-              {/* Fuel Filter */}
+              
               <select
                 value={fuelFilter}
                 onChange={(e) => {
@@ -508,7 +499,6 @@ export default function ProviderVehicleListPage() {
                 <option value="HYBRID">Hybrid</option>
               </select>
 
-              {/* Sort By */}
               <select
                 value={sortBy}
                 onChange={(e) => {
@@ -524,7 +514,6 @@ export default function ProviderVehicleListPage() {
                 <option value="name-asc">Tên xe: A → Z</option>
               </select>
 
-              {/* Grid / Table Switch */}
               <div className="inline-flex rounded-xl border border-slate-200 p-0.5 bg-slate-100">
                 <button
                   type="button"
@@ -550,7 +539,6 @@ export default function ProviderVehicleListPage() {
             </div>
           </div>
 
-          {/* Active Filter Chips */}
           {(statusFilter || fuelFilter || debouncedKeyword) && (
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
               <span className="text-slate-400">Đang lọc theo:</span>
@@ -589,7 +577,6 @@ export default function ProviderVehicleListPage() {
           )}
         </div>
 
-        {/* Loading / Error States */}
         {loading && (
           <div className="py-20 text-center">
             <span className="material-symbols-outlined animate-spin text-4xl text-emerald-600">
@@ -613,7 +600,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Empty State */}
         {!loading && !error && vehicles.length === 0 && (
           <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center shadow-xs">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
@@ -633,7 +619,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Vehicles List (Grid View) */}
         {!loading && !error && vehicles.length > 0 && viewMode === 'grid' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {vehicles.map((vehicle) => {
@@ -646,7 +631,7 @@ export default function ProviderVehicleListPage() {
                   key={vehicle.id}
                   className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-[0_2px_12px_rgba(11,28,48,0.04)] hover:shadow-[0_8px_24px_rgba(11,28,48,0.08)] transition-all flex flex-col"
                 >
-                  {/* Vehicle Image Cover */}
+                  
                   <div className="relative aspect-16/10 bg-slate-100 overflow-hidden group">
                     <img
                       src={vehicle.coverImageUrl || '/placeholder-car.jpg'}
@@ -658,20 +643,17 @@ export default function ProviderVehicleListPage() {
                       }}
                     />
 
-                    {/* Top Overlay Badges */}
                     <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
-                      {/* Top-Left: Status Badge (e.g. • Đã duyệt / • Chờ duyệt) */}
+                      
                       <div className="pointer-events-auto">
                         {renderStatusBadge(vehicle.status)}
                       </div>
 
-                      {/* Top-Right: Fuel Badge (e.g. EV / Xăng / Dầu / Hybrid) */}
                       <div className="pointer-events-auto">
                         {renderFuelBadge(vehicle.fuelType, true)}
                       </div>
                     </div>
 
-                    {/* Bottom-Left: License Plate Badge with Red Dot */}
                     <div className="absolute bottom-3 left-3 pointer-events-none">
                       <div className="pointer-events-auto">
                         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200/90 shadow-md">
@@ -684,7 +666,6 @@ export default function ProviderVehicleListPage() {
                     </div>
                   </div>
 
-                  {/* Vehicle Details */}
                   <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                     <div>
                       <div className="flex items-start justify-between gap-2">
@@ -705,7 +686,6 @@ export default function ProviderVehicleListPage() {
                         )}
                       </div>
 
-                      {/* Vehicle Specs Box (Gộp chung 1 ô) */}
                       <div className="mt-3 p-3 rounded-2xl bg-slate-50/80 border border-slate-100 grid grid-cols-2 gap-y-2.5 gap-x-3 text-xs">
                         <div className="flex items-center gap-1.5">
                           <span className="material-symbols-outlined text-[16px] text-slate-500 flex-shrink-0">
@@ -744,7 +724,6 @@ export default function ProviderVehicleListPage() {
                         </div>
                       </div>
 
-                      {/* Active Rental Plans Table */}
                       <div className="mt-3.5">
                         {(() => {
                           const plans = getActivePlans(vehicle)
@@ -784,7 +763,6 @@ export default function ProviderVehicleListPage() {
                       </div>
                     </div>
 
-                    {/* Bottom Controls: Direct Visibility Toggle Switch */}
                     <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button
@@ -831,7 +809,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Vehicles List (Table View) */}
         {!loading && !error && vehicles.length > 0 && viewMode === 'table' && (
           <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
@@ -940,7 +917,6 @@ export default function ProviderVehicleListPage() {
           </div>
         )}
 
-        {/* Pagination Controls */}
         {!loading && !error && totalPages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200">
             <span className="text-xs text-slate-500 font-medium">
