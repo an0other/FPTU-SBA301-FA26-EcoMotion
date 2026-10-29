@@ -87,7 +87,7 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
       id: 'gmv',
       label: 'Tổng giao dịch (GMV)',
       shortLabel: 'Tổng GMV',
-      sublabel: 'Dòng tiền khách thanh toán',
+      sublabel: `Tổng giá trị ${completedBookings} chuyến`,
       value: gmv,
       heightPct: Math.max(Math.round((gmv / maxBarValue) * 100), 6),
       color: 'sky',
@@ -432,7 +432,9 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                         ? 'Đối soát NCC'
                         : activeSegment === 'escrow'
                         ? 'Quỹ cọc lưu ký'
-                        : 'Tổng GMV Sàn'}
+                        : activeSegment === 'gmv'
+                        ? 'Tổng GMV Sàn'
+                        : 'Tổng dòng tiền'}
                     </span>
                     <span className="text-xl font-black tracking-tight text-slate-900">
                       {activeSegment === 'commission'
@@ -441,7 +443,9 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                         ? formatCompactVND(payout)
                         : activeSegment === 'escrow'
                         ? formatCompactVND(escrow)
-                        : formatCompactVND(gmv)}
+                        : activeSegment === 'gmv'
+                        ? formatCompactVND(gmv)
+                        : formatCompactVND(totalAllocated)}
                     </span>
                     <span className="mt-0.5 text-[11px] font-bold text-emerald-600">
                       {activeSegment === 'commission'
@@ -450,7 +454,9 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                         ? `${pctPayout.toFixed(1)}% cơ cấu`
                         : activeSegment === 'escrow'
                         ? `${pctEscrow.toFixed(1)}% cơ cấu`
-                        : `${completedBookings} chuyến xong`}
+                        : activeSegment === 'gmv'
+                        ? `${completedBookings} chuyến xong`
+                        : `${formatCompactVND(gmv)} GMV`}
                     </span>
                   </div>
                 </div>

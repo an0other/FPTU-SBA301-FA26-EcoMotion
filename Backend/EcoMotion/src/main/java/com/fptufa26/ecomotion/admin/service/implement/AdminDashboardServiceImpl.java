@@ -27,11 +27,12 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminStatsResponse getStats() {
-        BigDecimal gmv = bookingService.sumTotalRevenue();
+
         BigDecimal platformCommission = bookingService.sumAdminCommission();
         BigDecimal grossCompleted = bookingService.sumCompletedGrossRentalVolume();
         BigDecimal providerPayoutDue = grossCompleted.subtract(platformCommission).max(BigDecimal.ZERO);
         BigDecimal escrowDeposits = bookingService.sumEscrowDeposits();
+        BigDecimal gmv = grossCompleted.compareTo(BigDecimal.ZERO) > 0 ? grossCompleted : bookingService.sumTotalRevenue();
         long completedBookings = bookingService.countBookingsByStatus(BookingStatus.COMPLETED);
 
         return AdminStatsResponse.builder()
