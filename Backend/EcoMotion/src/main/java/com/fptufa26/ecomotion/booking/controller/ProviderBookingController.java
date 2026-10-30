@@ -55,6 +55,7 @@ public class ProviderBookingController {
     private final ProviderBookingService providerBookingService;
     private final TripEvidenceService tripEvidenceService;
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
+    private final com.fptufa26.ecomotion.booking.service.BookingWorkflowService bookingWorkflowService;
 
     @GetMapping
     @Operation(summary = "List the current provider's bookings")
@@ -68,11 +69,10 @@ public class ProviderBookingController {
     @Operation(summary = "List the current provider's bookings with pagination")
     public ApiResponse<PageResponse<ProviderBookingResponse>> listBookingsPaged(
             @AuthenticationPrincipal SecurityUser principal,
-            @RequestParam(required = false) String status,
+            @org.springframework.web.bind.annotation.ModelAttribute com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "10") int limit) {
-        return ApiResponse.success(providerBookingService.listBookingsPaged(
-                principal.getUserId(), status, Math.max(0, offset), Math.max(1, limit)));
+        return ApiResponse.success(providerBookingService.filterBookings(principal.getUserId(), filter, offset, limit));
     }
 
     @GetMapping("/summary")
@@ -104,7 +104,7 @@ public class ProviderBookingController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id,
             @RequestBody @Valid ResolveOperationalRiskRequest request) {
-        return ApiResponse.success(providerBookingService.resolveOperationalRisk(
+        return ApiResponse.success(bookingWorkflowService.proposeAlternative(
                 principal.getUserId(), id, request));
     }
 
@@ -191,8 +191,8 @@ public class ProviderBookingController {
     @Operation(summary = "Export bookings to CSV format")
     public ResponseEntity<byte[]> exportBookings(
             @AuthenticationPrincipal SecurityUser principal,
-            @RequestParam(required = false) String status) {
-        byte[] csvData = providerBookingService.exportBookingsCsv(principal.getUserId(), status);
+            @org.springframework.web.bind.annotation.ModelAttribute com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter) {
+        byte[] csvData = providerBookingService.exportFilteredBookings(principal.getUserId(), filter);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"bookings-export.csv\"")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
@@ -217,7 +217,7 @@ public class ProviderBookingController {
 
     @PostMapping("/{id}/auto-assign")
     @Operation(summary = "Run Google OR-Tools CP-SAT and automatically assign optimal driver")
-    public ApiResponse<ProviderBookingResponse> autoAssignDriver(
+    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.AutoAssignmentResponse> autoAssignDriver(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.autoAssignDriver(principal.getUserId(), id));

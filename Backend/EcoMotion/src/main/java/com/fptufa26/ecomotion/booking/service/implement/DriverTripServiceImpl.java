@@ -98,6 +98,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     private final DriverStatusService driverStatusService;
     private final NotificationStreamService notificationStreamService;
     private final Clock clock;
+    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
 
     @Override
     public PageResponse<DriverTripResponse> listDriverTrips(
@@ -169,10 +170,19 @@ public class DriverTripServiceImpl implements DriverTripService {
     @Override
     @Transactional
     public DriverTripDetailResponse confirmTrip(Long currentUserId, String tripIdOrCode) {
+        return confirmTrip(currentUserId, tripIdOrCode, null);
+    }
+
+    @Override
+    @Transactional
+    public DriverTripDetailResponse confirmTrip(Long currentUserId, String tripIdOrCode, Instant expectedAssignedAt) {
         Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
-        booking = bookingRepository.findByIdForUpdate(booking.getId())
-                .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy chuyến đi"));
+        Booking booking = resolveDriverBookingForUpdate(driver, tripIdOrCode);
+        var proposal = booking.getOperationalProposal();
+        if (expectedAssignedAt != null && !expectedAssignedAt.equals(booking.getAssignedAt())
+                || expectedAssignedAt == null && proposal != null && Boolean.TRUE.equals(proposal.getAccepted())) {
+            throw new TripConflictException("Lịch hoặc phân công đã thay đổi; hãy xem lại chi tiết chuyến trước khi nhận");
+        }
         userService.findDriverByIdForUpdate(driver.getId())
                 .orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài xế"));
         if (booking.getDriver() == null || !booking.getDriver().getId().equals(driver.getId())) {
@@ -211,17 +221,20 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getAssignmentExpiresAt() != null && !booking.getAssignmentExpiresAt().isAfter(now)) {
             throw new TripConflictException("Yêu cầu phân công đã hết hạn, vui lòng tải lại lịch trình");
         }
+        Long provider = booking.getVehicle().getProvider().getId();
+        boolean eligible = driverOptimizationService.evaluateCandidates(booking.getId(), provider).stream()
+                .anyMatch(c -> c.driverId().equals(driver.getId()) && c.eligible());
+        if (!eligible) throw new TripConflictException("Tài xế không còn đủ điều kiện nhận chuyến");
         booking.setDriverConfirmedAt(now);
         booking.setStatus(BookingStatus.DRIVER_CONFIRMED);
         Booking saved = bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "DRIVER_CONFIRMED");
 
-        driverAssignmentRepository.findByBooking_IdAndDriver_IdAndStatus(
-                saved.getId(), driver.getId(), AssignmentStatus.PENDING_RESPONSE
-        ).ifPresent(da -> {
-            da.setStatus(AssignmentStatus.ACCEPTED);
-            da.setRespondedAt(now);
-            driverAssignmentRepository.save(da);
-        });
+        DriverAssignment current = driverOptimizationService.requireCurrentAssignment(booking, driver.getId());
+        current.setStatus(AssignmentStatus.ACCEPTED);
+        current.setRespondedAt(now);
+        driverAssignmentRepository.save(current);
+
 
         driverStatusService.updateStatusTimestamp(driver.getId());
 
@@ -254,7 +267,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     @Transactional
     public DriverTripDetailResponse arriveAtPickup(Long currentUserId, String tripIdOrCode) {
         Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        Booking booking = resolveDriverBookingForUpdate(driver, tripIdOrCode);
 
         log.info(
                 "Driver {} reports arrival at pickup for trip {}, booking {}, oldTripStatus={}, oldBookingStatus={}",
@@ -288,6 +301,7 @@ public class DriverTripServiceImpl implements DriverTripService {
         booking.setActualArrivedAt(now);
         booking.setStatus(BookingStatus.DRIVER_ARRIVED);
         Booking saved = bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "DRIVER_ARRIVED");
 
         log.info(
                 "Trip status changed: tripId={}, bookingId={}, tripStatus={}, bookingStatus={}",
@@ -303,7 +317,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     @Transactional
     public DriverTripDetailResponse startTrip(Long currentUserId, String tripIdOrCode) {
         Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        Booking booking = resolveDriverBookingForUpdate(driver, tripIdOrCode);
 
         log.info(
                 "Driver {} starts trip {}, booking {}, oldTripStatus={}, oldBookingStatus={}",
@@ -342,6 +356,7 @@ public class DriverTripServiceImpl implements DriverTripService {
             booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
         driverStatusService.updateStatusTimestamp(driver.getId());
 
@@ -383,7 +398,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     @Transactional
     public DriverTripDetailResponse finishTrip(Long currentUserId, String tripIdOrCode) {
         Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        Booking booking = resolveDriverBookingForUpdate(driver, tripIdOrCode);
 
         log.info(
                 "Driver {} finishes trip {}, booking {}, oldTripStatus={}, oldBookingStatus={}",
@@ -405,8 +420,8 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
 
         Instant now = clock.instant();
-        booking.setActualEndAt(now);
         booking.setDriverEndConfirmedAt(now);
+        if (booking.getRenterEndConfirmedAt() != null) booking.setActualEndAt(now);
         booking.setStatus(booking.getRenterEndConfirmedAt() != null
                 ? BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
                 : BookingStatus.AWAITING_END_CONFIRMATION);
@@ -414,6 +429,7 @@ public class DriverTripServiceImpl implements DriverTripService {
             booking.setProviderConfirmedAt(now);
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
         driverStatusService.updateStatusTimestamp(driver.getId());
 
@@ -453,7 +469,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     public DriverTripDetailResponse reportUnavailable(Long currentUserId, String tripIdOrCode,
                                                       ReportDriverIssueRequest request) {
         Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        Booking booking = resolveDriverBookingForUpdate(driver, tripIdOrCode);
         if (booking.getActualStartAt() != null || booking.getStatus() == BookingStatus.IN_PROGRESS) {
             throw new InvalidTripTransitionException("Chuyến đi đã bắt đầu; hãy dùng quy trình báo sự cố đang vận hành");
         }
@@ -471,6 +487,7 @@ public class DriverTripServiceImpl implements DriverTripService {
         booking.setDriverIssueReportedBy(driver.getUser());
         booking.setDriverIssueResolvedAt(null);
         Booking saved = bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         return toDetailResponse(saved, getCoverUrl(saved), getLatestLocationForBooking(saved.getId()));
     }
 
@@ -599,32 +616,22 @@ public class DriverTripServiceImpl implements DriverTripService {
     @Transactional
     public DriverTripDetailResponse rejectTrip(Long currentUserId, String tripIdOrCode, DriverRejectRequest request) {
         Driver driver = resolveDriver(currentUserId);
-        Booking booking = resolveDriverBooking(driver, tripIdOrCode);
+        Booking booking = resolveDriverBookingForUpdate(driver, tripIdOrCode);
 
         if (booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
             throw new InvalidTripTransitionException("Chỉ có thể từ chối chuyến đang ở trạng thái chờ xác nhận (DRIVER_ASSIGNED)");
         }
 
         Instant now = clock.instant();
-        driverAssignmentRepository.findByBooking_IdAndDriver_IdAndStatus(
-                booking.getId(), driver.getId(), AssignmentStatus.PENDING_RESPONSE
-        ).ifPresentOrElse(da -> {
-            da.setStatus(AssignmentStatus.REJECTED);
-            da.setRejectionReason(request.rejectionReason());
-            da.setRejectionNote(request.rejectionNote());
-            da.setRespondedAt(now);
-            driverAssignmentRepository.save(da);
-        }, () -> {
-            DriverAssignment da = new DriverAssignment();
-            da.setBooking(booking);
-            da.setDriver(driver);
-            da.setStatus(AssignmentStatus.REJECTED);
-            da.setRejectionReason(request.rejectionReason());
-            da.setRejectionNote(request.rejectionNote());
-            da.setAssignedAt(booking.getAssignedAt() != null ? booking.getAssignedAt() : now);
-            da.setRespondedAt(now);
-            driverAssignmentRepository.save(da);
-        });
+        if (booking.getAssignmentExpiresAt() != null && !booking.getAssignmentExpiresAt().isAfter(now)) {
+            throw new TripConflictException("Phân công đã hết hạn");
+        }
+        DriverAssignment current = driverOptimizationService.requireCurrentAssignment(booking, driver.getId());
+        current.setStatus(AssignmentStatus.REJECTED);
+        current.setRejectionReason(request.rejectionReason());
+        current.setRejectionNote(request.rejectionNote());
+        current.setRespondedAt(now);
+        driverAssignmentRepository.saveAndFlush(current);
 
         driverOptimizationService.triggerAutoReassign(
                 booking.getId(), driver.getId(), request.rejectionReason().name() + ": " + request.rejectionNote()
@@ -710,7 +717,10 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
             return "AWAITING_EXTRA_CHARGE_CONFIRMATION";
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getActualEndAt() != null) {
+        if (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT) {
+            return "AWAITING_FINAL_PAYMENT";
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
             return "COMPLETED";
         }
         if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getActualStartAt() != null) {
@@ -778,6 +788,21 @@ public class DriverTripServiceImpl implements DriverTripService {
             throw new AccessDeniedException("Driver account is not active or approved");
         }
         return driver;
+    }
+
+    private Booking resolveDriverBookingForUpdate(Driver driver, String identifier) {
+        Booking booking;
+        try {
+            booking = bookingRepository.findByIdForUpdate(Long.parseLong(identifier))
+                    .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy chuyến đi"));
+        } catch (NumberFormatException exception) {
+            booking = bookingRepository.findByBookingCodeForUpdate(identifier.trim().toUpperCase(Locale.ROOT))
+                    .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy chuyến đi"));
+        }
+        if (booking.getDriver() == null || !booking.getDriver().getId().equals(driver.getId())) {
+            throw new AccessDeniedException("Chuyến đi đã được phân công cho tài xế khác");
+        }
+        return booking;
     }
 
     private Booking resolveDriverBooking(Driver driver, String tripIdOrCode) {
@@ -877,7 +902,7 @@ public class DriverTripServiceImpl implements DriverTripService {
             return Sort.by(direction, actualFieldName).and(Sort.by(direction, "id"));
         }
 
-        if (view == TripView.TODAY || view == TripView.UPCOMING || view == TripView.ACTIVE) {
+        if (view == TripView.REQUESTS || view == TripView.TODAY || view == TripView.UPCOMING || view == TripView.ACTIVE) {
             return Sort.by(Sort.Order.asc("pickupTime"), Sort.Order.asc("id"));
         }
         return Sort.by(Sort.Order.desc("pickupTime"), Sort.Order.desc("id"));
@@ -957,7 +982,8 @@ public class DriverTripServiceImpl implements DriverTripService {
                 booking.getAssignedAt(),
                 booking.getDriverConfirmedAt(),
                 booking.getActualArrivedAt(),
-                executionStatus
+                executionStatus,
+                booking.getAssignmentExpiresAt()
         );
     }
 
@@ -1046,7 +1072,8 @@ public class DriverTripServiceImpl implements DriverTripService {
                 booking.getDriverConfirmedAt(),
                 booking.getActualArrivedAt(),
                 executionStatus,
-                latestLocation
+                latestLocation,
+                booking.getAssignmentExpiresAt()
         );
     }
 

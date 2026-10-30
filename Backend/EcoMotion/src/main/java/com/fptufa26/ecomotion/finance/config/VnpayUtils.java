@@ -55,7 +55,7 @@ public final class VnpayUtils {
                 }
                 sb.append(fieldName);
                 sb.append('=');
-                sb.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
+                sb.append(URLEncoder.encode(fieldValue, StandardCharsets.UTF_8));
             }
         }
         return sb.toString();
@@ -71,9 +71,9 @@ public final class VnpayUtils {
                 if (!sb.isEmpty()) {
                     sb.append('&');
                 }
-                sb.append(URLEncoder.encode(fieldName, StandardCharsets.US_ASCII));
+                sb.append(URLEncoder.encode(fieldName, StandardCharsets.UTF_8));
                 sb.append('=');
-                sb.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
+                sb.append(URLEncoder.encode(fieldValue, StandardCharsets.UTF_8));
             }
         }
         return sb.toString();

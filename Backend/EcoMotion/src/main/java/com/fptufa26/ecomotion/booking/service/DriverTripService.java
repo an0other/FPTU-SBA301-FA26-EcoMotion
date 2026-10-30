@@ -30,6 +30,8 @@ public interface DriverTripService {
 
     DriverTripDetailResponse confirmTrip(Long currentUserId, String tripIdOrCode);
 
+    DriverTripDetailResponse confirmTrip(Long currentUserId, String tripIdOrCode, java.time.Instant expectedAssignedAt);
+
     DriverTripDetailResponse arriveAtPickup(Long currentUserId, String tripIdOrCode);
 
     DriverTripDetailResponse startTrip(Long currentUserId, String tripIdOrCode);

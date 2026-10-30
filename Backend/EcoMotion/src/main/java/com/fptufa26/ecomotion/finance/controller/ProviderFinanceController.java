@@ -46,6 +46,13 @@ public class ProviderFinanceController {
     private final ProviderFinanceService providerFinanceService;
     private final RefundService refundService;
 
+    @PostMapping("/sandbox/payouts/{bookingId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<ProviderPayoutSummaryResponse> createSandboxPayout(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long bookingId) {
+        return ApiResponse.success(providerFinanceService.createSandboxPayout(principal.getUserId(), bookingId));
+    }
+
     @GetMapping("/summary")
     @Operation(summary = "Get provider overall finance overview and metrics")
     public ApiResponse<ProviderFinanceSummaryResponse> getSummary(

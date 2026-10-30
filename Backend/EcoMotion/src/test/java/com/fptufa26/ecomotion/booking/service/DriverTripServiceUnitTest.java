@@ -63,6 +63,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class DriverTripServiceUnitTest {
 
+    @Test void actualEndTimestampDoesNotImplyFinancialCompletion() {
+        Booking booking = new Booking();
+        booking.setActualEndAt(Instant.parse("2026-10-29T01:00:00Z"));
+        booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+        assertThat(DriverTripServiceImpl.deriveExecutionStatus(booking)).isEqualTo("AWAITING_FINAL_PAYMENT");
+        booking.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);
+        assertThat(DriverTripServiceImpl.deriveExecutionStatus(booking)).isEqualTo("AWAITING_END_CONFIRMATION");
+    }
+
     @Mock
     private BookingRepository bookingRepository;
 
@@ -120,7 +129,7 @@ class DriverTripServiceUnitTest {
                 driverStatusService,
                 notificationStreamService,
                 fixedClock
-        );
+        , org.mockito.Mockito.mock(com.fptufa26.ecomotion.booking.service.BookingNotificationService.class));
 
         driverUser = new User();
         driverUser.setId(201L);

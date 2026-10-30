@@ -3,7 +3,11 @@ import { driverTripService } from '../../services/driverTripService'
 import { EVIDENCE_TYPES, formatFileSize } from '../../utils/cloudinaryUtils'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+  return (
+    <span className={`material-symbols-rounded select-none leading-none inline-flex items-center justify-center shrink-0 ${className}`}>
+      {name}
+    </span>
+  )
 }
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10MB
@@ -21,7 +25,6 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
 
   const fileInputRef = useRef(null)
 
-  // Clean up object URL when component unmounts or preview changes
   const cleanupPreview = useCallback(() => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl)
@@ -35,16 +38,17 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
     }
   }, [cleanupPreview])
 
-  // Reset form when modal closes or opens
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) return undefined
+    const timer = setTimeout(() => {
       cleanupPreview()
       setFile(null)
       setNote('')
       setError(null)
       setUploading(false)
       setIsDragging(false)
-    }
+    }, 0)
+    return () => clearTimeout(timer)
   }, [isOpen, cleanupPreview])
 
   if (!isOpen || !trip) return null
@@ -54,7 +58,6 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
 
     if (!selectedFile) return
 
-    // Validate MIME type
     const isMimeValid = ALLOWED_MIME_TYPES.includes(selectedFile.type.toLowerCase())
     const ext = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase()
     const isExtValid = ALLOWED_EXTENSIONS.includes(ext)
@@ -64,14 +67,12 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
       return
     }
 
-    // Prevent executable/executable-like extensions
     const forbiddenExts = ['.exe', '.sh', '.bat', '.cmd', '.js', '.jar']
     if (forbiddenExts.some((fe) => selectedFile.name.toLowerCase().endsWith(fe))) {
       setError('Không được phép tải lên file thực thi hoặc script.')
       return
     }
 
-    // Validate size (max 10MB)
     if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
       setError('Dung lượng ảnh vượt quá giới hạn 10 MB. Vui lòng chọn ảnh có dung lượng nhỏ hơn.')
       return
@@ -82,7 +83,6 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
       return
     }
 
-    // Valid: cleanup previous preview and create new one
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl)
     }
@@ -96,7 +96,6 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
     if (selected) {
       validateAndSetFile(selected)
     }
-    // reset input so the same file could be selected again if replaced
     e.target.value = ''
   }
 
@@ -135,6 +134,7 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (uploading) return
 
     if (!file) {
       setError('Vui lòng chọn hình ảnh minh chứng trước khi lưu.')
@@ -172,7 +172,12 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200 animate-in fade-in duration-150">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tải ảnh minh chứng chuyến đi"
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5 shadow-lg border border-slate-200"
+      >
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
           <div className="flex items-center gap-2 text-slate-800">
             <Icon name="photo_camera" className="text-xl text-brand-700" />
@@ -182,7 +187,7 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
             type="button"
             onClick={onClose}
             disabled={uploading}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
           >
             <Icon name="close" className="text-lg" />
           </button>
@@ -202,30 +207,34 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {/* Phân loại tài liệu */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Phân loại tài liệu <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={evidenceType}
-              onChange={(e) => setEvidenceType(e.target.value)}
-              disabled={uploading}
-              className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold text-slate-800 focus:border-brand-600 focus:outline-none disabled:bg-slate-50"
-            >
-              {EVIDENCE_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
+            <div className="relative h-10 w-full">
+              <select
+                value={evidenceType}
+                onChange={(e) => setEvidenceType(e.target.value)}
+                disabled={uploading}
+                className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-semibold text-slate-800 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none disabled:bg-slate-50 transition"
+              >
+                {EVIDENCE_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                <Icon name="expand_more" className="text-[18px]" />
+              </div>
+            </div>
           </div>
 
           {/* Upload ảnh zone */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Ảnh minh chứng <span className="text-rose-500">*</span>
             </label>
 
-            {/* Hidden file input */}
             <input
               ref={fileInputRef}
               type="file"
@@ -235,7 +244,6 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
             />
 
             {!file ? (
-              /* Drag & Drop Dropzone */
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -259,7 +267,6 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
                 </p>
               </div>
             ) : (
-              /* Selected File Preview Box */
               <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-2xs">
@@ -288,7 +295,7 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
                     type="button"
                     onClick={handleTriggerSelect}
                     disabled={uploading}
-                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Thay ảnh
                   </button>
@@ -296,7 +303,7 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
                     type="button"
                     onClick={handleRemoveFile}
                     disabled={uploading}
-                    className="rounded-md p-1 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                     title="Xóa ảnh"
                   >
                     <Icon name="delete" className="text-lg" />
@@ -317,7 +324,7 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
               onChange={(e) => setNote(e.target.value)}
               disabled={uploading}
               placeholder="Ghi chú thêm về tình trạng phương tiện hoặc bối cảnh..."
-              className="w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-600 focus:outline-none disabled:bg-slate-50"
+              className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-600 focus:outline-none disabled:bg-slate-50"
             />
           </div>
 
@@ -327,14 +334,14 @@ export default function DriverEvidenceUploadModal({ trip, isOpen, onClose, onSuc
               type="button"
               onClick={onClose}
               disabled={uploading}
-              className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Hủy
             </button>
             <button
               type="submit"
               disabled={uploading || !file}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white hover:bg-brand-800 transition disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-brand-700 px-4 text-xs font-bold text-white hover:bg-brand-800 transition disabled:opacity-50"
             >
               {uploading && <Icon name="sync" className="animate-spin text-[16px]" />}
               <span>{uploading ? 'Đang tải ảnh lên...' : 'Lưu minh chứng'}</span>

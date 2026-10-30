@@ -136,6 +136,10 @@ public final class BookingSpecification {
             Instant startOfTomorrow) {
         Specification<Booking> spec = Specification.where(hasDriver(driverId));
 
+        if (view == TripView.REQUESTS) {
+            spec = spec.and(hasStatus(BookingStatus.DRIVER_ASSIGNED));
+        }
+
         if (fromInclusive != null && toExclusive != null) {
             spec = spec.and(pickupTimeBetween(fromInclusive, toExclusive));
             if (statuses != null && !statuses.isEmpty()) {
@@ -158,13 +162,17 @@ public final class BookingSpecification {
                                         BookingStatus.DRIVER_ASSIGNED,
                                         BookingStatus.DRIVER_CONFIRMED,
                                         BookingStatus.DRIVER_ARRIVED,
-                                        BookingStatus.IN_PROGRESS
+                                        BookingStatus.IN_PROGRESS,
+                                        BookingStatus.AWAITING_START_CONFIRMATION,
+                                        BookingStatus.AWAITING_END_CONFIRMATION
                                 ))
                         ),
                         root.get("status").in(List.of(
                                 BookingStatus.DRIVER_CONFIRMED,
                                 BookingStatus.DRIVER_ARRIVED,
-                                BookingStatus.IN_PROGRESS
+                                BookingStatus.IN_PROGRESS,
+                                BookingStatus.AWAITING_START_CONFIRMATION,
+                                BookingStatus.AWAITING_END_CONFIRMATION
                         ))
                 ));
             }
@@ -190,14 +198,17 @@ public final class BookingSpecification {
                 spec = spec.and(hasStatusIn(List.of(
                         BookingStatus.COMPLETED,
                         BookingStatus.CANCELLED,
-                        BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
+                        BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+                        BookingStatus.AWAITING_FINAL_PAYMENT
                 )));
             }
         } else if (view == TripView.ACTIVE) {
             spec = spec.and((root, query, cb) -> root.get("status").in(List.of(
                     BookingStatus.DRIVER_CONFIRMED,
                     BookingStatus.DRIVER_ARRIVED,
-                    BookingStatus.IN_PROGRESS
+                    BookingStatus.IN_PROGRESS,
+                    BookingStatus.AWAITING_START_CONFIRMATION,
+                    BookingStatus.AWAITING_END_CONFIRMATION
             )));
         } else {
             if (statuses != null && !statuses.isEmpty()) {

@@ -186,7 +186,7 @@ class DriverTripLifecycleIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.status").value("AWAITING_END_CONFIRMATION"))
-                .andExpect(jsonPath("$.data.actualEndAt").exists());
+                .andExpect(jsonPath("$.data.actualEndAt").doesNotExist());
 
         mockMvc.perform(get("/api/v1/driver/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))

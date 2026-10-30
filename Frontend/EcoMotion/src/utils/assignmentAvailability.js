@@ -1,4 +1,5 @@
 export const assignmentStatuses = {
+  UNCERTAIN: { label: 'Chưa xác định giờ về', color: 'bg-amber-100 text-amber-800' },
   AVAILABLE: { label: 'Rảnh', color: 'bg-emerald-100 text-emerald-800' },
   ON_TRIP: { label: 'Đang chạy chuyến', color: 'bg-red-100 text-red-800' },
   SCHEDULE_CONFLICT: { label: 'Trùng lịch', color: 'bg-orange-100 text-orange-800' },
@@ -8,6 +9,7 @@ export const assignmentStatuses = {
 }
 
 export const assignmentReasons = {
+  DRIVER_RETURN_UNCERTAIN: 'Chuyến hiện tại đã quá giờ hoặc thiếu dữ liệu thời gian. Cần xác nhận giờ về trước khi phân công.',
   DRIVER_ON_TRIP: 'Tài xế chưa kết thúc chuyến hiện tại.',
   DRIVER_SCHEDULE_CONFLICT: 'Đã có chuyến trong khung giờ hoặc khoảng đệm này.',
   ASSIGNMENT_PENDING: 'Khung giờ đang được giữ cho yêu cầu chờ xác nhận.',

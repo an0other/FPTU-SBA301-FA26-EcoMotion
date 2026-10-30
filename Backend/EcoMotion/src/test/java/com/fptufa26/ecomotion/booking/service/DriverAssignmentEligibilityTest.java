@@ -25,11 +25,16 @@ class DriverAssignmentEligibilityTest {
     DriverAssignmentRepository assignments = mock(DriverAssignmentRepository.class);
     TripIncidentRepository incidents = mock(TripIncidentRepository.class);
     NotificationStreamService notifications = mock(NotificationStreamService.class);
+    BookingPolicySnapshotRepository snapshots = mock(BookingPolicySnapshotRepository.class);
+    BookingChargeRepository charges = mock(BookingChargeRepository.class);
     DriverOptimizationServiceImpl service = new DriverOptimizationServiceImpl(bookings, users, assignments, incidents,
-            mock(VehicleLocationRepository.class), mock(BookingPolicySnapshotRepository.class), mock(BookingChargeRepository.class),
+            mock(VehicleLocationRepository.class), snapshots, charges,
             mock(MapGeocodingService.class), notifications, Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC),
+            mock(com.fptufa26.ecomotion.booking.service.BookingNotificationService.class),
+            new com.fptufa26.ecomotion.booking.config.OptimizationProperties(),
+            new com.fptufa26.ecomotion.booking.service.implement.DriverSelectionServiceImpl(new com.fptufa26.ecomotion.booking.config.OptimizationProperties()),
             new com.fptufa26.ecomotion.booking.service.implement.DriverAvailabilityServiceImpl(bookings,
-                    mock(BookingPolicySnapshotRepository.class), mock(BookingChargeRepository.class),
+                    snapshots, charges,
                     mock(com.fptufa26.ecomotion.user.service.DriverAssignmentService.class),
                     Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC)));
     Driver driver; Booking booking;
@@ -41,6 +46,11 @@ class DriverAssignmentEligibilityTest {
         Vehicle vehicle = new Vehicle(); vehicle.setProvider(provider); vehicle.setSeatCount(4); vehicle.setTransmission(Transmission.AUTOMATIC);
         booking = new Booking(); booking.setId(4L); booking.setVehicle(vehicle); booking.setBookingCode("test-booking");
         booking.setStatus(BookingStatus.CONFIRMED); booking.setPickupTime(Instant.parse("2026-10-29T00:00:00Z"));
+        var policy = new com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot();
+        policy.setSlotLengthMinutes(60);
+        var base = new com.fptufa26.ecomotion.booking.entity.BookingCharge(); base.setQuantity(1);
+        when(snapshots.findByBooking_Id(4L)).thenReturn(Optional.of(policy));
+        when(charges.findByBooking_IdAndChargeType(eq(4L), any())).thenReturn(Optional.of(base));
         when(bookings.findByIdForUpdate(4L)).thenReturn(Optional.of(booking));
         when(bookings.findById(4L)).thenReturn(Optional.of(booking));
         when(users.findDriverByIdForUpdate(3L)).thenReturn(Optional.of(driver));
@@ -67,6 +77,10 @@ class DriverAssignmentEligibilityTest {
         future.setId(5L); future.setDriver(driver); future.setVehicle(booking.getVehicle());
         future.setPlan(new com.fptufa26.ecomotion.vehicle.entity.RentalPlan()); future.getPlan().setSlotLengthMinutes(60);
         future.setStatus(BookingStatus.DRIVER_CONFIRMED);
+        var policy = new com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot(); policy.setBooking(future); policy.setSlotLengthMinutes(60);
+        var base = new com.fptufa26.ecomotion.booking.entity.BookingCharge(); base.setBooking(future); base.setQuantity(1);
+        when(snapshots.findByBooking_IdIn(any())).thenReturn(List.of(policy));
+        when(charges.findByBooking_IdInAndChargeType(any(), any())).thenReturn(List.of(base));
         when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(future));
         assertThat(service.manualAssign(4L, 3L, 1L)).isSameAs(driver);
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.DRIVER_ASSIGNED);
@@ -77,6 +91,12 @@ class DriverAssignmentEligibilityTest {
         when(users.findDriverByIdForUpdate(3L)).thenReturn(Optional.of(offline));
         assertThat(service.autoAssign(4L)).isNull();
         verify(users).findDriverByIdForUpdate(3L);
+        verify(bookings, never()).saveAndFlush(any());
+    }
+
+    @Test void missingRequestedDurationCannotDefaultToOneHour() {
+        when(snapshots.findByBooking_Id(4L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class);
         verify(bookings, never()).saveAndFlush(any());
     }
     @ParameterizedTest
@@ -105,11 +125,25 @@ class DriverAssignmentEligibilityTest {
         pending.setDriver(driver); pending.setBooking(booking);
         pending.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE);
         booking.setDriver(driver); booking.setReassignCount(3); booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
-        when(assignments.findExpiredAssignments(any())).thenReturn(List.of(pending));
+        pending.setId(1L);
+        Instant assigned = Instant.parse("2026-10-27T00:00:00Z");
+        Instant expired = Instant.parse("2026-10-27T00:15:00Z");
+        pending.setAssignedAt(assigned); pending.setExpiresAt(expired);
+        booking.setAssignedAt(assigned); booking.setAssignmentExpiresAt(expired);
+        when(assignments.findExpiredBookingIds(any())).thenReturn(List.of(4L));
+        when(assignments.findByBooking_IdOrderByCreatedAtDesc(4L)).thenReturn(List.of(pending));
         service.processPendingAssignmentTimeouts();
         assertThat(pending.getStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.TIMEOUT);
         assertThat(booking.getDriver()).isNull();
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
-        verify(notifications).sendEventToProvider(eq(1L), eq("DRIVER_STATUS_CHANGED"), any());
+        verify(bookings, atLeastOnce()).saveAndFlush(booking);
     }
+    @Test void licenseMustRemainValidAcrossMidnightUntilPlannedEnd() {
+        booking.setPickupTime(Instant.parse("2026-10-28T16:30:00Z"));
+        driver.setLicenseExpiry(LocalDate.of(2026, 10, 28));
+        assertThat(service.evaluateCandidates(4L, 1L)).allMatch(c -> !c.eligible());
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class);
+        assertThat(service.autoAssign(4L)).isNull();
+    }
+
 }

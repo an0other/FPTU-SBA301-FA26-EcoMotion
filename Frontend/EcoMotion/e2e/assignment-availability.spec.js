@@ -14,7 +14,7 @@ for (const width of [1280, 390]) {
         return route.fulfill({ json: { id: 2, role: 'PROVIDER', fullName: 'Nhà xe' } })
       }
       if (path.endsWith('/BK-TEST')) data = {
-        bookingCode: 'BK-TEST', status: 'CONFIRMED', bookingStatus: 'CONFIRMED',
+        bookingCode: 'BK-TEST', status: 'CONFIRMED', bookingStatus: 'CONFIRMED', canAssignDriver: true, canAutoAssignDriver: true,
         pickupTime: '2026-10-29T03:00:00Z', pickupAddress: 'Quận 1', totalAmount: 1000000,
         vehicleName: 'VinFast VF 8', vehicleImageUrls: [], charges: [], paymentTransactions: [], timeline: [],
       }
@@ -34,7 +34,7 @@ for (const width of [1280, 390]) {
       await route.fulfill({ json: { data } })
     })
     await page.goto('/provider/bookings/BK-TEST')
-    await page.getByRole('button', { name: '+ Phân công tài xế ngay', exact: true }).click()
+    await page.getByRole('button', { name: 'Phân công tài xế', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Phân công tài xế' })
     await expect(dialog.getByRole('button', { name: /Tài xế 1/ })).toBeEnabled()
     await expect(dialog.getByRole('button', { name: /Tài xế 2/ })).toBeDisabled()

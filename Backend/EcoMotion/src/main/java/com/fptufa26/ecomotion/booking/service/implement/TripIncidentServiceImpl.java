@@ -41,6 +41,7 @@ public class TripIncidentServiceImpl implements TripIncidentService {
     private final UserService userService;
     private final DriverOptimizationService driverOptimizationService;
     private final Clock clock;
+    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
 
     @Override
     @Transactional
@@ -129,6 +130,7 @@ public class TripIncidentServiceImpl implements TripIncidentService {
         incident.setResolvedAt(clock.instant());
 
         tripIncidentRepository.save(incident);
+        bookingNotificationService.changed(booking, "INCIDENT_RESOLVED");
         log.info("Provider {} resolved incident #{} with status {}", provider.getId(), incidentId, request.status());
     }
 

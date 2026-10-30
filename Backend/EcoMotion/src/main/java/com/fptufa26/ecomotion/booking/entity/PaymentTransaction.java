@@ -66,7 +66,7 @@ public class PaymentTransaction {
     @Column(name = "gateway_ref", length = 100)
     private String gatewayRef;
 
-    @Column(name = "vnp_txn_ref", length = 100)
+    @Column(name = "vnp_txn_ref", length = 100, unique = true)
     private String vnpTxnRef;
 
     @Column(name = "vnp_transaction_no", length = 100)
@@ -108,6 +108,12 @@ public class PaymentTransaction {
 
     @Column(name = "processing_note", length = 500)
     private String processingNote;
+
+    @Column(name = "payout_gross_amount", precision = 14, scale = 2)
+    private BigDecimal payoutGrossAmount;
+
+    @Column(name = "payout_fee_amount", precision = 14, scale = 2)
+    private BigDecimal payoutFeeAmount;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "confirmed_by_id")

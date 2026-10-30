@@ -277,6 +277,7 @@ public class BookingServiceImpl implements BookingService {
         booking.setPassengerCount(request.passengerCount());
         booking.setTotalAmount(total);
         bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         booking.setBookingCode(nextBookingCode(booking.getId()));
         bookingRepository.save(booking);
 
@@ -700,7 +701,8 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public ConfirmStartResponse confirmStart(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, normalizeBookingCode(bookingCode));
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
         if (booking.getRenterStartConfirmedAt() != null) {
             return toConfirmStart(booking);
         }
@@ -717,6 +719,7 @@ public class BookingServiceImpl implements BookingService {
             booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
         }
         bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         if (booking.getDriver() != null) {
             driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
         }
@@ -726,7 +729,8 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public ConfirmEndResponse confirmEnd(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, normalizeBookingCode(bookingCode));
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
         if (booking.getStatus() != BookingStatus.IN_PROGRESS
                 && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION
                 && booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
@@ -739,11 +743,13 @@ public class BookingServiceImpl implements BookingService {
         booking.setRenterEndConfirmedAt(now);
         booking.setRenterConfirmedAt(now);
         if (booking.getDriverEndConfirmedAt() != null || booking.getProviderConfirmedAt() != null) {
+            booking.setActualEndAt(now);
             booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         } else {
             booking.setStatus(BookingStatus.IN_PROGRESS);
         }
         bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         if (booking.getDriver() != null) {
             driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
         }

@@ -80,6 +80,9 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     private final ProviderBankAccountRepository providerBankAccountRepository;
     private final PaymentRequestRepository paymentRequestRepository;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
+    private final org.springframework.core.env.Environment environment;
+    private final com.fptufa26.ecomotion.dispute.service.DisputeService disputeService;
+    private final com.fptufa26.ecomotion.finance.repository.RefundRequestRepository refundRequestRepository;
 
     @Override
     public ProviderBankAccountResponse getBankAccount(Long currentUserId) {
@@ -246,12 +249,15 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         List<PaymentTransaction> allTx = bookingPaymentLedgerService.listProviderTransactions(providerId);
         BigDecimal confirmedIncoming = allTx.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                .filter(t -> t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
+                .filter(t -> t.getProcessingNote() == null || !t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 2. Completed refunds
         BigDecimal completedRefunds = allTx.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.OUT && t.getType() == PaymentType.REFUND)
+                .filter(t -> t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -272,7 +278,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         for (Booking b : providerBookings) {
             List<BookingCharge> charges = bookingPaymentLedgerService.listCharges(b.getId());
             BigDecimal bookingCharges = charges.stream()
-                    .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.DEPOSIT)
+                    .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.DEPOSIT && c.getChargeType() != ChargeType.BASE_RENTAL)
                     .map(BookingCharge::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             approvedSurcharges = approvedSurcharges.add(bookingCharges);
@@ -296,7 +302,12 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 netEarnings.setScale(2, RoundingMode.HALF_UP),
                 totalBookings,
                 pendingBookings,
-                completedBookings
+                completedBookings,
+                receivedByMethod(allTx, PaymentMethod.BANK_TRANSFER),
+                receivedByMethod(allTx, PaymentMethod.VNPAY),
+                allTx.stream().filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN
+                                && t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))
+                        .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add)
         );
     }
 
@@ -509,65 +520,85 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     @Override
     @Transactional
     public PaymentTransaction createMockPayout(Long bookingId) {
-        Booking booking = bookingPaymentLedgerService.requireBooking(bookingId);
+        throw new PayoutIneligibleException("Chi trả yêu cầu định danh Admin và xác minh nguồn tiền nền tảng");
+    }
 
-        if (booking.getStatus() != BookingStatus.COMPLETED) {
-            throw new PayoutIneligibleException("Chỉ đơn thuê đã hoàn tất (COMPLETED) mới đủ điều kiện quyết toán chi trả");
+    @Override
+    @Transactional
+    public ProviderPayoutSummaryResponse createSandboxPayout(Long currentUserId, Long bookingId) {
+        var actor = userService.findById(currentUserId)
+                .filter(u -> u.getRole() == com.fptufa26.ecomotion.user.enums.Role.ADMIN
+                        && u.getStatus() == com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE)
+                .orElseThrow(() -> new AccessDeniedException("Chỉ Admin được tạo lệnh chi trả"));
+        if (!Boolean.TRUE.equals(environment.getProperty("app.finance.sandbox-payout-enabled", Boolean.class, false))
+                || !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev", "test"))
+                || environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod", "production"))) {
+            throw new PayoutIneligibleException("Chi trả sandbox bị tắt trong môi trường hiện tại");
         }
-
-        boolean hasSuccessfulCustomerPayment = bookingPaymentLedgerService.listTransactions(bookingId).stream()
-                .anyMatch(tx -> tx.getStatus() == PaymentStatus.PAID
-                        && (tx.getType() == PaymentType.DEPOSIT_PAY
-                        || tx.getType() == PaymentType.UPFRONT_PAY
-                        || tx.getType() == PaymentType.SETTLEMENT));
-
-        if (!hasSuccessfulCustomerPayment) {
-            throw new PayoutIneligibleException("Đơn thuê chưa hoàn tất thanh toán từ phía khách hàng");
+        Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(bookingId);
+        if (booking.getStatus() != BookingStatus.COMPLETED || disputeService.hasActiveDispute(bookingId)) {
+            throw new PayoutIneligibleException("Chỉ chi trả sau khi hoàn tất quyết toán và giải quyết tranh chấp");
         }
-
+        if (refundRequestRepository.existsByBooking_IdAndStatusIn(bookingId, List.of(
+                com.fptufa26.ecomotion.finance.enums.RefundStatus.REQUESTED,
+                com.fptufa26.ecomotion.finance.enums.RefundStatus.UNDER_REVIEW,
+                com.fptufa26.ecomotion.finance.enums.RefundStatus.APPROVED,
+                com.fptufa26.ecomotion.finance.enums.RefundStatus.PROCESSING,
+                com.fptufa26.ecomotion.finance.enums.RefundStatus.PENDING_RECONCILIATION))) {
+            throw new PayoutIneligibleException("Đơn thuê còn nghĩa vụ hoàn tiền chưa xử lý");
+        }
+        List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactions(bookingId);
+        var existing = transactions.stream().filter(t -> t.getType() == PaymentType.PAYOUT).findFirst();
+        if (existing.isPresent()) return toPayoutSummaryResponse(existing.get());
+        if (transactions.stream().anyMatch(t -> t.getStatus() == PaymentStatus.PENDING
+                || t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))) {
+            throw new PayoutIneligibleException("Đơn thuê còn giao dịch chưa đối soát");
+        }
+        BigDecimal held = transactions.stream().filter(t -> t.getStatus() == PaymentStatus.PAID
+                        && t.getDirection() == PaymentDirection.IN && t.getMethod() == PaymentMethod.VNPAY
+                        && t.getVerificationMethod() == PaymentVerificationMethod.GATEWAY_VERIFIED)
+                .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal refunds = transactions.stream().filter(t -> t.getStatus() == PaymentStatus.PAID
+                        && t.getType() == PaymentType.REFUND && t.getDirection() == PaymentDirection.OUT)
+                .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal gross = calculateGrossAmount(booking);
+        BigDecimal received = transactions.stream().filter(t -> t.getStatus() == PaymentStatus.PAID
+                        && t.getDirection() == PaymentDirection.IN && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
+                .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (refunds.signum() > 0 && received.compareTo(held) > 0) {
+            throw new PayoutIneligibleException("Đơn có nhiều nguồn thu và tiền hoàn; cần Admin xác định nguồn tiền hoàn trước chi trả");
+        }
+        if (received.subtract(refunds).compareTo(gross) != 0) {
+            throw new PayoutIneligibleException("Tiền thực thu chưa khớp quyết toán; cần xử lý tiền thiếu hoặc thừa trước chi trả");
+        }
+        BigDecimal eligible = held.subtract(refunds).max(BigDecimal.ZERO).min(gross);
         Provider provider = booking.getVehicle().getProvider();
-        if (provider.getBankAccountNo() == null || provider.getBankAccountNo().isBlank()) {
-            throw new PayoutIneligibleException("Nhà cung cấp chưa cấu hình tài khoản ngân hàng nhận tiền");
+        BigDecimal rate = provider.getCommissionRate();
+        if (eligible.signum() <= 0 || rate == null || rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) > 0) {
+            throw new PayoutIneligibleException("Không có tiền nền tảng thực thu hợp lệ hoặc thiếu tỷ lệ hoa hồng");
         }
-
-        if (bookingPaymentLedgerService.transactionExists(bookingId, PaymentType.PAYOUT)) {
-            return bookingPaymentLedgerService.findTransaction(bookingId, PaymentType.PAYOUT).orElseThrow();
-        }
-
-        BigDecimal grossAmount = calculateGrossAmount(booking);
-        BigDecimal commissionRate = provider.getCommissionRate() != null ? provider.getCommissionRate() : BigDecimal.ZERO;
-        BigDecimal platformFee = grossAmount.multiply(commissionRate).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal netAmount = grossAmount.subtract(platformFee);
-
-        if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new PayoutIneligibleException("Số tiền quyết toán chi trả không hợp lệ: " + netAmount);
-        }
-
-        String bankCode = provider.getBankCode();
-        if (bankCode == null || bankCode.isBlank()) {
-            bankCode = SupportedBank.fromName(provider.getBankName())
-                    .map(SupportedBank::getCode)
-                    .orElse("VCB");
-        }
-
+        ProviderBankAccount bank = providerBankAccountRepository.findByProvider_IdAndStatus(provider.getId(), BankAccountStatus.ACTIVE)
+                .orElseThrow(() -> new PayoutIneligibleException("Chưa có tài khoản nhận tiền được kích hoạt"));
+        BigDecimal amount = eligible.multiply(BigDecimal.ONE.subtract(rate)).setScale(2, RoundingMode.HALF_UP);
+        if (amount.signum() <= 0) throw new PayoutIneligibleException("Số tiền chi trả phải dương");
         PaymentTransaction payout = new PaymentTransaction();
         payout.setBooking(booking);
         payout.setType(PaymentType.PAYOUT);
         payout.setDirection(PaymentDirection.OUT);
         payout.setMethod(PaymentMethod.BANK_TRANSFER);
-        payout.setAmount(netAmount);
-        payout.setStatus(PaymentStatus.PAID);
-        payout.setGatewayRef("MOCK-PAYOUT-" + booking.getBookingCode());
-        payout.setPaidAt(Instant.now());
-        payout.setReceiptUrl("https://cdn.ecomotion.test/receipt/payout-" + booking.getBookingCode() + ".pdf");
+        payout.setAmount(amount);
+        payout.setPayoutGrossAmount(eligible);
+        payout.setPayoutFeeAmount(eligible.subtract(amount));
+        payout.setStatus(PaymentStatus.PENDING);
         payout.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
-
-        payout.setBankCodeSnapshot(bankCode);
-        payout.setBankNameSnapshot(provider.getBankName());
-        payout.setBankAccountNoSnapshot(maskAccountNumber(provider.getBankAccountNo()));
-        payout.setBankAccountHolderSnapshot(provider.getBankAccountHolder());
-
-        return bookingPaymentLedgerService.saveTransaction(payout);
+        payout.setConfirmedBy(actor);
+        payout.setGatewayRef("SANDBOX-PAYOUT-" + booking.getBookingCode());
+        payout.setProcessingNote("SANDBOX: no bank transfer; platform funds=" + eligible + "; commissionRate=" + rate);
+        payout.setBankCodeSnapshot(bank.getBankCode());
+        payout.setBankNameSnapshot(bank.getBankName());
+        payout.setBankAccountNoSnapshot(maskAccountNumber(bank.getAccountNumber()));
+        payout.setBankAccountHolderSnapshot(bank.getAccountHolderName());
+        return toPayoutSummaryResponse(bookingPaymentLedgerService.saveTransaction(payout));
     }
 
     // ==========================================
@@ -577,6 +608,13 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     private Provider resolveProvider(Long currentUserId) {
         return userService.findProviderByUserId(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng hiện tại không có hồ sơ nhà cung cấp"));
+    }
+
+    private BigDecimal receivedByMethod(List<PaymentTransaction> transactions, PaymentMethod method) {
+        return transactions.stream().filter(t -> t.getStatus() == PaymentStatus.PAID
+                        && t.getDirection() == PaymentDirection.IN && t.getMethod() == method
+                        && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
+                .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private Booking resolveBooking(Provider provider, String bookingCodeOrId) {
@@ -725,9 +763,9 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
     private ProviderPayoutSummaryResponse toPayoutSummaryResponse(PaymentTransaction pt) {
         Booking booking = pt.getBooking();
-        BigDecimal grossAmount = calculateGrossAmount(booking);
+        BigDecimal grossAmount = pt.getPayoutGrossAmount() != null ? pt.getPayoutGrossAmount() : calculateGrossAmount(booking);
         BigDecimal netAmount = pt.getAmount();
-        BigDecimal platformFee = grossAmount.subtract(netAmount).max(BigDecimal.ZERO);
+        BigDecimal platformFee = pt.getPayoutFeeAmount() != null ? pt.getPayoutFeeAmount() : grossAmount.subtract(netAmount).max(BigDecimal.ZERO);
 
         DestinationBankSnapshotResponse bankSnapshot = new DestinationBankSnapshotResponse(
                 pt.getBankCodeSnapshot(),
@@ -748,15 +786,16 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 pt.getGatewayRef(),
                 bankSnapshot,
                 pt.getCreatedAt(),
-                pt.getPaidAt()
+                pt.getPaidAt(),
+                pt.getVerificationMethod()
         );
     }
 
     private ProviderPayoutDetailResponse toPayoutDetailResponse(PaymentTransaction pt) {
         Booking booking = pt.getBooking();
-        BigDecimal grossAmount = calculateGrossAmount(booking);
+        BigDecimal grossAmount = pt.getPayoutGrossAmount() != null ? pt.getPayoutGrossAmount() : calculateGrossAmount(booking);
         BigDecimal netAmount = pt.getAmount();
-        BigDecimal platformFee = grossAmount.subtract(netAmount).max(BigDecimal.ZERO);
+        BigDecimal platformFee = pt.getPayoutFeeAmount() != null ? pt.getPayoutFeeAmount() : grossAmount.subtract(netAmount).max(BigDecimal.ZERO);
 
         String vehicleName = booking.getVehicle() != null
                 ? booking.getVehicle().getBrand() + " " + booking.getVehicle().getModel()
@@ -788,7 +827,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 bankSnapshot,
                 pt.getCreatedAt(),
                 pt.getPaidAt(),
-                true
+                pt.getVerificationMethod() == PaymentVerificationMethod.MOCK_SIMULATED
         );
     }
 

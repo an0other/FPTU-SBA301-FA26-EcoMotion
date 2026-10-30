@@ -14,7 +14,11 @@ import {
 } from '../../src/utils/driverTripUtils'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+  return (
+    <span className={`material-symbols-rounded select-none leading-none inline-flex items-center justify-center shrink-0 ${className}`}>
+      {name}
+    </span>
+  )
 }
 
 export default function DriverSchedulePage() {
@@ -45,11 +49,9 @@ export default function DriverSchedulePage() {
   useRealtimeSync({
     handlers: {
       [TV5_REALTIME_EVENTS.DRIVER_ASSIGNED]: () => {
-        refetch()
         setToast({ message: 'Bạn có một chuyến đi mới vừa được phân công!', type: 'info' })
       },
       [TV5_REALTIME_EVENTS.DRIVER_REASSIGNED]: () => {
-        refetch()
         setToast({ message: 'Thông báo: Có thay đổi phân công lịch trình.', type: 'warning' })
       },
     },
@@ -74,7 +76,7 @@ export default function DriverSchedulePage() {
     setActionLoading(true)
     try {
       const tripId = trip.tripId || trip.bookingCode
-      await driverTripService.confirmTrip(tripId)
+      await driverTripService.confirmTrip(tripId, trip.assignedAt)
       setToast({ message: 'Đã xác nhận nhận chuyến thành công! Vui lòng chuẩn bị di chuyển.', type: 'success' })
       refetch()
     } catch (err) {
@@ -108,9 +110,9 @@ export default function DriverSchedulePage() {
           onClick={() => refetch()}
           disabled={loading}
           aria-label="Làm mới lịch trình"
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-50"
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-50"
         >
-          <Icon name="refresh" className={`text-[16px] ${loading ? 'animate-spin' : ''}`} />
+          <Icon name="refresh" className={`text-[18px] ${loading ? 'animate-spin' : ''}`} />
           <span>Làm mới</span>
         </button>
       </div>
@@ -119,17 +121,17 @@ export default function DriverSchedulePage() {
       <ActiveTripBanner trip={activeTrip} />
 
       {/* View Tabs: TODAY | UPCOMING | HISTORY */}
-      <div className="mb-4 flex rounded-xl border border-slate-200 bg-white p-1 shadow-xs">
+      <div className="mb-4 flex flex-wrap rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
         {Object.values(TRIP_VIEWS).map((item) => {
           const isActive = view === item.key
           return (
             <button
               key={item.key}
               type="button"
-              onClick={() => setView(item.key)}
-              className={`flex-1 rounded-lg py-2.5 text-xs font-bold transition ${
+              onClick={() => { setStatus('ALL'); setView(item.key) }}
+              className={`flex-1 h-10 rounded-lg text-xs font-bold transition ${
                 isActive
-                  ? 'bg-brand-700 text-white shadow-xs'
+                  ? 'bg-brand-700 text-white shadow-2xs'
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -140,47 +142,57 @@ export default function DriverSchedulePage() {
       </div>
 
       {/* Filter and Date Bar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5 rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
+      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs items-end">
         {/* Status Dropdown */}
-        <div className="flex items-center gap-2">
-          <label htmlFor="status-filter" className="text-xs font-semibold text-slate-500">
-            Trạng thái:
+        <div>
+          <label htmlFor="status-filter" className="mb-1.5 block text-xs font-semibold text-slate-600">
+            Trạng thái chuyến
           </label>
-          <select
-            id="status-filter"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-brand-600 focus:bg-white"
-          >
-            {STATUS_FILTER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative h-10 sm:h-[42px] w-full">
+            <select
+              id="status-filter"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="h-full w-full appearance-none rounded-lg sm:rounded-xl border border-slate-200 bg-white pl-3.5 pr-9 text-xs sm:text-[13px] font-semibold text-slate-800 outline-none transition hover:border-slate-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+            >
+              {STATUS_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+              <Icon name="expand_more" className="text-[18px]" />
+            </div>
+          </div>
         </div>
 
         {/* Date Selector */}
-        <div className="flex items-center gap-2">
-          <label htmlFor="date-filter" className="text-xs font-semibold text-slate-500">
-            Ngày:
+        <div>
+          <label htmlFor="date-filter" className="mb-1.5 block text-xs font-semibold text-slate-600">
+            Lọc theo ngày
           </label>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <input
               id="date-filter"
               type="date"
+              lang="vi-VN"
               value={dateDraft}
               onChange={handleDateChange}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-brand-600 focus:bg-white"
+              className="h-10 sm:h-[42px] flex-1 rounded-lg sm:rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-[13px] text-slate-800 outline-none transition hover:border-slate-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
             />
-            {dateDraft && (
+            {(dateDraft || status !== 'ALL') && (
               <button
                 type="button"
-                onClick={handleClearDate}
-                title="Bỏ lọc theo ngày"
-                className="rounded p-1 text-slate-400 hover:text-slate-600"
+                onClick={() => {
+                  handleClearDate()
+                  setStatus('ALL')
+                }}
+                title="Xóa bộ lọc"
+                className="inline-flex h-10 sm:h-[42px] shrink-0 items-center justify-center gap-1 rounded-lg sm:rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
               >
-                <Icon name="close" className="text-[16px]" />
+                <Icon name="filter_alt_off" className="text-[16px]" />
+                <span>Xóa lọc</span>
               </button>
             )}
           </div>
@@ -202,12 +214,36 @@ export default function DriverSchedulePage() {
       {loading ? (
         <TripListSkeleton />
       ) : trips.length === 0 ? (
-        <div className="my-8 rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center">
+        <div className="my-8 rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
           <Icon name="event_busy" className="mx-auto mb-2 text-4xl text-slate-300" />
-          <h3 className="text-sm font-bold text-slate-800">Không có chuyến đi nào phù hợp</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Bạn có thể thử chọn tab khác hoặc thay đổi bộ lọc ngày để xem các chuyến khác.
+          <h3 className="text-sm font-bold text-slate-800">
+            {view === 'TODAY'
+              ? 'Hôm nay bạn chưa có chuyến đi nào'
+              : view === 'UPCOMING'
+              ? 'Không có chuyến đi sắp tới'
+              : view === 'HISTORY'
+              ? 'Chưa có lịch sử chuyến đi'
+              : 'Không có chuyến đi nào phù hợp'}
+          </h3>
+          <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto leading-normal">
+            {dateDraft || status !== 'ALL'
+              ? 'Không tìm thấy chuyến nào phù hợp với bộ lọc hiện tại. Thử xóa lọc để xem toàn bộ lịch trình.'
+              : view === 'TODAY'
+              ? 'Lịch trình hôm nay của bạn đang trống. Bạn có thể mở tab "Sắp tới" để kiểm tra các cuốc xe đã được lên lịch cho những ngày tiếp theo.'
+              : view === 'UPCOMING'
+              ? 'Chưa có chuyến đi mới nào được phân công trong thời gian tới.'
+              : 'Bạn có thể thử chọn tab khác hoặc thay đổi bộ lọc ngày để xem các chuyến khác.'}
           </p>
+          {view === 'TODAY' && !dateDraft && status === 'ALL' && (
+            <button
+              type="button"
+              onClick={() => { setStatus('ALL'); setView('UPCOMING') }}
+              className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl bg-brand-50 px-4 py-2 text-xs font-bold text-brand-800 hover:bg-brand-100 transition border border-brand-200 shadow-2xs"
+            >
+              <Icon name="event_upcoming" className="text-[16px]" />
+              <span>Xem chuyến sắp tới</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3.5">

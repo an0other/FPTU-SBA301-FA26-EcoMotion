@@ -74,11 +74,11 @@ class FinalPaymentFlowIntegrationTest {
     @Autowired
     private VnpayConfig vnpayConfig;
 
+    @Autowired
+    private com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository snapshotRepository;
+
     private Booking createSampleBookingForFinalPayment(BigDecimal totalAmount, BigDecimal depositAmount) {
-        Booking booking = bookingRepository.findAll().stream()
-                .filter(b -> b.getRenter() != null && b.getRenter().getUser() != null)
-                .findFirst()
-                .orElseThrow();
+        Booking booking = VnpayBookingFixture.create(bookingRepository, snapshotRepository);
 
         booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
         booking.setTotalAmount(totalAmount);
@@ -196,6 +196,8 @@ class FinalPaymentFlowIntegrationTest {
         ipnParams.put("vnp_TxnRef", res.vnpTxnRef());
         ipnParams.put("vnp_Amount", String.valueOf(amountPennies));
         ipnParams.put("vnp_ResponseCode", "00");
+        ipnParams.put("vnp_TransactionStatus", "00");
+        ipnParams.put("vnp_TmnCode", vnpayConfig.getTmnCode());
         ipnParams.put("vnp_TransactionNo", "14567890");
         ipnParams.put("vnp_BankCode", "NCB");
         ipnParams.put("vnp_CardType", "ATM");
@@ -228,7 +230,9 @@ class FinalPaymentFlowIntegrationTest {
         Map<String, String> failParams = new HashMap<>();
         failParams.put("vnp_TxnRef", session1.vnpTxnRef());
         failParams.put("vnp_Amount", String.valueOf(amountPennies));
-        failParams.put("vnp_ResponseCode", "24"); // Cancelled by customer
+        failParams.put("vnp_ResponseCode", "24");
+        failParams.put("vnp_TransactionStatus", "02");
+        failParams.put("vnp_TmnCode", vnpayConfig.getTmnCode()); // Cancelled by customer
 
         String hashData = VnpayUtils.buildHashData(failParams);
         String secureHash = VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData);
@@ -276,6 +280,8 @@ class FinalPaymentFlowIntegrationTest {
         ipnParams.put("vnp_TxnRef", res.vnpTxnRef());
         ipnParams.put("vnp_Amount", String.valueOf(amountPennies));
         ipnParams.put("vnp_ResponseCode", "00");
+        ipnParams.put("vnp_TransactionStatus", "00");
+        ipnParams.put("vnp_TmnCode", vnpayConfig.getTmnCode());
 
         String hashData = VnpayUtils.buildHashData(ipnParams);
         String secureHash = VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData);
@@ -429,6 +435,8 @@ class FinalPaymentFlowIntegrationTest {
         ipnParams.put("vnp_TxnRef", res.vnpTxnRef());
         ipnParams.put("vnp_Amount", String.valueOf(amountPennies));
         ipnParams.put("vnp_ResponseCode", "00");
+        ipnParams.put("vnp_TransactionStatus", "00");
+        ipnParams.put("vnp_TmnCode", vnpayConfig.getTmnCode());
 
         String hashData = VnpayUtils.buildHashData(ipnParams);
         String secureHash = VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData);
