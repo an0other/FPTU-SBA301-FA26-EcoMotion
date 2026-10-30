@@ -63,6 +63,9 @@ public class PaymentTransaction {
     @Column(nullable = false, length = 20)
     private PaymentMethod method;
 
+    @Column(name = "transaction_code", length = 32, unique = true)
+    private String transactionCode;
+
     @Column(name = "gateway_ref", length = 100)
     private String gatewayRef;
 

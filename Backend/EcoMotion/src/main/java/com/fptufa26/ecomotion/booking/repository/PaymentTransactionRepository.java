@@ -48,6 +48,8 @@ public interface PaymentTransactionRepository
 
     boolean existsByBooking_IdAndType(Long bookingId, PaymentType type);
 
+    Optional<PaymentTransaction> findByTransactionCode(String transactionCode);
+
     Optional<PaymentTransaction> findByBooking_IdAndType(Long bookingId, PaymentType type);
 
     @EntityGraph(attributePaths = { "booking", "booking.vehicle", "booking.vehicle.provider" })

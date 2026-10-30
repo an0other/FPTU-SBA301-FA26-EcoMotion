@@ -39,7 +39,7 @@ public record DriverCandidateResponse(
             state = new AssignmentAvailabilityResponse(state.workStatus(), "UNAVAILABLE", ineligibilityReason,
                     state.currentBookingCode(), state.currentTripStartedAt(), state.conflictingBookingCode(),
                     state.conflictStart(), state.conflictEnd(), state.nextBookingCode(), state.nextPickupAt(),
-                    state.nextAvailableAt(), state.lastUpdatedAt());
+                    state.nextAvailableAt(), state.lastUpdatedAt(), state.currentOperationalStatus());
         }
         return new DriverCandidateResponse(driverId, userId, fullName, phone, licenseNo, licenseClass,
                 licenseExpiry, portraitUrl, ratingAvg, ratingCount, etaMinutes, distanceKm,

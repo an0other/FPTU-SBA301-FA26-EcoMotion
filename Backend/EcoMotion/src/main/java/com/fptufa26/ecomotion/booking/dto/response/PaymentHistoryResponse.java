@@ -10,6 +10,7 @@ import java.time.Instant;
 
 public record PaymentHistoryResponse(
         String bookingCode,
+        String transactionCode,
         PaymentType type,
         BigDecimal amount,
         PaymentDirection direction,
@@ -19,4 +20,17 @@ public record PaymentHistoryResponse(
         Instant paidAt,
         Instant createdAt
 ) {
+    public PaymentHistoryResponse(
+            String bookingCode,
+            PaymentType type,
+            BigDecimal amount,
+            PaymentDirection direction,
+            PaymentMethod method,
+            PaymentStatus status,
+            String receiptUrl,
+            Instant paidAt,
+            Instant createdAt
+    ) {
+        this(bookingCode, null, type, amount, direction, method, status, receiptUrl, paidAt, createdAt);
+    }
 }

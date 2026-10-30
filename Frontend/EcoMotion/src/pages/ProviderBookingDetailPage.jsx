@@ -1040,7 +1040,14 @@ export default function ProviderBookingDetailPage() {
                   {booking.paymentTransactions.map((tx) => (
                     <div key={tx.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 flex justify-between items-center">
                       <div>
-                        <div className="font-semibold text-slate-900">{tx.type}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-slate-900">{tx.type}</span>
+                          {tx.transactionCode && (
+                            <span className="font-mono text-[10px] font-bold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
+                              {tx.transactionCode}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-slate-400">{formatDateTime(tx.paidAt || tx.createdAt)}</div>
                       </div>
                       <div className="text-right">

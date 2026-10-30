@@ -82,6 +82,14 @@ export default function PaymentDetailModal({ payment, onClose }) {
               <span className="text-slate-500 block">Phương thức:</span>
               <strong className="text-slate-900">{payment.method || 'VIETQR'}</strong>
             </div>
+            {payment.transactionCode && (
+              <div className="col-span-2">
+                <span className="text-slate-500 block">Mã thanh toán nội bộ:</span>
+                <strong className="text-brand-700 font-mono text-xs block">
+                  {payment.transactionCode}
+                </strong>
+              </div>
+            )}
             <div className="col-span-2">
               <span className="text-slate-500 block">Mã tham chiếu Gateway (Gateway Ref):</span>
               <strong className="text-slate-900 font-mono text-[11px] block break-all">

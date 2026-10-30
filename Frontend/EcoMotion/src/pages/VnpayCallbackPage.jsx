@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { paymentService } from '../services/paymentService'
 
 const POLL_INTERVAL_MS = 3000
@@ -7,8 +7,28 @@ const MAX_POLLS = 40
 
 export default function VnpayCallbackPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const query = searchParams.toString()
   const [state, setState] = useState({ result: null, error: null, checking: true })
+
+  useEffect(() => {
+    if (state.result?.status === 'SUCCESS' && state.result?.bookingCode) {
+      const timer = window.setTimeout(() => {
+        navigate('/payment/success', {
+          replace: true,
+          state: {
+            bookingCode: state.result.bookingCode,
+            transactionCode: state.result.transactionCode,
+            vnpTransactionNo: state.result.vnpTransactionNo,
+            amount: state.result.amount,
+            paymentMethod: 'VNPAY',
+            paidAt: state.result.payDate || new Date().toISOString(),
+          },
+        })
+      }, 1000)
+      return () => window.clearTimeout(timer)
+    }
+  }, [state.result, navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +107,7 @@ export default function VnpayCallbackPage() {
         {result?.bookingCode && (
           <dl className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-left space-y-3">
             <div className="flex justify-between gap-3"><dt>Mã đơn đặt xe</dt><dd className="font-mono font-bold break-all">{result.bookingCode}</dd></div>
+            {result.transactionCode && <div className="flex justify-between gap-3"><dt>Mã thanh toán nội bộ</dt><dd className="font-mono font-bold text-brand-700">{result.transactionCode}</dd></div>}
             <div className="flex justify-between gap-3"><dt>Số tiền thanh toán</dt><dd className="font-bold">{Number(result.amount ?? 0).toLocaleString('vi-VN')} ₫</dd></div>
             <div className="flex justify-between gap-3"><dt>Mã giao dịch VNPay</dt><dd className="font-mono break-all">{result.vnpTransactionNo || '—'}</dd></div>
             {result.bankCode && <div className="flex justify-between gap-3"><dt>Ngân hàng</dt><dd>{result.bankCode}</dd></div>}

@@ -285,8 +285,18 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               ) : !suggestionResult?.candidates || suggestionResult.candidates.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500">
                   <Icon name="person_off" className="text-3xl text-slate-300 mx-auto mb-2" />
-                  Hiện không có tài xế nào khả dụng trong khu vực cho khung giờ này.
-                  <p className="mt-1 text-slate-400">Bạn có thể chọn chế độ Phân công thủ công để kiểm tra toàn bộ đội xe.</p>
+                  <div className="font-semibold text-slate-800 text-sm">Chưa có tài xế phù hợp với lịch thuê này.</div>
+                  <p className="mt-1 text-slate-500">Hệ thống chưa tìm thấy tài xế khả dụng đáp ứng đầy đủ điều kiện vận hành trong khung giờ này.</p>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={fetchSuggestions}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                    >
+                      Thử lại tìm kiếm
+                    </button>
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">Bạn có thể chuyển sang chế độ "Thủ công" để xem toàn bộ danh sách tài xế và nguyên nhân không khả dụng.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -556,8 +566,26 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                     Đang tải danh sách tài xế...
                   </div>
                 ) : filteredDrivers.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">
-                    Không tìm thấy tài xế phù hợp
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500">
+                    <Icon name="person_off" className="text-3xl text-slate-300 mx-auto mb-2" />
+                    <div className="font-semibold text-slate-800 text-sm">Chưa có tài xế phù hợp với lịch thuê này.</div>
+                    <p className="mt-1 text-slate-500">
+                      {statusFilter === 'ELIGIBLE'
+                        ? 'Hiện không có tài xế nào đủ điều kiện nhận cuốc trong khung giờ này.'
+                        : 'Không tìm thấy tài xế khớp với bộ lọc tìm kiếm.'}
+                    </p>
+                    <div className="mt-3 flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { refreshDrivers(); setStatusFilter('ALL'); setSearchQuery(''); }}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        Đặt lại bộ lọc &amp; Thử lại
+                      </button>
+                    </div>
+                    <p className="mt-3 text-[11px] text-slate-400">
+                      Đơn thuê vẫn được giữ ở trạng thái chờ phân công. Bạn có thể kiểm tra danh sách đầy đủ hoặc liên hệ Renter để thống nhất dời lịch đón.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">

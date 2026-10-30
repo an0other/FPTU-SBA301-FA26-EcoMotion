@@ -1,23 +1,84 @@
-import { assignmentStatuses, assignmentReasons } from '../../utils/assignmentAvailability'
+import { assignmentStatuses, assignmentReasons, currentOperationalStatuses } from '../../utils/assignmentAvailability'
 
 const time = value => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa xác định'
 
 export default function AssignmentDriverStatus({ driver }) {
-  const state = driver.availability
-  const badge = assignmentStatuses[state?.availabilityStatus]
+  const state = driver?.availability
   if (!state) return <p className="text-xs text-slate-500">Chưa có dữ liệu trạng thái.</p>
+
+  // 1. Current operational status
+  const currentKey = state.currentOperationalStatus
+    || (state.currentBookingCode ? 'ON_TRIP'
+      : state.workStatus === 'OFFLINE' ? 'OFFLINE'
+      : state.workStatus === 'UNAVAILABLE' ? 'UNAVAILABLE'
+      : state.nextBookingCode ? 'SCHEDULED' : 'AVAILABLE')
+  const currentBadge = currentOperationalStatuses[currentKey] || currentOperationalStatuses.AVAILABLE
+
+  // 2. Booking-specific availability badge
+  const bookingBadge = driver.eligible
+    ? { label: 'Có thể phân công', color: 'bg-emerald-100 text-emerald-800' }
+    : assignmentStatuses[state.availabilityStatus] || { label: 'Không thể phân công', color: 'bg-rose-100 text-rose-800' }
+
   return (
-    <div className="mt-2 space-y-1 text-xs text-slate-600">
-      <span className={`inline-block rounded-full px-2 py-1 font-semibold ${badge?.color || 'bg-slate-100'}`}>
-        {badge?.label || 'Chưa xác định'}
-      </span>
-      <p>{driver.eligible ? 'Có thể phân công trong khung giờ đang chọn.' : 'Không thể phân công trong khung giờ đang chọn.'}</p>
-      <p>Sẵn sàng: {state.workStatus === 'AVAILABLE' ? 'Đang nhận chuyến' : state.workStatus === 'OFFLINE' ? 'Ngoại tuyến' : 'Tạm nghỉ'}</p>
-      {state.currentBookingCode ? <p>Đang chạy: <strong>{state.currentBookingCode}</strong> · Bắt đầu: {time(state.currentTripStartedAt)}</p> : <p>Không có chuyến đang chạy.</p>}
-      {state.conflictingBookingCode && <p>Lịch bị chiếm: {state.conflictingBookingCode} · {time(state.conflictStart)} – {time(state.conflictEnd)}</p>}
-      {state.nextBookingCode && <p>Chuyến tiếp theo: {state.nextBookingCode} · {time(state.nextPickupAt)}</p>}
-      {!driver.eligible && <p className="text-red-700">{assignmentReasons[state.reason] || driver.ineligibilityReason || state.reason}</p>}
-      {state.nextAvailableAt && <p>Hết lịch và khoảng đệm: {time(state.nextAvailableAt)}</p>}
+    <div className="mt-2 space-y-1.5 text-xs text-slate-600">
+      {/* 2 distinct status pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1">
+          <span className="text-[11px] font-medium text-slate-500">Hiện tại:</span>
+          <span className={`inline-block rounded-full px-2 py-0.5 font-semibold text-[11px] ${currentBadge.color}`}>
+            {currentBadge.label}
+          </span>
+        </span>
+
+        <span className="inline-flex items-center gap-1">
+          <span className="text-[11px] font-medium text-slate-500">Booking này:</span>
+          <span className={`inline-block rounded-full px-2 py-0.5 font-semibold text-[11px] ${bookingBadge.color}`}>
+            {bookingBadge.label}
+          </span>
+        </span>
+      </div>
+
+      {/* Details on current trip if on trip */}
+      {state.currentBookingCode && (
+        <p className="text-[11px] text-blue-700">
+          Đang chạy: <strong className="font-mono">{state.currentBookingCode}</strong> (Bắt đầu: {time(state.currentTripStartedAt)})
+        </p>
+      )}
+
+      {/* Conflicting slot if schedule conflict */}
+      {state.conflictingBookingCode && (
+        <p className="text-[11px] text-orange-800">
+          Trùng lịch: <strong className="font-mono">{state.conflictingBookingCode}</strong> ({time(state.conflictStart)} – {time(state.conflictEnd)})
+        </p>
+      )}
+
+      {/* Buffer conflict details */}
+      {state.availabilityStatus === 'BUFFER_CONFLICT' && state.conflictEnd && (
+        <p className="text-[11px] text-amber-800">
+          Chuyến trước kết thúc lúc {time(state.conflictEnd)}, không đủ khoảng đệm bảo dưỡng/di chuyển.
+        </p>
+      )}
+
+      {/* Next booking info if scheduled */}
+      {state.nextBookingCode && !state.conflictingBookingCode && (
+        <p className="text-[11px] text-slate-500">
+          Chuyến tiếp theo: <span className="font-mono">{state.nextBookingCode}</span> lúc {time(state.nextPickupAt)}
+        </p>
+      )}
+
+      {/* Ineligibility reason */}
+      {!driver.eligible && (
+        <p className="text-[11px] font-medium text-red-700">
+          {assignmentReasons[state.reason] || driver.ineligibilityReason || state.reason}
+        </p>
+      )}
+
+      {/* Expected available at */}
+      {state.nextAvailableAt && (
+        <p className="text-[11px] text-slate-500">
+          Dự kiến sẵn sàng sau: {time(state.nextAvailableAt)}
+        </p>
+      )}
     </div>
   )
 }

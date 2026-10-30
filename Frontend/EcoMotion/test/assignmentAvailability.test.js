@@ -9,7 +9,7 @@ const drivers = [
 ]
 
 test('assignment statuses include an explicit uncertain return with Vietnamese labels and badge colors', () => {
-  assert.deepEqual(Object.keys(assignmentStatuses).sort(), ['AVAILABLE', 'OFFLINE', 'ON_TRIP', 'PENDING_ASSIGNMENT', 'SCHEDULE_CONFLICT', 'UNAVAILABLE', 'UNCERTAIN'].sort())
+  assert.deepEqual(Object.keys(assignmentStatuses).sort(), ['AVAILABLE', 'BUFFER_CONFLICT', 'OFFLINE', 'ON_TRIP', 'PENDING_ASSIGNMENT', 'SCHEDULE_CONFLICT', 'UNAVAILABLE', 'UNCERTAIN'].sort())
   for (const status of Object.values(assignmentStatuses)) {
     assert.ok(status.label)
     assert.match(status.color, /bg-/)
