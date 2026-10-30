@@ -111,29 +111,27 @@ class VnpayPaymentFlowIntegrationTest {
     }
 
     @Test
-    void returnBeforeIpnVerifiesDirectlyAndSubsequentIpnIsIdempotent() {
+    void returnBeforeIpnOnlyReadsAndIpnAppliesPaymentExactlyOnce() {
         var session = pendingSession();
         var params = signed(session, "00", "00");
         
-        // 1. Callback arrives before IPN (e.g. sandbox localhost)
         var result = vnpayService.processCallback(params);
-        assertThat(result.status()).isEqualTo("SUCCESS");
-        assertThat(result.success()).isTrue();
+        assertThat(result.status()).isEqualTo("PENDING_VERIFICATION");
+        assertThat(result.success()).isFalse();
         assertThat(result.retryAllowed()).isFalse();
         assertThat(result.transactionCode()).isNotBlank().startsWith("VP");
         
-        // Transaction is PAID and booking is CONFIRMED
         var tx = paymentTransactionRepository.findByVnpTxnRef(session.vnpTxnRef()).orElseThrow();
-        assertThat(tx.getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(tx.getBooking().getStatus()).isIn(BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED);
+        assertThat(tx.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(tx.getBooking().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
 
-        // 2. Refreshing callback returns SUCCESS idempotently
         var refresh = vnpayService.processCallback(params);
-        assertThat(refresh.status()).isEqualTo("SUCCESS");
-        assertThat(refresh.success()).isTrue();
+        assertThat(refresh.status()).isEqualTo("PENDING_VERIFICATION");
+        assertThat(refresh.success()).isFalse();
 
-        // 3. Subsequent IPN arrives: safely returns 02 (already confirmed) without error
+        assertThat(vnpayService.processIpn(params).rspCode()).isEqualTo("00");
         assertThat(vnpayService.processIpn(params).rspCode()).isEqualTo("02");
+        assertThat(vnpayService.processCallback(params).status()).isEqualTo("SUCCESS");
         assertThat(vnpayService.queryTransaction(session.bookingCode(), session.vnpTxnRef()).status()).isEqualTo("SUCCESS");
     }
 

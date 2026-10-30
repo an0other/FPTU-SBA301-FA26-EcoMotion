@@ -16,11 +16,14 @@ test('verified funds requiring reconciliation never show booking success or retr
 })
 
 async function mockPayments(page, callback, query = callback) {
+  let latest
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
     let data = {}
     if (url.pathname.endsWith('/callback')) data = typeof callback === 'function' ? callback() : callback
     if (url.pathname.endsWith('/query')) data = typeof query === 'function' ? query() : query
+    if (url.pathname.endsWith('/callback') || url.pathname.endsWith('/query')) latest = data
+    if (url.pathname.endsWith('/receipt')) data = { ...latest, paymentMethod: 'VNPAY', verificationMethod: 'GATEWAY_VERIFIED', paidAt: '2026-10-30T10:00:00Z' }
     await route.fulfill({ json: { data } })
   })
 }

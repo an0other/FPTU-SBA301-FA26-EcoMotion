@@ -1,125 +1,77 @@
-import { useLocation, useSearchParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useSearchParams, Link } from 'react-router-dom'
+import { paymentService } from '../services/paymentService'
 import { formatPaymentMoney, formatPaymentDate } from '../utils/paymentDisplay'
 
-function Icon({ name, className = '' }) {
-  return (
-    <span className={`material-symbols-rounded select-none ${className}`} aria-hidden="true">
-      {name}
-    </span>
-  )
+const TITLES = {
+  SUCCESS: 'Thanh toán thành công!',
+  FAILED: 'Thanh toán không thành công',
+  PENDING_VERIFICATION: 'Đang xác minh thanh toán',
+  RECONCILIATION_REQUIRED: 'Đã nhận tiền, cần đối soát đơn thuê',
 }
 
 export default function PaymentSuccessPage() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
+  const reference = searchParams.get('reference') || location.state?.reference
+    || searchParams.get('vnpTxnRef') || searchParams.get('transactionCode')
+    || location.state?.vnpTxnRef || location.state?.transactionCode || ''
+  const [attempt, setAttempt] = useState(0)
+  const [state, setState] = useState({ key: null, receipt: null, error: null })
+  const key = `${reference}:${attempt}`
 
-  const state = location.state || {}
+  useEffect(() => {
+    if (!reference) return undefined
+    const controller = new AbortController()
+    let cancelled = false
+    paymentService.getReceipt(reference, controller.signal).then(receipt => {
+      if (cancelled) return
+      if (!TITLES[receipt?.status]) throw new Error('Máy chủ chưa trả về kết quả thanh toán hợp lệ.')
+      setState({ key, receipt, error: null })
+    }).catch(error => {
+      if (!cancelled) setState({ key, receipt: null, error: error?.message || 'Không thể tải biên lai thanh toán.' })
+    })
+    return () => { cancelled = true; controller.abort() }
+  }, [reference, key])
 
-  const bookingCode = state.bookingCode || searchParams.get('bookingCode') || ''
-  const transactionCode = state.transactionCode || searchParams.get('transactionCode') || ''
-  const vnpTransactionNo = state.vnpTransactionNo || searchParams.get('vnpTransactionNo') || searchParams.get('vnp_TransactionNo') || ''
-  const rawAmount = state.amount || searchParams.get('amount') || 0
-  const amount = Number(rawAmount)
-  const paymentMethod = (state.paymentMethod || searchParams.get('paymentMethod') || searchParams.get('method') || 'VNPAY').toUpperCase()
-  const paidAt = state.paidAt || searchParams.get('paidAt') || new Date().toISOString()
-
-  const methodLabel = paymentMethod === 'VNPAY' ? 'Cổng thanh toán VNPay' : 'Chuyển khoản VietQR'
-  const bookingPath = bookingCode ? `/renter/bookings/${encodeURIComponent(bookingCode)}` : '/renter/bookings'
+  const loading = Boolean(reference) && state.key !== key
+  const error = !reference ? 'Thiếu mã tham chiếu để kiểm tra thanh toán.' : state.key === key ? state.error : null
+  const receipt = state.key === key && !error ? state.receipt : null
+  const success = receipt?.status === 'SUCCESS'
+  const title = loading ? 'Đang kiểm tra thanh toán' : error ? 'Không thể xác minh thanh toán' : TITLES[receipt?.status]
+  const bookingPath = receipt?.bookingCode ? `/renter/bookings/${encodeURIComponent(receipt.bookingCode)}` : null
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm text-center space-y-6 animate-fade-in">
-        {/* Success Icon */}
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50">
-          <Icon name="check_circle" className="text-5xl" />
-        </div>
-
-        {/* Title */}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Thanh toán thành công!</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Giao dịch thanh toán của bạn đã được máy chủ EcoMotion xác minh và ghi nhận thành công.
-          </p>
-        </div>
-
-        {/* Receipt Card */}
-        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5 text-left text-sm space-y-3.5">
-          {bookingCode && (
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
-              <span className="text-slate-500 text-xs">Mã đơn thuê</span>
-              <span className="font-mono font-bold text-slate-900 break-all">{bookingCode}</span>
-            </div>
-          )}
-
-          {transactionCode && (
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
-              <span className="text-slate-500 text-xs">Mã thanh toán nội bộ</span>
-              <span className="font-mono font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
-                {transactionCode}
-              </span>
-            </div>
-          )}
-
-          {vnpTransactionNo && (
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
-              <span className="text-slate-500 text-xs">Mã giao dịch cổng (VNPay)</span>
-              <span className="font-mono text-slate-700 break-all">{vnpTransactionNo}</span>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
-            <span className="text-slate-500 text-xs">Số tiền thanh toán</span>
-            <span className="text-lg font-black text-slate-900">
-              {formatPaymentMoney(amount)}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
-            <span className="text-slate-500 text-xs">Phương thức</span>
-            <span className="font-medium text-slate-800">{methodLabel}</span>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
-            <span className="text-slate-500 text-xs">Thời gian thanh toán</span>
-            <span className="text-xs text-slate-700">{formatPaymentDate(paidAt)}</span>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 pt-0.5">
-            <span className="text-slate-500 text-xs">Trạng thái</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-              <Icon name="check" className="text-xs" />
-              Đã thanh toán
-            </span>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
-          {bookingCode && (
-            <Link
-              to={bookingPath}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-brand-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
-            >
-              <Icon name="receipt" className="text-base" />
-              Xem chi tiết đơn thuê
-            </Link>
-          )}
-
-          <Link
-            to="/renter/bookings"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-5 py-2.5 text-xs font-bold text-brand-800 hover:bg-brand-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
-          >
-            <Icon name="list_alt" className="text-base" />
-            Về danh sách đơn
-          </Link>
-
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-          >
-            Về trang chủ
-          </Link>
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm text-center space-y-6" aria-live="polite">
+        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+        {loading && <p>Đang lấy trạng thái từ máy chủ EcoMotion.</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        {receipt && !success && (
+          <p className="text-sm text-slate-600">{receipt.status === 'FAILED'
+            ? 'Máy chủ ghi nhận giao dịch không thành công. Vui lòng kiểm tra đơn thuê.'
+            : 'Vui lòng không thanh toán lại trong lúc chờ xác minh hoặc đối soát.'}</p>
+        )}
+        {success && (
+          <>
+            <p className="text-sm text-slate-600">{receipt.verificationMethod === 'GATEWAY_VERIFIED'
+              ? 'Giao dịch đã được cổng thanh toán xác minh và máy chủ ghi nhận.'
+              : 'Khoản chuyển khoản đã được xác nhận thủ công và máy chủ ghi nhận.'}</p>
+            <dl className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-left text-sm space-y-4" aria-label="Biên lai thanh toán">
+              <div><dt>Mã đơn thuê</dt><dd className="font-mono break-all">{receipt.bookingCode}</dd></div>
+              <div><dt>Mã thanh toán nội bộ</dt><dd className="font-mono break-all">{receipt.transactionCode || '—'}</dd></div>
+              {receipt.vnpTransactionNo && <div><dt>Mã giao dịch VNPay</dt><dd className="break-all">{receipt.vnpTransactionNo}</dd></div>}
+              <div><dt>Số tiền thanh toán</dt><dd className="text-lg font-bold">{formatPaymentMoney(receipt.amount)}</dd></div>
+              <div><dt>Phương thức</dt><dd>{receipt.paymentMethod === 'VNPAY' ? 'Cổng thanh toán VNPay' : 'Chuyển khoản ngân hàng'}</dd></div>
+              <div><dt>Thời gian thanh toán</dt><dd>{formatPaymentDate(receipt.paidAt)}</dd></div>
+            </dl>
+          </>
+        )}
+        <div className="flex flex-wrap justify-center gap-3">
+          {reference && !loading && <button type="button" onClick={() => setAttempt(value => value + 1)} className="rounded-lg border px-4 py-2">Kiểm tra lại</button>}
+          {bookingPath && <Link to={bookingPath} className="rounded-lg bg-brand-700 px-4 py-2 text-white">Xem chi tiết đơn thuê</Link>}
+          <Link to="/renter/bookings" className="rounded-lg border px-4 py-2">Đơn của tôi</Link>
+          <Link to="/" className="rounded-lg border px-4 py-2">Về trang chủ</Link>
         </div>
       </div>
     </div>
