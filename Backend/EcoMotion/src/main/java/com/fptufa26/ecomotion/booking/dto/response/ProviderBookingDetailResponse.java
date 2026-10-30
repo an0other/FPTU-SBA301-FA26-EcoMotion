@@ -207,6 +207,7 @@ public record ProviderBookingDetailResponse(
 
     public record PaymentTransactionDetailResponse(
             Long id,
+            String transactionCode,
             String type,
             BigDecimal amount,
             String direction,
@@ -215,7 +216,21 @@ public record ProviderBookingDetailResponse(
             String receiptUrl,
             Instant paidAt,
             Instant createdAt
-    ) {}
+    ) {
+        public PaymentTransactionDetailResponse(
+                Long id,
+                String type,
+                BigDecimal amount,
+                String direction,
+                String method,
+                String status,
+                String receiptUrl,
+                Instant paidAt,
+                Instant createdAt
+        ) {
+            this(id, null, type, amount, direction, method, status, receiptUrl, paidAt, createdAt);
+        }
+    }
 
     public record TimelineEventResponse(
             String title,

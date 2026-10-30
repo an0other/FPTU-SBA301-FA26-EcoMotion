@@ -45,6 +45,7 @@ import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
 import com.fptufa26.ecomotion.common.storage.FileStorageService;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
+import com.fptufa26.ecomotion.finance.service.PaymentCodeGenerator;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.Role;
@@ -99,6 +100,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private final VehicleCatalogService vehicleCatalogService;
     private final ScheduleService scheduleService;
     private final UserService userService;
+    private final PaymentCodeGenerator paymentCodeGenerator;
     private final Clock clock;
     private final Environment environment;
 
@@ -129,6 +131,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         pr.setAmount(depositAmount);
         pr.setPaidAmount(BigDecimal.ZERO);
         pr.setCurrency("VND");
+        pr.setPaymentCode(paymentCodeGenerator.generatePaymentCode("VQ"));
         pr.setTransferReference(transferRef);
 
         pr.setBankCodeSnapshot(bankAccount.getBankCode());
@@ -235,6 +238,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         pr.setAmount(remaining);
         pr.setPaidAmount(BigDecimal.ZERO);
         pr.setCurrency("VND");
+        pr.setPaymentCode(paymentCodeGenerator.generatePaymentCode("VQ"));
         pr.setTransferReference(transferRef);
 
         pr.setBankCodeSnapshot(bankAccount.getBankCode());
@@ -561,8 +565,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
         }
 
-        if (pr.getStatus() != PaymentRequestStatus.PROOF_SUBMITTED) {
-            throw new InvalidPaymentOperationException("Cần chứng từ chuyển khoản hợp lệ trước khi xác nhận thanh toán");
+        if (pr.getStatus() == PaymentRequestStatus.CONFIRMED
+                || pr.getStatus() == PaymentRequestStatus.REJECTED
+                || pr.getStatus() == PaymentRequestStatus.VOIDED) {
+            throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã được xử lý hoặc không còn hiệu lực");
         }
 
         BigDecimal neededAmount = pr.getAmount().subtract(pr.getPaidAmount()).max(BigDecimal.ZERO);
@@ -599,6 +605,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         tx.setMethod(PaymentMethod.BANK_TRANSFER);
         tx.setAmount(receivedAmount);
         tx.setAppliedAmount(appliedAmount);
+        tx.setTransactionCode(pr.getPaymentCode() != null ? pr.getPaymentCode() : paymentCodeGenerator.generatePaymentCode("VQ"));
         tx.setStatus(PaymentStatus.PAID);
         bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
         tx.setPaidAt(clock.instant());
@@ -1185,6 +1192,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         return new PaymentRequestResponse(
                 pr.getId(),
+                pr.getPaymentCode(),
                 pr.getBooking().getId(),
                 pr.getBooking().getBookingCode(),
                 pr.getPaymentType(),

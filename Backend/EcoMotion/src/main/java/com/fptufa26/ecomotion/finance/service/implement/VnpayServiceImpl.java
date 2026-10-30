@@ -29,6 +29,7 @@ import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
 import com.fptufa26.ecomotion.finance.exception.InvalidPaymentOperationException;
 import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.service.PaymentCodeGenerator;
 import com.fptufa26.ecomotion.finance.service.VnpayService;
 import com.fptufa26.ecomotion.finance.service.gateway.PaymentGatewayResolver;
 import com.fptufa26.ecomotion.finance.service.gateway.PaymentGatewayStrategy;
@@ -78,6 +79,7 @@ public class VnpayServiceImpl implements VnpayService {
     private final VehicleService vehicleService;
     private final ScheduleService scheduleService;
     private final DriverOptimizationService driverOptimizationService;
+    private final PaymentCodeGenerator paymentCodeGenerator;
     private final Clock clock;
     private final VnpayConfig vnpayConfig;
     private final PlatformTransactionManager transactionManager;
@@ -221,6 +223,7 @@ public class VnpayServiceImpl implements VnpayService {
                     newTx.setAmount(amount);
                     newTx.setStatus(PaymentStatus.PENDING);
                     newTx.setVerificationMethod(PaymentVerificationMethod.MANUAL_UNVERIFIED);
+                    newTx.setTransactionCode(paymentCodeGenerator.generatePaymentCode("VP"));
                     newTx.setVnpTxnRef(vnpTxnRef);
                     newTx.setGatewayRef(vnpTxnRef);
                     newTx.setCreatedAt(now);
@@ -564,23 +567,36 @@ public class VnpayServiceImpl implements VnpayService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public VnpayCallbackResultResponse processCallback(Map<String, String> params) {
         PaymentVerificationResult verification = paymentGatewayResolver.resolve(PaymentMethod.VNPAY).verifyCallback(params);
         if (!verification.validSignature()) {
             return invalidCallback("Chữ ký hoặc thông tin merchant không hợp lệ");
         }
-        PaymentTransaction transaction = bookingQueryService.findTransactionByVnpTxnRef(verification.txnRef()).orElse(null);
-        if (transaction == null) return invalidCallback("Giao dịch không tồn tại");
+        String vnpTxnRef = verification.txnRef();
+        if (vnpTxnRef == null || vnpTxnRef.isBlank()) {
+            return invalidCallback("Mã tham chiếu giao dịch không tồn tại");
+        }
+        PaymentTransaction candidate = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(null);
+        if (candidate == null) return invalidCallback("Giao dịch không tồn tại");
         try {
             String amount = params.get("vnp_Amount");
             if (amount == null || !amount.matches("[0-9]+")
-                    || new BigDecimal(amount).compareTo(transaction.getAmount().movePointRight(2)) != 0) {
+                    || new BigDecimal(amount).compareTo(candidate.getAmount().movePointRight(2)) != 0) {
                 return invalidCallback("Số tiền giao dịch không khớp");
             }
         } catch (NumberFormatException ex) {
             return invalidCallback("Số tiền giao dịch không hợp lệ");
         }
+
+        bookingQueryService.lockBookingForPayment(candidate.getBooking().getId());
+        PaymentTransaction transaction = bookingQueryService.findTransactionByVnpTxnRefForUpdate(vnpTxnRef).orElse(candidate);
+
+        if (transaction.getStatus() == PaymentStatus.PENDING) {
+            applyVerifiedPayment(transaction, verification, params);
+            transaction = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(transaction);
+        }
+
         return transactionResult(transaction);
     }
 
@@ -612,7 +628,7 @@ public class VnpayServiceImpl implements VnpayService {
     }
 
     private VnpayCallbackResultResponse invalidCallback(String message) {
-        return new VnpayCallbackResultResponse(null, null, null, BigDecimal.ZERO, null, null, null, null,
+        return new VnpayCallbackResultResponse(null, null, null, null, BigDecimal.ZERO, null, null, null, null,
                 false, message, "PENDING_VERIFICATION", false);
     }
 
@@ -639,10 +655,10 @@ public class VnpayServiceImpl implements VnpayService {
                 .map(pr -> (pr.getStatus() == PaymentRequestStatus.PENDING || pr.getStatus() == PaymentRequestStatus.REJECTED)
                         && (pr.getPaidAmount() == null || pr.getPaidAmount().signum() == 0)
                         && (pr.getExpiresAt() == null || pr.getExpiresAt().isAfter(clock.instant()))).orElse(true);
-        return new VnpayCallbackResultResponse(booking.getBookingCode(), transaction.getVnpTxnRef(),
-                transaction.getVnpTransactionNo(), transaction.getAmount(), transaction.getVnpBankCode(),
-                transaction.getVnpCardType(), transaction.getVnpPayDate(), transaction.getVnpResponseCode(),
-                success, message, status, failed && eligible && requestActive && !unsettledOrPaid);
+        return new VnpayCallbackResultResponse(booking.getBookingCode(), transaction.getTransactionCode(),
+                transaction.getVnpTxnRef(), transaction.getVnpTransactionNo(), transaction.getAmount(),
+                transaction.getVnpBankCode(), transaction.getVnpCardType(), transaction.getVnpPayDate(),
+                transaction.getVnpResponseCode(), success, message, status, failed && eligible && requestActive && !unsettledOrPaid);
     }
 
     private BigDecimal calculateDepositAmount(Booking booking) {

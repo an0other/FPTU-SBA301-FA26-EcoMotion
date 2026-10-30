@@ -231,6 +231,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         List<ProviderBookingDetailResponse.PaymentTransactionDetailResponse> transactionResponses = transactions.stream()
                 .map(t -> new ProviderBookingDetailResponse.PaymentTransactionDetailResponse(
                         t.getId(),
+                        t.getTransactionCode(),
                         t.getType() != null ? t.getType().name() : null,
                         t.getAmount(),
                         t.getDirection() != null ? t.getDirection().name() : null,
@@ -383,7 +384,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getStatus() == BookingStatus.CONFIRMED || (booking.isDriverReplacementRequired()
                         && java.util.Set.of(BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED).contains(booking.getStatus())),
                 booking.getStatus() == BookingStatus.CONFIRMED || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED,
-                booking.getStatus() == BookingStatus.REJECTED ? booking.getOperationalResolutionReason() : null,
+                resolveDriverRejectionReason(booking),
                 resolvePaymentStatus(booking, transactions)
         );
     }
@@ -555,7 +556,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         var execution = driverOptimizationService.autoAssignWithResult(booking.getId());
         Driver driver = execution.driver();
         if (driver == null) {
-            throw new ConflictException("Không tìm thấy tài xế phù hợp để phân công tự động");
+            throw new ConflictException("Chưa có tài xế phù hợp với khung giờ này");
         }
         booking.setAssignmentMode(AssignmentMode.FULL_AUTO);
 
@@ -1468,6 +1469,20 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         public Pageable first() { return new QueuePage(0, size, sort); }
         public Pageable withPage(int page) { return new QueuePage(Math.multiplyExact(page, size), size, sort); }
         public boolean hasPrevious() { return offset > 0; }
+    }
+
+
+    private String resolveDriverRejectionReason(Booking booking) {
+        if (booking.getStatus() == BookingStatus.REJECTED) {
+            return booking.getOperationalResolutionReason();
+        }
+        return driverAssignmentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId()).stream()
+                .filter(a -> a.getStatus() == com.fptufa26.ecomotion.booking.enums.AssignmentStatus.REJECTED)
+                .findFirst()
+                .map(a -> a.getRejectionReason() != null
+                        ? a.getRejectionReason().name() + (a.getRejectionNote() != null && !a.getRejectionNote().isBlank() ? (": " + a.getRejectionNote().trim()) : "")
+                        : a.getRejectionNote())
+                .orElse(null);
     }
 
 }

@@ -68,6 +68,9 @@ class VnpayPaymentFlowIntegrationTest {
     @Autowired
     private org.springframework.test.web.servlet.MockMvc mockMvc;
 
+    @Autowired
+    private com.fptufa26.ecomotion.finance.service.PaymentCodeGenerator paymentCodeGenerator;
+
     @Test
     void http200IpnDoesNotMeanPaymentSucceededAndAnonymousCannotCreatePayments() throws Exception {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/payment/vnpay/ipn")
@@ -108,19 +111,30 @@ class VnpayPaymentFlowIntegrationTest {
     }
 
     @Test
-    void returnBeforeIpnAndRefreshRemainPendingThenQueryShowsSuccess() {
+    void returnBeforeIpnVerifiesDirectlyAndSubsequentIpnIsIdempotent() {
         var session = pendingSession();
         var params = signed(session, "00", "00");
-        for (int refresh = 0; refresh < 2; refresh++) {
-            var result = vnpayService.processCallback(params);
-            assertThat(result.status()).isEqualTo("PENDING_VERIFICATION");
-            assertThat(result.retryAllowed()).isFalse();
-            assertThat(result.message()).doesNotContain("Giao dịch thành công");
-        }
-        assertThat(vnpayService.queryTransaction(session.bookingCode(), session.vnpTxnRef()).status()).isEqualTo("PENDING_VERIFICATION");
-        assertThat(vnpayService.processIpn(params).rspCode()).isEqualTo("00");
+        
+        // 1. Callback arrives before IPN (e.g. sandbox localhost)
+        var result = vnpayService.processCallback(params);
+        assertThat(result.status()).isEqualTo("SUCCESS");
+        assertThat(result.success()).isTrue();
+        assertThat(result.retryAllowed()).isFalse();
+        assertThat(result.transactionCode()).isNotBlank().startsWith("VP");
+        
+        // Transaction is PAID and booking is CONFIRMED
+        var tx = paymentTransactionRepository.findByVnpTxnRef(session.vnpTxnRef()).orElseThrow();
+        assertThat(tx.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(tx.getBooking().getStatus()).isIn(BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED);
+
+        // 2. Refreshing callback returns SUCCESS idempotently
+        var refresh = vnpayService.processCallback(params);
+        assertThat(refresh.status()).isEqualTo("SUCCESS");
+        assertThat(refresh.success()).isTrue();
+
+        // 3. Subsequent IPN arrives: safely returns 02 (already confirmed) without error
+        assertThat(vnpayService.processIpn(params).rspCode()).isEqualTo("02");
         assertThat(vnpayService.queryTransaction(session.bookingCode(), session.vnpTxnRef()).status()).isEqualTo("SUCCESS");
-        assertThat(vnpayService.processCallback(params).success()).isTrue();
     }
 
     @Test
@@ -540,5 +554,54 @@ class VnpayPaymentFlowIntegrationTest {
 
         VnpayCallbackResultResponse callbackRes = vnpayService.processCallback(invalidParams);
         assertThat(callbackRes.success()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Auto Transaction ID format VPxxxxxx and VQxxxxxx with 6 digits padding")
+    void autoTransactionCodeGenerationFormatAndSequence() {
+        String vpCode1 = paymentCodeGenerator.generatePaymentCode("VP");
+        String vpCode2 = paymentCodeGenerator.generatePaymentCode("VP");
+        String vqCode1 = paymentCodeGenerator.generatePaymentCode("VQ");
+        String vqCode2 = paymentCodeGenerator.generatePaymentCode("VQ");
+
+        assertThat(vpCode1).matches("^VP\\d{6,}$");
+        assertThat(vpCode2).matches("^VP\\d{6,}$");
+        assertThat(vqCode1).matches("^VQ\\d{6,}$");
+        assertThat(vqCode2).matches("^VQ\\d{6,}$");
+
+        assertThat(vpCode1).isNotEqualTo(vpCode2);
+        assertThat(vqCode1).isNotEqualTo(vqCode2);
+    }
+
+    @Test
+    @DisplayName("Concurrent payment code generation guarantees uniqueness without duplicate codes")
+    void concurrentPaymentCodeGenerationGuaranteesUniqueness() throws Exception {
+        int threads = 8;
+        int countPerThread = 5;
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        java.util.Set<String> generatedCodes = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+
+        for (int i = 0; i < threads; i++) {
+            futures.add(pool.submit(() -> {
+                try {
+                    latch.await();
+                    for (int j = 0; j < countPerThread; j++) {
+                        generatedCodes.add(paymentCodeGenerator.generatePaymentCode("VP"));
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+        }
+
+        latch.countDown();
+        for (java.util.concurrent.Future<?> f : futures) {
+            f.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        pool.shutdown();
+
+        assertThat(generatedCodes).hasSize(threads * countPerThread);
     }
 }

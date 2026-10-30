@@ -198,6 +198,7 @@ public class AdminOperationsController {
         Booking b = p.getBooking();
         return AdminPaymentDto.builder()
                 .id(p.getId())
+                .transactionCode(p.getTransactionCode())
                 .bookingId(b != null ? b.getId() : null)
                 .bookingCode(b != null ? b.getBookingCode() : null)
                 .type(p.getType())

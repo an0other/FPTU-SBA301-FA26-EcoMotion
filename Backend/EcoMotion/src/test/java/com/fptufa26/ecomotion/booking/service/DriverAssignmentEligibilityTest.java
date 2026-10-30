@@ -146,4 +146,134 @@ class DriverAssignmentEligibilityTest {
         assertThat(service.autoAssign(4L)).isNull();
     }
 
+    @Test
+    void driverBusyNowOnTripIsEligibleForFutureBookingTomorrow() {
+        Booking ongoingTrip = new Booking();
+        ongoingTrip.setId(99L);
+        ongoingTrip.setBookingCode("ONGOING-1");
+        ongoingTrip.setStatus(BookingStatus.IN_PROGRESS);
+        ongoingTrip.setPickupTime(Instant.parse("2026-10-28T00:00:00Z"));
+        ongoingTrip.setActualStartAt(Instant.parse("2026-10-28T00:00:00Z"));
+        ongoingTrip.setDriver(driver);
+        ongoingTrip.setVehicle(booking.getVehicle());
+        var ongoingPolicy = new com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot();
+        ongoingPolicy.setBooking(ongoingTrip);
+        ongoingPolicy.setSlotLengthMinutes(60);
+        var ongoingCharge = new com.fptufa26.ecomotion.booking.entity.BookingCharge();
+        ongoingCharge.setBooking(ongoingTrip);
+        ongoingCharge.setQuantity(1);
+
+        when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(ongoingTrip));
+        when(snapshots.findByBooking_IdIn(any())).thenReturn(List.of(ongoingPolicy));
+        when(charges.findByBooking_IdInAndChargeType(any(), any())).thenReturn(List.of(ongoingCharge));
+
+        var candidates = service.evaluateCandidates(4L, 1L);
+        assertThat(candidates).hasSize(1);
+        var c = candidates.get(0);
+        assertThat(c.eligible()).isTrue();
+        assertThat(c.availability().currentBookingCode()).isEqualTo("ONGOING-1");
+        assertThat(c.availability().currentOperationalStatus()).isEqualTo("ON_TRIP");
+
+        Driver assigned = service.manualAssign(4L, 3L, 1L);
+        assertThat(assigned).isSameAs(driver);
+        assertThat(booking.getDriver()).isSameAs(driver);
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.DRIVER_ASSIGNED);
+    }
+
+    @Test
+    void driverAvailableNowButConflictingTomorrowIsRejected() {
+        Booking futureConflict = new Booking();
+        futureConflict.setId(101L);
+        futureConflict.setBookingCode("CONFLICT-TOMORROW");
+        futureConflict.setStatus(BookingStatus.DRIVER_CONFIRMED);
+        futureConflict.setPickupTime(booking.getPickupTime());
+        futureConflict.setDriver(driver);
+        futureConflict.setVehicle(booking.getVehicle());
+        var conflictPolicy = new com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot();
+        conflictPolicy.setBooking(futureConflict);
+        conflictPolicy.setSlotLengthMinutes(60);
+        var conflictCharge = new com.fptufa26.ecomotion.booking.entity.BookingCharge();
+        conflictCharge.setBooking(futureConflict);
+        conflictCharge.setQuantity(1);
+
+        when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(futureConflict));
+        when(snapshots.findByBooking_IdIn(any())).thenReturn(List.of(conflictPolicy));
+        when(charges.findByBooking_IdInAndChargeType(any(), any())).thenReturn(List.of(conflictCharge));
+
+        var candidates = service.evaluateCandidates(4L, 1L);
+        assertThat(candidates).hasSize(1);
+        var c = candidates.get(0);
+        assertThat(c.eligible()).isFalse();
+        assertThat(c.availability().availabilityStatus()).isEqualTo("SCHEDULE_CONFLICT");
+        assertThat(c.availability().conflictingBookingCode()).isEqualTo("CONFLICT-TOMORROW");
+
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void driverFinishesTripBeforeBookingButViolatesBufferIsRejected() {
+        booking.getVehicle().setMaintenanceBufferMinutes(30);
+        Booking earlierTrip = new Booking();
+        earlierTrip.setId(102L);
+        earlierTrip.setBookingCode("EARLIER-TRIP");
+        earlierTrip.setStatus(BookingStatus.DRIVER_CONFIRMED);
+        earlierTrip.setPickupTime(booking.getPickupTime().minus(Duration.ofMinutes(45)));
+        earlierTrip.setDriver(driver);
+        earlierTrip.setVehicle(booking.getVehicle());
+        var policy = new com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot();
+        policy.setBooking(earlierTrip);
+        policy.setSlotLengthMinutes(30);
+        var charge = new com.fptufa26.ecomotion.booking.entity.BookingCharge();
+        charge.setBooking(earlierTrip);
+        charge.setQuantity(1);
+
+        when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(earlierTrip));
+        when(snapshots.findByBooking_IdIn(any())).thenReturn(List.of(policy));
+        when(charges.findByBooking_IdInAndChargeType(any(), any())).thenReturn(List.of(charge));
+
+        var candidates = service.evaluateCandidates(4L, 1L);
+        assertThat(candidates).hasSize(1);
+        var c = candidates.get(0);
+        assertThat(c.eligible()).isFalse();
+        assertThat(c.availability().reason()).isEqualTo("DRIVER_SCHEDULE_CONFLICT");
+
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void noAvailableDriversReturnsInfeasibleWithoutCrash() {
+        when(users.findDriversByProviderId(1L)).thenReturn(List.of());
+        var suggestion = service.suggestDriver(4L, 1L);
+        assertThat(suggestion.solverStatus()).isEqualTo("INFEASIBLE");
+        assertThat(suggestion.suggestedDriver()).isNull();
+        assertThat(suggestion.candidates()).isEmpty();
+
+        Driver auto = service.autoAssign(4L);
+        assertThat(auto).isNull();
+        verify(bookings, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void cancelledBookingRejectsDriverAssignment() {
+        booking.setStatus(BookingStatus.CANCELLED);
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L))
+                .isInstanceOf(ConflictException.class);
+        verify(bookings, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void driverRejectionTriggersAutoReassignAndRecallsAssignment() {
+        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
+        booking.setDriver(driver);
+        booking.setReassignCount(0);
+        when(assignments.findRejectedDriverIdsForBooking(4L)).thenReturn(List.of(3L));
+
+        service.triggerAutoReassign(4L, 3L, "Driver rejected due to health");
+        assertThat(booking.getDriver()).isNull();
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(booking.getReassignCount()).isEqualTo(1);
+        verify(bookings, atLeastOnce()).saveAndFlush(booking);
+    }
 }

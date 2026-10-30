@@ -81,7 +81,7 @@ public class DriverAvailabilityServiceImpl implements DriverAvailabilityService 
                     .sorted(Comparator.comparing((Booking b) -> unfinishedTrip(b)).reversed()
                             .thenComparing(Booking::getPickupTime, Comparator.nullsFirst(Comparator.naturalOrder())))
                     .findFirst().orElse(null);
-            DriverActivityStatus work = driver.getActivityStatus();
+                        DriverActivityStatus work = driver.getActivityStatus();
             boolean uncertain = conflict != null && (ends.get(conflict.getId()) == null
                     || unfinishedTrip(conflict) && !ends.get(conflict.getId()).isAfter(now));
             String status = work == DriverActivityStatus.OFFLINE ? "OFFLINE"
@@ -96,6 +96,13 @@ public class DriverAvailabilityServiceImpl implements DriverAvailabilityService 
                     : conflict != null && unfinishedTrip(conflict) ? "DRIVER_ON_TRIP"
                     : conflict == null ? null
                     : conflict.getStatus() == BookingStatus.DRIVER_ASSIGNED ? "ASSIGNMENT_PENDING" : "DRIVER_SCHEDULE_CONFLICT";
+
+            String opStatus = work == DriverActivityStatus.OFFLINE ? "OFFLINE"
+                    : work != DriverActivityStatus.AVAILABLE ? "UNAVAILABLE"
+                    : current != null ? "ON_TRIP"
+                    : next != null ? "SCHEDULED"
+                    : "AVAILABLE";
+
             result.put(driver.getId(), new AssignmentAvailabilityResponse(work == null ? "UNAVAILABLE" : work.name(),
                     status, reason, current == null ? null : current.getBookingCode(),
                     current == null ? null : current.getActualStartAt(),
@@ -106,12 +113,13 @@ public class DriverAvailabilityServiceImpl implements DriverAvailabilityService 
                             ? AvailabilityPolicy.bufferedWindow(conflict.getVehicle(), conflict.getPickupTime(), ends.get(conflict.getId())).end()
                             : current == null || ends.get(current.getId()) == null ? null
                             : AvailabilityPolicy.bufferedWindow(current.getVehicle(), current.getPickupTime(), ends.get(current.getId())).end(),
-                    now));
+                    now,
+                    opStatus));
         }
         return result;
     }
 
-    private boolean conflictsWith(Vehicle requestedVehicle, Instant start, Instant end,
+        private boolean conflictsWith(Vehicle requestedVehicle, Instant start, Instant end,
                                   Booking existing, Instant plannedEnd, Instant now) {
         if (plannedEnd == null || existing.getVehicle() == null) return true;
         if (unfinishedTrip(existing) && !plannedEnd.isAfter(now)) return true;
