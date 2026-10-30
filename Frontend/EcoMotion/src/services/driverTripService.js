@@ -18,15 +18,9 @@ export function createDriverTripService(client = apiClient) {
     },
 
     async getActiveTrip() {
-      try {
-        const { data } = await client.get('/v1/driver/trips', {
-          params: { view: 'ACTIVE', size: 1 },
-        })
-        const items = data?.data?.items || []
-        return items.length > 0 ? items[0] : null
-      } catch {
-        return null
-      }
+      const { data } = await client.get('/v1/driver/trips', { params: { view: 'ACTIVE', size: 1 } })
+      const items = data?.data?.items || []
+      return items.length > 0 ? items[0] : null
     },
 
     async getTripDetail(tripIdOrCode) {
@@ -39,9 +33,9 @@ export function createDriverTripService(client = apiClient) {
       return data?.data
     },
 
-    async confirmTrip(tripId) {
+    async confirmTrip(tripId, assignedAt) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/confirm`)
+      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/confirm`, assignedAt ? { assignedAt } : undefined)
       return data?.data
     },
 

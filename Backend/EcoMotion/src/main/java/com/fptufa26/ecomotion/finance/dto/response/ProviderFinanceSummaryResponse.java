@@ -11,6 +11,9 @@ public record ProviderFinanceSummaryResponse(
         BigDecimal netEarnings,
         long totalBookingsCount,
         long pendingBookingsCount,
-        long completedBookingsCount
+        long completedBookingsCount,
+        BigDecimal directReceived,
+        BigDecimal platformReceived,
+        BigDecimal reconciliationRequiredAmount
 ) {
 }

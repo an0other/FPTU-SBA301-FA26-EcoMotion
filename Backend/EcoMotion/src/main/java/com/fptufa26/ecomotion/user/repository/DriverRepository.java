@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+
 @Repository
 public interface DriverRepository extends JpaRepository<Driver, Long> {
 
@@ -21,6 +22,14 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     List<Driver> findByStatusOrderByCreatedAtDesc(DriverStatus status);
 
     Optional<Driver> findByUser_Id(Long userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM Driver d WHERE d.id = :id")
+    Optional<Driver> findByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM Driver d WHERE d.user.id = :userId")
+    Optional<Driver> findByUserIdForUpdate(@Param("userId") Long userId);
 
     boolean existsByUser_Id(Long userId);
 

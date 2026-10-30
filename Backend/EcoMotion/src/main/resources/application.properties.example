@@ -267,3 +267,21 @@ app.map.fallback-search-url=https://photon.komoot.io/api/
 app.map.user-agent=EcoMotion-localhost/1.0 (https://github.com/an0other/FPTU-SBA301-FA26-EcoMotion)
 app.map.connect-timeout=5s
 app.map.request-timeout=8s
+
+app.optimization.max-solver-time-seconds=5
+app.optimization.assignment-timeout-minutes=15
+app.optimization.max-reassign-retries=3
+app.optimization.weight-eta=10
+app.optimization.weight-workload=50
+app.optimization.weight-rating=5
+app.optimization.location-max-age-seconds=60
+
+app.optimization.unknown-eta-minutes=30
+
+app.vnpay.reconciliation-enabled=${VNPAY_RECONCILIATION_ENABLED:true}
+app.vnpay.server-ip=${VNPAY_SERVER_IP:127.0.0.1}
+app.vnpay.query-timeout=${VNPAY_QUERY_TIMEOUT:5s}
+app.vnpay.query-interval=${VNPAY_QUERY_INTERVAL:60s}
+app.finance.sandbox-payout-enabled=${SANDBOX_PAYOUT_ENABLED:false}
+app.vnpay.reconciliation-batch-size=${VNPAY_RECONCILIATION_BATCH_SIZE:25}
+app.vnpay.reconciliation-delay-ms=${VNPAY_RECONCILIATION_DELAY_MS:60000}

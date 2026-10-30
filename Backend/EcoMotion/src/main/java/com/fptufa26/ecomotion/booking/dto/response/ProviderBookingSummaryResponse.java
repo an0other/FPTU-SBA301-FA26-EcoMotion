@@ -9,6 +9,7 @@ public record ProviderBookingSummaryResponse(
         long inProgress,
         long completed,
         long rejected,
-        long cancelled
+        long cancelled,
+        java.util.List<String> vehicleOptions
 ) {
 }

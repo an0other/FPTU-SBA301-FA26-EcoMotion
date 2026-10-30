@@ -50,6 +50,8 @@ public interface BookingPaymentLedgerService {
 
     Optional<PaymentTransaction> findTransactionById(Long transactionId);
 
+    Optional<PaymentTransaction> findTransactionByIdForUpdate(Long transactionId);
+
     Optional<PaymentTransaction> findTransaction(Long bookingId, PaymentType type);
 
     boolean transactionExists(Long bookingId, PaymentType type);

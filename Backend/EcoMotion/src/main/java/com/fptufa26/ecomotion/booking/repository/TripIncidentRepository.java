@@ -8,6 +8,11 @@ import java.util.List;
 
 public interface TripIncidentRepository extends JpaRepository<TripIncident, Long> {
 
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT i.driver.id FROM TripIncident i " +
+            "WHERE i.driver.id IN :driverIds AND i.status IN :statuses")
+    List<Long> findBlockedDriverIds(@org.springframework.data.repository.query.Param("driverIds") List<Long> driverIds,
+            @org.springframework.data.repository.query.Param("statuses") List<TripIncidentStatus> statuses);
+
     List<TripIncident> findByBooking_IdOrderByCreatedAtDesc(Long bookingId);
 
     List<TripIncident> findByDriver_IdOrderByCreatedAtDesc(Long driverId);
