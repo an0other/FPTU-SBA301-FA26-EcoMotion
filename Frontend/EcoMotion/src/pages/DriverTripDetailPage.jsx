@@ -7,6 +7,7 @@ import DriverIncidentReportModal from '../components/driver/DriverIncidentReport
 import DriverEvidenceUploadModal from '../components/driver/DriverEvidenceUploadModal'
 import Toast from '../components/Toast'
 import { useDriverTripDetail } from '../hooks/useDriverTripDetail'
+import { useDeadlineExpired } from '../hooks/useDeadlineExpired'
 import { useDriverLocationTracker } from '../hooks/useDriverLocationTracker'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { driverTripService } from '../services/driverTripService'
@@ -17,6 +18,7 @@ import {
   deriveExecutionStatus,
   getExecutionStatusConfig,
   isLocationStale,
+  rentalTypeLabel,
 } from '../utils/driverTripUtils'
 import { getOptimizedImageUrl, EVIDENCE_TYPE_LABELS } from '../utils/cloudinaryUtils'
 
@@ -38,7 +40,7 @@ export default function DriverTripDetailPage() {
   const [lightboxImage, setLightboxImage] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
   const [actionError, setActionError] = useState(null)
-  const [gpsEnabled, setGpsEnabled] = useState(true)
+  const [gpsEnabled] = useState(true)
 
   const fetchEvidence = useCallback(async () => {
     if (!bookingCode) return
@@ -51,7 +53,8 @@ export default function DriverTripDetailPage() {
   }, [bookingCode])
 
   useEffect(() => {
-    fetchEvidence()
+    const timer = setTimeout(fetchEvidence, 0)
+    return () => clearTimeout(timer)
   }, [fetchEvidence])
 
   const handleDeleteEvidence = async (evidenceId) => {
@@ -72,12 +75,10 @@ export default function DriverTripDetailPage() {
   useRealtimeSync({
     handlers: {
       [TV5_REALTIME_EVENTS.DRIVER_REASSIGNED]: () => {
-        refetch()
         setToast({ message: 'Thông báo: Có cập nhật phân công từ chủ xe.', type: 'info' })
       },
       [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
-        refetch()
-        setToast({ message: 'Khách hàng đã hoàn tất thanh toán.', type: 'success' })
+        setToast({ message: 'Thông tin thanh toán đã cập nhật; vui lòng kiểm tra quyết toán.', type: 'success' })
       },
     },
     onResync: () => refetch(),
@@ -90,13 +91,12 @@ export default function DriverTripDetailPage() {
   )
 
   const isTripActive = ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(executionStatus)
+  const assignmentExpired = useDeadlineExpired(trip?.assignmentExpiresAt)
 
   // Geolocation tracking hook
   const {
-    trackingState,
     currentCoords,
     lastSentAt,
-    errorMessage: gpsError,
   } = useDriverLocationTracker({
     tripId: trip?.tripId || trip?.bookingCode,
     enabled: isTripActive && gpsEnabled,
@@ -119,17 +119,17 @@ export default function DriverTripDetailPage() {
 
     try {
       if (statusConfig.actionType === 'confirm') {
-        await driverTripService.confirmTrip(tripId)
+        await driverTripService.confirmTrip(tripId, trip.assignedAt)
         setToast({ message: 'Đã xác nhận nhận chuyến thành công!', type: 'success' })
       } else if (statusConfig.actionType === 'arrive') {
         await driverTripService.arriveTrip(tripId)
         setToast({ message: 'Đã báo có mặt tại điểm đón khách!', type: 'success' })
       } else if (statusConfig.actionType === 'start') {
-        await driverTripService.startTrip(tripId)
-        setToast({ message: 'Chuyến đi đã chính thức bắt đầu hành trình!', type: 'success' })
+        const started = await driverTripService.startTrip(tripId)
+        setToast({ message: started.status === 'AWAITING_START_CONFIRMATION' ? 'Đã xác nhận bắt đầu; đang chờ người thuê xác nhận.' : 'Chuyến đi đã bắt đầu.', type: 'success' })
       } else if (statusConfig.actionType === 'finish') {
         await driverTripService.finishTrip(tripId)
-        setToast({ message: 'Hoàn thành chuyến đi thành công!', type: 'success' })
+        setToast({ message: 'Đã ghi nhận kết thúc. Cần xác nhận hai phía và xử lý quyết toán.', type: 'success' })
       }
 
       setShowConfirmModal(false)
@@ -285,7 +285,7 @@ export default function DriverTripDetailPage() {
                 </div>
               </div>
               <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                {trip.rentalType === 'HOURLY' ? 'Thuê theo giờ' : 'Thuê theo ngày'}
+                {rentalTypeLabel(trip.rentalType)}
               </span>
             </div>
 
@@ -429,6 +429,7 @@ export default function DriverTripDetailPage() {
                   <button
                     type="button"
                     onClick={() => setShowRejectModal(true)}
+                    disabled={actionLoading || assignmentExpired}
                     className="flex-1 rounded-lg border border-slate-300 bg-white py-3 text-xs font-bold text-rose-700 hover:bg-rose-50"
                   >
                     Từ chối nhận
@@ -436,7 +437,7 @@ export default function DriverTripDetailPage() {
                   <button
                     type="button"
                     onClick={handleActionClick}
-                    disabled={actionLoading}
+                    disabled={actionLoading || assignmentExpired}
                     className="flex-2 rounded-lg bg-brand-700 py-3 text-xs font-bold text-white shadow-xs hover:bg-brand-800 disabled:opacity-50"
                   >
                     Xác nhận nhận chuyến
@@ -454,7 +455,7 @@ export default function DriverTripDetailPage() {
                 </button>
               ) : (
                 <div className="w-full text-center py-2 text-xs font-semibold text-slate-500">
-                  Chuyến xe này đã hoàn tất tác nghiệp.
+                  Hiện chưa có thao tác tiếp theo; vui lòng theo dõi trạng thái chuyến.
                 </div>
               )}
             </div>

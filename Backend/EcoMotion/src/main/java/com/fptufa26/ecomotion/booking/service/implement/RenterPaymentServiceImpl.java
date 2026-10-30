@@ -114,6 +114,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
             PaymentTransaction payment) {
         return new PaymentHistoryResponse(
                 payment.getBooking().getBookingCode(),
+                payment.getTransactionCode(),
                 payment.getType(),
                 payment.getAmount(),
                 payment.getDirection(),

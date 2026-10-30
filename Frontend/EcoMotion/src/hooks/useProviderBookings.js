@@ -1,119 +1,31 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { providerBookingService } from '../services/providerBookingService'
-
-export function useProviderBookings(status = 'ALL') {
+export function useProviderBookings(status = 'ALL', filters = {}) {
   const [bookings, setBookings] = useState([])
-  const [summary, setSummary] = useState({
-    total: 0,
-    pending: 0,
-    awaitingDeposit: 0,
-    accepted: 0,
-    confirmed: 0,
-    inProgress: 0,
-    completed: 0,
-    rejected: 0,
-    cancelled: 0,
-  })
+  const [summary, setSummary] = useState({})
+  const [total, setTotal] = useState(0)
+  const filterKey = JSON.stringify(filters)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let active = true
-
-    async function fetchData(silent = false) {
-      if (!silent) {
-        setLoading(true)
-      }
-      try {
-        const [listResult, summaryResult] = await Promise.all([
-          providerBookingService.listBookings(status),
-          providerBookingService.getSummary().catch(() => null),
-        ])
-        if (active) {
-          setBookings(listResult)
-          if (summaryResult) {
-            setSummary(summaryResult)
-          }
-          setError(null)
-          if (!silent) {
-            setLoading(false)
-          }
-        }
-      } catch (err) {
-        if (active) {
-          if (!silent) {
-            setError(
-              err?.status === 403
-                ? 'Bạn không có quyền truy cập dữ liệu của nhà cung cấp.'
-                : err?.message || 'Không thể tải danh sách đơn thuê từ máy chủ.',
-            )
-            setLoading(false)
-          }
-        }
-      }
-    }
-
-    fetchData(false)
-
-    // Window focus & visibility change handler for instant state synchronization
-    const handleSync = () => {
-      if (document.visibilityState === 'visible' && active) {
-        fetchData(true)
-      }
-    }
-
-    window.addEventListener('focus', handleSync)
-    document.addEventListener('visibilitychange', handleSync)
-
-    // Periodic polling every 8s when tab is active
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        fetchData(true)
-      }
-    }, 8000)
-
-    return () => {
-      active = false
-      window.removeEventListener('focus', handleSync)
-      document.removeEventListener('visibilitychange', handleSync)
-      clearInterval(intervalId)
-    }
-  }, [status])
-
-  const refetch = useCallback(async (silent = false) => {
-    if (!silent) {
-      setLoading(true)
-    }
-    setError(null)
+  const sequence = useRef(0)
+  const refetch = useCallback(async () => {
+    const id = ++sequence.current
     try {
-      const [listResult, summaryResult] = await Promise.all([
-        providerBookingService.listBookings(status),
-        providerBookingService.getSummary().catch(() => null),
-      ])
-      setBookings(listResult)
-      if (summaryResult) {
-        setSummary(summaryResult)
-      }
+      const [rows, counts] = await Promise.all([providerBookingService.listBookingsPaged(status, JSON.parse(filterKey).offset || 0, JSON.parse(filterKey).limit || 10, JSON.parse(filterKey)), providerBookingService.getSummary()])
+      if (id !== sequence.current) return
+      setBookings(Array.isArray(rows?.items) ? rows.items : [])
+      setTotal(Number(rows?.total) || 0)
+      setSummary(counts || {})
+      setError(null)
     } catch (err) {
-      if (!silent) {
-        setError(
-          err?.status === 403
-            ? 'Bạn không có quyền truy cập dữ liệu của nhà cung cấp.'
-            : err?.message || 'Không thể tải danh sách đơn thuê từ máy chủ.',
-        )
-      }
+      if (id === sequence.current) setError(err.message || 'Không thể tải dữ liệu')
     } finally {
-      if (!silent) {
-        setLoading(false)
-      }
+      if (id === sequence.current) setLoading(false)
     }
-  }, [status])
-
-  return {
-    bookings,
-    summary,
-    loading,
-    error,
-    refetch,
-  }
+  }, [status, filterKey])
+  useEffect(() => {
+    const timer = setTimeout(refetch, 0)
+    return () => { clearTimeout(timer); ++sequence.current }
+  }, [refetch])
+  return { bookings, total, summary, loading, error, refetch }
 }

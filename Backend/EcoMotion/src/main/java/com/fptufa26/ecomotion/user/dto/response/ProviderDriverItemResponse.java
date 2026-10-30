@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.user.dto.response;
 
+import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
+import com.fptufa26.ecomotion.user.enums.DriverOperationalStatus;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 
 import java.math.BigDecimal;
@@ -19,6 +21,12 @@ public record ProviderDriverItemResponse(
         String portraitUrl,
         String licenseImageUrl,
         DriverStatus status,
+        DriverActivityStatus activityStatus,
+        DriverOperationalStatus operationalStatus,
+        Instant statusUpdatedAt,
+        String currentTripBookingCode,
+        String nextTripBookingCode,
+        Instant nextTripPickupTime,
         String rejectReason,
         BigDecimal ratingAvg,
         Integer ratingCount,

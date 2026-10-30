@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.booking.entity;
 
 import com.fptufa26.ecomotion.booking.enums.TripEvidenceType;
 import com.fptufa26.ecomotion.user.entity.Driver;
+import com.fptufa26.ecomotion.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -41,7 +42,7 @@ public class TripEvidence {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by_id")
-    private com.fptufa26.ecomotion.user.entity.User uploadedBy;
+    private User uploadedBy;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "evidence_type", nullable = false, length = 50)

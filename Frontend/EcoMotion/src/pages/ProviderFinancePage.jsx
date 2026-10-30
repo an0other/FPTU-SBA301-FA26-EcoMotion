@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { canReviewRefund, refundReviewPayload } from '../utils/tv5Contracts'
+import { RefundProofModal } from '../components/payments/RefundProofModal'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
@@ -13,25 +15,29 @@ function formatVnd(amount) {
 
 function formatDateTime(isoString) {
   if (!isoString) return '—'
-  try {
-    const d = new Date(isoString)
-    if (Number.isNaN(d.getTime())) return isoString
-    const hours = String(d.getHours()).padStart(2, '0')
-    const mins = String(d.getMinutes()).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const year = d.getFullYear()
-    return `${hours}:${mins} ${day}/${month}/${year}`
-  } catch {
-    return isoString
-  }
+  const d = new Date(isoString)
+  if (Number.isNaN(d.getTime())) return isoString
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d)
 }
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+  return (
+    <span className={`material-symbols-rounded select-none leading-none inline-flex items-center justify-center shrink-0 ${className}`}>
+      {name}
+    </span>
+  )
 }
 
 const TX_STATUS_CONFIG = {
+  PAID: { label: 'Đã ghi nhận tiền', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  RECONCILIATION_REQUIRED: { label: 'Đã nhận tiền, cần đối soát', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
   SUCCESS: { label: 'Thành công', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
   CONFIRMED: { label: 'Đã thanh toán', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
   PENDING: { label: 'Đang xử lý', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
@@ -52,10 +58,14 @@ const REQUEST_STATUS_CONFIG = {
 }
 
 const REFUND_STATUS_CONFIG = {
-  PENDING: { label: 'Chờ duyệt', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
-  APPROVED: { label: 'Đã chấp thuận', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
-  COMPLETED: { label: 'Đã hoàn tất', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  REQUESTED: { label: 'Chờ xem xét', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
+  UNDER_REVIEW: { label: 'Đang xét duyệt', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
+  APPROVED: { label: 'Đã chấp thuận, chưa hoàn tiền', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
+  PROCESSING: { label: 'Chờ chuyển khoản và biên lai', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
+  REFUNDED: { label: 'Đã hoàn tiền', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
   REJECTED: { label: 'Đã từ chối', bg: 'bg-red-50 text-red-800 border-red-200' },
+  FAILED: { label: 'Hoàn tiền thất bại', bg: 'bg-red-50 text-red-800 border-red-200' },
+  PENDING_RECONCILIATION: { label: 'Chờ đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
 }
 
 export default function ProviderFinancePage() {
@@ -64,7 +74,6 @@ export default function ProviderFinancePage() {
   // Summary & Core Metrics
   const [summary, setSummary] = useState(null)
   const [bankAccounts, setBankAccounts] = useState([])
-  const [activeBank, setActiveBank] = useState(null)
 
   // Transactions State
   const [transactions, setTransactions] = useState([])
@@ -83,6 +92,7 @@ export default function ProviderFinancePage() {
 
   // Refunds State
   const [refunds, setRefunds] = useState([])
+  const [proofRefund, setProofRefund] = useState(null)
   const [reviewingRefund, setReviewingRefund] = useState(null)
   const [reviewDecision, setReviewDecision] = useState('APPROVE')
   const [reviewNote, setReviewNote] = useState('')
@@ -96,9 +106,9 @@ export default function ProviderFinancePage() {
   const [submittingBank, setSubmittingBank] = useState(false)
   const [bankFormError, setBankFormError] = useState(null)
 
-  // Payout Mock State
   const [payoutList, setPayoutList] = useState([])
-  const [requestingPayout, setRequestingPayout] = useState(false)
+  const [payoutLoading, setPayoutLoading] = useState(false)
+  const [payoutError, setPayoutError] = useState(null)
 
   // Global State
   const [loading, setLoading] = useState(true)
@@ -126,7 +136,11 @@ export default function ProviderFinancePage() {
 
 
   // Fetch summary and bank accounts
+  const financeSequence = useRef(0)
+  const txSequence = useRef(0)
+  const paymentSequence = useRef(0)
   const fetchFinanceData = useCallback(async () => {
+    const id = ++financeSequence.current
     try {
       setLoading(true)
       setError(null)
@@ -136,6 +150,7 @@ export default function ProviderFinancePage() {
         providerFinanceService.listRefunds(),
       ])
 
+      if (id !== financeSequence.current) return
       if (sumRes.status === 'fulfilled') {
         setSummary(sumRes.value)
       } else {
@@ -150,7 +165,6 @@ export default function ProviderFinancePage() {
       if (banksRes.status === 'fulfilled') {
         const list = banksRes.value || []
         setBankAccounts(list)
-        setActiveBank(list.find((b) => b.isActive) || list[0] || null)
       } else {
         console.error('Failed to load bank accounts:', banksRes.reason)
       }
@@ -171,12 +185,14 @@ export default function ProviderFinancePage() {
 
   // Fetch transactions with pagination
   const fetchTransactions = useCallback(async () => {
+    const id = ++txSequence.current
     try {
       const res = await providerFinanceService.listTransactions({
         type: txTypeFilter !== 'ALL' ? txTypeFilter : undefined,
         offset: (txPage - 1) * txPageSize,
         limit: txPageSize,
       })
+      if (id !== txSequence.current) return
       setTransactions(res?.items || [])
       setTotalTransactions(res?.total || 0)
     } catch {
@@ -186,12 +202,14 @@ export default function ProviderFinancePage() {
 
   // Fetch incoming payment requests with pagination
   const fetchPaymentRequests = useCallback(async () => {
+    const id = ++paymentSequence.current
     try {
       const res = await providerFinanceService.listProviderPaymentRequests({
         status: requestStatusFilter !== 'ALL' ? requestStatusFilter : undefined,
         offset: (requestPage - 1) * requestPageSize,
         limit: requestPageSize,
       })
+      if (id !== paymentSequence.current) return
       setPaymentRequests(res?.items || [])
       setTotalPaymentRequests(res?.total || 0)
     } catch {
@@ -203,120 +221,41 @@ export default function ProviderFinancePage() {
   useRealtimeSync({
     handlers: {
       [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
-        fetchFinanceData()
-        fetchTransactions()
-        fetchPaymentRequests()
-        setToast({ message: 'Thông báo tài chính: Giao dịch thanh toán VNPAY vừa được xác minh!', type: 'success' })
+        setToast({ message: 'Thông tin thanh toán đã được máy chủ cập nhật.', type: 'success' })
       },
       [TV5_REALTIME_EVENTS.REFUND_UPDATED]: () => {
-        fetchFinanceData()
         setToast({ message: 'Thông báo: Yêu cầu hoàn tiền đã có cập nhật mới.', type: 'info' })
       },
     },
-    onResync: () => {
-      fetchFinanceData()
-      fetchTransactions()
-      fetchPaymentRequests()
-    },
+    onResync: () => Promise.all([fetchFinanceData(), fetchTransactions(), fetchPaymentRequests()]),
   })
 
   useEffect(() => {
-    let active = true
-    Promise.allSettled([
-      providerFinanceService.getFinanceSummary(),
-      providerFinanceService.listBankAccounts(),
-      providerFinanceService.listRefunds(),
-    ])
-      .then(([sumRes, banksRes, refundsRes]) => {
-        if (!active) return
-        setLoading(false)
-        if (sumRes.status === 'fulfilled') {
-          setSummary(sumRes.value)
-        } else {
-          const errMsg =
-            sumRes.reason?.response?.data?.message ||
-            sumRes.reason?.message ||
-            'Không thể tải dữ liệu tổng quan tài chính.'
-          setError(errMsg)
-        }
-
-        if (banksRes.status === 'fulfilled') {
-          const list = banksRes.value || []
-          setBankAccounts(list)
-          setActiveBank(list.find((b) => b.isActive) || list[0] || null)
-        }
-
-        if (refundsRes.status === 'fulfilled') {
-          setRefunds(refundsRes.value || [])
-        }
-      })
-      .catch((err) => {
-        if (!active) return
-        setLoading(false)
-        setError(err?.response?.data?.message || err?.message || 'Không thể tải thông tin tài chính.')
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
-
+    const timer = setTimeout(fetchFinanceData, 0)
+    return () => { clearTimeout(timer); ++financeSequence.current }
+  }, [fetchFinanceData])
   useEffect(() => {
-    let active = true
-    if (activeTab === 'transactions') {
-      providerFinanceService
-        .listTransactions({
-          type: txTypeFilter !== 'ALL' ? txTypeFilter : undefined,
-          offset: (txPage - 1) * txPageSize,
-          limit: txPageSize,
-        })
-        .then((res) => {
-          if (active) {
-            setTransactions(res?.items || [])
-            setTotalTransactions(res?.total || 0)
-          }
-        })
-        .catch(() => {})
-    }
-    return () => {
-      active = false
-    }
-  }, [activeTab, txTypeFilter, txPage, txPageSize])
-
+    const timer = setTimeout(fetchTransactions, 0)
+    return () => { clearTimeout(timer); ++txSequence.current }
+  }, [fetchTransactions])
   useEffect(() => {
-    let active = true
-    if (activeTab === 'incoming') {
-      providerFinanceService
-        .listProviderPaymentRequests({
-          status: requestStatusFilter !== 'ALL' ? requestStatusFilter : undefined,
-          offset: (requestPage - 1) * requestPageSize,
-          limit: requestPageSize,
-        })
-        .then((res) => {
-          if (active) {
-            setPaymentRequests(res?.items || [])
-            setTotalPaymentRequests(res?.total || 0)
-          }
-        })
-        .catch(() => {})
-    }
-    return () => {
-      active = false
-    }
-  }, [activeTab, requestStatusFilter, requestPage, requestPageSize])
+    const timer = setTimeout(fetchPaymentRequests, 0)
+    return () => { clearTimeout(timer); ++paymentSequence.current }
+  }, [fetchPaymentRequests])
 
   // Handle Review Refund
   const handleReviewRefundSubmit = async (e) => {
     e.preventDefault()
-    if (!reviewingRefund) return
+    if (!reviewingRefund || submittingReview) return
+    if (reviewDecision === 'REJECT' && (!reviewNote.trim() || reviewNote.trim().length > 500)) {
+      setToast({ message: 'Vui lòng nhập lý do từ chối từ 1 đến 500 ký tự.', type: 'error' })
+      return
+    }
     setSubmittingReview(true)
     try {
-      await providerFinanceService.reviewRefund(reviewingRefund.id, {
-        approved: reviewDecision === 'APPROVE',
-        note: reviewNote.trim() || undefined,
-      })
+      await providerFinanceService.reviewRefund(reviewingRefund.id, refundReviewPayload(reviewDecision, reviewNote))
       setToast({
-        message: reviewDecision === 'APPROVE' ? 'Đã duyệt yêu cầu hoàn tiền thành công!' : 'Đã từ chối yêu cầu hoàn tiền.',
+        message: reviewDecision === 'APPROVE' ? 'Đã duyệt yêu cầu. Cần chuyển khoản và tải biên lai để xác nhận hoàn tiền.' : 'Đã từ chối yêu cầu hoàn tiền.',
         type: 'success',
       })
       setReviewingRefund(null)
@@ -358,23 +297,23 @@ export default function ProviderFinancePage() {
     }
   }
 
-  // Handle Mock Payout Request
-  const handleMockPayout = () => {
-    setRequestingPayout(true)
-    setTimeout(() => {
-      setRequestingPayout(false)
-      const mockItem = {
-        id: Date.now(),
-        payoutCode: `PO-${Date.now().toString().slice(-6)}`,
-        amount: summary?.pendingBalance || 1500000,
-        status: 'PROCESSING',
-        bankSnapshot: activeBank ? `${activeBank.bankCode} • ${activeBank.accountNumber}` : 'VCB • 9988776655',
-        requestedAt: new Date().toISOString(),
+  useEffect(() => {
+    if (activeTab !== 'payout') return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      setPayoutLoading(true)
+      setPayoutError(null)
+      try {
+        const result = await providerFinanceService.listPayouts({ offset: 0, limit: 50 })
+        if (!cancelled) setPayoutList(result?.items ?? [])
+      } catch (err) {
+        if (!cancelled) setPayoutError(err?.message || 'Không thể tải lịch sử chi trả.')
+      } finally {
+        if (!cancelled) setPayoutLoading(false)
       }
-      setPayoutList((prev) => [mockItem, ...prev])
-      setToast({ message: '[SANDBOX MOCK] Đã tạo lệnh yêu cầu đối soát rút tiền thử nghiệm!', type: 'info' })
-    }, 600)
-  }
+    }, 0)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [activeTab])
 
   // Handle Confirm Payment
   const handleOpenConfirmModal = (pr) => {
@@ -387,11 +326,14 @@ export default function ProviderFinancePage() {
   const handleConfirmPayment = async (e) => {
     e.preventDefault()
     if (!confirmModalData || isConfirming) return
+    if (!Number.isFinite(Number(receivedAmountInput)) || Number(receivedAmountInput) <= 0) {
+      setToast({ message: 'Số tiền nhận phải lớn hơn 0.', type: 'error' }); return
+    }
 
     try {
       setIsConfirming(true)
       const payload = {
-        receivedAmount: Number(receivedAmountInput) || confirmModalData.amount,
+        receivedAmount: Number(receivedAmountInput),
         bankTransactionRef: bankRefInput.trim() || undefined,
         note: confirmNoteInput.trim() || undefined,
       }
@@ -503,8 +445,8 @@ export default function ProviderFinancePage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-200 flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-amber-50 px-3 text-xs font-bold text-amber-800 border border-amber-200">
               <span className="h-2 w-2 rounded-full bg-amber-500" />
               <span>Cổng thanh toán: VNPAY Sandbox</span>
             </span>
@@ -516,9 +458,9 @@ export default function ProviderFinancePage() {
                 fetchPaymentRequests()
               }}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-50"
             >
-              <Icon name="refresh" className={`text-[16px] ${loading ? 'animate-spin' : ''}`} />
+              <Icon name="refresh" className={`text-[18px] ${loading ? 'animate-spin' : ''}`} />
               <span>Làm mới</span>
             </button>
           </div>
@@ -563,18 +505,18 @@ export default function ProviderFinancePage() {
               <div className="h-8 w-32 animate-pulse rounded bg-slate-200 my-0.5" />
             ) : (
               <div className="text-2xl font-bold font-mono text-slate-900">
-                {formatVnd(summary?.totalRevenue || summary?.totalVolume || 0)}
+                {formatVnd(summary?.totalConfirmedRevenue ?? 0)}
               </div>
             )}
             <div className="text-[11px] text-slate-500">
-              Tích lũy từ tất cả các đơn đặt xe hoàn tất
+              Thực thu hợp lệ trừ tiền đã hoàn, chưa trừ hoa hồng
             </div>
           </div>
 
           {/* Card 2: Tiền đặt cọc đã thu */}
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-1">
             <div className="flex items-center justify-between text-slate-500">
-              <span className="text-xs font-semibold">Tiền đặt cọc</span>
+              <span className="text-xs font-semibold">Nhà xe nhận trực tiếp</span>
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
                 <Icon name="lock" className="text-lg" />
               </span>
@@ -583,18 +525,18 @@ export default function ProviderFinancePage() {
               <div className="h-8 w-28 animate-pulse rounded bg-blue-100 my-0.5" />
             ) : (
               <div className="text-2xl font-bold font-mono text-blue-900">
-                {formatVnd(summary?.depositCollected || summary?.totalDeposit || 0)}
+                {formatVnd(summary?.directReceived ?? 0)}
               </div>
             )}
             <div className="text-[11px] text-slate-500">
-              Đang giữ đảm bảo thực hiện hợp đồng
+              Tổng chuyển khoản đã xác nhận, trước hoàn tiền
             </div>
           </div>
 
           {/* Card 3: Số tiền chưa đối soát / Chờ quyết toán */}
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-1">
             <div className="flex items-center justify-between text-slate-500">
-              <span className="text-xs font-semibold">Chưa đối soát</span>
+              <span className="text-xs font-semibold">Nền tảng đã nhận</span>
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
                 <Icon name="hourglass_top" className="text-lg" />
               </span>
@@ -603,11 +545,11 @@ export default function ProviderFinancePage() {
               <div className="h-8 w-28 animate-pulse rounded bg-amber-100 my-0.5" />
             ) : (
               <div className="text-2xl font-bold font-mono text-amber-900">
-                {formatVnd(summary?.pendingSettlement || summary?.pendingBalance || 0)}
+                {formatVnd(summary?.platformReceived ?? 0)}
               </div>
             )}
             <div className="text-[11px] text-slate-500">
-              Chờ quyết toán cuối chuyến &amp; phụ phí
+              Tổng VNPay đã xác minh, trước hoàn tiền và chi trả
             </div>
           </div>
 
@@ -623,7 +565,7 @@ export default function ProviderFinancePage() {
               <div className="h-8 w-28 animate-pulse rounded bg-purple-100 my-0.5" />
             ) : (
               <div className="text-2xl font-bold font-mono text-purple-900">
-                {formatVnd(summary?.totalRefunded || 0)}
+                {formatVnd(summary?.refundedAmount ?? 0)}
               </div>
             )}
             <div className="text-[11px] text-slate-500">
@@ -633,11 +575,11 @@ export default function ProviderFinancePage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-white px-2 rounded-t-lg shadow-2xs gap-1">
+        <div className="flex border-b border-slate-200 bg-white px-2 rounded-t-lg shadow-2xs gap-1 overflow-x-auto scrollbar-none">
           <button
             type="button"
             onClick={() => setActiveTab('transactions')}
-            className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`py-3 px-4 text-xs font-bold whitespace-nowrap shrink-0 transition-all border-b-2 flex items-center gap-1.5 ${
               activeTab === 'transactions'
                 ? 'border-brand-700 text-brand-800'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -650,7 +592,7 @@ export default function ProviderFinancePage() {
           <button
             type="button"
             onClick={() => setActiveTab('incoming')}
-            className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`py-3 px-4 text-xs font-bold whitespace-nowrap shrink-0 transition-all border-b-2 flex items-center gap-1.5 ${
               activeTab === 'incoming'
                 ? 'border-brand-700 text-brand-800'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -663,7 +605,7 @@ export default function ProviderFinancePage() {
           <button
             type="button"
             onClick={() => setActiveTab('refunds')}
-            className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`py-3 px-4 text-xs font-bold whitespace-nowrap shrink-0 transition-all border-b-2 flex items-center gap-1.5 ${
               activeTab === 'refunds'
                 ? 'border-brand-700 text-brand-800'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -676,7 +618,7 @@ export default function ProviderFinancePage() {
           <button
             type="button"
             onClick={() => setActiveTab('bankAccounts')}
-            className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`py-3 px-4 text-xs font-bold whitespace-nowrap shrink-0 transition-all border-b-2 flex items-center gap-1.5 ${
               activeTab === 'bankAccounts'
                 ? 'border-brand-700 text-brand-800'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -689,14 +631,14 @@ export default function ProviderFinancePage() {
           <button
             type="button"
             onClick={() => setActiveTab('payout')}
-            className={`py-3 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`py-3 px-4 text-xs font-bold whitespace-nowrap shrink-0 transition-all border-b-2 flex items-center gap-1.5 ${
               activeTab === 'payout'
                 ? 'border-brand-700 text-brand-800'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Icon name="payments" className="text-[16px]" />
-            <span>Đối soát &amp; Rút tiền (Sandbox)</span>
+            <span>Lịch sử chi trả</span>
           </button>
         </div>
 
@@ -706,21 +648,29 @@ export default function ProviderFinancePage() {
             {/* Toolbar */}
             <div className="p-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
               <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-slate-500">Loại giao dịch:</label>
-                <select
-                  value={txTypeFilter}
-                  onChange={(e) => {
-                    setTxTypeFilter(e.target.value)
-                    setTxPage(1)
-                  }}
-                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 focus:border-brand-600 focus:outline-none"
-                >
-                  <option value="ALL">Tất cả giao dịch</option>
-                  <option value="DEPOSIT">Đặt cọc (DEPOSIT)</option>
-                  <option value="SETTLEMENT">Quyết toán (SETTLEMENT)</option>
-                  <option value="EXTRA_CHARGE">Phụ phí phát sinh</option>
-                  <option value="REFUND">Hoàn tiền (REFUND)</option>
-                </select>
+                <label htmlFor="finance-tx-type-filter" className="text-xs font-semibold text-slate-600">
+                  Loại giao dịch:
+                </label>
+                <div className="relative h-10 w-52">
+                  <select
+                    id="finance-tx-type-filter"
+                    value={txTypeFilter}
+                    onChange={(e) => {
+                      setTxTypeFilter(e.target.value)
+                      setTxPage(1)
+                    }}
+                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-medium text-slate-800 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none transition"
+                  >
+                    <option value="ALL">Tất cả giao dịch</option>
+                    <option value="DEPOSIT">Đặt cọc (DEPOSIT)</option>
+                    <option value="SETTLEMENT">Quyết toán (SETTLEMENT)</option>
+                    <option value="EXTRA_CHARGE">Phụ phí phát sinh</option>
+                    <option value="REFUND">Hoàn tiền (REFUND)</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                    <Icon name="expand_more" className="text-[18px]" />
+                  </div>
+                </div>
               </div>
 
               <span className="text-xs text-slate-500">
@@ -765,7 +715,7 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : (
                     transactions.map((tx) => {
-                      const statusBadge = TX_STATUS_CONFIG[tx.status] || {
+                      const statusBadge = TX_STATUS_CONFIG[tx.processingNote?.startsWith('RECONCILIATION_REQUIRED') ? 'RECONCILIATION_REQUIRED' : tx.status] || {
                         label: tx.status,
                         bg: 'bg-slate-100 text-slate-700',
                       }
@@ -783,11 +733,11 @@ export default function ProviderFinancePage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 text-[10px]">
-                              {tx.paymentMethod || 'VNPAY'}
+                              {tx.method || '—'}{tx.verificationMethod === 'MOCK_SIMULATED' ? ' · MOCK/SANDBOX' : ''}
                             </span>
                           </td>
                           <td className="px-4 py-3 font-mono text-slate-500 text-[11px]">
-                            {tx.gatewayTxnRef || tx.vnpTxnRef || 'VNPAY-SANDBOX'}
+                            {tx.gatewayRef || '—'}
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
                             {formatVnd(tx.amount)}
@@ -809,6 +759,9 @@ export default function ProviderFinancePage() {
                             >
                               <Icon name="visibility" className="text-[18px]" />
                             </button>
+                            {tx.type === 'REFUND' && tx.status === 'PENDING' && (
+                              <button type="button" aria-label={`Xác nhận hoàn tiền cho ${tx.bookingCode}`} onClick={() => setProofRefund({ bookingCode: tx.bookingCode, paymentTransactionId: tx.id })} className="ml-2 rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-brand-800">Biên lai hoàn tiền</button>
+                            )}
                           </td>
                         </tr>
                       )
@@ -849,23 +802,31 @@ export default function ProviderFinancePage() {
             {/* Toolbar */}
             <div className="p-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
               <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-slate-500">Trạng thái:</label>
-                <select
-                  value={requestStatusFilter}
-                  onChange={(e) => {
-                    setRequestStatusFilter(e.target.value)
-                    setRequestPage(1)
-                  }}
-                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 focus:border-brand-600 focus:outline-none"
-                >
-                  <option value="ALL">Tất cả trạng thái</option>
-                  <option value="PENDING">Chờ thanh toán</option>
-                  <option value="PROOF_SUBMITTED">Chờ đối soát biên lai</option>
-                  <option value="PARTIALLY_PAID">Thanh toán một phần</option>
-                  <option value="CONFIRMED">Đã xác nhận đủ</option>
-                  <option value="REVIEW_REQUIRED">Cần đối soát</option>
-                  <option value="REJECTED">Đã từ chối</option>
-                </select>
+                <label htmlFor="finance-req-status-filter" className="text-xs font-semibold text-slate-600">
+                  Trạng thái:
+                </label>
+                <div className="relative h-10 w-56">
+                  <select
+                    id="finance-req-status-filter"
+                    value={requestStatusFilter}
+                    onChange={(e) => {
+                      setRequestStatusFilter(e.target.value)
+                      setRequestPage(1)
+                    }}
+                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-medium text-slate-800 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none transition"
+                  >
+                    <option value="ALL">Tất cả trạng thái</option>
+                    <option value="PENDING">Chờ thanh toán</option>
+                    <option value="PROOF_SUBMITTED">Chờ đối soát biên lai</option>
+                    <option value="PARTIALLY_PAID">Thanh toán một phần</option>
+                    <option value="CONFIRMED">Đã xác nhận đủ</option>
+                    <option value="REVIEW_REQUIRED">Cần đối soát</option>
+                    <option value="REJECTED">Đã từ chối</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                    <Icon name="expand_more" className="text-[18px]" />
+                  </div>
+                </div>
               </div>
 
               <span className="text-xs text-slate-500">
@@ -1077,7 +1038,7 @@ export default function ProviderFinancePage() {
                   ) : (
                     refunds.map((ref) => {
                       const badge = REFUND_STATUS_CONFIG[ref.status] || { label: ref.status, bg: 'bg-slate-100 text-slate-700' }
-                      const canReview = ref.status === 'PENDING'
+                      const canReview = canReviewRefund(ref.status)
 
                       return (
                         <tr key={ref.id} className="hover:bg-slate-50/80">
@@ -1107,14 +1068,27 @@ export default function ProviderFinancePage() {
                                 type="button"
                                 onClick={() => {
                                   setReviewingRefund(ref)
+                                  setReviewNote('')
                                   setReviewDecision('APPROVE')
                                 }}
-                                className="rounded bg-brand-50 px-3 py-1 text-xs font-bold text-brand-800 hover:bg-brand-100 border border-brand-200"
+                                className="inline-flex h-8 items-center justify-center rounded-lg bg-brand-50 px-3 text-xs font-bold text-brand-800 hover:bg-brand-100 border border-brand-200"
                               >
                                 Xem xét duyệt
                               </button>
                             ) : (
-                              <span className="text-slate-400 text-[11px]">Đã xử lý</span>
+                              ref.status === 'PROCESSING' && ref.paymentTransactionId ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setProofRefund(ref)}
+                                  className="inline-flex h-8 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 text-xs font-bold text-brand-800 hover:bg-brand-100"
+                                >
+                                  Tải biên lai hoàn tiền
+                                </button>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">
+                                  {ref.status === 'REFUNDED' ? 'Đã hoàn tiền' : 'Không có thao tác'}
+                                </span>
+                              )
                             )}
                           </td>
                         </tr>
@@ -1205,61 +1179,21 @@ export default function ProviderFinancePage() {
           </div>
         )}
 
-        {/* TAB 4: MOCK PAYOUT (SANDBOX) */}
         {activeTab === 'payout' && (
           <div className="rounded-lg border border-slate-200 bg-white shadow-xs p-5 space-y-4">
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">
-              <div className="font-bold flex items-center gap-2 text-sm mb-1">
-                <Icon name="science" className="text-amber-700" />
-                Môi trường thử nghiệm đối soát (Sandbox Mock Payout)
-              </div>
-              <p className="leading-relaxed">
-                Chức năng này mô phỏng chu trình đối soát tiền thật giữa EcoMotion Platform và Nhà xe. Các giao dịch ở đây không chuyển tiền thật ngoài ngân hàng thực tế.
-              </p>
+              <h3 className="font-bold text-sm mb-1">Lịch sử chi trả từ máy chủ</h3>
+              <p>Chỉ tiền nền tảng thực thu mới được xét chi trả. Tiền khách chuyển trực tiếp nhà xe được theo dõi riêng ở Giao dịch. Admin quản lý lệnh chi trả; giao dịch MOCK/SANDBOX chưa chuyển tiền ngân hàng.</p>
             </div>
-
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Yêu cầu đối soát rút tiền</h3>
-                <p className="text-xs text-slate-500">Số dư chờ đối soát khả dụng: <strong className="text-brand-900 font-mono">{formatVnd(summary?.pendingSettlement || summary?.pendingBalance || 1500000)}</strong></p>
-              </div>
-              <button
-                type="button"
-                onClick={handleMockPayout}
-                disabled={requestingPayout}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-800 disabled:opacity-50"
-              >
-                {requestingPayout && <Icon name="sync" className="animate-spin text-[16px]" />}
-                <span>{requestingPayout ? 'Đang tạo lệnh...' : 'Tạo lệnh rút tiền thử nghiệm'}</span>
-              </button>
-            </div>
-
-            {/* Payout History List */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-700 uppercase">Lịch sử lệnh rút đối soát:</h4>
-              {payoutList.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
-                  Chưa có lệnh rút đối soát nào trong phiên làm việc hiện tại
+            {payoutLoading ? <p role="status" className="text-sm text-slate-500">Đang tải lịch sử chi trả...</p>
+              : payoutError ? <p role="alert" className="text-sm text-red-700">{payoutError}</p>
+              : payoutList.length === 0 ? <p className="py-6 text-center text-xs text-slate-500">Chưa có lệnh chi trả được ghi nhận.</p>
+              : payoutList.map(po => (
+                <div key={po.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs flex flex-wrap justify-between gap-3">
+                  <div><p className="font-mono font-bold">{po.bookingCode}</p><p>{formatDateTime(po.createdAt)}</p></div>
+                  <div className="text-right"><p className="font-mono font-bold">{formatVnd(po.netAmount)}</p><p>{po.status} · {po.verificationMethod === 'MOCK_SIMULATED' ? 'MOCK/SANDBOX' : po.verificationMethod || 'Chưa xác minh'}</p></div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {payoutList.map((po) => (
-                    <div key={po.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs flex justify-between items-center">
-                      <div>
-                        <div className="font-mono font-bold text-slate-900">{po.payoutCode}</div>
-                        <div className="text-[11px] text-slate-500">{po.bankSnapshot} • {formatDateTime(po.requestedAt)}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-mono font-bold text-brand-900 text-sm">{formatVnd(po.amount)}</div>
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                          Đang đối soát ngân hàng
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+              ))}
           </div>
         )}
       </div>
@@ -1267,9 +1201,9 @@ export default function ProviderFinancePage() {
       {/* Transaction Details Modal */}
       {selectedTxDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5 shadow-lg border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-              <h3 className="text-base font-bold text-slate-900">Chi tiết giao dịch VNPAY</h3>
+              <h3 className="text-base font-bold text-slate-900">Chi tiết giao dịch</h3>
               <button
                 type="button"
                 onClick={() => setSelectedTxDetail(null)}
@@ -1308,16 +1242,16 @@ export default function ProviderFinancePage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Cổng thanh toán:</span>
-                <span className="font-semibold text-emerald-800">VNPAY Sandbox</span>
+                <span className="font-semibold text-emerald-800">{selectedTxDetail.method || '—'}{selectedTxDetail.verificationMethod === 'MOCK_SIMULATED' ? ' · MOCK/SANDBOX' : ''}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500">Mã tham chiếu ngân hàng:</span>
                 <span className="font-mono text-slate-700 inline-flex items-center gap-1.5">
-                  {selectedTxDetail.gatewayTxnRef || 'VNPAY-REF'}
-                  {selectedTxDetail.gatewayTxnRef && (
+                  {selectedTxDetail.gatewayRef || '—'}
+                  {selectedTxDetail.gatewayRef && (
                     <button
                       type="button"
-                      onClick={() => handleCopy(selectedTxDetail.gatewayTxnRef, 'mã tham chiếu')}
+                      onClick={() => handleCopy(selectedTxDetail.gatewayRef, 'mã tham chiếu')}
                       className="text-slate-400 hover:text-slate-600"
                       title="Sao chép mã tham chiếu"
                     >
@@ -1356,9 +1290,10 @@ export default function ProviderFinancePage() {
       )}
 
       {/* Review Refund Modal */}
+      {proofRefund && <RefundProofModal refund={proofRefund} onClose={() => setProofRefund(null)} onSuccess={async () => { await Promise.all([fetchFinanceData(), fetchTransactions()]); setToast({ message: 'Backend đã xác nhận biên lai hoàn tiền.', type: 'success' }) }} />}
       {reviewingRefund && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5 shadow-lg border border-slate-200">
             <h3 className="text-base font-bold text-slate-900 mb-1">Xét duyệt yêu cầu hoàn tiền</h3>
             <p className="text-xs text-slate-500 mb-3">
               Đơn thuê: <span className="font-mono font-bold text-slate-800">#{reviewingRefund.bookingCode}</span> • Số tiền: <strong className="font-mono text-purple-900">{formatVnd(reviewingRefund.amount)}</strong>
@@ -1370,8 +1305,9 @@ export default function ProviderFinancePage() {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
+                    disabled={submittingReview}
                     onClick={() => setReviewDecision('APPROVE')}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition ${
+                    className={`h-10 px-3 rounded-xl border text-xs font-bold transition ${
                       reviewDecision === 'APPROVE'
                         ? 'border-brand-600 bg-brand-50 text-brand-900 ring-1 ring-brand-500'
                         : 'border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -1381,8 +1317,9 @@ export default function ProviderFinancePage() {
                   </button>
                   <button
                     type="button"
+                    disabled={submittingReview}
                     onClick={() => setReviewDecision('REJECT')}
-                    className={`p-2.5 rounded-xl border text-xs font-bold transition ${
+                    className={`h-10 px-3 rounded-xl border text-xs font-bold transition ${
                       reviewDecision === 'REJECT'
                         ? 'border-rose-500 bg-rose-50 text-rose-950 ring-1 ring-rose-400'
                         : 'border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -1394,13 +1331,16 @@ export default function ProviderFinancePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Ghi chú đối soát</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Lý do từ chối (bắt buộc khi từ chối)</label>
                 <textarea
                   rows="2"
+                  required={reviewDecision === 'REJECT'}
+                  disabled={submittingReview || reviewDecision !== 'REJECT'}
+                  maxLength={500}
                   value={reviewNote}
                   onChange={(e) => setReviewNote(e.target.value)}
                   placeholder="Ghi rõ lý do hoặc thỏa thuận đã đạt được..."
-                  className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-600 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-600 focus:outline-none"
                 />
               </div>
 
@@ -1408,14 +1348,14 @@ export default function ProviderFinancePage() {
                 <button
                   type="button"
                   onClick={() => setReviewingRefund(null)}
-                  className="rounded-lg border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 px-3.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={submittingReview}
-                  className="rounded-lg bg-brand-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-brand-700 px-4 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
                 >
                   {submittingReview ? 'Đang lưu...' : 'Xác nhận kết quả'}
                 </button>
@@ -1428,7 +1368,7 @@ export default function ProviderFinancePage() {
       {/* Add Bank Account Modal */}
       {showAddBankModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5 shadow-lg border border-slate-200">
             <h3 className="text-base font-bold text-slate-900 mb-1">Liên kết tài khoản ngân hàng</h3>
             <p className="text-xs text-slate-500 mb-3">Tài khoản chính thức nhận thanh toán doanh thu</p>
 
@@ -1441,17 +1381,22 @@ export default function ProviderFinancePage() {
             <form onSubmit={handleAddBankSubmit} className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Ngân hàng thụ hưởng</label>
-                <select
-                  value={formBankCode}
-                  onChange={(e) => setFormBankCode(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-2 text-xs font-semibold text-slate-800 focus:border-brand-600 focus:outline-none"
-                >
-                  {SUPPORTED_BANKS.map((b) => (
-                    <option key={b.code} value={b.code}>
-                      {b.shortName} — {b.fullName}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative h-10 w-full">
+                  <select
+                    value={formBankCode}
+                    onChange={(e) => setFormBankCode(e.target.value)}
+                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-semibold text-slate-800 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none transition"
+                  >
+                    {SUPPORTED_BANKS.map((b) => (
+                      <option key={b.code} value={b.code}>
+                        {b.shortName} — {b.fullName}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                    <Icon name="expand_more" className="text-[18px]" />
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -1461,7 +1406,7 @@ export default function ProviderFinancePage() {
                   value={formAccountNumber}
                   onChange={(e) => setFormAccountNumber(e.target.value.replace(/\s+/g, ''))}
                   placeholder="Nhập số tài khoản chính xác..."
-                  className="w-full rounded-xl border border-slate-200 p-2 text-xs font-mono font-bold text-slate-800 focus:border-brand-600 focus:outline-none"
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-bold text-slate-800 focus:border-brand-600 focus:outline-none"
                   required
                 />
               </div>
@@ -1473,7 +1418,7 @@ export default function ProviderFinancePage() {
                   value={formAccountHolder}
                   onChange={(e) => setFormAccountHolder(e.target.value.toUpperCase())}
                   placeholder="NGUYEN VAN A"
-                  className="w-full rounded-xl border border-slate-200 p-2 text-xs uppercase font-bold text-slate-800 focus:border-brand-600 focus:outline-none"
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs uppercase font-bold text-slate-800 focus:border-brand-600 focus:outline-none"
                   required
                 />
               </div>
@@ -1482,14 +1427,14 @@ export default function ProviderFinancePage() {
                 <button
                   type="button"
                   onClick={() => setShowAddBankModal(false)}
-                  className="rounded-lg border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 px-3.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={submittingBank}
-                  className="rounded-lg bg-brand-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-brand-700 px-4 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
                 >
                   {submittingBank ? 'Đang lưu...' : 'Lưu tài khoản'}
                 </button>
@@ -1503,7 +1448,7 @@ export default function ProviderFinancePage() {
       {/* ======================================================== */}
       {confirmModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Xác nhận đã nhận tiền chuyển khoản</h3>
               <button
@@ -1538,7 +1483,7 @@ export default function ProviderFinancePage() {
                   min="1000"
                   value={receivedAmountInput}
                   onChange={(e) => setReceivedAmountInput(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-brand-600 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-500">Gõ số trên sao kê. Để nguyên nếu đúng số QR. Thiếu sẽ ghi nhận một phần; thừa sẽ tạo lệnh hoàn.</span>
               </div>
@@ -1550,7 +1495,7 @@ export default function ProviderFinancePage() {
                   value={bankRefInput}
                   onChange={(e) => setBankRefInput(e.target.value)}
                   placeholder="FT24..."
-                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-[#059669] focus:outline-hidden"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-[#059669] focus:outline-hidden"
                 />
               </div>
 
@@ -1569,14 +1514,14 @@ export default function ProviderFinancePage() {
                 <button
                   type="button"
                   onClick={() => setConfirmModalData(null)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
                   disabled={isConfirming}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#059669] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#047857]"
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[#059669] px-4 text-xs font-semibold text-white shadow-xs hover:bg-[#047857]"
                 >
                   {isConfirming && <Icon name="sync" className="animate-spin text-sm" />}
                   Xác nhận đã nhận tiền
@@ -1592,7 +1537,7 @@ export default function ProviderFinancePage() {
       {/* ======================================================== */}
       {rejectModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-red-600">Từ chối biên lai thanh toán</h3>
               <button
@@ -1625,14 +1570,14 @@ export default function ProviderFinancePage() {
                 <button
                   type="button"
                   onClick={() => setRejectModalData(null)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
                   disabled={isRejecting}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-red-700"
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 text-xs font-semibold text-white shadow-xs hover:bg-red-700"
                 >
                   {isRejecting && <Icon name="sync" className="animate-spin text-sm" />}
                   Xác nhận từ chối
@@ -1648,7 +1593,7 @@ export default function ProviderFinancePage() {
       {/* ======================================================== */}
       {reportIssueModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-purple-700">Báo cáo sai lệch / Cần đối soát</h3>
               <button
@@ -1677,14 +1622,14 @@ export default function ProviderFinancePage() {
                 <button
                   type="button"
                   onClick={() => setReportIssueModalData(null)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
                   disabled={isReportingIssue}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-700 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-purple-800"
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-purple-700 px-4 text-xs font-semibold text-white shadow-xs hover:bg-purple-800"
                 >
                   {isReportingIssue && <Icon name="sync" className="animate-spin text-sm" />}
                   Gửi báo cáo
@@ -1700,7 +1645,7 @@ export default function ProviderFinancePage() {
       {/* ======================================================== */}
       {viewProofModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Biên lai thanh toán của khách hàng</h3>
               <button

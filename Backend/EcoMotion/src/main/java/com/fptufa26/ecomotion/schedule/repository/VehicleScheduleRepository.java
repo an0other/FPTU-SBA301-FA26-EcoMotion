@@ -27,7 +27,7 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             WHERE s.vehicle.provider.id = :providerId
               AND s.type IN ('BLOCKED', 'MAINTENANCE')
               AND (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
-                   OR (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD AND s.expiresAt > CURRENT_TIMESTAMP))
+                   OR (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD AND (s.expiresAt > CURRENT_TIMESTAMP or exists (select p.id from PaymentTransaction p where p.booking.id = s.booking.id and p.method = com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY and p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING))))
               AND s.endAt > :now
             """)
     long countActiveBlocksByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
@@ -110,7 +110,7 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             select count(s) > 0 from VehicleSchedule s
             where s.vehicle.id = :vehicleId
               and (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
-                   or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD and s.expiresAt > CURRENT_TIMESTAMP))
+                   or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD and (s.expiresAt > CURRENT_TIMESTAMP or exists (select p.id from PaymentTransaction p where p.booking.id = s.booking.id and p.method = com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY and p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING))))
               and s.startAt < :endAt
               and s.endAt > :startAt
             """)
@@ -139,7 +139,7 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             where s.vehicle.id = :vehicleId
               and (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
                    or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD
-                       and s.expiresAt > CURRENT_TIMESTAMP))
+                       and (s.expiresAt > CURRENT_TIMESTAMP or exists (select p.id from PaymentTransaction p where p.booking.id = s.booking.id and p.method = com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY and p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING))))
               and s.startAt < :rangeTo
               and s.endAt > :rangeFrom
             order by s.startAt
@@ -169,7 +169,7 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             where s.vehicle.id = :vehicleId
               and (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
                    or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD
-                       and s.expiresAt > CURRENT_TIMESTAMP))
+                       and (s.expiresAt > CURRENT_TIMESTAMP or exists (select p.id from PaymentTransaction p where p.booking.id = s.booking.id and p.method = com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY and p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING))))
               and (s.booking is null or s.booking.id <> :excludeBookingId)
               and s.startAt < :endAt
               and s.endAt > :startAt

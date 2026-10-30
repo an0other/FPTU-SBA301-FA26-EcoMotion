@@ -1,424 +1,220 @@
 import { useState } from 'react'
 import { providerBookingService } from '../../../services/providerBookingService'
+import { chargeQuote } from '../../../utils/tv5Contracts'
 
-function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+const labels = {
+  OVERTIME: 'Quá giờ (số slot vượt)',
+  WAITING: 'Chờ (số phút tính phí)',
+  OUT_OF_RADIUS: 'Ngoài bán kính (số km vượt)',
+  WEEKEND: 'Cuối tuần (số slot)',
 }
-
-const CHARGE_TYPE_CONFIG = {
-  OVERTIME: {
-    label: 'Phụ thu quá giờ (OVERTIME)',
-    quantityLabel: 'Số slot vượt',
-    defaultUnitPrice: 100000,
-  },
-  WAITING: {
-    label: 'Phụ thu thời gian chờ (WAITING)',
-    quantityLabel: 'Số phút chờ',
-    defaultUnitPrice: 3000,
-  },
-  OUT_OF_RADIUS: {
-    label: 'Phụ thu ngoài bán kính (OUT_OF_RADIUS)',
-    quantityLabel: 'Số km vượt',
-    defaultUnitPrice: 15000,
-  },
-  WEEKEND: {
-    label: 'Phụ thu cuối tuần / ngày lễ (WEEKEND)',
-    quantityLabel: 'Số ngày / lượt',
-    defaultUnitPrice: 200000,
-  },
-}
-
-// Anomaly threshold: 2,000,000 VNĐ
-const ANOMALY_THRESHOLD = 2000000
 
 export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) {
   const [chargeType, setChargeType] = useState('OVERTIME')
-  const [description, setDescription] = useState('')
   const [quantity, setQuantity] = useState(1)
-  const [unitPrice, setUnitPrice] = useState(100000)
-  const [appliedRate, setAppliedRate] = useState(1.0)
-  const [amount, setAmount] = useState(100000)
+  const [description, setDescription] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
-
-  // Confirmation step state
-  const [step, setStep] = useState(1) // 1: Form, 2: Confirmation
-  const [confirmedByProvider, setConfirmedByProvider] = useState(false)
-
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [validationErrors, setValidationErrors] = useState({})
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
   if (!isOpen || !booking) return null
 
-  const isAbnormal = Number(amount) >= ANOMALY_THRESHOLD
+  const quote = chargeQuote(booking, chargeType, quantity)
 
-  const handleTypeChange = (newType) => {
-    setChargeType(newType)
-    const conf = CHARGE_TYPE_CONFIG[newType]
-    if (conf) {
-      setUnitPrice(conf.defaultUnitPrice)
-      const q = Number(quantity) || 0
-      const r = appliedRate != null && appliedRate !== '' ? Number(appliedRate) : 1
-      setAmount(Math.round(q * conf.defaultUnitPrice * r))
-    }
-  }
-
-  const handleQuantityChange = (val) => {
-    setQuantity(val)
-    const q = Number(val) || 0
-    const p = Number(unitPrice) || 0
-    const r = appliedRate != null && appliedRate !== '' ? Number(appliedRate) : 1
-    setAmount(Math.round(q * p * r))
-  }
-
-  const handleUnitPriceChange = (val) => {
-    setUnitPrice(val)
-    const q = Number(quantity) || 0
-    const p = Number(val) || 0
-    const r = appliedRate != null && appliedRate !== '' ? Number(appliedRate) : 1
-    setAmount(Math.round(q * p * r))
-  }
-
-  const handleAppliedRateChange = (val) => {
-    setAppliedRate(val)
-    const q = Number(quantity) || 0
-    const p = Number(unitPrice) || 0
-    const r = val != null && val !== '' ? Number(val) : 1
-    setAmount(Math.round(q * p * r))
-  }
-
-  function validate() {
-    const errors = {}
-    if (!description.trim()) {
-      errors.description = 'Vui lòng nhập lý do phát sinh phụ phí rõ ràng.'
-    }
-    if (quantity == null || Number(quantity) <= 0) {
-      errors.quantity = 'Số lượng phải lớn hơn 0.'
-    }
-    if (unitPrice == null || Number(unitPrice) < 0) {
-      errors.unitPrice = 'Đơn giá không được âm.'
-    }
-    if (amount == null || Number(amount) <= 0) {
-      errors.amount = 'Số tiền phụ thu phải lớn hơn 0.'
-    }
-    setValidationErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const handleProceedToConfirm = (e) => {
-    e.preventDefault()
-    if (!validate()) return
-    setStep(2)
-  }
-
-  const handleSubmit = async () => {
-    if (isAbnormal && !confirmedByProvider) {
-      setError('Vui lòng tích xác nhận đồng ý với mức phụ phí bất thường.')
+  const submit = async (event) => {
+    event.preventDefault()
+    if (busy) return
+    if (
+      !description.trim() ||
+      !evidenceUrl.trim() ||
+      !Number.isInteger(Number(quantity)) ||
+      Number(quantity) < 1 ||
+      Number(quantity) > 1000000 ||
+      !Number.isFinite(quote.amount) ||
+      quote.amount <= 0
+    ) {
+      setError('Cần lý do, bằng chứng và số lượng hợp lệ theo chính sách đơn thuê.')
       return
     }
-
-    setLoading(true)
-    setError(null)
-
+    if (!confirming) {
+      setConfirming(true)
+      setError('')
+      return
+    }
+    setBusy(true)
+    setError('')
     try {
-      const payload = {
+      const created = await providerBookingService.addCharge(booking.bookingCode, {
         chargeType,
-        description: description.trim(),
         quantity: Number(quantity),
-        unitPrice: Number(unitPrice),
-        appliedRate: appliedRate ? Number(appliedRate) : null,
-        amount: Number(amount),
-        evidenceUrl: evidenceUrl.trim() || null,
-      }
-
-      const created = await providerBookingService.addCharge(booking.bookingCode, payload)
-      onSuccess?.(created, 'Đã ghi nhận phụ phí thành công!')
+        description: description.trim(),
+        evidenceUrl: evidenceUrl.trim(),
+        ...quote,
+      })
+      onSuccess?.(created, 'Đã ghi nhận phụ phí theo chính sách chốt của đơn.')
+      setConfirming(false)
       onClose()
-      setStep(1)
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || 'Không thể ghi nhận phụ phí. Vui lòng thử lại.')
+      setError(err.message || 'Không thể lưu phụ phí.')
     } finally {
-      setLoading(false)
+      setBusy(false)
     }
   }
 
-  const currentConfig = CHARGE_TYPE_CONFIG[chargeType] || CHARGE_TYPE_CONFIG.OVERTIME
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-md border border-slate-200 flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-800">
-              <Icon name="receipt_long" className="text-xl" />
-            </span>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                {step === 1 ? 'Ghi nhận phụ phí' : 'Xác nhận ghi nhận phụ phí'}
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Đơn thuê: <span className="font-mono font-bold text-slate-800">{booking.bookingCode}</span>
-              </p>
-            </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <form
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Thêm phụ phí"
+        className="w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              Thêm phụ phí — <span className="font-mono">{booking.bookingCode}</span>
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Tính toán tự động theo biểu phí đã chốt của đơn thuê
+            </p>
           </div>
           <button
             type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+            disabled={busy}
+            onClick={() => {
+              setConfirming(false)
+              onClose()
+            }}
+            aria-label="Đóng cửa sổ"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700"
           >
-            <Icon name="close" className="text-xl" />
+            <span className="material-symbols-rounded text-[20px] leading-none">close</span>
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-4">
-          {error && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-              <Icon name="error" className="text-[18px] text-red-600 shrink-0 mt-0.5" />
-              <span className="font-medium">{error}</span>
-            </div>
-          )}
-
-          {step === 1 ? (
-            <form id="add-charge-form" onSubmit={handleProceedToConfirm} className="space-y-4">
-              {/* Charge Type Selection */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Loại phụ phí phát sinh <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(CHARGE_TYPE_CONFIG).map(([key, conf]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => handleTypeChange(key)}
-                      className={`p-2.5 rounded-xl border text-left text-xs transition ${
-                        chargeType === key
-                          ? 'border-brand-600 bg-brand-50 text-brand-900 font-bold'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                      }`}
-                    >
-                      {conf.label}
-                    </button>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <fieldset disabled={busy || confirming} className="space-y-3.5">
+            <label className="block text-xs font-semibold text-slate-700">
+              Loại phí
+              <div className="relative mt-1.5 h-10 w-full">
+                <select
+                  value={chargeType}
+                  onChange={(e) => setChargeType(e.target.value)}
+                  className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-medium text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
+                >
+                  {Object.entries(labels).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
                   ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                  <span className="material-symbols-rounded text-[18px] leading-none">expand_more</span>
                 </div>
               </div>
+            </label>
 
-              {/* Description */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Lý do chi tiết <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows="2"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ghi rõ lý do phát sinh (ví dụ: Khách trả xe trễ 1 giờ 30 phút theo thỏa thuận...)"
-                  className={`w-full rounded-xl border bg-slate-50 p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none ${
-                    validationErrors.description
-                      ? 'border-red-400 ring-1 ring-red-400'
-                      : 'border-slate-200 focus:border-brand-600'
-                  }`}
-                />
-                {validationErrors.description && (
-                  <p className="mt-1 text-xs text-red-600 font-medium">{validationErrors.description}</p>
-                )}
-              </div>
+            <label className="block text-xs font-semibold text-slate-700">
+              Số lượng tính phí
+              <input
+                required
+                type="number"
+                min="1"
+                max="1000000"
+                step="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
+              />
+            </label>
 
-              {/* Quantity & Unit price */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {currentConfig.quantityLabel} <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={quantity}
-                    onChange={(e) => handleQuantityChange(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-800 focus:border-brand-600 focus:bg-white focus:outline-none"
-                  />
-                </div>
+            <label className="block text-xs font-semibold text-slate-700">
+              Lý do
+              <textarea
+                required
+                rows={3}
+                maxLength={500}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Nhập chi tiết lý do phát sinh phụ phí..."
+                className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
+              />
+            </label>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Đơn giá (₫) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1000"
-                    value={unitPrice}
-                    onChange={(e) => handleUnitPriceChange(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-800 focus:border-brand-600 focus:bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
+            <label className="block text-xs font-semibold text-slate-700">
+              Đường dẫn bằng chứng
+              <input
+                required
+                type="url"
+                maxLength={500}
+                value={evidenceUrl}
+                onChange={(e) => setEvidenceUrl(e.target.value)}
+                placeholder="https://..."
+                className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
+              />
+            </label>
+          </fieldset>
 
-              {/* Applied Rate & Total Amount */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Hệ số áp dụng
-                  </label>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.05"
-                    value={appliedRate}
-                    onChange={(e) => handleAppliedRateChange(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-800 focus:border-brand-600 focus:bg-white focus:outline-none"
-                  />
-                </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 space-y-1">
+            <p className="text-xs text-slate-700">
+              Đơn giá {quote.unitPrice.toLocaleString('vi-VN')} × {quantity} × {quote.appliedRate}:{' '}
+              <strong className="font-mono text-sm text-emerald-800">
+                {quote.amount.toLocaleString('vi-VN')} ₫
+              </strong>
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Giá và tỷ lệ lấy từ chính sách đã chốt. Backend tính lại khi lưu.
+            </p>
+          </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tổng phụ thu (₫) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full rounded-xl border border-brand-500 bg-brand-50/50 py-2 px-3 text-xs font-bold text-brand-900 focus:border-brand-600 focus:bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Evidence URL */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Đường dẫn ảnh minh chứng / Biên bản bàn giao (tùy chọn)
-                </label>
-                <input
-                  type="url"
-                  value={evidenceUrl}
-                  onChange={(e) => setEvidenceUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-800 focus:border-brand-600 focus:bg-white focus:outline-none"
-                />
-              </div>
-
-              {/* Abnormal Warning Box */}
-              {isAbnormal && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 flex items-start gap-2">
-                  <Icon name="warning" className="text-amber-600 text-[18px] shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">Cảnh báo chi phí bất thường: </span>
-                    Số tiền phụ thu ({Number(amount).toLocaleString('vi-VN')} ₫) vượt mức khuyến nghị thông thường (2.000.000 ₫). Vui lòng đảm bảo đã có sự đồng thuận từ khách hàng và bổ sung minh chứng rõ ràng.
-                  </div>
-                </div>
-              )}
-            </form>
-          ) : (
-            /* Step 2: Confirmation Preview */
-            <div className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3 text-xs">
-                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                  <span className="text-slate-500">Loại phụ phí:</span>
-                  <span className="font-bold text-slate-800">{currentConfig.label}</span>
-                </div>
-                <div className="flex justify-between items-start border-b border-slate-200 pb-2">
-                  <span className="text-slate-500">Lý do phát sinh:</span>
-                  <span className="font-medium text-slate-800 max-w-[280px] text-right">{description}</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                  <span className="text-slate-500">Công thức tính:</span>
-                  <span className="font-mono text-slate-700">
-                    {quantity} × {Number(unitPrice).toLocaleString('vi-VN')} ₫
-                    {appliedRate && appliedRate !== 1 ? ` × ${appliedRate}` : ''}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-1 text-sm">
-                  <span className="font-bold text-slate-900">Tổng phụ thu cộng vào đơn:</span>
-                  <span className="font-mono font-bold text-brand-800 text-base">
-                    {Number(amount).toLocaleString('vi-VN')} ₫
-                  </span>
-                </div>
-              </div>
-
-              {evidenceUrl && (
-                <div className="rounded-xl border border-slate-200 p-3 text-xs flex items-center justify-between">
-                  <span className="text-slate-500">Minh chứng kèm theo:</span>
-                  <a
-                    href={evidenceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-brand-700 underline truncate max-w-[240px]"
-                  >
-                    Xem tài liệu
-                  </a>
-                </div>
-              )}
-
-              {isAbnormal && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 space-y-2">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <Icon name="report" className="text-amber-700 text-[18px]" />
-                    Xác nhận cam kết phụ phí lớn
-                  </div>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={confirmedByProvider}
-                      onChange={(e) => setConfirmedByProvider(e.target.checked)}
-                      className="mt-0.5 rounded border-amber-400 text-brand-600 focus:ring-brand-500"
-                    />
-                    <span className="leading-snug">
-                      Tôi xác nhận phụ phí này đã được thông báo và đối chiếu với khách thuê, có đầy đủ căn cứ thực tế.
-                    </span>
-                  </label>
-                </div>
-              )}
+          {confirming && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
+              Xác nhận số lượng, lý do và bằng chứng trước khi ghi nhận phụ phí.
             </div>
           )}
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 bg-slate-50">
-          {step === 1 ? (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                form="add-charge-form"
-                className="rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-800"
-              >
-                Tiếp tục xác nhận
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                disabled={loading}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Quay lại sửa
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={loading || (isAbnormal && !confirmedByProvider)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition disabled:opacity-50"
-              >
-                {loading && <Icon name="sync" className="animate-spin text-[16px]" />}
-                <span>{loading ? 'Đang lưu...' : 'Lưu phụ phí vào đơn'}</span>
-              </button>
-            </>
+          {error && (
+            <p
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
+            >
+              {error}
+            </p>
           )}
         </div>
-      </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setConfirming(false)
+              onClose()
+            }}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Đóng
+          </button>
+          {confirming && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Sửa lại
+            </button>
+          )}
+          <button
+            disabled={busy}
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+          >
+            {busy ? 'Đang lưu...' : confirming ? 'Xác nhận thêm phụ phí' : 'Tiếp tục'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

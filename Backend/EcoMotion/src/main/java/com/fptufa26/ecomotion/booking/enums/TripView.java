@@ -4,5 +4,6 @@ public enum TripView {
     TODAY,
     UPCOMING,
     HISTORY,
-    ACTIVE
+    ACTIVE,
+    REQUESTS
 }

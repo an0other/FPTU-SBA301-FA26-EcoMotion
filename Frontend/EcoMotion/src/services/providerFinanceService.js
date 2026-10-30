@@ -204,7 +204,8 @@ export const providerFinanceService = {
   // ==========================================
 
   async listPayouts(params = {}) {
-    return this.listTransactions(params)
+    const { data } = await apiClient.get('/v1/provider/finance/payouts', { params })
+    return data?.data
   },
 
   async getPayoutDetail(payoutId) {

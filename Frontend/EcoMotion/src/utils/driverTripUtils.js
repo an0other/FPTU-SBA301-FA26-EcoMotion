@@ -1,6 +1,12 @@
 const VIETNAM_TIMEZONE = 'Asia/Ho_Chi_Minh'
 
+export function rentalTypeLabel(value) {
+  const labels = { HOURLY: 'Theo giờ', DAILY: 'Theo ngày', MONTHLY: 'Theo tháng', YEARLY: 'Theo năm' }
+  return labels[value] || (typeof value === 'string' && value.startsWith('Theo ') ? value : 'Gói thuê đã chọn')
+}
+
 export const TRIP_STATUS_CONFIG = {
+  AWAITING_FINAL_PAYMENT: { label: 'Chuyến đã kết thúc, chờ quyết toán', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200', dotClass: 'bg-slate-400' },
   ASSIGNED: {
     label: 'Đã phân công',
     badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
@@ -54,6 +60,7 @@ export const TRIP_STATUS_CONFIG = {
 }
 
 export const TRIP_EXECUTION_CONFIG = {
+  AWAITING_FINAL_PAYMENT: { key: 'AWAITING_FINAL_PAYMENT', label: 'Chuyến đã kết thúc, chờ thanh toán', actionLabel: null, actionType: null, badgeClass: 'bg-slate-100 text-slate-700 border-slate-200', dotClass: 'bg-slate-400' },
   ASSIGNED: {
     key: 'ASSIGNED',
     label: 'Chờ tài xế xác nhận',
@@ -164,7 +171,7 @@ export function deriveExecutionStatus(trip) {
     return trip.executionStatus.toUpperCase()
   }
   const status = (trip.status || '').toUpperCase()
-  if (['COMPLETED', 'CANCELLED', 'REJECTED', 'IN_PROGRESS', 'AWAITING_START_CONFIRMATION', 'AWAITING_END_CONFIRMATION', 'AWAITING_EXTRA_CHARGE_CONFIRMATION', 'DRIVER_REPLACEMENT_REQUIRED'].includes(status)) {
+  if (['COMPLETED', 'CANCELLED', 'REJECTED', 'IN_PROGRESS', 'AWAITING_START_CONFIRMATION', 'AWAITING_END_CONFIRMATION', 'AWAITING_EXTRA_CHARGE_CONFIRMATION', 'AWAITING_FINAL_PAYMENT', 'DRIVER_REPLACEMENT_REQUIRED'].includes(status)) {
     return status
   }
   if (trip.actualStartAt) return 'IN_PROGRESS'
@@ -201,12 +208,18 @@ export function isLocationStale(receivedAt, maxAgeSeconds = 60) {
 
 export const TRIP_VIEWS = {
   TODAY: { key: 'TODAY', label: 'Hôm nay' },
+  REQUESTS: { key: 'REQUESTS', label: 'Chờ phản hồi' },
   UPCOMING: { key: 'UPCOMING', label: 'Sắp tới' },
+  ACTIVE: { key: 'ACTIVE', label: 'Đang thực hiện' },
   HISTORY: { key: 'HISTORY', label: 'Lịch sử' },
 }
 
 export const STATUS_FILTER_OPTIONS = [
   { value: 'ALL', label: 'Tất cả trạng thái' },
+  { value: 'DRIVER_ASSIGNED', label: 'Chờ tôi chấp nhận' },
+  { value: 'AWAITING_START_CONFIRMATION', label: 'Chờ xác nhận bắt đầu' },
+  { value: 'AWAITING_END_CONFIRMATION', label: 'Chờ xác nhận kết thúc' },
+  { value: 'AWAITING_FINAL_PAYMENT', label: 'Chờ thanh toán cuối chuyến' },
   { value: 'CONFIRMED', label: 'Đã xác nhận' },
   { value: 'IN_PROGRESS', label: 'Đang thực hiện' },
   { value: 'COMPLETED', label: 'Đã hoàn thành' },
@@ -308,7 +321,7 @@ export function getRelativeDayLabel(isoString, referenceDate = new Date()) {
 export function serializeTripFilters({ view = 'TODAY', status, date, page = 0, size = 20, sort } = {}) {
   const params = {}
 
-  if (view && ['TODAY', 'UPCOMING', 'HISTORY', 'ACTIVE'].includes(view.toUpperCase())) {
+  if (view && ['TODAY', 'UPCOMING', 'HISTORY', 'ACTIVE', 'REQUESTS'].includes(view.toUpperCase())) {
     params.view = view.toUpperCase()
   } else {
     params.view = 'TODAY'

@@ -1,9 +1,15 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { providerBookingService } from '../../../services/providerBookingService'
 import { useAvailableDrivers } from '../../../hooks/useAvailableDrivers'
+import AssignmentDriverStatus from '../AssignmentDriverStatus'
+import { assignmentStatuses, filterAssignmentDrivers } from '../../../utils/assignmentAvailability'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+  return (
+    <span className={`material-symbols-rounded select-none leading-none inline-flex items-center justify-center shrink-0 ${className}`}>
+      {name}
+    </span>
+  )
 }
 
 function initialsOf(name) {
@@ -13,13 +19,15 @@ function initialsOf(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-export default function AssignDriverModal({ booking, currentDriverId, isOpen, onClose, onSuccess }) {
+export default function AssignDriverModal({ booking, currentDriverId, isOpen, onClose, onSuccess, onRefresh }) {
+  const bookingCode = booking?.bookingCode
   const [activeMode, setActiveMode] = useState('MANUAL') // 'MANUAL' | 'SUGGESTION' | 'AUTO'
 
   // Manual mode state
-  const { drivers, loading: loadingDrivers, error: driversError } = useAvailableDrivers()
+  const { drivers, loading: loadingDrivers, error: driversError, refetch: refreshDrivers } = useAvailableDrivers(booking?.bookingCode, isOpen)
   const [selectedDriverId, setSelectedDriverId] = useState(currentDriverId || null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
 
   // Suggestion mode state
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
@@ -38,16 +46,16 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
 
   // Fetch suggestions when opening modal in SUGGESTION mode
   const fetchSuggestions = useCallback(async () => {
-    if (!booking?.bookingCode) return
+    if (!bookingCode) return
     setSuggestionsLoading(true)
     setSuggestionError(null)
     try {
-      const data = await providerBookingService.suggestDriverAssignment(booking.bookingCode)
+      const data = await providerBookingService.suggestDriverAssignment(bookingCode)
       setSuggestionResult(data)
       if (data?.suggestedDriver?.driverId) {
         setSelectedCandidateId(data.suggestedDriver.driverId)
       } else if (data?.candidates?.length > 0) {
-        const firstEligible = data.candidates.find((c) => c.eligible) || data.candidates[0]
+        const firstEligible = data.candidates.find((c) => c.eligible)
         setSelectedCandidateId(firstEligible?.driverId || null)
       }
     } catch (err) {
@@ -56,10 +64,11 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
     } finally {
       setSuggestionsLoading(false)
     }
-  }, [booking?.bookingCode])
+  }, [bookingCode])
 
   useEffect(() => {
-    if (isOpen && booking?.bookingCode) {
+    if (!isOpen || !bookingCode) return
+    const timer = setTimeout(() => {
       setSelectedDriverId(currentDriverId || null)
       setActionError(null)
       setAutoAssignResult(null)
@@ -67,27 +76,21 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
       if (activeMode === 'SUGGESTION') {
         fetchSuggestions()
       }
-    }
-  }, [isOpen, booking?.bookingCode, currentDriverId, activeMode, fetchSuggestions])
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [isOpen, bookingCode, currentDriverId, activeMode, fetchSuggestions])
 
   // Filter available drivers for Manual mode
   const filteredDrivers = useMemo(() => {
-    if (!drivers) return []
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return drivers
-    return drivers.filter((d) => {
-      const name = (d.fullName || '').toLowerCase()
-      const phone = (d.phone || '').toLowerCase()
-      const license = (d.licenseNo || '').toLowerCase()
-      return name.includes(q) || phone.includes(q) || license.includes(q)
-    })
-  }, [drivers, searchQuery])
+    return filterAssignmentDrivers(drivers || [], searchQuery, statusFilter)
+  }, [drivers, searchQuery, statusFilter])
+  const selectedDriver = drivers.find(driver => driver.id === selectedDriverId)
 
   if (!isOpen || !booking) return null
 
   // Handler for manual assignment
   const handleConfirmManual = async () => {
-    if (!selectedDriverId) {
+    if (!drivers.some(driver => driver.id === selectedDriverId && driver.eligible)) {
       setActionError('Vui lòng chọn một tài xế trong danh sách để phân công.')
       return
     }
@@ -96,9 +99,15 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
     setActionError(null)
     try {
       const updated = await providerBookingService.assignDriver(booking.bookingCode, selectedDriverId)
+      refreshDrivers()
       onSuccess?.(updated, 'Đã phân công tài xế thành công theo phương thức thủ công!')
       onClose()
     } catch (err) {
+      onRefresh?.()
+      setSelectedDriverId(null)
+      setSelectedCandidateId(null)
+      refreshDrivers()
+      fetchSuggestions()
       setActionError(err?.response?.data?.message || err?.message || 'Phân công tài xế thất bại. Vui lòng thử lại.')
     } finally {
       setSubmitting(false)
@@ -108,7 +117,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
   // Handler for suggested candidate assignment
   const handleConfirmCandidate = async (candidateId) => {
     const targetId = candidateId || selectedCandidateId
-    if (!targetId) {
+    if (!drivers.some(driver => driver.driverId === targetId && driver.eligible) || loadingDrivers || driversError) {
       setActionError('Vui lòng chọn một tài xế đề xuất để xác nhận phân công.')
       return
     }
@@ -117,9 +126,14 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
     setActionError(null)
     try {
       const updated = await providerBookingService.assignDriver(booking.bookingCode, targetId)
+      refreshDrivers()
       onSuccess?.(updated, 'Đã phân công tài xế theo danh sách đề xuất thành công!')
       onClose()
     } catch (err) {
+      onRefresh?.()
+      setSelectedCandidateId(null)
+      refreshDrivers()
+      fetchSuggestions()
       setActionError(err?.response?.data?.message || err?.message || 'Không thể xác nhận phân công tài xế.')
     } finally {
       setSubmitting(false)
@@ -133,8 +147,9 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
     setActionError(null)
     try {
       const updated = await providerBookingService.autoAssignDriver(booking.bookingCode)
+      refreshDrivers()
       setAutoAssignResult(updated)
-      onSuccess?.(updated, 'Đã tự động phân công tài xế tối ưu thành công!')
+      onSuccess?.(updated, 'Đã phân công tài xế; đang chờ tài xế xác nhận.')
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || 'Hệ thống không tìm thấy tài xế khả dụng phù hợp.'
       setAutoAssignError(msg)
@@ -145,20 +160,20 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-md flex flex-col max-h-[92vh] border border-slate-200">
+      <div role="dialog" aria-modal="true" aria-label="Phân công tài xế" className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-md flex flex-col max-h-[92vh] border border-slate-200">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-slate-50">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-800">
               <Icon name="assignment_ind" className="text-2xl" />
             </span>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-slate-900">
                 Điều phối &amp; Phân công tài xế
               </h2>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="break-words text-xs text-slate-500 font-medium">
                 Mã đơn thuê: <span className="font-mono font-bold text-slate-800">{booking.bookingCode}</span> •{' '}
-                Điểm đón: <span className="text-slate-700 truncate inline-block max-w-[280px] align-bottom">{booking.pickupAddress || 'Đang cập nhật'}</span>
+                Điểm đón: <span className="text-slate-700">{booking.pickupAddress || 'Đang cập nhật'}</span>
               </p>
             </div>
           </div>
@@ -174,7 +189,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
         </div>
 
         {/* Dispatch Mode Tabs */}
-        <div className="flex border-b border-slate-200 bg-white px-6 pt-3 gap-2">
+        <div className="flex flex-wrap border-b border-slate-200 bg-white px-3 sm:px-6 pt-3 gap-2">
           <button
             type="button"
             onClick={() => setActiveMode('SUGGESTION')}
@@ -190,6 +205,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
 
           <button
             type="button"
+            disabled={booking.canAutoAssignDriver === false}
             onClick={() => setActiveMode('AUTO')}
             className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
               activeMode === 'AUTO'
@@ -203,6 +219,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
 
           <button
             type="button"
+            disabled={booking.canAssignDriver === false}
             onClick={() => setActiveMode('MANUAL')}
             className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
               activeMode === 'MANUAL'
@@ -229,6 +246,8 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               MODE 1: GỢI Ý TÀI XẾ (OR-Tools Candidate Suggestions)
               ======================================================== */}
           {activeMode === 'SUGGESTION' && (
+            <div className="space-y-2"><p className="text-xs text-slate-600">Gợi ý chưa lưu phân công. {suggestionResult?.solverStatus?.startsWith('FALLBACK') ? 'Đang dùng xếp hạng dự phòng: ' : 'Trạng thái bộ giải: '}{suggestionResult?.solverStatus || 'Đang chờ'}</p>
+
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -236,7 +255,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                     Danh sách ứng viên tài xế đề xuất
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Sắp xếp theo thứ tự tối ưu khoảng cách, thời gian di chuyển dự kiến và lịch trình hiện tại
+                    Chọn một tài xế cho đơn này theo ETA ước tính, tải chuyến và đánh giá; không có dữ liệu giao thông.
                   </p>
                 </div>
                 <button
@@ -253,7 +272,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               {suggestionsLoading ? (
                 <div className="py-12 text-center text-xs text-slate-500">
                   <Icon name="sync" className="animate-spin text-2xl text-brand-600 mx-auto mb-2" />
-                  Đang tính toán ma trận di chuyển và độ phù hợp của các tài xế...
+                  Đang kiểm tra điều kiện và lựa chọn tài xế cho đơn này...
                 </div>
               ) : suggestionError ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
@@ -266,8 +285,18 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               ) : !suggestionResult?.candidates || suggestionResult.candidates.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500">
                   <Icon name="person_off" className="text-3xl text-slate-300 mx-auto mb-2" />
-                  Hiện không có tài xế nào khả dụng trong khu vực cho khung giờ này.
-                  <p className="mt-1 text-slate-400">Bạn có thể chọn chế độ Phân công thủ công để kiểm tra toàn bộ đội xe.</p>
+                  <div className="font-semibold text-slate-800 text-sm">Chưa có tài xế phù hợp với lịch thuê này.</div>
+                  <p className="mt-1 text-slate-500">Hệ thống chưa tìm thấy tài xế khả dụng đáp ứng đầy đủ điều kiện vận hành trong khung giờ này.</p>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={fetchSuggestions}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                    >
+                      Thử lại tìm kiếm
+                    </button>
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">Bạn có thể chuyển sang chế độ "Thủ công" để xem toàn bộ danh sách tài xế và nguyên nhân không khả dụng.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -282,7 +311,8 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                   )}
 
                   <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                    {suggestionResult.candidates.map((candidate) => {
+                    {suggestionResult.candidates.map((suggestedCandidate) => {
+                      const candidate = drivers.find(driver => driver.driverId === suggestedCandidate.driverId) || { ...suggestedCandidate, eligible: false }
                       const isSelected = selectedCandidateId === candidate.driverId
                       const isBest = candidate.isBestMatch
 
@@ -340,6 +370,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                             </div>
                           </div>
 
+                          <AssignmentDriverStatus driver={candidate} />
                           {/* Recommendation explanation or ineligibility reason */}
                           <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                             <div className="text-slate-600 text-[11px] leading-tight">
@@ -355,14 +386,14 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                               )}
                             </div>
 
-                            {candidate.eligible && (
+                            {candidate.eligible && booking.canAssignDriver !== false && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleConfirmCandidate(candidate.driverId)
                                 }}
-                                disabled={submitting}
+                                disabled={submitting || loadingDrivers || !!driversError}
                                 className="rounded-lg bg-brand-700 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-800 transition disabled:opacity-50 shrink-0"
                               >
                                 {submitting && selectedCandidateId === candidate.driverId ? 'Đang phân công...' : 'Chọn tài xế này'}
@@ -375,6 +406,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                   </div>
                 </div>
               )}
+            </div>
             </div>
           )}
 
@@ -424,8 +456,9 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900">
                   <div className="font-bold flex items-center gap-1.5 mb-2 text-sm text-emerald-800">
                     <Icon name="check_circle" className="text-[18px] text-emerald-600" />
-                    Đã hoàn thành phân công tự động
+                    Đã lưu phân công — chờ tài xế xác nhận
                   </div>
+                  <p className="text-xs">Bộ giải: {autoAssignResult.solverStatus}. {autoAssignResult.solverStatus?.startsWith('FALLBACK') ? 'Đã dùng xếp hạng dự phòng có kiểm tra điều kiện.' : autoAssignResult.solverStatus === 'FEASIBLE' ? 'Phương án khả thi, chưa chứng minh tối ưu.' : ''}</p>
                   <div className="rounded-md bg-white p-3 border border-emerald-200 text-slate-800">
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500">Tài xế được phân công:</span>
@@ -439,7 +472,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                     )}
                     <div className="flex justify-between items-center mt-1">
                       <span className="text-slate-500">Trạng thái:</span>
-                      <span className="font-semibold text-amber-700">Chờ tài xế xác nhận (15 phút)</span>
+                      <span className="font-semibold text-amber-700">Chờ tài xế xác nhận (thời hạn cấu hình)</span>
                     </div>
                   </div>
                   <div className="mt-4 flex justify-end">
@@ -457,7 +490,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                   <button
                     type="button"
                     onClick={handleRunAutoAssign}
-                    disabled={autoAssignLoading}
+                    disabled={autoAssignLoading || booking.canAutoAssignDriver === false}
                     className="inline-flex items-center gap-2 rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition disabled:opacity-50"
                   >
                     {autoAssignLoading && <Icon name="sync" className="animate-spin text-[16px]" />}
@@ -471,7 +504,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
           {/* ========================================================
               MODE 3: THỦ CÔNG (Manual Selection)
               ======================================================== */}
-          {activeMode === 'MANUAL' && (
+          {activeMode === 'MANUAL' && booking.canAssignDriver !== false && (
             <div className="space-y-3">
               {driversError && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
@@ -479,21 +512,49 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                 </div>
               )}
 
-              {/* Search box */}
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <Icon name="search" className="text-[18px]" />
+              {/* Search & Status Filter */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <div>
+                  <label htmlFor="assign-driver-search" className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    Tìm kiếm tài xế
+                  </label>
+                  <div className="relative h-10 w-full">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                      <Icon name="search" className="text-[18px]" />
+                    </div>
+                    <input
+                      id="assign-driver-search"
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Tên, SĐT, số bằng lái..."
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3.5 text-xs text-slate-800 placeholder-slate-400 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none transition"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Tìm theo tên tài xế, số điện thoại, số bằng lái..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-600 focus:bg-white focus:outline-none"
-                />
-              </div>
 
-              {/* Drivers List */}
+                <label className="block text-xs font-semibold text-slate-700">
+                  Trạng thái tài xế
+                  <div className="relative mt-1.5 h-10 w-full">
+                    <select
+                      value={statusFilter}
+                      onChange={(event) => setStatusFilter(event.target.value)}
+                      className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-medium text-slate-700 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none transition"
+                    >
+                      <option value="ALL">Tất cả</option>
+                      <option value="ELIGIBLE">Có thể phân công</option>
+                      {Object.entries(assignmentStatuses).map(([value, status]) => (
+                        <option key={value} value={value}>
+                          {status.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+                      <Icon name="expand_more" className="text-[18px]" />
+                    </div>
+                  </div>
+                </label>
+              </div>
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-700">
                   Danh sách tài xế thuộc nhà xe ({filteredDrivers.length}):
@@ -505,18 +566,38 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                     Đang tải danh sách tài xế...
                   </div>
                 ) : filteredDrivers.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-xs text-slate-400">
-                    Không tìm thấy tài xế phù hợp
+                  <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500">
+                    <Icon name="person_off" className="text-3xl text-slate-300 mx-auto mb-2" />
+                    <div className="font-semibold text-slate-800 text-sm">Chưa có tài xế phù hợp với lịch thuê này.</div>
+                    <p className="mt-1 text-slate-500">
+                      {statusFilter === 'ELIGIBLE'
+                        ? 'Hiện không có tài xế nào đủ điều kiện nhận cuốc trong khung giờ này.'
+                        : 'Không tìm thấy tài xế khớp với bộ lọc tìm kiếm.'}
+                    </p>
+                    <div className="mt-3 flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { refreshDrivers(); setStatusFilter('ALL'); setSearchQuery(''); }}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        Đặt lại bộ lọc &amp; Thử lại
+                      </button>
+                    </div>
+                    <p className="mt-3 text-[11px] text-slate-400">
+                      Đơn thuê vẫn được giữ ở trạng thái chờ phân công. Bạn có thể kiểm tra danh sách đầy đủ hoặc liên hệ Renter để thống nhất dời lịch đón.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                     {filteredDrivers.map((driver) => {
                       const isSelected = selectedDriverId === driver.id
                       return (
-                        <div
+                        <button type="button"
                           key={driver.id}
-                          onClick={() => setSelectedDriverId(driver.id)}
-                          className={`cursor-pointer flex items-center justify-between p-3 rounded-xl border transition-all ${
+                          aria-pressed={isSelected}
+                          disabled={!driver.eligible || loadingDrivers || !!driversError}
+                          onClick={() => driver.eligible && setSelectedDriverId(driver.id)}
+                          className={`w-full min-w-0 break-words text-left disabled:cursor-not-allowed disabled:opacity-70 flex items-center justify-between p-3 rounded-xl border transition-all ${
                             isSelected
                               ? 'border-brand-600 bg-brand-50/60 ring-2 ring-brand-600/20'
                               : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -539,21 +620,11 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                                 <span>{driver.phone || 'Chưa cập nhật SĐT'}</span>
                                 {driver.licenseNo && <span>• GPLX: {driver.licenseNo}</span>}
                               </div>
+                              <AssignmentDriverStatus driver={driver} />
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {driver.status && (
-                              <span
-                                className={`rounded px-2 py-0.5 text-[10px] font-bold ${
-                                  driver.status === 'AVAILABLE'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-slate-100 text-slate-600'
-                                }`}
-                              >
-                                {driver.status === 'AVAILABLE' ? 'Sẵn sàng' : driver.status}
-                              </span>
-                            )}
                             <div
                               className={`h-4 w-4 rounded-full border flex items-center justify-center ${
                                 isSelected ? 'border-brand-600 bg-brand-600' : 'border-slate-300'
@@ -562,7 +633,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                               {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
                             </div>
                           </div>
-                        </div>
+                        </button>
                       )
                     })}
                   </div>
@@ -573,9 +644,9 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 bg-slate-50">
-          <div className="text-xs text-slate-500">
-            {activeMode === 'MANUAL' && selectedDriverId && 'Đã chọn 1 tài xế.'}
+        <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center justify-between border-t border-slate-200 px-6 py-4 bg-slate-50">
+          <div className="max-h-28 overflow-y-auto text-xs text-slate-500">
+            {activeMode === 'MANUAL' && selectedDriver?.eligible && <div><p className="font-semibold">Xác nhận lịch trình: {selectedDriver.fullName}</p><AssignmentDriverStatus driver={selectedDriver} /></div>}
             {activeMode === 'SUGGESTION' && selectedCandidateId && 'Chọn tài xế từ danh sách đề xuất.'}
           </div>
           <div className="flex items-center gap-2">
@@ -583,7 +654,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               type="button"
               onClick={onClose}
               disabled={submitting || autoAssignLoading}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
             >
               Hủy
             </button>
@@ -591,19 +662,19 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               <button
                 type="button"
                 onClick={handleConfirmManual}
-                disabled={submitting || !selectedDriverId}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition disabled:opacity-50"
+                disabled={submitting || loadingDrivers || !!driversError || !drivers.some(driver => driver.id === selectedDriverId && driver.eligible)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-brand-700 px-4 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition disabled:opacity-50"
               >
                 {submitting && <Icon name="sync" className="animate-spin text-[16px]" />}
                 <span>{submitting ? 'Đang lưu...' : 'Xác nhận phân công'}</span>
               </button>
             )}
-            {activeMode === 'SUGGESTION' && selectedCandidateId && (
+            {activeMode === 'SUGGESTION' && selectedCandidateId && booking.canAssignDriver !== false && (
               <button
                 type="button"
                 onClick={() => handleConfirmCandidate(selectedCandidateId)}
-                disabled={submitting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition disabled:opacity-50"
+                disabled={submitting || loadingDrivers || !!driversError || !drivers.some(driver => driver.driverId === selectedCandidateId && driver.eligible)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-brand-700 px-4 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition disabled:opacity-50"
               >
                 {submitting && <Icon name="sync" className="animate-spin text-[16px]" />}
                 <span>{submitting ? 'Đang lưu...' : 'Xác nhận tài xế đã chọn'}</span>

@@ -30,6 +30,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
+import com.fptufa26.ecomotion.common.response.PageResponse;
 import java.util.List;
 import java.util.Map;
 
@@ -53,15 +56,31 @@ public class ProviderDriverController {
                 : providerBookingService.getAvailableDrivers(principal.getUserId(), bookingCode));
     }
 
-    @GetMapping
+    @GetMapping(params = "!offset")
     @Operation(summary = "Get list of provider drivers with optional filter and sort")
     public ApiResponse<List<ProviderDriverItemResponse>> getDrivers(
             @AuthenticationPrincipal SecurityUser principal,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) com.fptufa26.ecomotion.user.enums.DriverOperationalStatus operationalStatus,
             @RequestParam(required = false) String sort
     ) {
-        return ApiResponse.success(providerDriverService.getDrivers(principal.getUserId(), search, status, sort));
+        return ApiResponse.success(providerDriverService.getDrivers(principal.getUserId(), search, status, operationalStatus, sort));
+    }
+
+    @GetMapping(params = "offset")
+    public ApiResponse<PageResponse<ProviderDriverItemResponse>> getDriversPaged(
+            @AuthenticationPrincipal SecurityUser principal,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) com.fptufa26.ecomotion.user.enums.DriverOperationalStatus operationalStatus,
+            @RequestParam(defaultValue = "updated_desc") String sort,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate updatedFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate updatedTo,
+            @RequestParam int offset,
+            @RequestParam(defaultValue = "12") int limit) {
+        return ApiResponse.success(providerDriverService.getDriversPaged(principal.getUserId(), search, status,
+                operationalStatus, sort, updatedFrom, updatedTo, offset, limit));
     }
 
     @GetMapping("/stats")

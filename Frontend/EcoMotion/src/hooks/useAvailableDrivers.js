@@ -1,53 +1,28 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useRealtimeSync } from './useRealtimeSync'
 import { providerBookingService } from '../services/providerBookingService'
-
-export function useAvailableDrivers(bookingCode) {
+export function useAvailableDrivers(bookingId, enabled = true) {
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let active = true
-
-    async function fetchDrivers() {
-      try {
-        const data = await providerBookingService.getAvailableDrivers(bookingCode)
-        if (active) {
-          setDrivers(data)
-          setLoading(false)
-        }
-      } catch (err) {
-        if (active) {
-          setError(err?.message || 'Không thể tải danh sách tài xế.')
-          setLoading(false)
-        }
-      }
-    }
-
-    fetchDrivers()
-
-    return () => {
-      active = false
-    }
-  }, [bookingCode])
-
+  const sequence = useRef(0)
   const refetch = useCallback(async () => {
+    if (!enabled || !bookingId) return
+    const id = ++sequence.current
     setLoading(true)
-    setError(null)
     try {
-      const data = await providerBookingService.getAvailableDrivers(bookingCode)
-      setDrivers(data)
+      const data = await providerBookingService.getAvailableDrivers(bookingId)
+      if (id === sequence.current) { setDrivers(data); setError(null) }
     } catch (err) {
-      setError(err?.message || 'Không thể tải danh sách tài xế.')
+      if (id === sequence.current) setError(err?.message || 'Không thể tải danh sách tài xế.')
     } finally {
-      setLoading(false)
+      if (id === sequence.current) setLoading(false)
     }
-  }, [bookingCode])
-
-  return {
-    drivers,
-    loading,
-    error,
-    refetch,
-  }
+  }, [bookingId, enabled])
+  useEffect(() => {
+    const timer = setTimeout(refetch, 0)
+    return () => { clearTimeout(timer); ++sequence.current }
+  }, [refetch])
+  useRealtimeSync({ enabled: enabled && !!bookingId, onResync: refetch })
+  return { drivers, loading, error, refetch }
 }

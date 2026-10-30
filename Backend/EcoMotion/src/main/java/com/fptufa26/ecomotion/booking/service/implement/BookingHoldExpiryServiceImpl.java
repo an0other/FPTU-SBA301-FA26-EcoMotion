@@ -20,6 +20,8 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
     private final BookingRepository bookingRepository;
     private final ScheduleService scheduleService;
     private final PaymentRequestService paymentRequestService;
+    private final com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository transactions;
+    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService notifications;
 
     @Override
     @Transactional
@@ -29,6 +31,9 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
             if (booking == null || booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
                 continue;
             }
+            if (transactions.findByBooking_Id(bookingId).stream().anyMatch(t ->
+                    t.getMethod() == com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY
+                            && t.getStatus() == com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING)) continue;
             if (!paymentRequestService.expireDepositWithoutProof(bookingId)) {
                 continue;
             }
@@ -36,6 +41,7 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
             booking.setStatus(BookingStatus.CANCELLED);
             booking.setCancelReason(CancelReason.DEPOSIT_TIMEOUT);
             booking.setCancelledAt(now);
+            notifications.changed(booking, "BOOKING_CHANGED");
         }
     }
 }

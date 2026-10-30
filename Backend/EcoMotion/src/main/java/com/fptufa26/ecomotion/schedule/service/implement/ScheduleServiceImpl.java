@@ -158,6 +158,31 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     @Override
     @Transactional
+    public boolean confirmUnexpiredHold(Long bookingId, Instant now) {
+        VehicleSchedule row = availableHold(bookingId, now);
+        if (row == null) return false;
+        row.setStatus(ScheduleStatus.ACTIVE);
+        row.setExpiresAt(null);
+        return true;
+    }
+
+    @Override
+    public boolean hasUnexpiredHold(Long bookingId, Instant now) {
+        return availableHold(bookingId, now) != null;
+    }
+
+    private VehicleSchedule availableHold(Long bookingId, Instant now) {
+        VehicleSchedule row = vehicleScheduleRepository.findByBooking_Id(bookingId).stream()
+                .filter(s -> s.getStatus() == ScheduleStatus.HELD && s.getExpiresAt() != null
+                        && s.getExpiresAt().isAfter(now))
+                .findFirst().orElse(null);
+        if (row == null || vehicleScheduleRepository.existsOccupiedOverlapExcludingBooking(
+                row.getVehicle().getId(), row.getStartAt(), row.getEndAt(), bookingId)) return null;
+        return row;
+    }
+
+    @Override
+    @Transactional
     public void release(Long bookingId) {
         for (VehicleSchedule row : vehicleScheduleRepository.findByBooking_Id(bookingId)) {
             if (row.getStatus() == ScheduleStatus.ACTIVE || row.getStatus() == ScheduleStatus.HELD) {
@@ -169,5 +194,12 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Override
     public List<Long> expiredHoldBookingIds(Instant now) {
         return vehicleScheduleRepository.findExpiredHoldBookingIds(now);
+    }
+    @Override
+    public java.util.List<VehicleSchedule> findActiveInRange(Long vehicleId, Instant start, Instant end) {
+        if (vehicleId == null || start == null || end == null) {
+            return java.util.List.of();
+        }
+        return vehicleScheduleRepository.findActiveInRange(vehicleId, start, end);
     }
 }

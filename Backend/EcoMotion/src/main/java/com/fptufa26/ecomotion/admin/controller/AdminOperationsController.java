@@ -12,6 +12,7 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.dispute.entity.Dispute;
@@ -66,7 +67,7 @@ public class AdminOperationsController {
     @Operation(summary = "Chi tiết đơn thuê kèm các khoản phụ phí (charges)")
     public ResponseEntity<ApiResponse<AdminBookingDto>> getBookingDetail(@PathVariable Long id) {
         Booking booking = bookingService.getBookingById(id)
-                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.ResourceNotFoundException("Đơn thuê không tồn tại: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Đơn thuê không tồn tại: " + id));
         return ResponseEntity.ok(ApiResponse.ok(mapBookingDto(booking)));
     }
 
@@ -197,6 +198,7 @@ public class AdminOperationsController {
         Booking b = p.getBooking();
         return AdminPaymentDto.builder()
                 .id(p.getId())
+                .transactionCode(p.getTransactionCode())
                 .bookingId(b != null ? b.getId() : null)
                 .bookingCode(b != null ? b.getBookingCode() : null)
                 .type(p.getType())

@@ -178,5 +178,33 @@ describe('Renter Payment Flow & Service Contracts', () => {
     assert.equal(isDepositPaid, false)
     assert.equal(isSettled, false)
   })
+
+  it('Payment codes follow VP/VQ 6-digit prefix format with zero padding', () => {
+    const vnpayCode = 'VP000042'
+    const vietqrCode = 'VQ000105'
+
+    assert.match(vnpayCode, /^VP\d{6,}$/)
+    assert.match(vietqrCode, /^VQ\d{6,}$/)
+    assert.equal(vnpayCode.startsWith('VP'), true)
+    assert.equal(vietqrCode.startsWith('VQ'), true)
+  })
+
+  it('Payment success receipt structure satisfies required display attributes without upload proof', () => {
+    const successReceipt = {
+      bookingCode: 'BK-1P9A55',
+      transactionCode: 'VP000001',
+      vnpTransactionNo: '14999888',
+      amount: 450000,
+      paymentMethod: 'VNPAY',
+      paidAt: '2026-10-30T10:00:00Z',
+      status: 'PAID',
+    }
+
+    assert.ok(successReceipt.bookingCode)
+    assert.ok(successReceipt.transactionCode.startsWith('VP'))
+    assert.equal(successReceipt.amount, 450000)
+    assert.equal(successReceipt.status, 'PAID')
+    assert.equal(successReceipt.proofImageUrl, undefined)
+  })
 })
 

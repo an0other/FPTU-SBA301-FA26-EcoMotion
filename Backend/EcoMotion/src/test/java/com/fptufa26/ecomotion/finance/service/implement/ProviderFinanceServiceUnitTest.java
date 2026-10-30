@@ -16,11 +16,15 @@ import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.finance.dto.request.UpdateBankAccountRequest;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderBankAccountResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderPayoutDetailResponse;
+import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
+import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
 import com.fptufa26.ecomotion.finance.exception.InvalidAccountHolderNameException;
 import com.fptufa26.ecomotion.finance.exception.InvalidAccountNumberException;
 import com.fptufa26.ecomotion.finance.exception.InvalidBankCodeException;
 import com.fptufa26.ecomotion.finance.exception.PayoutIneligibleException;
 import com.fptufa26.ecomotion.finance.exception.PayoutNotFoundException;
+import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.ProviderStatus;
@@ -53,31 +57,19 @@ import static org.mockito.Mockito.when;
 class ProviderFinanceServiceUnitTest {
 
     @Mock
-    private ProviderRepository providerRepository;
-
-    @Mock
-    private PaymentTransactionRepository paymentTransactionRepository;
-
-    @Mock
-    private BookingRepository bookingRepository;
-
-    @Mock
-    private BookingChargeRepository bookingChargeRepository;
-
-    @Mock
-    private com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository providerBankAccountRepository;
-
-    @Mock
-    private com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository paymentRequestRepository;
-
-    @Mock
-    private com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
-
-    @Mock
     private UserService userService;
 
     @Mock
+    private ProviderBankAccountRepository providerBankAccountRepository;
+
+    @Mock
+    private PaymentRequestRepository paymentRequestRepository;
+
+    @Mock
     private BookingPaymentLedgerService bookingPaymentLedgerService;
+
+    @Mock
+    private org.springframework.core.env.Environment environment;
 
     @InjectMocks
     private ProviderFinanceServiceImpl providerFinanceService;
@@ -218,142 +210,28 @@ class ProviderFinanceServiceUnitTest {
     }
 
     @Test
-    @DisplayName("createMockPayout rejects uncompleted booking")
-    void createMockPayoutRejectsUncompletedBooking() {
-        Booking booking = new Booking();
-        booking.setId(100L);
-        booking.setStatus(BookingStatus.IN_PROGRESS);
-
-        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
-
+    void legacyPayoutCannotInventPaidMoneyWithoutAnAuthenticatedAdmin() {
         assertThatThrownBy(() -> providerFinanceService.createMockPayout(100L))
                 .isInstanceOf(PayoutIneligibleException.class)
-                .hasMessageContaining("COMPLETED");
+                .hasMessageContaining("Admin");
+        verify(bookingPaymentLedgerService, never()).saveTransaction(any());
     }
 
-    @Test
-    @DisplayName("createMockPayout rejects unpaid customer booking")
-    void createMockPayoutRejectsUnpaidBooking() {
-        Booking booking = new Booking();
-        booking.setId(100L);
-        booking.setStatus(BookingStatus.COMPLETED);
-
-        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
-        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of());
-
-        assertThatThrownBy(() -> providerFinanceService.createMockPayout(100L))
-                .isInstanceOf(PayoutIneligibleException.class)
-                .hasMessageContaining("thanh toán");
+    @Test void productionProfileBlocksSandboxEvenWhenFlagIsEnabled() {
+        User admin = new User(); admin.setRole(com.fptufa26.ecomotion.user.enums.Role.ADMIN);
+        admin.setStatus(com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE);
+        when(userService.findById(12L)).thenReturn(Optional.of(admin));
+        when(environment.getProperty("app.finance.sandbox-payout-enabled", Boolean.class, false)).thenReturn(true);
+        when(environment.acceptsProfiles(any(org.springframework.core.env.Profiles.class))).thenReturn(true);
+        assertThatThrownBy(() -> providerFinanceService.createSandboxPayout(12L, 100L)).isInstanceOf(PayoutIneligibleException.class);
+        verify(bookingPaymentLedgerService, never()).saveTransaction(any());
     }
 
-    @Test
-    @DisplayName("createMockPayout rejects provider with missing receiving bank account")
-    void createMockPayoutRejectsMissingProviderBank() {
-        Vehicle vehicle = new Vehicle();
-        vehicle.setProvider(sampleProvider);
-
-        Booking booking = new Booking();
-        booking.setId(100L);
-        booking.setStatus(BookingStatus.COMPLETED);
-        booking.setVehicle(vehicle);
-
-        PaymentTransaction customerPayment = new PaymentTransaction();
-        customerPayment.setType(PaymentType.DEPOSIT_PAY);
-        customerPayment.setStatus(PaymentStatus.PAID);
-
-        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
-        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of(customerPayment));
-
-        assertThatThrownBy(() -> providerFinanceService.createMockPayout(100L))
-                .isInstanceOf(PayoutIneligibleException.class)
-                .hasMessageContaining("ngân hàng");
-    }
-
-    @Test
-    @DisplayName("createMockPayout calculates netAmount = grossAmount - platformFee and takes destination snapshot")
-    void createMockPayoutCalculatesCorrectlyAndSnapshots() {
-        sampleProvider.setBankCode("VCB");
-        sampleProvider.setBankName("Vietcombank");
-        sampleProvider.setBankAccountNo("0123456789");
-        sampleProvider.setBankAccountHolder("NGUYEN VAN A");
-        sampleProvider.setCommissionRate(new BigDecimal("0.1000"));
-
-        Vehicle vehicle = new Vehicle();
-        vehicle.setBrand("VinFast");
-        vehicle.setModel("VF 8");
-        vehicle.setLicensePlate("51A-12345");
-        vehicle.setProvider(sampleProvider);
-
-        Booking booking = new Booking();
-        booking.setId(100L);
-        booking.setBookingCode("BK-TEST-100");
-        booking.setStatus(BookingStatus.COMPLETED);
-        booking.setVehicle(vehicle);
-        booking.setTotalAmount(new BigDecimal("1000000.00"));
-
-        PaymentTransaction customerPayment = new PaymentTransaction();
-        customerPayment.setType(PaymentType.DEPOSIT_PAY);
-        customerPayment.setStatus(PaymentStatus.PAID);
-
-        BookingCharge baseRental = new BookingCharge();
-        baseRental.setChargeType(ChargeType.BASE_RENTAL);
-        baseRental.setAmount(new BigDecimal("1000000.00"));
-        baseRental.setWaived(false);
-
-        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
-        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of(customerPayment));
-        when(bookingPaymentLedgerService.transactionExists(100L, PaymentType.PAYOUT)).thenReturn(false);
-        when(bookingPaymentLedgerService.listCharges(100L)).thenReturn(List.of(baseRental));
-        when(bookingPaymentLedgerService.saveTransaction(any(PaymentTransaction.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        PaymentTransaction payout = providerFinanceService.createMockPayout(100L);
-
-        assertThat(payout).isNotNull();
-        assertThat(payout.getType()).isEqualTo(PaymentType.PAYOUT);
-        assertThat(payout.getDirection()).isEqualTo(PaymentDirection.OUT);
-        assertThat(payout.getMethod()).isEqualTo(PaymentMethod.BANK_TRANSFER);
-        assertThat(payout.getAmount()).isEqualByComparingTo("900000.00");
-        assertThat(payout.getGatewayRef()).isEqualTo("MOCK-PAYOUT-BK-TEST-100");
-        assertThat(payout.getBankCodeSnapshot()).isEqualTo("VCB");
-        assertThat(payout.getBankNameSnapshot()).isEqualTo("Vietcombank");
-        assertThat(payout.getBankAccountNoSnapshot()).isEqualTo("******6789");
-        assertThat(payout.getBankAccountHolderSnapshot()).isEqualTo("NGUYEN VAN A");
-    }
-
-    @Test
-    @DisplayName("createMockPayout is idempotent and does not recreate payout on repeated call")
-    void createMockPayoutIsIdempotent() {
-        sampleProvider.setBankCode("VCB");
-        sampleProvider.setBankName("Vietcombank");
-        sampleProvider.setBankAccountNo("0123456789");
-        sampleProvider.setBankAccountHolder("NGUYEN VAN A");
-
-        Vehicle vehicle = new Vehicle();
-        vehicle.setProvider(sampleProvider);
-
-        Booking booking = new Booking();
-        booking.setId(100L);
-        booking.setBookingCode("BK-TEST-100");
-        booking.setStatus(BookingStatus.COMPLETED);
-        booking.setVehicle(vehicle);
-
-        PaymentTransaction customerPayment = new PaymentTransaction();
-        customerPayment.setType(PaymentType.DEPOSIT_PAY);
-        customerPayment.setStatus(PaymentStatus.PAID);
-
-        PaymentTransaction existingPayout = new PaymentTransaction();
-        existingPayout.setId(777L);
-        existingPayout.setType(PaymentType.PAYOUT);
-        existingPayout.setAmount(new BigDecimal("900000.00"));
-
-        when(bookingPaymentLedgerService.requireBooking(100L)).thenReturn(booking);
-        when(bookingPaymentLedgerService.listTransactions(100L)).thenReturn(List.of(customerPayment));
-        when(bookingPaymentLedgerService.transactionExists(100L, PaymentType.PAYOUT)).thenReturn(true);
-        when(bookingPaymentLedgerService.findTransaction(100L, PaymentType.PAYOUT)).thenReturn(Optional.of(existingPayout));
-
-        PaymentTransaction result = providerFinanceService.createMockPayout(100L);
-
-        assertThat(result.getId()).isEqualTo(777L);
+    @Test void sandboxPayoutIsDisabledByDefault() {
+        User admin = new User(); admin.setRole(com.fptufa26.ecomotion.user.enums.Role.ADMIN);
+        admin.setStatus(com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE);
+        when(userService.findById(12L)).thenReturn(Optional.of(admin));
+        assertThatThrownBy(() -> providerFinanceService.createSandboxPayout(12L, 100L)).isInstanceOf(PayoutIneligibleException.class);
         verify(bookingPaymentLedgerService, never()).saveTransaction(any());
     }
 
