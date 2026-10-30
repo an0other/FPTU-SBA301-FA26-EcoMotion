@@ -337,8 +337,10 @@ export default function ProviderFinancePage() {
         bankTransactionRef: bankRefInput.trim() || undefined,
         note: confirmNoteInput.trim() || undefined,
       }
-      await providerFinanceService.confirmPayment(confirmModalData.id, payload)
-      setToast({ message: 'Xác nhận đã nhận tiền thành công! Giao dịch tài chính đã được cập nhật.', type: 'success' })
+      const result = await providerFinanceService.confirmPayment(confirmModalData.id, payload)
+      setToast(result?.status === 'REVIEW_REQUIRED'
+        ? { message: 'Đã ghi nhận tiền thực nhận. Booking chưa được xác nhận; cần đối soát hoặc hoàn tiền.', type: 'warning' }
+        : { message: 'Đã ghi nhận thanh toán và cập nhật giao dịch tài chính.', type: 'success' })
       setConfirmModalData(null)
       fetchFinanceData()
       fetchPaymentRequests()

@@ -7,24 +7,6 @@ import { providerFinanceService } from '../services/providerFinanceService'
 import { paymentService } from '../services/paymentService'
 import { formatPaymentMoney, isPaymentRequestExpired } from '../utils/paymentDisplay'
 
-function formatDateTime(isoString) {
-  if (!isoString) return '—'
-  try {
-    const d = new Date(isoString)
-    if (Number.isNaN(d.getTime())) return isoString
-    return new Intl.DateTimeFormat('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      timeZone: 'Asia/Ho_Chi_Minh',
-    }).format(d)
-  } catch {
-    return isoString
-  }
-}
-
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`} aria-hidden="true">{name}</span>
 }
@@ -100,21 +82,13 @@ export default function CustomerPaymentPage() {
     }
   }, [fetchPaymentRequests, selectedRequest])
 
-  // Redirect to success page when request is confirmed
   useEffect(() => {
     if (selectedRequest?.status === 'CONFIRMED') {
-      navigate('/payment/success', {
+      navigate(`/payment/success?reference=${encodeURIComponent(selectedRequest.paymentCode || '')}`, {
         replace: true,
-        state: {
-          bookingCode: selectedRequest.bookingCode || bookingIdentifier,
-          transactionCode: selectedRequest.paymentCode,
-          amount: selectedRequest.amount,
-          paymentMethod: payMethod === 'vnpay' ? 'VNPAY' : 'VIETQR',
-          paidAt: selectedRequest.confirmedAt || new Date().toISOString(),
-        },
       })
     }
-  }, [selectedRequest, bookingIdentifier, payMethod, navigate])
+  }, [selectedRequest, navigate])
 
   useEffect(() => {
     const expiresAt = selectedRequest?.expiresAt
