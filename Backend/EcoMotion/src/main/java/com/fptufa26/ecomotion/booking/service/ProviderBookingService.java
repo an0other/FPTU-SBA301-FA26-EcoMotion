@@ -24,6 +24,11 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 public interface ProviderBookingService {
+    com.fptufa26.ecomotion.common.response.PageResponse<ProviderBookingResponse> filterBookings(
+            Long userId, com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter, int offset, int limit);
+
+    byte[] exportFilteredBookings(Long userId, com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter);
+
 
     List<ProviderBookingResponse> listBookings(Long currentUserId, String status);
 
@@ -67,7 +72,7 @@ public interface ProviderBookingService {
 
     AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId);
 
-    ProviderBookingResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId);
+    com.fptufa26.ecomotion.booking.dto.response.AutoAssignmentResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId);
 
     void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, ResolveIncidentRequest request);
 

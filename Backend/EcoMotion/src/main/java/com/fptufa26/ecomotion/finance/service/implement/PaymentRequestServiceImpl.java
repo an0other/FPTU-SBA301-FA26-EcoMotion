@@ -600,6 +600,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         tx.setAmount(receivedAmount);
         tx.setAppliedAmount(appliedAmount);
         tx.setStatus(PaymentStatus.PAID);
+        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
         tx.setPaidAt(clock.instant());
         tx.setGatewayRef(bankRef);
         tx.setReceivingBankAccount(receivingAccount);
@@ -755,6 +756,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(amount);
                 tx.setStatus(PaymentStatus.PAID);
+        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
                 tx.setPaidAt(clock.instant());
                 tx.setGatewayRef(ref);
                 tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
@@ -790,6 +792,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(half);
                 tx.setStatus(PaymentStatus.PAID);
+        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
                 tx.setPaidAt(clock.instant());
                 tx.setGatewayRef(ref);
                 tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
@@ -814,6 +817,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(extra);
                 tx.setStatus(PaymentStatus.PAID);
+        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
                 tx.setPaidAt(clock.instant());
                 tx.setGatewayRef(ref);
                 tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
@@ -849,6 +853,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(amount);
                 tx.setStatus(PaymentStatus.PAID);
+        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
                 tx.setPaidAt(clock.instant());
                 tx.setGatewayRef(ref);
                 tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);

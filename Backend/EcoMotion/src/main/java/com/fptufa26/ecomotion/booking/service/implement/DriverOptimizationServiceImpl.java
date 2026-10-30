@@ -33,12 +33,6 @@ import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.Transmission;
-import com.google.ortools.Loader;
-import com.google.ortools.sat.BoolVar;
-import com.google.ortools.sat.CpModel;
-import com.google.ortools.sat.CpSolver;
-import com.google.ortools.sat.CpSolverStatus;
-import com.google.ortools.sat.LinearExpr;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,26 +60,16 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
     private static final Logger log = LoggerFactory.getLogger(DriverOptimizationServiceImpl.class);
 
-    private static final int MAX_AUTO_REASSIGN_RETRIES = 3;
-    private static final Duration ASSIGNMENT_TIMEOUT_DURATION = Duration.ofMinutes(15);
-    private static final double SOLVER_MAX_TIME_SECONDS = 5.0;
 
     private static final List<BookingStatus> ACTIVE_DRIVER_STATUSES = List.of(
             BookingStatus.CONFIRMED,
             BookingStatus.DRIVER_ASSIGNED,
             BookingStatus.DRIVER_CONFIRMED,
             BookingStatus.DRIVER_ARRIVED,
+            BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.AWAITING_END_CONFIRMATION,
             BookingStatus.IN_PROGRESS
     );
-
-    static {
-        try {
-            Loader.loadNativeLibraries();
-            log.info("Google OR-Tools native libraries loaded successfully");
-        } catch (Throwable t) {
-            log.warn("Failed to load Google OR-Tools native libraries: {}", t.getMessage());
-        }
-    }
 
     private final BookingRepository bookingRepository;
     private final UserService userService;
@@ -97,6 +81,9 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     private final MapGeocodingService mapGeocodingService;
     private final NotificationStreamService notificationStreamService;
     private final Clock clock;
+    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+    private final com.fptufa26.ecomotion.booking.config.OptimizationProperties optimizationProperties;
+    private final com.fptufa26.ecomotion.booking.service.DriverSelectionService driverSelectionService;
     private final DriverAvailabilityService driverAvailabilityService;
 
     @Override
@@ -134,6 +121,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         evaluatedList.sort(Comparator
                 .comparing(DriverCandidateResponse::eligible).reversed()
                 .thenComparing(DriverCandidateResponse::suitabilityScore, Comparator.reverseOrder())
+                .thenComparing(DriverCandidateResponse::driverId)
         );
 
         if (!evaluatedList.isEmpty() && evaluatedList.getFirst().eligible()) {
@@ -180,7 +168,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                 : eligibleCandidates.getFirst();
 
         String explanation = "Đề xuất tài xế " + suggested.fullName()
-                + " (Điểm tối ưu: " + String.format(Locale.ROOT, "%.1f", suggested.suitabilityScore())
+                + " (Điểm xếp hạng: " + String.format(Locale.ROOT, "%.1f", suggested.suitabilityScore())
                 + ", ETA: " + suggested.etaMinutes() + " phút, Đánh giá: " + suggested.ratingAvg() + "*). "
                 + suggested.recommendationReason();
 
@@ -196,21 +184,38 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
     @Override
     @Transactional
+    public java.time.Instant assignmentDeadline() {
+        return clock.instant().plus(Duration.ofMinutes(optimizationProperties.getAssignmentTimeoutMinutes()));
+    }
+
+    @Override
+    @Transactional
     public Driver autoAssign(Long bookingId) {
+        return autoAssignWithResult(bookingId).driver();
+    }
+
+    @Override
+    @Transactional
+    public AutoAssignment autoAssignWithResult(Long bookingId) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + bookingId));
 
         if (booking.getStatus() != BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
             log.warn("Booking {} is not in CONFIRMED/DRIVER_ASSIGNED status for auto assign: {}", bookingId, booking.getStatus());
-            return null;
+            return new AutoAssignment(null, "INFEASIBLE");
         }
 
+        if (booking.getStatus() == BookingStatus.DRIVER_ASSIGNED && booking.getDriver() != null
+                && !booking.isDriverReplacementRequired() && booking.getAssignmentExpiresAt() != null && booking.getAssignmentExpiresAt().isAfter(clock.instant())) {
+            return new AutoAssignment(booking.getDriver(), "ALREADY_ASSIGNED");
+        }
         Long providerId = booking.getVehicle().getProvider().getId();
         AssignmentSuggestionResponse suggestion = suggestDriver(bookingId, providerId);
 
         if (suggestion.suggestedDriver() == null) {
             log.warn("OR-Tools solver could not find eligible driver for booking {}", booking.getBookingCode());
-            return null;
+            bookingNotificationService.changed(booking, "DRIVER_UNAVAILABLE");
+            return new AutoAssignment(null, "INFEASIBLE");
         }
 
         Long driverId = suggestion.suggestedDriver().driverId();
@@ -224,12 +229,16 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                 evaluationContext(booking, List.of(driver)));
         if (!validated.eligible()) {
             log.warn("Driver {} became ineligible: {}", driverId, validated.ineligibilityReason());
-            return null;
+            return new AutoAssignment(null, "INFEASIBLE");
         }
 
         Instant now = clock.instant();
-        Instant expiresAt = now.plus(ASSIGNMENT_TIMEOUT_DURATION);
+        Instant expiresAt = now.plus(Duration.ofMinutes(optimizationProperties.getAssignmentTimeoutMinutes()));
 
+        if (booking.isDriverReplacementRequired()) {
+            booking.setDriverReplacementRequired(false);
+            booking.setDriverIssueResolvedAt(now);
+        }
         booking.setDriver(driver);
         booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
         booking.setAssignedAt(now);
@@ -237,7 +246,9 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         booking.setActualArrivedAt(null);
         booking.setAssignmentExpiresAt(expiresAt);
         bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
+        recallActiveAssignments(booking.getId());
         DriverAssignment assignment = new DriverAssignment();
         assignment.setBooking(booking);
         assignment.setDriver(driver);
@@ -264,7 +275,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         log.info("Auto assigned driver {} to booking {} via OR-Tools. Expires at: {}",
                 driver.getId(), booking.getBookingCode(), expiresAt);
 
-        return driver;
+        return new AutoAssignment(driver, suggestion.solverStatus());
     }
 
     @Override
@@ -277,11 +288,14 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
             throw new AccessDeniedException("Đơn thuê không thuộc quyền quản lý của nhà cung cấp");
         }
 
-        if (booking.getStatus() != BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
-            throw new ConflictException("Chỉ có thể phân công tài xế khi đơn ở trạng thái Đã cọc (CONFIRMED) hoặc Phân công (DRIVER_ASSIGNED)");
-        }
+        if (booking.getDriver() != null && booking.getDriver().getId().equals(driverId)
+                && booking.getStatus() == BookingStatus.DRIVER_ASSIGNED && !booking.isDriverReplacementRequired()
+                && booking.getAssignmentExpiresAt() != null && booking.getAssignmentExpiresAt().isAfter(clock.instant())) return booking.getDriver();
+        boolean replacement = booking.isDriverReplacementRequired()
+                && java.util.Set.of(BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED).contains(booking.getStatus());
+        if (booking.getStatus() != BookingStatus.CONFIRMED && !replacement)
+            throw new ConflictException("Chỉ có thể gán khi đã cọc hoặc đang yêu cầu tài xế thay thế");
 
-        // Concurrency protection: lock driver row (Rule 9)
         Driver driver = userService.findDriverByIdForUpdate(driverId)
                 .orElseThrow(() -> new IllegalArgumentException("Tài xế không tồn tại hoặc không thuộc nhà cung cấp"));
 
@@ -298,7 +312,8 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         }
 
         Instant now = clock.instant();
-        Instant expiresAt = now.plus(ASSIGNMENT_TIMEOUT_DURATION);
+        if (booking.getAssignedAt() != null && now.isBefore(booking.getAssignedAt().plusMillis(1))) now = booking.getAssignedAt().plusMillis(1);
+        Instant expiresAt = now.plus(Duration.ofMinutes(optimizationProperties.getAssignmentTimeoutMinutes()));
 
         booking.setDriver(driver);
         booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
@@ -307,7 +322,9 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         booking.setActualArrivedAt(null);
         booking.setAssignmentExpiresAt(expiresAt);
         bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
+        recallActiveAssignments(booking.getId());
         DriverAssignment assignment = new DriverAssignment();
         assignment.setBooking(booking);
         assignment.setDriver(driver);
@@ -341,23 +358,62 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     @Transactional
     public void processPendingAssignmentTimeouts() {
         Instant now = clock.instant();
-        List<DriverAssignment> expiredAssignments = driverAssignmentRepository.findExpiredAssignments(now);
-
-        for (DriverAssignment da : expiredAssignments) {
-            log.info("Assignment {} for booking {} expired without response", da.getId(), da.getBooking().getBookingCode());
-            da.setStatus(AssignmentStatus.TIMEOUT);
-            da.setRespondedAt(now);
-            driverAssignmentRepository.save(da);
-
-            Booking booking = da.getBooking();
-            if (booking.getStatus() == BookingStatus.DRIVER_ASSIGNED && booking.getDriver() != null
-                    && booking.getDriver().getId().equals(da.getDriver().getId())) {
-                triggerAutoReassign(booking.getId(), da.getDriver().getId(), "Tài xế không phản hồi trong thời hạn quy định (TIMEOUT)");
+        for (Long bookingId : driverAssignmentRepository.findExpiredBookingIds(now)) {
+            Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+            if (booking == null) continue;
+            for (DriverAssignment da : driverAssignmentRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId)) {
+                if (da.getStatus() != AssignmentStatus.PENDING_RESPONSE) continue;
+                if (!matchesAssignment(booking, da) || booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
+                    da.setStatus(AssignmentStatus.RECALLED);
+                    da.setRespondedAt(now);
+                    driverAssignmentRepository.save(da);
+                    continue;
+                }
+                DriverAssignment current = requireCurrentAssignment(booking, da.getDriver().getId());
+                if (!java.util.Objects.equals(current.getId(), da.getId())) {
+                    da.setStatus(AssignmentStatus.RECALLED);
+                    da.setRespondedAt(now);
+                    driverAssignmentRepository.save(da);
+                    continue;
+                }
+                if (da.getExpiresAt() == null || da.getExpiresAt().isAfter(now)) continue;
+                da.setStatus(AssignmentStatus.TIMEOUT);
+                da.setRespondedAt(now);
+                driverAssignmentRepository.saveAndFlush(da);
+                triggerAutoReassign(bookingId, da.getDriver().getId(), "TIMEOUT");
+                break;
             }
-            notificationStreamService.sendEventToProvider(booking.getVehicle().getProvider().getId(),
-                    "DRIVER_STATUS_CHANGED", Map.of("driverId", da.getDriver().getId(),
-                            "bookingCode", booking.getBookingCode()));
         }
+    }
+
+    @Override
+    @Transactional
+    public void recallActiveAssignments(Long bookingId) {
+        driverAssignmentRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
+                .filter(a -> a.getStatus() == AssignmentStatus.PENDING_RESPONSE || a.getStatus() == AssignmentStatus.ACCEPTED)
+                .forEach(a -> {
+                    a.setStatus(AssignmentStatus.RECALLED);
+                    a.setRespondedAt(clock.instant());
+                    driverAssignmentRepository.save(a);
+                    notificationStreamService.sendEventToUser(a.getDriver().getUser().getId(), "DRIVER_REASSIGNED", java.util.Map.of("bookingCode", a.getBooking().getBookingCode()));
+                });
+        driverAssignmentRepository.flush();
+    }
+
+    @Override
+    public DriverAssignment requireCurrentAssignment(Booking booking, Long driverId) {
+        return driverAssignmentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId()).stream()
+                .filter(a -> a.getStatus() == AssignmentStatus.PENDING_RESPONSE)
+                .filter(a -> a.getDriver().getId().equals(driverId) && matchesAssignment(booking, a))
+                .max(Comparator.comparing(DriverAssignment::getId))
+                .orElseThrow(() -> new ConflictException("Phân công đã được thay thế. Vui lòng tải lại lịch trình"));
+    }
+
+    private boolean matchesAssignment(Booking booking, DriverAssignment assignment) {
+        return booking.getDriver() != null
+                && booking.getDriver().getId().equals(assignment.getDriver().getId())
+                && java.util.Objects.equals(booking.getAssignedAt(), assignment.getAssignedAt())
+                && java.util.Objects.equals(booking.getAssignmentExpiresAt(), assignment.getExpiresAt());
     }
 
     @Override
@@ -366,29 +422,51 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + bookingId));
 
+        if (!java.util.Set.of(BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED).contains(booking.getStatus())
+                || booking.getDriver() == null || !booking.getDriver().getId().equals(rejectedDriverId)) return;
+        recallActiveAssignments(bookingId);
         int currentRetries = booking.getReassignCount() != null ? booking.getReassignCount() : 0;
         int nextRetries = currentRetries + 1;
         booking.setReassignCount(nextRetries);
 
         booking.setDriver(null);
+        booking.setDriverConfirmedAt(null);
+        booking.setActualArrivedAt(null);
         booking.setAssignedAt(null);
         booking.setAssignmentExpiresAt(null);
 
-        if (nextRetries > MAX_AUTO_REASSIGN_RETRIES) {
+        if (nextRetries > optimizationProperties.getMaxReassignRetries()) {
             log.warn("Booking {} reached max reassign retries ({}/{}). Waiting for manual intervention.",
-                    booking.getBookingCode(), currentRetries, MAX_AUTO_REASSIGN_RETRIES);
+                    booking.getBookingCode(), currentRetries, optimizationProperties.getMaxReassignRetries());
             booking.setStatus(BookingStatus.CONFIRMED);
             bookingRepository.saveAndFlush(booking);
+            bookingNotificationService.changed(booking, "DRIVER_UNAVAILABLE");
             return;
         }
 
         booking.setStatus(BookingStatus.CONFIRMED);
         bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
         log.info("Triggering auto reassign for booking {} (round {}/{}). Reason: {}",
-                booking.getBookingCode(), nextRetries, MAX_AUTO_REASSIGN_RETRIES, reason);
+                booking.getBookingCode(), nextRetries, optimizationProperties.getMaxReassignRetries(), reason);
 
-        autoAssign(bookingId);
+        Long providerId = booking.getVehicle().getProvider().getId();
+        var suggestion = suggestDriver(bookingId, providerId);
+        if (suggestion.suggestedDriver() != null) {
+            Long selected = suggestion.suggestedDriver().driverId();
+            java.util.stream.Stream.of(rejectedDriverId, selected).distinct().sorted()
+                    .forEach(id -> userService.findDriverByIdForUpdate(id)
+                            .orElseThrow(() -> new ConflictException("Không tìm thấy tài xế")));
+            try {
+                manualAssign(bookingId, selected, providerId);
+            } catch (ConflictException exception) {
+                log.warn("Reassignment candidate became unavailable for booking {}: {}", bookingId, exception.getMessage());
+                bookingNotificationService.changed(booking, "DRIVER_UNAVAILABLE");
+            }
+        } else {
+            bookingNotificationService.changed(booking, "DRIVER_UNAVAILABLE");
+        }
     }
 
     private DriverCandidateResponse evaluateDriver(
@@ -404,6 +482,10 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         String fullName = driver.getUser() != null ? driver.getUser().getFullName() : "Tài xế #" + driverId;
         String phone = driver.getUser() != null ? driver.getUser().getPhone() : null;
 
+        if (booking.isDriverReplacementRequired() && booking.getDriver() != null
+                && booking.getDriver().getId().equals(driverId)) {
+            return buildIneligible(driver, fullName, phone, "Tài xế đã báo không thể thực hiện chuyến, cần tài xế thay thế");
+        }
         if (rejectedDriverIds.contains(driverId)) {
             return buildIneligible(driver, fullName, phone, "Tài xế đã từ chối booking này trong vòng phân công hiện tại");
         }
@@ -425,7 +507,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         }
 
         LocalDate pickupDate = LocalDate.ofInstant(bookingStart, ClockConfig.VIETNAM_ZONE);
-        if (driver.getLicenseExpiry() == null || driver.getLicenseExpiry().isBefore(pickupDate)) {
+        if (driver.getLicenseExpiry() == null || driver.getLicenseExpiry().isBefore(LocalDate.ofInstant(bookingEnd.minusNanos(1), ClockConfig.VIETNAM_ZONE))) {
             return buildIneligible(driver, fullName, phone, "GPLX hết hạn vào ngày đón (" + driver.getLicenseExpiry() + " < " + pickupDate + ")");
         }
 
@@ -450,9 +532,12 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                 Optional.ofNullable(context.locations().get(driverId)), pickupPoint, booking.getVehicle().getProvider());
 
         double rating = driver.getRatingAvg() != null ? driver.getRatingAvg().doubleValue() : 5.0;
-        double suitabilityScore = calculateSuitabilityScore(distanceAndEta.etaMinutes(), activeTripsToday, rating);
+        double suitabilityScore = calculateSuitabilityScore(distanceAndEta.etaMinutes() == null ? optimizationProperties.getUnknownEtaMinutes() : distanceAndEta.etaMinutes(), activeTripsToday, rating);
 
-        String recommendationReason = buildRecommendationReason(distanceAndEta.etaMinutes(), activeTripsToday, rating);
+        String recommendationReason = (distanceAndEta.etaMinutes() == null ? "Thiếu điểm đón hoặc vị trí mới/depot; ETA chưa xác định. "
+                : "Nguồn vị trí: " + distanceAndEta.source() + "; ETA ước tính, không có dữ liệu giao thông. ")
+                + (distanceAndEta.etaMinutes() == null ? "Không dùng tọa độ mặc định làm GPS tài xế."
+                    : buildRecommendationReason(distanceAndEta.etaMinutes(), activeTripsToday, rating));
 
         return new DriverCandidateResponse(
                 driverId,
@@ -500,55 +585,8 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private SolverOptimizationResult solveWithCpSat(List<DriverCandidateResponse> eligibleCandidates) {
-        int n = eligibleCandidates.size();
-        if (n == 0) {
-            return new SolverOptimizationResult("INFEASIBLE", null);
-        }
-        if (n == 1) {
-            return new SolverOptimizationResult("OPTIMAL", eligibleCandidates.getFirst());
-        }
-
-        try {
-            CpModel model = new CpModel();
-            BoolVar[] x = new BoolVar[n];
-            for (int i = 0; i < n; i++) {
-                x[i] = model.newBoolVar("driver_" + eligibleCandidates.get(i).driverId());
-            }
-
-            model.addExactlyOne(x);
-
-            long[] penalties = new long[n];
-            for (int i = 0; i < n; i++) {
-                DriverCandidateResponse c = eligibleCandidates.get(i);
-                int eta = c.etaMinutes() != null ? c.etaMinutes() : 30;
-                long workload = c.activeTripsCount() != null ? c.activeTripsCount() : 0L;
-                double rating = c.ratingAvg() != null ? c.ratingAvg().doubleValue() : 5.0;
-                long ratingPenalty = Math.round((5.0 - rating) * 20.0);
-
-                penalties[i] = (eta * 10L) + (workload * 50L) + (ratingPenalty * 5L);
-            }
-
-            LinearExpr objective = LinearExpr.weightedSum(x, penalties);
-            model.minimize(objective);
-
-            CpSolver solver = new CpSolver();
-            solver.getParameters().setMaxTimeInSeconds(SOLVER_MAX_TIME_SECONDS);
-            CpSolverStatus status = solver.solve(model);
-
-            if (status == CpSolverStatus.OPTIMAL || status == CpSolverStatus.FEASIBLE) {
-                for (int i = 0; i < n; i++) {
-                    if (solver.booleanValue(x[i])) {
-                        return new SolverOptimizationResult(status.name(), eligibleCandidates.get(i));
-                    }
-                }
-            }
-
-            log.warn("OR-Tools solver finished with status: {}, falling back to highest score candidate", status);
-            return new SolverOptimizationResult(status.name(), eligibleCandidates.getFirst());
-        } catch (Throwable t) {
-            log.error("Exception during CP-SAT solving, fallback to top heuristic candidate: {}", t.getMessage());
-            return new SolverOptimizationResult("FALLBACK_HEURISTIC", eligibleCandidates.getFirst());
-        }
+        var result = driverSelectionService.select(eligibleCandidates);
+        return new SolverOptimizationResult(result.status(), result.candidate());
     }
 
     private boolean isLicenseClassCompatible(String licenseClass, int seatCount, Transmission transmission) {
@@ -571,19 +609,27 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private Instant calculateBookingEndTime(Booking booking) {
-        BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
-        int slotMinutes = snapshot != null
-                ? snapshot.getSlotLengthMinutes()
-                : (booking.getPlan() != null ? booking.getPlan().getSlotLengthMinutes() : 60);
-
-        int quantity = bookingChargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
+        BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
+                .orElseThrow(() -> new ConflictException("Thiếu chính sách thời lượng đã chốt; chưa thể phân công"));
+        Integer slotMinutes = snapshot.getSlotLengthMinutes();
+        Integer quantity = bookingChargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
                 .map(BookingCharge::getQuantity)
-                .orElse(1);
-
-        return booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * Math.max(1, quantity)));
+                .orElse(null);
+        if (quantity == null && snapshot.getSlotPrice() != null && snapshot.getSlotPrice().signum() > 0
+                && booking.getTotalAmount() != null) {
+            var division = booking.getTotalAmount().divideAndRemainder(snapshot.getSlotPrice());
+            if (division[1].signum() == 0) quantity = division[0].intValueExact();
+        }
+        if (booking.getPickupTime() == null || slotMinutes == null || slotMinutes <= 0 || quantity == null || quantity <= 0)
+            throw new ConflictException("Không xác định được khoảng thời gian thuê đáng tin cậy; chưa thể phân công");
+        return booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * quantity));
     }
 
     private MapGeocodingService.GeoPoint resolvePickupCoordinates(Booking booking) {
+        if (booking.getPickupLatitude() != null && booking.getPickupLongitude() != null) {
+            return new MapGeocodingService.GeoPoint(booking.getPickupLatitude().doubleValue(),
+                    booking.getPickupLongitude().doubleValue(), booking.getPickupAddress());
+        }
         if (booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
             Optional<MapGeocodingService.GeoPoint> geoOpt = mapGeocodingService.geocodeAddress(booking.getPickupAddress());
             if (geoOpt.isPresent()) {
@@ -598,7 +644,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                     provider.getDepotAddress()
             );
         }
-        return new MapGeocodingService.GeoPoint(10.7769, 106.7009, "TP. Hồ Chí Minh");
+        return null;
     }
 
     private DistanceAndEta calculateDistanceAndEta(
@@ -608,22 +654,30 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     ) {
         double driverLat;
         double driverLon;
+        String source;
 
-        if (latestLoc.isPresent()) {
+        if (latestLoc.isPresent() && isFresh(latestLoc.get().getReceivedAt()) && isFresh(latestLoc.get().getRecordedAt())) {
             driverLat = latestLoc.get().getLatitude();
             driverLon = latestLoc.get().getLongitude();
+            source = "GPS mới";
         } else if (provider.getDepotLatitude() != null && provider.getDepotLongitude() != null) {
             driverLat = provider.getDepotLatitude().doubleValue();
             driverLon = provider.getDepotLongitude().doubleValue();
+            source = "bãi xe nhà cung cấp (dự phòng)";
         } else {
-            driverLat = 10.7769;
-            driverLon = 106.7009;
+            return new DistanceAndEta(null, null, "không xác định");
         }
 
+        if (pickupPoint == null) return new DistanceAndEta(null, null, "không xác định");
         double distanceKm = haversineDistanceKm(driverLat, driverLon, pickupPoint.latitude(), pickupPoint.longitude());
         int etaMinutes = Math.max(5, (int) Math.round((distanceKm / 30.0) * 60.0) + 5);
 
-        return new DistanceAndEta(distanceKm, etaMinutes);
+        return new DistanceAndEta(distanceKm, etaMinutes, source);
+    }
+
+    private boolean isFresh(Instant timestamp) {
+        return timestamp != null && !timestamp.isAfter(clock.instant())
+                && Duration.between(timestamp, clock.instant()).getSeconds() <= optimizationProperties.getLocationMaxAgeSeconds();
     }
 
     private double haversineDistanceKm(double lat1, double lon1, double lat2, double lon2) {
@@ -638,11 +692,9 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private double calculateSuitabilityScore(int etaMinutes, long activeTripsToday, double rating) {
-        double etaScore = Math.max(0.0, 100.0 - (etaMinutes * 1.5));
-        double workloadScore = Math.max(0.0, 100.0 - (activeTripsToday * 25.0));
-        double ratingScore = (rating / 5.0) * 100.0;
-
-        return (etaScore * 0.4) + (workloadScore * 0.3) + (ratingScore * 0.3);
+        return -((long) etaMinutes * optimizationProperties.getWeightEta()
+                + activeTripsToday * optimizationProperties.getWeightWorkload()
+                + Math.round((5 - rating) * 20) * optimizationProperties.getWeightRating());
     }
 
     private String buildRecommendationReason(int etaMinutes, long activeTripsToday, double rating) {
@@ -655,9 +707,9 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         }
 
         if (activeTripsToday == 0) {
-            sb.append("Chưa có chuyến trong ngày, đảm bảo thể lực. ");
+            sb.append("Chưa có chuyến giữ lịch trong ngày đón. ");
         } else {
-            sb.append("Đã chạy ").append(activeTripsToday).append(" chuyến hôm nay. ");
+            sb.append("Đã chạy ").append(activeTripsToday).append(" chuyến trong ngày đón. ");
         }
 
         if (rating >= 4.8) {
@@ -669,7 +721,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         return sb.toString();
     }
 
-    private record DistanceAndEta(Double distanceKm, Integer etaMinutes) {
+    private record DistanceAndEta(Double distanceKm, Integer etaMinutes, String source) {
     }
 
     private EvaluationContext evaluationContext(Booking booking, List<Driver> drivers) {
@@ -680,7 +732,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         Map<Long, VehicleLocation> locations = new java.util.HashMap<>();
         List<Long> blocked = List.of();
         if (!ids.isEmpty()) {
-            LocalDate today = LocalDate.now(clock.withZone(ClockConfig.VIETNAM_ZONE));
+            LocalDate today = LocalDate.ofInstant(booking.getPickupTime(), ClockConfig.VIETNAM_ZONE);
             bookingRepository.countTripsForDrivers(ids, ACTIVE_DRIVER_STATUSES,
                     today.atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant(),
                     today.plusDays(1).atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant())

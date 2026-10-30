@@ -118,8 +118,9 @@ public class DriverTripController {
     @Operation(summary = "Driver confirms assignment of the trip")
     public ApiResponse<DriverTripDetailResponse> confirmTrip(
             @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable("tripId") String tripId) {
-        DriverTripDetailResponse response = driverTripService.confirmTrip(principal.getUserId(), tripId);
+            @PathVariable("tripId") String tripId,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) com.fptufa26.ecomotion.booking.dto.request.ConfirmDriverAssignmentRequest request) {
+        DriverTripDetailResponse response = driverTripService.confirmTrip(principal.getUserId(), tripId, request == null ? null : request.assignedAt());
         return ApiResponse.success(response);
     }
 

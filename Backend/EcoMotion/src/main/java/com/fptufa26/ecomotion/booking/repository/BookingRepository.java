@@ -27,6 +27,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
 
     List<Booking> findAllByOrderByCreatedAtDesc();
 
+    @Query("select distinct concat(b.vehicle.brand, ' ', b.vehicle.model) from Booking b where b.vehicle.provider.id = :providerId order by 1")
+    List<String> findProviderQueueVehicleNames(@Param("providerId") Long providerId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from Booking b where b.bookingCode = :code")
+    Optional<Booking> findByBookingCodeForUpdate(@Param("code") String code);
+
     List<Booking> findByStatusOrderByCreatedAtDesc(BookingStatus status);
 
     List<Booking> findByRenter_IdOrderByCreatedAtDesc(Long renterId);
@@ -168,11 +175,11 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
                                                             @Param("providerId") Long providerId);
 
     @Query("SELECT b FROM Booking b " +
-            "JOIN FETCH b.plan pl " +
+            "LEFT JOIN FETCH b.plan pl " +
             "WHERE b.driver.id = :driverId " +
             "AND b.status IN :statuses " +
             "AND (:excludeBookingId IS NULL OR b.id <> :excludeBookingId) " +
-            "AND b.pickupTime < :windowEnd")
+            "AND (b.pickupTime IS NULL OR b.pickupTime < :windowEnd)")
     List<Booking> findPotentialDriverConflicts(
             @Param("driverId") Long driverId,
             @Param("statuses") Collection<BookingStatus> statuses,
@@ -180,7 +187,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
             @Param("windowEnd") Instant windowEnd
     );
 
-    @Query("SELECT b FROM Booking b JOIN FETCH b.vehicle v JOIN FETCH b.plan " +
+    @Query("SELECT b FROM Booking b JOIN FETCH b.vehicle v LEFT JOIN FETCH b.plan " +
             "JOIN FETCH b.driver d WHERE v.provider.id = :providerId AND b.status IN :statuses")
     List<Booking> findDriverScheduleForProvider(@Param("providerId") Long providerId,
             @Param("statuses") Collection<BookingStatus> statuses);

@@ -15,7 +15,11 @@ import java.util.Optional;
 
 public interface BookingQueryService {
 
+    List<com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget> pendingGatewayPayments(int limit);
+
     Optional<Booking> findBookingById(Long id);
+
+    Booking lockBookingForPayment(Long id);
 
     Optional<Booking> findBookingByCode(String bookingCode);
 
@@ -34,6 +38,8 @@ public interface BookingQueryService {
     List<PaymentTransaction> findTransactionsByBookingIdOrderByCreatedAtAsc(Long bookingId);
 
     Optional<PaymentTransaction> findTransactionByVnpTxnRef(String vnpTxnRef);
+
+    Optional<PaymentTransaction> findTransactionByVnpTxnRefForUpdate(String vnpTxnRef);
 
     Optional<PaymentTransaction> findTransactionByIdAndProviderId(Long id, Long providerId);
 

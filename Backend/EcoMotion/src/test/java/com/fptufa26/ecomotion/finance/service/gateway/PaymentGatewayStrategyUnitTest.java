@@ -95,32 +95,19 @@ class PaymentGatewayStrategyUnitTest {
     @Test
     @DisplayName("VnpayPaymentGatewayStrategy verifies signature correctly for valid params")
     void vnpayStrategy_verifySignature_valid() {
-        Instant now = Instant.now();
-        PaymentUrlCommand command = new PaymentUrlCommand(
-                "BK-2026-002",
-                "2002",
-                new BigDecimal("200000"),
-                "Thanh toan don xe",
-                "127.0.0.1",
-                "vn",
-                null,
-                now,
-                now.plus(Duration.ofMinutes(15))
-        );
-
-        PaymentUrlResult urlResult = vnpayStrategy.generatePaymentUrl(command);
-        String query = urlResult.paymentUrl().substring(urlResult.paymentUrl().indexOf('?') + 1);
-
         Map<String, String> params = new HashMap<>();
-        for (String pair : query.split("&")) {
-            String[] kv = pair.split("=", 2);
-            params.put(kv[0], kv.length > 1 ? kv[1] : "");
-        }
+        params.put("vnp_TmnCode", "TEST_TMN");
+        params.put("vnp_TxnRef", "ref");
+        params.put("vnp_Amount", "144000000");
+        params.put("vnp_OrderInfo", "Thanh toán đơn thuê + mã & ký tự");
         params.put("vnp_ResponseCode", "00");
         params.put("vnp_TransactionStatus", "00");
-
-        PaymentVerificationResult verification = vnpayStrategy.verifyCallback(params);
-        assertThat(verification).isNotNull();
+        params.put("vnp_SecureHash", com.fptufa26.ecomotion.finance.config.VnpayUtils.hmacSHA512(
+                "TEST_SECRET_KEY_12345678901234567890", com.fptufa26.ecomotion.finance.config.VnpayUtils.buildHashData(params)));
+        assertThat(vnpayStrategy.verifyCallback(params).validSignature()).isTrue();
+        assertThat(vnpayStrategy.verifyCallback(params).success()).isTrue();
+        params.put("vnp_Amount", "1");
+        assertThat(vnpayStrategy.verifyCallback(params).validSignature()).isFalse();
     }
 
     @Test

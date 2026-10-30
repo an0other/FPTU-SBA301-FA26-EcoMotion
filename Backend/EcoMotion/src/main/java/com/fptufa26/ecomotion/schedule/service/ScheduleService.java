@@ -28,6 +28,10 @@ public interface ScheduleService {
 
     void confirmHold(Long bookingId);
 
+    boolean confirmUnexpiredHold(Long bookingId, Instant now);
+
+    boolean hasUnexpiredHold(Long bookingId, Instant now);
+
     void release(Long bookingId);
 
     List<VehicleSchedule> findActiveInRange(Long vehicleId, Instant start, Instant end);

@@ -12,9 +12,20 @@ public interface DriverOptimizationService {
 
     AssignmentSuggestionResponse suggestDriver(Long bookingId, Long providerId);
 
+    java.time.Instant assignmentDeadline();
+
     Driver autoAssign(Long bookingId);
 
+    AutoAssignment autoAssignWithResult(Long bookingId);
+
+    record AutoAssignment(Driver driver, String solverStatus) {}
+
     Driver manualAssign(Long bookingId, Long driverId, Long providerId);
+
+    void recallActiveAssignments(Long bookingId);
+
+    com.fptufa26.ecomotion.booking.entity.DriverAssignment requireCurrentAssignment(
+            com.fptufa26.ecomotion.booking.entity.Booking booking, Long driverId);
 
     void processPendingAssignmentTimeouts();
 

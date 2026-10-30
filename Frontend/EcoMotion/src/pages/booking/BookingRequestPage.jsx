@@ -281,7 +281,6 @@ export function BookingRequestPage() {
             totalAmount={totalAmount}
             depositAmount={depositAmount}
             submitting={submitting}
-            errorMessage={error}
             onBack={() => setStep(2)}
             onSubmit={handleSubmit}
           />

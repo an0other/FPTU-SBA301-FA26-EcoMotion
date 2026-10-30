@@ -163,7 +163,7 @@ export const BookingDetail = ({
           <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">Nguy cơ xe về trễ</p>
             <p className="mt-1">{operationalRisk.message}</p>
-            <p className="mt-1 text-xs">Nhà cung cấp sẽ chủ động đổi xe, dời lịch hoặc hủy và hoàn tiền nếu cần.</p>
+            <p className="mt-1 text-xs">Nhà xe cần xử lý. Đổi xe hoặc giờ đón chỉ áp dụng khi bạn đồng ý phương án; khoản tiền đã nhận vẫn được theo dõi và hoàn theo chính sách nếu đơn không thực hiện được.</p>
           </div>
         )}
       </div>
@@ -343,11 +343,63 @@ export const BookingDetail = ({
           {booking.status === 'CONFIRMED' && (
             <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base font-bold text-[#14221A]">Chuyến xe đã được xác nhận</h2>
+                <h2 className="text-base font-bold text-[#14221A]">
+                  {booking.driverReplacementRequired
+                    ? 'Đang phân công lại tài xế'
+                    : booking.driver?.name
+                      ? 'Chuyến xe đã được xác nhận'
+                      : 'Đang tìm tài xế'}
+                </h2>
                 <p className="text-xs text-gray-600 mt-1">
-                  {booking.upfront
-                    ? 'Lịch xe đã khóa. Bạn tự lái theo hợp đồng.'
-                    : `Lịch xe đã khóa thành công. ${booking.driver?.name ? `Tài xế ${booking.driver.name} sẽ đón bạn đúng giờ.` : 'Tài xế sẽ được phân công trước giờ đón.'}`}
+                  {booking.driverReplacementRequired
+                    ? 'Hệ thống hoặc nhà xe đang sắp xếp tài xế thay thế phù hợp cho chuyến đi.'
+                    : booking.upfront
+                      ? 'Lịch xe đã khóa. Bạn tự lái theo hợp đồng.'
+                      : booking.driver?.name
+                        ? `Lịch xe đã khóa thành công. Tài xế ${booking.driver.name} sẽ đón bạn đúng giờ.`
+                        : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
+                </p>
+              </div>
+              {booking.canCancel ? <button
+                onClick={() => setIsCancelModalOpen(true)}
+                type="button"
+                className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Huỷ đơn
+              </button> : null}
+            </div>
+          )}
+
+          {/* DRIVER_ASSIGNED HERO BANNER */}
+          {booking.status === 'DRIVER_ASSIGNED' && (
+            <div className="p-5 bg-blue-50 border border-blue-200 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-blue-900">Đã phân công tài xế - Chờ xác nhận</h2>
+                <p className="text-xs text-blue-700 mt-1">
+                  {booking.driver?.name
+                    ? `Tài xế ${booking.driver.name} đã được phân công và đang xác nhận nhận chuyến.`
+                    : 'Tài xế đã được phân công và đang kiểm tra chuyến đi.'}
+                </p>
+              </div>
+              {booking.canCancel ? <button
+                onClick={() => setIsCancelModalOpen(true)}
+                type="button"
+                className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Huỷ đơn
+              </button> : null}
+            </div>
+          )}
+
+          {/* DRIVER_CONFIRMED HERO BANNER */}
+          {booking.status === 'DRIVER_CONFIRMED' && (
+            <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-emerald-900">Tài xế đã xác nhận chuyến</h2>
+                <p className="text-xs text-emerald-700 mt-1">
+                  {booking.driver?.name
+                    ? `Tài xế ${booking.driver.name} đã sẵn sàng và sẽ đón bạn đúng lịch hẹn.`
+                    : 'Tài xế đã xác nhận sẵn sàng đón bạn theo lịch hẹn.'}
                 </p>
               </div>
               {booking.canCancel ? <button

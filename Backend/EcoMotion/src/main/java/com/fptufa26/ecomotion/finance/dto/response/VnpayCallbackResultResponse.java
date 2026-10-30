@@ -12,6 +12,8 @@ public record VnpayCallbackResultResponse(
         String payDate,
         String responseCode,
         boolean success,
-        String message
+        String message,
+        String status,
+        boolean retryAllowed
 ) {
 }

@@ -43,4 +43,6 @@ public interface ProviderFinanceService {
     ProviderPayoutDetailResponse getPayoutDetail(Long currentUserId, Long payoutId);
 
     PaymentTransaction createMockPayout(Long bookingId);
+
+    ProviderPayoutSummaryResponse createSandboxPayout(Long currentUserId, Long bookingId);
 }

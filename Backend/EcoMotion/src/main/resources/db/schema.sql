@@ -458,6 +458,17 @@ CREATE TABLE booking (
     operational_resolved_at timestamptz,
     previous_vehicle_id     bigint,
     previous_pickup_time    timestamptz,
+    proposal_id             varchar(36) UNIQUE,
+    proposal_resolution     varchar(30),
+    proposal_vehicle_id     bigint REFERENCES vehicle(id),
+    proposal_pickup_time    timestamptz,
+    proposal_reason         varchar(500),
+    proposal_created_by     bigint REFERENCES users(id),
+    proposal_created_at     timestamptz,
+    proposal_accepted       boolean,
+    proposal_responded_by   bigint REFERENCES users(id),
+    proposal_responded_at   timestamptz,
+    proposal_response_reason varchar(500),
     created_at              timestamptz   NOT NULL DEFAULT now(),
     updated_at              timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT uk_booking_code UNIQUE (booking_code),
@@ -676,6 +687,8 @@ CREATE TABLE payment_transaction (
     charge_id     bigint,
     type          varchar(20)   NOT NULL,
     amount        numeric(14,2) NOT NULL,
+    payout_gross_amount numeric(14,2),
+    payout_fee_amount numeric(14,2),
     direction     varchar(3)    NOT NULL,
     method        varchar(20)   NOT NULL,
     gateway_ref   varchar(100),
@@ -705,6 +718,9 @@ CREATE TABLE payment_transaction (
 CREATE INDEX idx_payment_booking_id ON payment_transaction (booking_id);
 CREATE INDEX idx_payment_charge_id ON payment_transaction (charge_id);
 CREATE INDEX idx_payment_type_status ON payment_transaction (type, status);
+
+CREATE UNIQUE INDEX uk_refund_paid_bank_reference ON payment_transaction (UPPER(TRIM(gateway_ref)))
+    WHERE type = 'REFUND' AND direction = 'OUT' AND status = 'PAID' AND gateway_ref IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- Tầng 4 — Sau chuyến

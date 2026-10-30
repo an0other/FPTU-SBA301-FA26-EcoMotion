@@ -50,6 +50,14 @@ class AssignmentAvailabilityTest {
         b.setPlan(plan);
         b.setStatus(status);
         b.setPickupTime(start);
+        var snapshot = new com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot();
+        snapshot.setBooking(b); snapshot.setSlotLengthMinutes(60);
+        var base = new com.fptufa26.ecomotion.booking.entity.BookingCharge();
+        base.setBooking(b); base.setQuantity(1);
+        when(snapshots.findByBooking_IdIn(any())).thenReturn(List.of(snapshot));
+        when(snapshots.findByBooking_Id(b.getId())).thenReturn(java.util.Optional.of(snapshot));
+        when(charges.findByBooking_IdInAndChargeType(any(), any())).thenReturn(List.of(base));
+        when(charges.findByBooking_IdAndChargeType(eq(b.getId()), any())).thenReturn(java.util.Optional.of(base));
         when(bookings.findDriverScheduleForProvider(eq(7L), any())).thenReturn(List.of(b));
         return b;
     }
@@ -99,11 +107,31 @@ class AssignmentAvailabilityTest {
         b.setActualStartAt(now.minusSeconds(86300));
         b.setActualEndAt(status == BookingStatus.AWAITING_END_CONFIRMATION ? now.minusSeconds(80000) : null);
         var state = inspect();
-        assertThat(state.availabilityStatus()).isEqualTo("ON_TRIP");
-        assertThat(state.reason()).isEqualTo("DRIVER_ON_TRIP");
+        assertThat(state.availabilityStatus()).isEqualTo("UNCERTAIN");
+        assertThat(state.reason()).isEqualTo("DRIVER_RETURN_UNCERTAIN");
         assertThat(state.currentBookingCode()).isEqualTo("EM-OTHER");
         assertThat(state.currentTripStartedAt()).isEqualTo(b.getActualStartAt());
         assertThat(state.nextAvailableAt()).isNull();
+    }
+
+    @Test
+    void futureBookingIsAvailableEvenWhenDriverIsCurrentlyOnTrip() {
+        Booking b = occupied(BookingStatus.IN_PROGRESS, now.minusSeconds(1800));
+        b.setActualStartAt(now.minusSeconds(1800));
+        var state = service.inspect(7L, List.of(driver), vehicle, now.plusSeconds(86400 + 3600), now.plusSeconds(86400 + 7200), 99L).get(1L);
+        assertThat(state.availabilityStatus()).isEqualTo("AVAILABLE");
+        assertThat(state.reason()).isNull();
+        assertThat(state.currentBookingCode()).isEqualTo("EM-OTHER");
+        assertThat(state.currentTripStartedAt()).isEqualTo(b.getActualStartAt());
+    }
+
+    @Test
+    void isAvailableReturnsTrueForFutureBookingWhenDriverOnTripToday() {
+        Booking b = occupied(BookingStatus.IN_PROGRESS, now.minusSeconds(1800));
+        b.setActualStartAt(now.minusSeconds(1800));
+        when(bookings.findPotentialDriverConflicts(eq(1L), any(), any(), any())).thenReturn(List.of(b));
+        boolean available = service.isAvailable(1L, vehicle, now.plusSeconds(86400 + 3600), now.plusSeconds(86400 + 7200), 99L);
+        assertThat(available).isTrue();
     }
 
     @Test void lifecycleRefreshReleasesOnlyAfterValidEndOrRejection() {
@@ -113,6 +141,38 @@ class AssignmentAvailabilityTest {
         assertThat(inspect().availabilityStatus()).isEqualTo("ON_TRIP");
         when(bookings.findDriverScheduleForProvider(eq(7L), any())).thenReturn(List.of());
         assertThat(inspect().availabilityStatus()).isEqualTo("AVAILABLE");
+    }
+
+    @Test void sameDayLaterTripIsAvailableBeforeCurrentTripBecomesOverdue() {
+        Booking b = occupied(BookingStatus.IN_PROGRESS, now.minusSeconds(1800));
+        b.setActualStartAt(now.minusSeconds(1800));
+        assertThat(inspect().reason()).isNull();
+        assertThat(inspect().currentBookingCode()).isEqualTo("EM-OTHER");
+        assertThat(inspect().nextAvailableAt()).isEqualTo(now.plusSeconds(1800));
+    }
+
+    @Test void overdueTripDoesNotBecomeAvailableAtMidnight() {
+        Booking b = occupied(BookingStatus.IN_PROGRESS, now.minusSeconds(7200));
+        when(bookings.findPotentialDriverConflicts(eq(1L), any(), any(), any())).thenReturn(List.of(b));
+        var state = service.inspect(7L, List.of(driver), vehicle, now.plusSeconds(90000), now.plusSeconds(93600), 99L).get(1L);
+        assertThat(state.availabilityStatus()).isEqualTo("UNCERTAIN");
+        assertThat(state.nextAvailableAt()).isNull();
+        assertThat(service.isAvailable(1L, vehicle, now.plusSeconds(90000), now.plusSeconds(93600), 99L)).isFalse();
+    }
+
+    @Test void lateStartExtendsEstimatedOccupation() {
+        Booking b = occupied(BookingStatus.IN_PROGRESS, now.minusSeconds(1800));
+        b.setActualStartAt(now.minusSeconds(300));
+        vehicle.setMaintenanceBufferMinutes(10);
+        assertThat(inspect().availabilityStatus()).isEqualTo("ON_TRIP");
+    }
+
+    @Test void missingDurationIsUncertainInsteadOfInventingAnHour() {
+        Booking b = occupied(BookingStatus.IN_PROGRESS, now.minusSeconds(1800));
+        b.setPlan(null);
+        when(snapshots.findByBooking_IdIn(any())).thenReturn(List.of());
+        assertThat(inspect().availabilityStatus()).isEqualTo("UNCERTAIN");
+        assertThat(inspect().nextAvailableAt()).isNull();
     }
 
     @Test void adjacentBookingsWithZeroBufferAreAllowed() {

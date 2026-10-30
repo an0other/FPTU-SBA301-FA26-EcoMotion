@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { incidentResolutionPayload } from '../utils/tv5Contracts'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import BookingStatusBadge from '../components/provider/BookingStatusBadge'
 import Toast from '../components/Toast'
@@ -13,9 +15,18 @@ import { useProviderTripTracking } from '../hooks/useProviderTripTracking'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { providerBookingService } from '../services/providerBookingService'
 import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
+import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
+import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+  return (
+    <span
+      aria-hidden="true"
+      className={`material-symbols-rounded select-none leading-none inline-flex items-center justify-center shrink-0 ${className}`}
+    >
+      {name}
+    </span>
+  )
 }
 
 function formatVnd(amount) {
@@ -23,19 +34,30 @@ function formatVnd(amount) {
   return Number(amount).toLocaleString('vi-VN') + ' ₫'
 }
 
+const PAYMENT_STATUS_LABELS = {
+  UNPAID: 'Chưa thanh toán',
+  AWAITING_DEPOSIT: 'Chờ đặt cọc',
+  DEPOSIT_PAID: 'Đã đặt cọc',
+  PARTIALLY_PAID: 'Thanh toán một phần',
+  FULLY_PAID: 'Đã tất toán',
+  PAID: 'Đã thanh toán',
+  REFUND_PENDING: 'Chờ hoàn tiền',
+  REFUNDED: 'Đã hoàn tiền',
+  FAILED: 'Thanh toán lỗi',
+}
+
 function formatDateTime(isoString) {
   if (!isoString) return '—'
-  try {
-    const d = new Date(isoString)
-    const hours = String(d.getHours()).padStart(2, '0')
-    const mins = String(d.getMinutes()).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const year = d.getFullYear()
-    return `${hours}:${mins} ${day}/${month}/${year}`
-  } catch {
-    return isoString
-  }
+  const value = new Date(isoString)
+  if (Number.isNaN(value.getTime())) return '—'
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(value)
 }
 
 function initialsOf(name) {
@@ -76,12 +98,14 @@ const EVIDENCE_TYPE_LABELS = {
 export default function ProviderBookingDetailPage() {
   const { bookingCode } = useParams()
   const navigate = useNavigate()
-  const { booking, loading, error, refetch } = useProviderBookingDetail(bookingCode)
+  const { user } = useAuth()
+  const { booking, operationalRisk, workflow, workflowError, loading, error, refetch } = useProviderBookingDetail(bookingCode)
 
-  const [activeImageIndex, setActiveImageIndex] = useState(0)
+  const [activeImageIndex] = useState(0)
   const [showAcceptModal, setShowAcceptModal] = useState(false)
   const [showDenyModal, setShowDenyModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
+  const [isOpeningAssignModal, setIsOpeningAssignModal] = useState(false)
   const [showAddChargeModal, setShowAddChargeModal] = useState(false)
   const [toast, setToast] = useState({ message: '', type: 'success' })
   const [finalizing, setFinalizing] = useState(false)
@@ -93,10 +117,41 @@ export default function ProviderBookingDetailPage() {
   const [resolvingIncident, setResolvingIncident] = useState(null)
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [submittingResolution, setSubmittingResolution] = useState(false)
+  const incidentSequence = useRef(0)
 
   const isPending = booking?.status === 'PENDING'
   const isRejected = booking?.status === 'REJECTED'
   const isCancelled = booking?.status === 'CANCELLED'
+  const isTerminal = ['CANCELLED', 'REJECTED', 'COMPLETED'].includes(booking?.status)
+
+  const isProviderRole = !user || ['PROVIDER', 'PROVIDER_STAFF', 'ADMIN'].includes(user?.role)
+
+  const isDriverConfirmed = Boolean(
+    booking?.driverConfirmedAt ||
+    booking?.status === 'DRIVER_CONFIRMED' ||
+    booking?.executionStatus === 'CONFIRMED' ||
+    workflow?.driverStatus === 'ACCEPTED'
+  )
+
+  const canAssignDriver = Boolean(
+    booking &&
+    isProviderRole &&
+    !isTerminal &&
+    !isPending &&
+    (
+      Boolean(booking.canAssignDriver) ||
+      Boolean(booking.canAutoAssignDriver) ||
+      Boolean(workflow?.needsDriver) ||
+      ['CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED', 'AWAITING_DRIVER'].includes(booking.status)
+    )
+  )
+
+  const handleOpenAssignModal = () => {
+    if (isOpeningAssignModal || showAssignModal || loading) return
+    setIsOpeningAssignModal(true)
+    setShowAssignModal(true)
+    setTimeout(() => setIsOpeningAssignModal(false), 400)
+  }
 
   const { trackingData, loading: trackingLoading, refetchTracking } = useProviderTripTracking(bookingCode, {
     enabled: Boolean(booking?.driverName && !isCancelled && !isRejected),
@@ -104,22 +159,25 @@ export default function ProviderBookingDetailPage() {
 
   // Load Incidents and Evidence
   const fetchIncidentsAndEvidence = useCallback(async () => {
+    const requestId = ++incidentSequence.current
     if (!bookingCode) return
     try {
       const [incData, evData] = await Promise.allSettled([
         providerBookingService.getBookingIncidents(bookingCode),
         providerBookingService.getBookingEvidence(bookingCode),
       ])
+      if (requestId !== incidentSequence.current) return
       if (incData.status === 'fulfilled') setIncidents(incData.value || [])
       if (evData.status === 'fulfilled') setEvidenceList(evData.value || [])
     } catch {
-      // Quiet fail if not yet mounted
+      // Quiet fail if unmounted
     }
   }, [bookingCode])
 
   useEffect(() => {
     if (bookingCode) {
-      fetchIncidentsAndEvidence()
+      const timer = setTimeout(fetchIncidentsAndEvidence, 0)
+      return () => { clearTimeout(timer); ++incidentSequence.current }
     }
   }, [bookingCode, fetchIncidentsAndEvidence])
 
@@ -141,37 +199,51 @@ export default function ProviderBookingDetailPage() {
   useRealtimeSync({
     handlers: {
       [TV5_REALTIME_EVENTS.DRIVER_ASSIGNED]: () => {
-        refetch()
         setToast({ message: 'Tài xế đã được phân công cho chuyến xe.', type: 'info' })
       },
-      [TV5_REALTIME_EVENTS.DRIVER_ACCEPTED]: () => {
-        refetch()
+      [TV5_REALTIME_EVENTS.DRIVER_CONFIRMED]: () => {
         setToast({ message: 'Tài xế đã xác nhận tiếp nhận chuyến!', type: 'success' })
       },
       [TV5_REALTIME_EVENTS.DRIVER_REJECTED]: () => {
-        refetch()
         setToast({ message: 'Cảnh báo: Tài xế đã từ chối nhận chuyến!', type: 'warning' })
       },
+      [TV5_REALTIME_EVENTS.DRIVER_UNAVAILABLE]: () => {
+        setToast({ message: 'Chưa có tài xế đủ điều kiện. Nhà xe cần điều phối thủ công.', type: 'warning' })
+      },
       [TV5_REALTIME_EVENTS.DRIVER_INCIDENT]: () => {
-        refetch()
-        fetchIncidentsAndEvidence()
         setToast({ message: 'Cảnh báo khẩn: Tài xế vừa báo cáo sự cố phát sinh!', type: 'error' })
       },
       [TV5_REALTIME_EVENTS.TRIP_STARTED]: () => {
-        refetch()
         setToast({ message: 'Chuyến xe đã chính thức bắt đầu hành trình.', type: 'info' })
       },
       [TV5_REALTIME_EVENTS.TRIP_COMPLETED]: () => {
-        refetch()
-        fetchIncidentsAndEvidence()
         setToast({ message: 'Chuyến xe đã kết thúc an toàn.', type: 'success' })
       },
     },
-    onResync: () => {
-      refetch()
-      fetchIncidentsAndEvidence()
-    },
+    onResync: () => Promise.all([refetch(), fetchIncidentsAndEvidence()]),
   })
+
+  const handleProgressAction = (action) => {
+    switch (action) {
+      case 'ACCEPT':
+        setShowAcceptModal(true)
+        break
+      case 'DENY':
+        setShowDenyModal(true)
+        break
+      case 'ASSIGN_DRIVER':
+        setShowAssignModal(true)
+        break
+      case 'ADD_CHARGE':
+        setShowAddChargeModal(true)
+        break
+      case 'FINALIZE_SETTLEMENT':
+        handleFinalizeSettlement()
+        break
+      default:
+        break
+    }
+  }
 
   const handleActionSuccess = (_, message) => {
     refetch()
@@ -203,14 +275,11 @@ export default function ProviderBookingDetailPage() {
 
     setSubmittingResolution(true)
     try {
-      await providerBookingService.resolveIncident(booking.bookingCode, resolvingIncident.id, {
-        resolutionNotes: resolutionNotes.trim(),
-        newStatus: 'RESOLVED',
-      })
+      await providerBookingService.resolveIncident(booking.bookingCode, resolvingIncident.id, incidentResolutionPayload(resolutionNotes))
       setToast({ message: 'Đã cập nhật phương án xử lý sự cố thành công!', type: 'success' })
       setResolvingIncident(null)
       setResolutionNotes('')
-      fetchIncidentsAndEvidence()
+      await Promise.all([fetchIncidentsAndEvidence(), refetch(), refetchTracking()])
     } catch (err) {
       setToast({ message: err?.response?.data?.message || err?.message || 'Không thể lưu xử lý sự cố', type: 'error' })
     } finally {
@@ -277,19 +346,113 @@ export default function ProviderBookingDetailPage() {
           onClose={() => setToast({ message: '', type: 'success' })}
         />
 
-        {/* Breadcrumb & Navigation */}
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        {/* 1. Breadcrumb & Navigation */}
+        <nav aria-label="Đường dẫn trang" className="flex items-center gap-2 text-xs text-slate-500">
           <button
             type="button"
             onClick={() => navigate('/provider/bookings')}
             className="hover:text-brand-800 transition flex items-center gap-1 font-semibold"
           >
             <Icon name="arrow_back" className="text-[16px]" />
-            <span>Quản lý đơn đặt xe</span>
+            <span>Quản lý đơn thuê</span>
           </button>
           <span>/</span>
           <span className="font-mono font-bold text-slate-800">{booking.bookingCode}</span>
-        </div>
+        </nav>
+
+        {/* 2. Master Detail Header Card */}
+        <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-xl font-bold font-mono text-slate-900">#{booking.bookingCode}</h1>
+              <BookingStatusBadge status={booking.status} />
+              {booking.paymentStatus && (
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
+                  Thanh toán: {PAYMENT_STATUS_LABELS[booking.paymentStatus] || booking.paymentStatus}
+                </span>
+              )}
+              {booking.driverName && (
+                isDriverConfirmed ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
+                    <Icon name="check_circle" className="text-[14px] text-emerald-600" />
+                    Tài xế đã xác nhận
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800 border border-blue-200">
+                    <Icon name="schedule" className="text-[14px] text-blue-600" />
+                    Chờ tài xế xác nhận
+                  </span>
+                )
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              Khởi tạo lúc: {formatDateTime(booking.createdAt)} • Cập nhật cuối: {formatDateTime(booking.updatedAt)}
+            </p>
+          </div>
+
+          {/* Action Button Strip */}
+          <div className="flex flex-wrap items-center gap-2">
+            {booking.rejectionReason && <p className="text-sm text-red-800">Lý do từ chối: {booking.rejectionReason}</p>}
+            {isPending && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowDenyModal(true)}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Từ chối
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAcceptModal(true)}
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-brand-700 px-4 text-xs font-bold text-white shadow-2xs hover:bg-brand-800 transition"
+                >
+                  Chấp nhận đơn
+                </button>
+              </>
+            )}
+
+            {canAssignDriver && (
+              <button
+                type="button"
+                disabled={isOpeningAssignModal || loading}
+                onClick={handleOpenAssignModal}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3.5 text-xs font-bold text-brand-900 hover:bg-brand-100 transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isOpeningAssignModal ? (
+                  <Icon name="progress_activity" className="text-[18px] animate-spin" />
+                ) : (
+                  <Icon name="assignment_ind" className="text-[18px]" />
+                )}
+                <span>{booking.driverName ? 'Điều phối lại tài xế' : 'Phân công tài xế'}</span>
+              </button>
+            )}
+
+            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && (
+              <button
+                type="button"
+                onClick={() => setShowAddChargeModal(true)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 text-xs font-bold text-indigo-900 hover:bg-indigo-100 transition shadow-2xs"
+              >
+                <Icon name="add_card" className="text-[18px]" />
+                <span>Thêm phụ phí</span>
+              </button>
+            )}
+
+            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' &&
+              booking.providerConfirmedAt && booking.renterConfirmedAt && (
+              <button
+                type="button"
+                onClick={handleFinalizeSettlement}
+                disabled={finalizing}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-purple-700 px-4 text-xs font-bold text-white shadow-2xs hover:bg-purple-800 disabled:opacity-50"
+              >
+                <Icon name="price_check" className="text-[18px]" />
+                <span>{finalizing ? 'Đang chốt...' : 'Chốt quyết toán'}</span>
+              </button>
+            )}
+          </div>
+        </header>
 
         {/* Urgent Incident Alert Banner if active incidents exist */}
         {activeIncidents.length > 0 && (
@@ -327,87 +490,36 @@ export default function ProviderBookingDetailPage() {
           </div>
         )}
 
-        {/* Master Detail Header Card */}
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold font-mono text-slate-900">#{booking.bookingCode}</h1>
-              <BookingStatusBadge status={booking.status} />
-              {booking.paymentStatus && (
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
-                  Thanh toán: {booking.paymentStatus}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500">
-              Khởi tạo lúc: {formatDateTime(booking.createdAt)} • Cập nhật cuối: {formatDateTime(booking.updatedAt)}
-            </p>
-          </div>
+        {/* 3. Tiến trình đơn thuê / Thông tin cần xử lý */}
+        <section aria-label="Tiến trình và việc cần xử lý">
+          <BookingWorkflowSummary
+            key={booking.bookingCode}
+            workflow={workflow}
+            booking={booking}
+            error={workflowError}
+            onRefresh={refetch}
+            provider
+            onAction={handleProgressAction}
+          />
+        </section>
 
-          {/* Action Button Strip */}
-          <div className="flex flex-wrap items-center gap-2">
-            {isPending && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setShowDenyModal(true)}
-                  className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  Từ chối
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAcceptModal(true)}
-                  className="rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition"
-                >
-                  Chấp nhận đơn
-                </button>
-              </>
-            )}
+        {workflow?.canProposeAlternative && (operationalRisk?.atRisk || workflow.needsDriver || workflow.proposal) && (
+          <OperationalRiskPanel
+            booking={booking}
+            risk={operationalRisk}
+            workflow={workflow}
+            onSuccess={async (result) => {
+              await Promise.all([refetch(), fetchIncidentsAndEvidence()])
+              setToast({ message: result.message, type: 'success' })
+            }}
+          />
+        )}
 
-            {!isRejected && !isCancelled && booking.status !== 'PENDING' && (
-              <button
-                type="button"
-                onClick={() => setShowAssignModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3.5 py-2 text-xs font-bold text-brand-900 hover:bg-brand-100 transition shadow-2xs"
-              >
-                <Icon name="assignment_ind" className="text-[18px]" />
-                <span>{booking.driverName ? 'Điều phối lại tài xế' : 'Phân công tài xế'}</span>
-              </button>
-            )}
-
-            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && (
-              <button
-                type="button"
-                onClick={() => setShowAddChargeModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-900 hover:bg-indigo-100 transition shadow-2xs"
-              >
-                <Icon name="add_card" className="text-[18px]" />
-                <span>Thêm phụ phí</span>
-              </button>
-            )}
-
-            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' &&
-              booking.providerConfirmedAt && booking.renterConfirmedAt && (
-              <button
-                type="button"
-                onClick={handleFinalizeSettlement}
-                disabled={finalizing}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-purple-800 disabled:opacity-50"
-              >
-                <Icon name="price_check" className="text-[18px]" />
-                <span>{finalizing ? 'Đang chốt...' : 'Chốt quyết toán'}</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 2-Column Responsive Layout */}
+        {/* 4. Khách hàng & Lịch trình đón & 5. Chi phí & Quyết toán */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* LEFT COLUMN: Customer, Vehicle, Driver, Map, Surcharges, Incidents, Evidence (8 cols) */}
-          <div className="lg:col-span-8 space-y-5">
-            {/* Customer & Trip Overview Card */}
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+          {/* 4. Khách hàng & Lịch trình đón (7 cols) */}
+          <div className="lg:col-span-7">
+            <div className="h-full rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between space-y-4">
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Icon name="person" className="text-[18px] text-brand-700" />
                 <span>Khách hàng &amp; Lịch trình đón</span>
@@ -458,9 +570,63 @@ export default function ProviderBookingDetailPage() {
                 </div>
               </div>
             </div>
+          </div>
 
+          {/* 5. Chi phí & Quyết toán (5 cols) */}
+          <div className="lg:col-span-5">
+            <div className="h-full rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 flex flex-col justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Icon name="payments" className="text-[18px] text-brand-700" />
+                  <span>Chi phí &amp; Quyết toán</span>
+                </h2>
+
+                <div className="mt-3 rounded-lg border border-brand-200 bg-slate-50 p-4 text-center">
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Tổng chi phí</span>
+                  <span className="text-2xl font-black font-mono text-brand-900 mt-1 block">
+                    {formatVnd(booking.totalAmount)}
+                  </span>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán & quyết toán' : 'Bao gồm tiền thuê gốc & phụ phí'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Policy Snapshot breakdown */}
+              <div className="space-y-2 text-xs border-t border-slate-100 pt-3">
+                <div className="flex justify-between text-slate-600">
+                  <span>Giá 1 slot thuê:</span>
+                  <strong className="text-slate-900 font-mono">{formatVnd(booking.slotPrice)}</strong>
+                </div>
+                {booking.depositRatio != null && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Tỷ lệ đặt cọc:</span>
+                    <strong className="text-slate-900">{Number(booking.depositRatio * 100).toFixed(0)}%</strong>
+                  </div>
+                )}
+                {booking.allowedOvertimeMinutes != null && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Vượt giờ miễn phí:</span>
+                    <strong className="text-slate-900">{booking.allowedOvertimeMinutes} phút</strong>
+                  </div>
+                )}
+                {booking.freeRadiusKm != null && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Bán kính miễn phí:</span>
+                    <strong className="text-slate-900">{booking.freeRadiusKm} km</strong>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 6. Các thông tin chi tiết còn lại (Phương tiện, Tài xế, Map, Phụ phí, Sự cố, Minh chứng, Giao dịch, Timeline) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Cột trái (8 cols): Phương tiện, Tài xế, Bản đồ, Phụ phí, Sự cố, Minh chứng */}
+          <div className="lg:col-span-8 space-y-5">
             {/* Vehicle Information Card */}
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <Icon name="directions_car" className="text-[18px] text-brand-700" />
@@ -510,21 +676,12 @@ export default function ProviderBookingDetailPage() {
             </div>
 
             {/* Assigned Driver Card */}
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <Icon name="badge" className="text-[18px] text-brand-700" />
                   <span>Tài xế phân công</span>
                 </h2>
-                {!isRejected && !isCancelled && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAssignModal(true)}
-                    className="text-xs font-bold text-brand-700 hover:text-brand-900 transition"
-                  >
-                    {booking.driverName ? 'Thay đổi tài xế' : '+ Phân công tài xế ngay'}
-                  </button>
-                )}
               </div>
 
               {booking.driverName ? (
@@ -553,70 +710,60 @@ export default function ProviderBookingDetailPage() {
 
                   <div className="text-right shrink-0">
                     {(() => {
-                      const isCompleted = Boolean(booking.actualEndAt || booking.status === 'COMPLETED');
-                      const isInProgress = Boolean(booking.actualStartAt || booking.status === 'IN_PROGRESS' || booking.executionStatus === 'IN_PROGRESS');
-                      const isArrived = Boolean(booking.actualArrivedAt || booking.status === 'DRIVER_ARRIVED' || booking.executionStatus === 'ARRIVED');
-                      const isConfirmed = Boolean(booking.driverConfirmedAt || booking.status === 'DRIVER_CONFIRMED' || booking.executionStatus === 'CONFIRMED');
+                      const isCompleted = Boolean(booking.actualEndAt || booking.status === 'COMPLETED')
+                      const isInProgress = Boolean(booking.actualStartAt || booking.status === 'IN_PROGRESS' || booking.executionStatus === 'IN_PROGRESS')
+                      const isArrived = Boolean(booking.actualArrivedAt || booking.status === 'DRIVER_ARRIVED' || booking.executionStatus === 'ARRIVED')
+                      const isConfirmed = Boolean(booking.driverConfirmedAt || booking.status === 'DRIVER_CONFIRMED' || booking.executionStatus === 'CONFIRMED')
 
                       if (isCompleted) {
                         return (
                           <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-800 border border-slate-200">
                             Đã hoàn thành chuyến
                           </span>
-                        );
+                        )
                       }
                       if (isInProgress) {
                         return (
                           <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
                             Đang thực hiện chuyến
                           </span>
-                        );
+                        )
                       }
                       if (isArrived) {
                         return (
                           <span className="inline-block rounded-full bg-cyan-100 px-2.5 py-0.5 text-[10px] font-bold text-cyan-800 border border-cyan-200">
                             Đã đến điểm đón
                           </span>
-                        );
+                        )
                       }
                       if (isConfirmed) {
                         return (
                           <span className="inline-block rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-bold text-teal-800 border border-teal-200">
                             Tài xế đã nhận chuyến
                           </span>
-                        );
+                        )
                       }
                       return (
                         <span className="inline-block rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-800 border border-blue-200">
                           Chờ tài xế xác nhận
                         </span>
-                      );
+                      )
                     })()}
                   </div>
                 </div>
               ) : (
                 <div className="py-6 px-4 rounded-xl border border-dashed border-amber-300 bg-amber-50/50 text-center">
                   <span className="text-xs font-bold text-amber-900 block">Chưa phân công tài xế</span>
-                  <p className="text-[11px] text-amber-700 mt-0.5">
-                    Hãy mở bộ điều phối để phân công tài xế tự động hoặc chọn từ danh sách đề xuất.
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    Đơn thuê chưa được chỉ định tài xế. Vui lòng sử dụng nút <strong>&quot;Phân công tài xế&quot;</strong> ở góc trên bên phải màn hình để thực hiện điều phối.
                   </p>
-                  {!isRejected && !isCancelled && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAssignModal(true)}
-                      className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-brand-800"
-                    >
-                      <Icon name="assignment_ind" className="text-[16px]" />
-                      <span>Mở giao diện điều phối</span>
-                    </button>
-                  )}
                 </div>
               )}
             </div>
 
             {/* Live GPS Map & Execution Milestones */}
             {booking.driverName && (
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
                     <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -686,9 +833,76 @@ export default function ProviderBookingDetailPage() {
               </div>
             )}
 
+            {/* Surcharges Breakdown Table */}
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Icon name="receipt_long" className="text-[18px] text-brand-700" />
+                    <span>Bóc tách phụ phí phát sinh ({booking.charges?.length || 0})</span>
+                  </h2>
+                  <p className="text-xs text-slate-500">Các khoản phụ thu quá giờ, chờ đợi, bán kính ngoài</p>
+                </div>
+                {(booking.canAssignDriver || booking.canAutoAssignDriver) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddChargeModal(true)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Icon name="add" className="text-[16px]" />
+                    <span>Thêm phụ phí</span>
+                  </button>
+                )}
+              </div>
+
+              {booking.charges && booking.charges.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[500px] border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                        <th className="px-3.5 py-2.5">Khoản phụ phí</th>
+                        <th className="px-3.5 py-2.5">Số lượng</th>
+                        <th className="px-3.5 py-2.5 text-right">Đơn giá</th>
+                        <th className="px-3.5 py-2.5 text-right">Thành tiền</th>
+                        <th className="px-3.5 py-2.5">Minh chứng</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {booking.charges.map((c) => (
+                        <tr key={c.id} className="hover:bg-slate-50/50">
+                          <td className="px-3.5 py-2.5 font-semibold text-slate-800">
+                            <div>{c.description}</div>
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                              {c.chargeType}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-2.5 text-slate-600">{c.quantity ?? '1'}</td>
+                          <td className="px-3.5 py-2.5 text-right font-mono text-slate-600">{formatVnd(c.unitPrice)}</td>
+                          <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">{formatVnd(c.amount)}</td>
+                          <td className="px-3.5 py-2.5 text-slate-500">
+                            {c.evidenceUrl ? (
+                              <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline">
+                                Xem link
+                              </a>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
+                  Chưa có phụ phí phát sinh nào được ghi nhận cho đơn này
+                </div>
+              )}
+            </div>
+
             {/* Incident Records Section */}
             {incidents.length > 0 && (
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <Icon name="report_problem" className="text-[18px] text-red-600" />
@@ -752,7 +966,7 @@ export default function ProviderBookingDetailPage() {
 
             {/* Trip Evidence Gallery */}
             {evidenceList.length > 0 && (
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <Icon name="photo_camera" className="text-[18px] text-brand-700" />
@@ -811,147 +1025,39 @@ export default function ProviderBookingDetailPage() {
                 </div>
               </div>
             )}
-
-            {/* Surcharges Breakdown Table */}
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Icon name="receipt_long" className="text-[18px] text-brand-700" />
-                    <span>Bóc tách phụ phí phát sinh ({booking.charges?.length || 0})</span>
-                  </h2>
-                  <p className="text-xs text-slate-500">Các khoản phụ thu quá giờ, chờ đợi, bán kính ngoài</p>
-                </div>
-                {!isRejected && !isCancelled && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAddChargeModal(true)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <Icon name="add" className="text-[16px]" />
-                    <span>Thêm phụ phí</span>
-                  </button>
-                )}
-              </div>
-
-              {booking.charges && booking.charges.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full min-w-[500px] border-collapse text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
-                        <th className="px-3.5 py-2.5">Khoản phụ phí</th>
-                        <th className="px-3.5 py-2.5">Số lượng</th>
-                        <th className="px-3.5 py-2.5 text-right">Đơn giá</th>
-                        <th className="px-3.5 py-2.5 text-right">Thành tiền</th>
-                        <th className="px-3.5 py-2.5">Minh chứng</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {booking.charges.map((c) => (
-                        <tr key={c.id} className="hover:bg-slate-50/50">
-                          <td className="px-3.5 py-2.5 font-semibold text-slate-800">
-                            <div>{c.description}</div>
-                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded inline-block mt-0.5">
-                              {c.chargeType}
-                            </span>
-                          </td>
-                          <td className="px-3.5 py-2.5 text-slate-600">{c.quantity ?? '1'}</td>
-                          <td className="px-3.5 py-2.5 text-right font-mono text-slate-600">{formatVnd(c.unitPrice)}</td>
-                          <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">{formatVnd(c.amount)}</td>
-                          <td className="px-3.5 py-2.5 text-slate-500">
-                            {c.evidenceUrl ? (
-                              <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline">
-                                Xem link
-                              </a>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
-                  Chưa có phụ phí phát sinh nào được ghi nhận cho đơn này
-                </div>
-              )}
-            </div>
           </div>
 
-          {/* RIGHT COLUMN: Financial Summary, Policies, Timeline (4 cols) */}
+          {/* Cột phải (4 cols): Lịch sử giao dịch VNPAY/Cọc & Timeline */}
           <div className="lg:col-span-4 space-y-5">
-            {/* Price Summary Card */}
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Icon name="payments" className="text-[18px] text-brand-700" />
-                <span>Chi phí &amp; Quyết toán</span>
-              </h2>
-
-              <div className="rounded-lg border border-brand-200 bg-slate-50 p-4 text-center">
-                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Tổng chi phí</span>
-                <span className="text-2xl font-black font-mono text-brand-900 mt-1 block">
-                  {formatVnd(booking.totalAmount)}
-                </span>
-                <span className="text-[11px] text-slate-500 mt-0.5 block">
-                  {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán' : 'Bao gồm tiền thuê gốc & phụ phí'}
-                </span>
-              </div>
-
-              {/* Policy Snapshot breakdown */}
-              <div className="space-y-2 text-xs border-t border-slate-100 pt-3">
-                <div className="flex justify-between text-slate-600">
-                  <span>Giá 1 slot thuê:</span>
-                  <strong className="text-slate-900 font-mono">{formatVnd(booking.slotPrice)}</strong>
-                </div>
-                {booking.depositRatio != null && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>Tỷ lệ đặt cọc:</span>
-                    <strong className="text-slate-900">{Number(booking.depositRatio * 100).toFixed(0)}%</strong>
-                  </div>
-                )}
-                {booking.allowedOvertimeMinutes != null && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>Vượt giờ miễn phí:</span>
-                    <strong className="text-slate-900">{booking.allowedOvertimeMinutes} phút</strong>
-                  </div>
-                )}
-                {booking.freeRadiusKm != null && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>Bán kính miễn phí:</span>
-                    <strong className="text-slate-900">{booking.freeRadiusKm} km</strong>
-                  </div>
-                )}
-              </div>
-
-              {/* Payment Transactions list */}
-              {booking.paymentTransactions && booking.paymentTransactions.length > 0 && (
-                <div className="border-t border-slate-100 pt-3 space-y-2">
-                  <span className="text-xs font-bold text-slate-800 block">Lịch sử giao dịch VNPAY/Cọc:</span>
-                  <div className="space-y-1.5">
-                    {booking.paymentTransactions.map((tx) => (
-                      <div key={tx.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs flex justify-between items-center">
-                        <div>
-                          <div className="font-semibold text-slate-900">{tx.type}</div>
-                          <div className="text-[10px] text-slate-400">{formatDateTime(tx.paidAt || tx.createdAt)}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-mono font-bold text-slate-900">{formatVnd(tx.amount)}</div>
-                          <span className="text-[10px] text-emerald-700 font-semibold">{tx.status}</span>
-                        </div>
+            {/* Payment Transactions list */}
+            {booking.paymentTransactions && booking.paymentTransactions.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Icon name="account_balance" className="text-[18px] text-brand-700" />
+                  <span>Lịch sử giao dịch &amp; Cọc</span>
+                </h2>
+                <div className="space-y-1.5 text-xs">
+                  {booking.paymentTransactions.map((tx) => (
+                    <div key={tx.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-slate-900">{tx.type}</div>
+                        <div className="text-[10px] text-slate-400">{formatDateTime(tx.paidAt || tx.createdAt)}</div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-slate-900">{formatVnd(tx.amount)}</div>
+                        <span className="text-[10px] text-emerald-700 font-semibold">{tx.status}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Timeline */}
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Icon name="history" className="text-[18px] text-brand-700" />
-                <span>Tiến trình đơn</span>
+                <span>Tiến trình thời gian</span>
               </h2>
 
               <div className="relative pl-5 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 text-xs">
@@ -972,14 +1078,19 @@ export default function ProviderBookingDetailPage() {
       {/* Incident Resolution Dialog */}
       {resolvingIncident && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Xử lý sự cố"
+            className="w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden rounded-xl bg-white p-6 shadow-lg border border-slate-200"
+          >
             <h3 className="text-base font-bold text-slate-900 mb-2">
               Xử lý sự cố: {INCIDENT_TYPE_LABELS[resolvingIncident.incidentType] || resolvingIncident.incidentType}
             </h3>
             <p className="text-xs text-slate-600 mb-4">{resolvingIncident.description}</p>
-            <form onSubmit={handleResolveIncident} className="space-y-4">
+            <form onSubmit={handleResolveIncident} className="space-y-4 overflow-y-auto">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Phương án giải quyết &amp; Ghi chú nghiệp vụ <span className="text-red-500">*</span>
                 </label>
                 <textarea
@@ -987,22 +1098,23 @@ export default function ProviderBookingDetailPage() {
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
                   placeholder="Ví dụ: Đã liên hệ điều xe cứu hộ / Khách đã đổi giờ đón..."
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 focus:border-brand-600 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-800 focus:border-brand-600 focus:outline-none"
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2.5 pt-2">
                 <button
                   type="button"
+                  disabled={submittingResolution}
                   onClick={() => setResolvingIncident(null)}
-                  className="rounded-lg border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Đóng
                 </button>
                 <button
                   type="submit"
                   disabled={submittingResolution}
-                  className="rounded-lg bg-brand-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-brand-700 px-4 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50"
                 >
                   {submittingResolution ? 'Đang lưu...' : 'Xác nhận giải quyết'}
                 </button>
@@ -1028,6 +1140,7 @@ export default function ProviderBookingDetailPage() {
       />
 
       <AssignDriverModal
+        onRefresh={refetch}
         booking={booking}
         currentDriverId={booking.driverId}
         isOpen={showAssignModal}

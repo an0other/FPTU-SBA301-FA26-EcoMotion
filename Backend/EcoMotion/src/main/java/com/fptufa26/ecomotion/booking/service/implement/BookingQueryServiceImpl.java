@@ -12,23 +12,44 @@ import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.booking.service.BookingQueryService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Optional;
-
 @Service
 @RequiredArgsConstructor
 public class BookingQueryServiceImpl implements BookingQueryService {
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget> pendingGatewayPayments(int limit) {
+        if (limit < 1 || limit > 100) throw new IllegalArgumentException("Reconciliation batch must be between 1 and 100");
+        return paymentTransactionRepository.findByMethodAndStatusAndVnpTxnRefIsNotNullOrderByUpdatedAtAscCreatedAtAsc(
+                com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY, PaymentStatus.PENDING,
+                org.springframework.data.domain.PageRequest.of(0, limit)).stream()
+                .map(t -> new com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget(t.getBooking().getBookingCode(), t.getVnpTxnRef())).toList();
+    }
+
     private final BookingRepository bookingRepository;
+    private final EntityManager entityManager;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final BookingChargeRepository bookingChargeRepository;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
+
+    @Override
+    @Transactional
+    public Booking lockBookingForPayment(Long id) {
+        Booking booking = entityManager.find(Booking.class, id);
+        if (booking == null) throw new com.fptufa26.ecomotion.common.exception.NotFoundException("Không tìm thấy booking");
+        entityManager.refresh(booking, LockModeType.PESSIMISTIC_WRITE);
+        return booking;
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -82,6 +103,14 @@ public class BookingQueryServiceImpl implements BookingQueryService {
     @Transactional(readOnly = true)
     public List<PaymentTransaction> findTransactionsByBookingIdOrderByCreatedAtAsc(Long bookingId) {
         return paymentTransactionRepository.findByBooking_IdOrderByCreatedAtAsc(bookingId);
+    }
+
+    @Override
+    @Transactional
+    public Optional<PaymentTransaction> findTransactionByVnpTxnRefForUpdate(String vnpTxnRef) {
+        var transaction = paymentTransactionRepository.findByVnpTxnRefForUpdate(vnpTxnRef);
+        transaction.ifPresent(tx -> entityManager.refresh(tx, LockModeType.PESSIMISTIC_WRITE));
+        return transaction;
     }
 
     @Override

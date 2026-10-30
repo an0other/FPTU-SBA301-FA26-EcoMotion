@@ -1,180 +1,60 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { getAccessToken } from '../utils/tokenStore.js'
 
-/**
- * TV5 Realtime Event Contract definitions.
- * Use these constants to subscribe to dispatch, lifecycle, and finance events.
- */
-export const TV5_REALTIME_EVENTS = {
-  BOOKING_CONFIRMED: 'BOOKING_CONFIRMED',
-  DRIVER_ASSIGNED: 'DRIVER_ASSIGNED',
-  DRIVER_STATUS_CHANGED: 'DRIVER_STATUS_CHANGED',
-  DRIVER_ACCEPTED: 'DRIVER_ACCEPTED',
-  DRIVER_REJECTED: 'DRIVER_REJECTED',
-  DRIVER_REASSIGNED: 'DRIVER_REASSIGNED',
-  TRIP_STARTED: 'TRIP_STARTED',
-  TRIP_COMPLETED: 'TRIP_COMPLETED',
-  DRIVER_INCIDENT: 'DRIVER_INCIDENT',
-  PAYMENT_VERIFIED: 'PAYMENT_VERIFIED',
-  REFUND_UPDATED: 'REFUND_UPDATED',
-}
+export const TV5_REALTIME_EVENTS = Object.fromEntries([
+  'BOOKING_CONFIRMED', 'BOOKING_CHANGED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED',
+  'DRIVER_ACCEPTED', 'DRIVER_REJECTED', 'DRIVER_REASSIGNED', 'DRIVER_TIMEOUT', 'DRIVER_UNAVAILABLE',
+  'DRIVER_ARRIVED', 'DRIVER_STATUS_CHANGED', 'TRIP_STARTED', 'TRIP_COMPLETED',
+  'DRIVER_INCIDENT', 'INCIDENT_RESOLVED', 'CHARGES_CHANGED', 'PAYMENT_VERIFIED', 'PAYMENT_RECONCILIATION_REQUIRED', 'REFUND_UPDATED', 'OPERATIONAL_PROPOSAL_CHANGED',
+].map(name => [name, name]))
 
-/**
- * useRealtimeSync Hook
- * Connects to the existing SSE Notification stream when available.
- * If SSE is not yet running or disconnected, falls back seamlessly to
- * window-focus revalidation and periodic quiet polling to maintain
- * absolute state parity between Provider and Driver dashboards.
- *
- * @param {Object} options
- * @param {Object} options.handlers - Map of { [EVENT_NAME]: (payload) => void }
- * @param {Function} options.onResync - Callback to refetch data on sync triggers
- * @param {number} [options.pollIntervalMs=15000] - Fallback poll interval when SSE offline
- * @param {boolean} [options.enabled=true] - Toggle sync active
- */
-export function useRealtimeSync({
-  handlers = {},
-  onResync,
-  pollIntervalMs = 15000,
-  enabled = true,
-} = {}) {
+export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 15000, enabled = true } = {}) {
   const [isConnected, setIsConnected] = useState(false)
   const [sseAvailable, setSseAvailable] = useState(true)
-  const [lastSyncedAt, setLastSyncedAt] = useState(new Date())
-
+  const [lastSyncedAt, setLastSyncedAt] = useState(null)
   const handlersRef = useRef(handlers)
   const onResyncRef = useRef(onResync)
-  handlersRef.current = handlers
-  onResyncRef.current = onResync
-
-  const triggerSync = useCallback(() => {
-    setLastSyncedAt(new Date())
-    if (typeof onResyncRef.current === 'function') {
-      try {
-        onResyncRef.current()
-      } catch (err) {
-        console.warn('RealtimeSync onResync callback error:', err)
-      }
+  const pending = useRef(false)
+  useEffect(() => { handlersRef.current = handlers; onResyncRef.current = onResync }, [handlers, onResync])
+  const triggerSync = useCallback(async () => {
+    if (pending.current) return
+    pending.current = true
+    try {
+      await onResyncRef.current?.()
+      setLastSyncedAt(new Date())
+    } finally {
+      pending.current = false
     }
   }, [])
-
-  // Listen to Window Focus and Online events to resync state immediately
   useEffect(() => {
     if (!enabled) return
-
-    const handleFocusOrOnline = () => {
-      triggerSync()
-    }
-
-    window.addEventListener('focus', handleFocusOrOnline)
-    window.addEventListener('online', handleFocusOrOnline)
-
+    const sync = () => { if (document.visibilityState === 'visible') triggerSync().catch(() => {}) }
+    window.addEventListener('focus', sync)
+    window.addEventListener('online', sync)
+    document.addEventListener('visibilitychange', sync)
+    const timer = pollIntervalMs ? setInterval(sync, pollIntervalMs) : null
     return () => {
-      window.removeEventListener('focus', handleFocusOrOnline)
-      window.removeEventListener('online', handleFocusOrOnline)
+      if (timer) clearInterval(timer)
+      window.removeEventListener('focus', sync)
+      window.removeEventListener('online', sync)
+      document.removeEventListener('visibilitychange', sync)
     }
-  }, [enabled, triggerSync])
-
-  // Fallback Polling when SSE is unavailable or down
+  }, [enabled, pollIntervalMs, triggerSync])
   useEffect(() => {
-    if (!enabled || isConnected || !pollIntervalMs) return
-
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') triggerSync()
-    }, pollIntervalMs)
-
-    return () => clearInterval(timer)
-  }, [enabled, isConnected, pollIntervalMs, triggerSync])
-
-  // SSE Connection attempt
-  useEffect(() => {
-    if (!enabled || typeof EventSource === 'undefined') {
-      setSseAvailable(false)
-      return
-    }
-
     const token = getAccessToken()
-    if (!token) {
-      setSseAvailable(false)
-      return
+    if (!enabled || !token || typeof EventSource === 'undefined') return
+    const source = new EventSource('/api/v1/notifications/stream?token=' + encodeURIComponent(token))
+    source.onopen = () => { setIsConnected(true); setSseAvailable(true); triggerSync().catch(() => {}) }
+    source.onerror = () => { setIsConnected(false); setSseAvailable(false) }
+    const receive = event => {
+      let data
+      try { data = JSON.parse(event.data) } catch { return }
+      handlersRef.current[event.type]?.(data)
+      triggerSync().catch(() => {})
     }
-
-    // Attempt standard SSE notification stream endpoint
-    const streamUrl = `/api/v1/notifications/stream?token=${encodeURIComponent(token)}`
-
-    let eventSource = null
-    let reconnectTimeout = null
-
-    try {
-      eventSource = new EventSource(streamUrl)
-
-      eventSource.onopen = () => {
-        setIsConnected(true)
-        setSseAvailable(true)
-        triggerSync()
-      }
-
-      eventSource.onerror = () => {
-        setIsConnected(false)
-        // If SSE endpoint fails (e.g. 404 or backend SSE not yet mounted), fallback quietly to polling
-        setSseAvailable(false)
-        if (eventSource) {
-          eventSource.close()
-          eventSource = null
-        }
-      }
-
-      // Register listener for generic message
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          const eventType = data?.type || data?.event
-          if (eventType && handlersRef.current[eventType]) {
-            handlersRef.current[eventType](data.payload || data)
-          }
-          if (handlersRef.current['*']) {
-            handlersRef.current['*'](eventType, data)
-          }
-          triggerSync()
-        } catch {
-          // Ignore non-json heartbeats
-        }
-      }
-
-      // Register listeners for all specific TV5 events
-      Object.values(TV5_REALTIME_EVENTS).forEach((evName) => {
-        eventSource.addEventListener(evName, (event) => {
-          try {
-            const data = JSON.parse(event.data)
-            if (handlersRef.current[evName]) {
-              handlersRef.current[evName](data)
-            }
-          } catch {
-            if (handlersRef.current[evName]) {
-              handlersRef.current[evName](event.data)
-            }
-          }
-          triggerSync()
-        })
-      })
-    } catch {
-      setIsConnected(false)
-      setSseAvailable(false)
-    }
-
-    return () => {
-      if (reconnectTimeout) clearTimeout(reconnectTimeout)
-      if (eventSource) {
-        eventSource.close()
-      }
-      setIsConnected(false)
-    }
+    Object.values(TV5_REALTIME_EVENTS).forEach(name => source.addEventListener(name, receive))
+    source.onmessage = receive
+    return () => { source.close() }
   }, [enabled, triggerSync])
-
-  return {
-    isConnected,
-    sseAvailable,
-    lastSyncedAt,
-    triggerSync,
-  }
+  return { isConnected, sseAvailable, lastSyncedAt, triggerSync }
 }
