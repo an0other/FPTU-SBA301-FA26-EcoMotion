@@ -123,11 +123,9 @@ export const bookingService = {
     return data.data || data
   },
 
-  async getAvailableDrivers(bookingCode) {
-    const { data } = await apiClient.get('/provider/drivers/available', {
-      params: { bookingCode: String(bookingCode ?? '').trim().toUpperCase() },
-    })
-    return data.data || data
+  async getAvailableDrivers(bookingId) {
+    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(bookingId)}/assign-candidates`)
+    return (data.data || data).map(driver => ({ ...driver, id: driver.driverId, available: driver.eligible }))
   },
 
   async assignDriver(bookingCode, driverId, mode = 'MANUAL') {

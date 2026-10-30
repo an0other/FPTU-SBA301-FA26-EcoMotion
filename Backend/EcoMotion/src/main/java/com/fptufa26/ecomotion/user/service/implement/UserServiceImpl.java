@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.user.service.implement;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
+import com.fptufa26.ecomotion.finance.enums.SupportedBank;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
@@ -21,6 +22,8 @@ import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
 import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -45,6 +48,7 @@ public class UserServiceImpl implements UserService {
     private final ProviderRepository providerRepository;
     private final DriverRepository driverRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional(readOnly = true)
@@ -310,8 +314,8 @@ public class UserServiceImpl implements UserService {
 
         boolean anyBank = !isBlank(bankName) || !isBlank(bankAccountNo) || !isBlank(bankAccountHolder);
         if (anyBank) {
-            String bCode = com.fptufa26.ecomotion.finance.enums.SupportedBank.fromName(bankName)
-                    .map(com.fptufa26.ecomotion.finance.enums.SupportedBank::getCode)
+            String bCode = SupportedBank.fromName(bankName)
+                    .map(SupportedBank::getCode)
                     .orElse("VCB");
             provider.setBankCode(bCode);
             provider.setBankName(bankName.trim());
@@ -548,5 +552,80 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public long countPendingDrivers() {
         return driverRepository.countByStatus(DriverStatus.PENDING);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Provider> findProviderById(Long providerId) {
+        if (providerId == null) {
+            return Optional.empty();
+        }
+        return providerRepository.findById(providerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Provider> findAllProviders() {
+        return providerRepository.findAll();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Driver> findDriverById(Long driverId) {
+        if (driverId == null) {
+            return Optional.empty();
+        }
+        return driverRepository.findById(driverId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Driver> findDriversByProviderId(Long providerId) {
+        if (providerId == null) {
+            return List.of();
+        }
+        return driverRepository.findByProvider_IdWithUser(providerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Driver> findDriversByProviderIdAndStatus(Long providerId, DriverStatus status) {
+        if (providerId == null) {
+            return List.of();
+        }
+        return driverRepository.findByProvider_IdAndStatus(providerId, status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Driver> findDriverByIdAndProviderId(Long driverId, Long providerId) {
+        if (driverId == null || providerId == null) {
+            return Optional.empty();
+        }
+        return driverRepository.findByIdAndProvider_Id(driverId, providerId);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Driver> findDriverByIdForUpdate(Long driverId) {
+        if (driverId == null) {
+            return Optional.empty();
+        }
+        Optional<Driver> result = driverRepository.findByIdForUpdate(driverId);
+        // Candidate evaluation may already have loaded this driver before waiting for the lock.
+        result.ifPresent(driver -> entityManager.refresh(driver, LockModeType.PESSIMISTIC_WRITE));
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Driver saveDriver(Driver driver) {
+        return driverRepository.save(driver);
+    }
+
+    @Override
+    @Transactional
+    public Provider saveProvider(Provider provider) {
+        return providerRepository.save(provider);
     }
 }

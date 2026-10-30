@@ -28,23 +28,13 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
+@RequiredArgsConstructor
 public class DisputeServiceImpl implements DisputeService {
 
     private final DisputeRepository disputeRepository;
     private final UserService userService;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
-
-    public DisputeServiceImpl(
-            DisputeRepository disputeRepository,
-            UserService userService,
-            BookingPaymentLedgerService bookingPaymentLedgerService,
-            PaymentRequestService paymentRequestService) {
-        this.disputeRepository = disputeRepository;
-        this.userService = userService;
-        this.bookingPaymentLedgerService = bookingPaymentLedgerService;
-        this.paymentRequestService = paymentRequestService;
-    }
 
     @Override
     @Transactional
@@ -63,7 +53,7 @@ public class DisputeServiceImpl implements DisputeService {
             }
         } else if (disputeRepository.existsByBooking_IdAndCategoryAndStatusAndChargeIsNull(
                 booking.getId(), category, DisputeStatus.OPEN)) {
-            throw new ConflictException("An open dispute already exists for this category");
+                throw new ConflictException("An open dispute already exists for this category");
         }
 
         Dispute dispute = new Dispute();
@@ -183,5 +173,18 @@ public class DisputeServiceImpl implements DisputeService {
     @Transactional(readOnly = true)
     public long countTotalDisputes() {
         return disputeRepository.count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveDispute(Long bookingId) {
+        return disputeRepository.existsByBooking_IdAndStatusIn(
+                bookingId, List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Dispute> getDisputesByBookingId(Long bookingId) {
+        return disputeRepository.findByBooking_Id(bookingId);
     }
 }

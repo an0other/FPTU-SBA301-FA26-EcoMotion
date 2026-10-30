@@ -4,6 +4,9 @@ import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
+import com.fptufa26.ecomotion.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -60,10 +63,13 @@ public class PaymentTransaction {
     @Column(nullable = false, length = 20)
     private PaymentMethod method;
 
+    @Column(name = "transaction_code", length = 32, unique = true)
+    private String transactionCode;
+
     @Column(name = "gateway_ref", length = 100)
     private String gatewayRef;
 
-    @Column(name = "vnp_txn_ref", length = 100)
+    @Column(name = "vnp_txn_ref", length = 100, unique = true)
     private String vnpTxnRef;
 
     @Column(name = "vnp_transaction_no", length = 100)
@@ -93,11 +99,11 @@ public class PaymentTransaction {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "verification_method", length = 30)
-    private com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod verificationMethod = com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED;
+    private PaymentVerificationMethod verificationMethod = PaymentVerificationMethod.PROVIDER_CONFIRMED;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "payment_request_id")
-    private com.fptufa26.ecomotion.finance.entity.PaymentRequest paymentRequest;
+    private PaymentRequest paymentRequest;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "receiving_bank_account_id")
@@ -106,9 +112,15 @@ public class PaymentTransaction {
     @Column(name = "processing_note", length = 500)
     private String processingNote;
 
+    @Column(name = "payout_gross_amount", precision = 14, scale = 2)
+    private BigDecimal payoutGrossAmount;
+
+    @Column(name = "payout_fee_amount", precision = 14, scale = 2)
+    private BigDecimal payoutFeeAmount;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "confirmed_by_id")
-    private com.fptufa26.ecomotion.user.entity.User confirmedBy;
+    private User confirmedBy;
 
     @Column(name = "bank_code_snapshot", length = 20)
     private String bankCodeSnapshot;
@@ -141,7 +153,7 @@ public class PaymentTransaction {
             status = PaymentStatus.PENDING;
         }
         if (verificationMethod == null) {
-            verificationMethod = com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED;
+            verificationMethod = PaymentVerificationMethod.PROVIDER_CONFIRMED;
         }
         if (appliedAmount == null) {
             appliedAmount = BigDecimal.ZERO;

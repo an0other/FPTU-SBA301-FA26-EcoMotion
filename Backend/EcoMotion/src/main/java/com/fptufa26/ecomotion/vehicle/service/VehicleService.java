@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public interface VehicleService {
 
@@ -51,5 +52,10 @@ public interface VehicleService {
 
     long countTotalVehicles();
 
+    Optional<Vehicle> findVehicleById(Long id);
+
+    Optional<Vehicle> findVehicleByIdAndProviderId(Long vehicleId, Long providerId);
+
+    Optional<Vehicle> findVehicleByIdForUpdate(Long id);
     Vehicle requireApprovedProviderVehicleForUpdate(Long vehicleId, Long providerId);
 }

@@ -10,6 +10,7 @@ import java.time.Instant;
 
 public record PaymentTransactionResponse(
         Long id,
+        String transactionCode,
         Long chargeId,
         PaymentType type,
         BigDecimal amount,
@@ -20,4 +21,18 @@ public record PaymentTransactionResponse(
         Instant paidAt,
         Instant createdAt
 ) {
+    public PaymentTransactionResponse(
+            Long id,
+            Long chargeId,
+            PaymentType type,
+            BigDecimal amount,
+            PaymentDirection direction,
+            PaymentMethod method,
+            PaymentStatus status,
+            String gatewayRef,
+            Instant paidAt,
+            Instant createdAt
+    ) {
+        this(id, null, chargeId, type, amount, direction, method, status, gatewayRef, paidAt, createdAt);
+    }
 }

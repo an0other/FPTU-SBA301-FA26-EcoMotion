@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.finance.controller;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.finance.dto.request.CreateVnpayPaymentUrlRequest;
+import com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse;
 import com.fptufa26.ecomotion.finance.dto.response.VnpayCallbackResultResponse;
 import com.fptufa26.ecomotion.finance.dto.response.VnpayIpnResponse;
 import com.fptufa26.ecomotion.finance.dto.response.VnpayPaymentUrlResponse;
@@ -47,7 +48,7 @@ public class VnpayPaymentController {
 
     @GetMapping({"/settlement/{bookingCode}", "/settlements/{bookingCode}"})
     @Operation(summary = "Get settlement and final payable calculation for a booking")
-    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse> getSettlement(
+    public ApiResponse<RenterSettlementResponse> getSettlement(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable String bookingCode) {
         Long userId = principal != null ? principal.getUserId() : null;

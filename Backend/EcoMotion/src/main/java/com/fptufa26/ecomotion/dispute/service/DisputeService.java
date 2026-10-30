@@ -30,5 +30,8 @@ public interface DisputeService {
 
     long countTotalDisputes();
 
+    boolean hasActiveDispute(Long bookingId);
+
+    List<Dispute> getDisputesByBookingId(Long bookingId);
     boolean hasOpenDispute(Long bookingId);
 }

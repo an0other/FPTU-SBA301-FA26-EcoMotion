@@ -35,6 +35,13 @@ class DriverAvailabilityServiceTest {
     private BookingChargeRepository chargeRepository;
     @Mock
     private DriverAssignmentService driverAssignmentService;
+    @Mock
+    private java.time.Clock clock;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setupClock() {
+        org.mockito.Mockito.lenient().when(clock.instant()).thenReturn(Instant.parse("2026-10-28T00:00:00Z"));
+    }
 
     @InjectMocks
     private DriverAvailabilityServiceImpl service;
@@ -48,8 +55,6 @@ class DriverAvailabilityServiceTest {
         Instant end = start.plusSeconds(3600);
 
         when(driverAssignmentService.listEligible(eq(3L), any())).thenReturn(List.of(driver));
-        when(bookingRepository.findPotentialDriverConflicts(eq(11L), any(), eq(null), any()))
-                .thenReturn(List.of());
 
         assertThat(service.findAvailable(3L, vehicle, start, end, null)).containsExactly(driver);
     }

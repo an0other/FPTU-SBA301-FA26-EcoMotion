@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useDeadlineExpired } from '../../hooks/useDeadlineExpired'
 import {
   formatTripDateTime,
   getRelativeDayLabel,
   deriveExecutionStatus,
   getExecutionStatusConfig,
+  rentalTypeLabel,
 } from '../../utils/driverTripUtils'
 
 function Icon({ name, className = '' }) {
@@ -11,6 +13,7 @@ function Icon({ name, className = '' }) {
 }
 
 export default function DriverTripCard({ trip, onConfirm, onReject, actionLoading }) {
+  const assignmentExpired = useDeadlineExpired(trip?.assignmentExpiresAt)
   if (!trip) return null
 
   const executionStatus = deriveExecutionStatus(trip)
@@ -39,7 +42,7 @@ export default function DriverTripCard({ trip, onConfirm, onReject, actionLoadin
           </span>
           {trip.rentalType && (
             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-              {trip.rentalType === 'HOURLY' ? 'Theo giờ' : 'Theo ngày'}
+              {rentalTypeLabel(trip.rentalType)}
             </span>
           )}
         </div>
@@ -137,12 +140,13 @@ export default function DriverTripCard({ trip, onConfirm, onReject, actionLoadin
 
       {/* Action Footer */}
       <div className="mt-2 border-t border-slate-100 pt-3">
+        {isAssigned && trip.assignmentExpiresAt && <p className="mb-2 text-xs text-amber-900">Phản hồi trước {formatTripDateTime(trip.assignmentExpiresAt)}. Kiểm tra lại lịch và xe trước khi nhận.</p>}
         {isAssigned ? (
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => onReject?.(trip)}
-              disabled={actionLoading}
+              disabled={actionLoading || assignmentExpired}
               className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-50 transition"
             >
               Từ chối chuyến
@@ -150,7 +154,7 @@ export default function DriverTripCard({ trip, onConfirm, onReject, actionLoadin
             <button
               type="button"
               onClick={() => onConfirm?.(trip)}
-              disabled={actionLoading}
+              disabled={actionLoading || assignmentExpired}
               className="flex-1 rounded-lg bg-brand-700 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-brand-800 transition disabled:opacity-50"
             >
               Xác nhận nhận chuyến

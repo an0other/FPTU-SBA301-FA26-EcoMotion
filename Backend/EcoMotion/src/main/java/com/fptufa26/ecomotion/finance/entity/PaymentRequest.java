@@ -60,6 +60,9 @@ public class PaymentRequest {
     @Column(nullable = false, length = 10)
     private String currency = "VND";
 
+    @Column(name = "payment_code", length = 32, unique = true)
+    private String paymentCode;
+
     @Column(name = "transfer_reference", nullable = false, unique = true, length = 100)
     private String transferReference;
 

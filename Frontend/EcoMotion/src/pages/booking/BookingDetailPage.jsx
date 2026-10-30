@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useRealtimeSync } from '../../hooks/useRealtimeSync'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
@@ -6,6 +7,8 @@ import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyB
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
+import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSummary'
+import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 
 const CHARGE_LABELS = {
   BASE_RENTAL: 'Tiền thuê',
@@ -87,6 +90,7 @@ function toCard(detail) {
     pickupLatitude: detail.pickupLatitude,
     pickupLongitude: detail.pickupLongitude,
     driverNote: detail.driverNote,
+    driverReplacementRequired: Boolean(detail.driverReplacementRequired),
     pickupTime: detail.pickupTime,
     endTime: detail.endTime,
     formattedStart: formatWhen(detail.pickupTime),
@@ -108,30 +112,35 @@ export function BookingDetailPage() {
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
   const [operationalRisk, setOperationalRisk] = useState(null)
+  const [workflow, setWorkflow] = useState(null)
+  const [workflowError, setWorkflowError] = useState(null)
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
   const { trackingData, loading: trackingLoading, error: trackingError, refetch: refetchTracking } = useRenterTripTracking(
     bookingCode,
     trackingEnabled,
   )
 
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([getMyBooking(bookingCode), getMyBookingOperationalRisk(bookingCode)])
-      .then(([row, risk]) => {
-        if (!cancelled) {
-          setDetail(row)
-          setOperationalRisk(risk)
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) setError(readErrorMessage(err))
-      })
-    return () => {
-      cancelled = true
+  const sequence = useRef(0)
+  const refreshDetail = useCallback(async () => {
+    const id = ++sequence.current
+    try {
+      const [row, risk, progress] = await Promise.allSettled([getMyBooking(bookingCode), getMyBookingOperationalRisk(bookingCode), bookingWorkflowService.get(bookingCode)])
+      if (id !== sequence.current) return
+      if (row.status === 'rejected') throw row.reason
+      setDetail(row.value); setOperationalRisk(risk.status === 'fulfilled' ? risk.value : null); setError('')
+      setWorkflow(progress.status === 'fulfilled' ? progress.value : null)
+      setWorkflowError(progress.status === 'rejected' ? progress.reason.message : null)
+    } catch (err) {
+      if (id === sequence.current) setError(readErrorMessage(err))
     }
   }, [bookingCode])
+  useEffect(() => {
+    const timer = setTimeout(refreshDetail, 0)
+    return () => { clearTimeout(timer); ++sequence.current }
+  }, [refreshDetail])
+  useRealtimeSync({ onResync: refreshDetail })
 
-  if (!detail) {
+  if (!detail || detail.bookingCode?.toUpperCase() !== bookingCode?.toUpperCase()) {
     return <p className="max-w-3xl mx-auto px-6 py-16 text-sm text-[#14221A]">{error || 'Đang tải đơn...'}</p>
   }
 
@@ -139,6 +148,9 @@ export function BookingDetailPage() {
 
   return (
     <>
+      {error && <p role="alert" className="mx-auto max-w-5xl p-4 text-sm text-red-800">Không thể cập nhật trạng thái: {error}. Dữ liệu đang hiển thị có thể đã cũ.</p>}
+      {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
+      <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} error={workflowError} onRefresh={refreshDetail} /></div>
       <BookingDetail
         booking={booking}
         operationalRisk={operationalRisk}
@@ -148,21 +160,21 @@ export function BookingDetailPage() {
         onCancelBooking={async () => {
           const updated = await cancelMyBooking(booking.id)
           navigate(`/renter/bookings/${updated.bookingCode}`, { replace: true })
-          setDetail(await getMyBooking(updated.bookingCode))
+          await refreshDetail()
         }}
         onCompleteBooking={async () => {
           await confirmTripEnd(booking.id)
-          setDetail(await getMyBooking(booking.id))
+          await refreshDetail()
         }}
         onConfirmStart={async () => {
           await confirmTripStart(booking.id)
-          setDetail(await getMyBooking(booking.id))
+          await refreshDetail()
         }}
-        onOpenDispute={(body) => openDispute(booking.id, body)}
+        onOpenDispute={async body => { const result = await openDispute(booking.id, body); await refreshDetail(); return result }}
         onUploadDisputeEvidence={(file) => uploadDisputeEvidence(booking.id, file)}
         onEditRequest={async (body) => {
           await updateBookingRequestDetails(booking.id, body)
-          setDetail(await getMyBooking(booking.id))
+          await refreshDetail()
         }}
         trackingData={trackingData}
         trackingLoading={trackingLoading}

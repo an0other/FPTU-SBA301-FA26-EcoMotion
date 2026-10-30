@@ -26,6 +26,9 @@ import static org.mockito.Mockito.when;
 class BookingPickupQuoteTest {
     @Mock private VehicleCatalogService vehicleCatalogService;
     @Mock private MapLocationService mapLocationService;
+    @org.mockito.Mock
+    com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+
     @InjectMocks private BookingServiceImpl service;
 
     private final PickupQuoteRequest request = new PickupQuoteRequest(1L, 2L,

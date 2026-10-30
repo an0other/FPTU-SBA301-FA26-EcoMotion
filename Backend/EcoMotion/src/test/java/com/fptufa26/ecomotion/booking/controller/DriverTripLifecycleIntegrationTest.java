@@ -77,6 +77,7 @@ class DriverTripLifecycleIntegrationTest {
         booking.setDriver(driverNam);
         booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
         booking.setAssignedAt(Instant.now().minusSeconds(1800));
+        booking.setAssignmentExpiresAt(Instant.now().plusSeconds(900));
         booking.setDriverConfirmedAt(null);
         booking.setActualArrivedAt(null);
         booking.setActualStartAt(null);
@@ -185,12 +186,22 @@ class DriverTripLifecycleIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.status").value("AWAITING_END_CONFIRMATION"))
-                .andExpect(jsonPath("$.data.actualEndAt").exists());
+                .andExpect(jsonPath("$.data.actualEndAt").doesNotExist());
+
+        mockMvc.perform(get("/api/v1/driver/status")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.operationalStatus").value("ON_TRIP"));
 
         mockMvc.perform(post("/api/renter/bookings/{bookingCode}/confirm-end", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("AWAITING_EXTRA_CHARGE_CONFIRMATION"));
+
+        mockMvc.perform(get("/api/v1/driver/status")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.operationalStatus").value(org.hamcrest.Matchers.not("ON_TRIP")));
 
         mockMvc.perform(get("/api/provider/bookings/{bookingCode}", booking.getBookingCode())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
@@ -256,6 +267,7 @@ class DriverTripLifecycleIntegrationTest {
                 .filter(d -> "SEED-R16-D001".equals(d.getLicenseNo()))
                 .findFirst().orElseThrow();
 
+        booking.setPickupTime(Instant.now().plusSeconds(10 * 86400));
         booking.setStatus(BookingStatus.CONFIRMED);
         bookingRepository.saveAndFlush(booking);
 
@@ -271,6 +283,25 @@ class DriverTripLifecycleIntegrationTest {
         Booking updatedBooking = bookingRepository.findById(tripId).orElseThrow();
         assertThat(updatedBooking.getStatus()).isEqualTo(BookingStatus.DRIVER_ASSIGNED);
         assertThat(updatedBooking.getDriver().getId()).isEqualTo(driverNam.getId());
+    }
+
+    @Test
+    void expiredAssignmentCannotBeAcceptedAfterItsSlotWasReleased() throws Exception {
+        String driverToken = loginAndGetToken("driver.review@ecomotion.vn", "EcoMotion@123");
+        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+        Driver driver = driverRepository.findAll().stream()
+                .filter(d -> "SEED-R16-D001".equals(d.getLicenseNo())).findFirst().orElseThrow();
+        booking.setDriver(driver);
+        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
+        booking.setDriverConfirmedAt(null);
+        booking.setActualEndAt(null);
+        booking.setAssignmentExpiresAt(Instant.now().minusSeconds(1));
+        bookingRepository.saveAndFlush(booking);
+        mockMvc.perform(post("/api/v1/driver/trips/{tripId}/confirm", booking.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
+                .andExpect(status().isConflict());
+        assertThat(booking.getDriverConfirmedAt()).isNull();
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.DRIVER_ASSIGNED);
     }
 
     @Test

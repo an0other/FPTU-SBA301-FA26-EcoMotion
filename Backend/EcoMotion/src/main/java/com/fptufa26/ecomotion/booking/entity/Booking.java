@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.entity;
 
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
@@ -66,7 +67,7 @@ public class Booking {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "assignment_mode", length = 30)
-    private com.fptufa26.ecomotion.booking.enums.AssignmentMode assignmentMode = com.fptufa26.ecomotion.booking.enums.AssignmentMode.AUTO_SUGGEST;
+    private AssignmentMode assignmentMode = AssignmentMode.AUTO_SUGGEST;
 
     @Column(name = "reassign_count")
     private Integer reassignCount = 0;
@@ -177,6 +178,9 @@ public class Booking {
 
     @Column(name = "previous_pickup_time")
     private Instant previousPickupTime;
+
+    @jakarta.persistence.Embedded
+    private OperationalProposal operationalProposal;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
