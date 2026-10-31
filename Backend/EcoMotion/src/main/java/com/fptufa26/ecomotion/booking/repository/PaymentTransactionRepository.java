@@ -12,7 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import org.springframework.data.repository.query.Param;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.List;
 
