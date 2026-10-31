@@ -11,6 +11,8 @@ import java.util.List;
 
 public interface RefundService {
 
+    java.math.BigDecimal refundableAmount(Long currentUserId, String bookingCode);
+
     RefundResponse createRefundRequest(Long currentUserId, CreateRefundRequest request);
 
     RefundResponse reviewRefundRequest(Long currentUserId, Long refundRequestId, ReviewRefundRequest request);

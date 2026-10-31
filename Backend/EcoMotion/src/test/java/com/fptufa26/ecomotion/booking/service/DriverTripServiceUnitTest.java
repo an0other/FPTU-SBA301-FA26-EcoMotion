@@ -9,9 +9,9 @@ import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
 import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
-import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
 import com.fptufa26.ecomotion.booking.repository.VehicleLocationRepository;
 import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
+import com.fptufa26.ecomotion.booking.service.TripIncidentService;
 import com.fptufa26.ecomotion.booking.service.implement.DriverTripServiceImpl;
 import com.fptufa26.ecomotion.common.config.ClockConfig;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -26,6 +26,8 @@ import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
+import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,6 +63,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class DriverTripServiceUnitTest {
 
+    @Test void actualEndTimestampDoesNotImplyFinancialCompletion() {
+        Booking booking = new Booking();
+        booking.setActualEndAt(Instant.parse("2026-10-29T01:00:00Z"));
+        booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+        assertThat(DriverTripServiceImpl.deriveExecutionStatus(booking)).isEqualTo("AWAITING_FINAL_PAYMENT");
+        booking.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);
+        assertThat(DriverTripServiceImpl.deriveExecutionStatus(booking)).isEqualTo("AWAITING_END_CONFIRMATION");
+    }
+
     @Mock
     private BookingRepository bookingRepository;
 
@@ -71,7 +82,7 @@ class DriverTripServiceUnitTest {
     private DriverAssignmentRepository driverAssignmentRepository;
 
     @Mock
-    private TripIncidentRepository tripIncidentRepository;
+    private TripIncidentService tripIncidentService;
 
     @Mock
     private TripEvidenceRepository tripEvidenceRepository;
@@ -88,6 +99,12 @@ class DriverTripServiceUnitTest {
     @Mock
     private MapGeocodingService mapGeocodingService;
 
+    @Mock
+    private DriverStatusService driverStatusService;
+
+    @Mock
+    private NotificationStreamService notificationStreamService;
+
     private Clock fixedClock;
     private DriverTripService driverTripService;
 
@@ -103,14 +120,16 @@ class DriverTripServiceUnitTest {
                 bookingRepository,
                 vehicleLocationRepository,
                 driverAssignmentRepository,
-                tripIncidentRepository,
+                tripIncidentService,
                 tripEvidenceRepository,
                 driverOptimizationService,
                 userService,
                 vehicleService,
                 mapGeocodingService,
+                driverStatusService,
+                notificationStreamService,
                 fixedClock
-        );
+        , org.mockito.Mockito.mock(com.fptufa26.ecomotion.booking.service.BookingNotificationService.class));
 
         driverUser = new User();
         driverUser.setId(201L);

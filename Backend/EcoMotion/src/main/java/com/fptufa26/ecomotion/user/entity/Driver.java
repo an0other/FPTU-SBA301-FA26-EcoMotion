@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.user.entity;
 
+import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -59,6 +60,13 @@ public class Driver {
     @Column(nullable = false, length = 20)
     private DriverStatus status = DriverStatus.PENDING;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "activity_status", nullable = false, length = 20)
+    private DriverActivityStatus activityStatus = DriverActivityStatus.AVAILABLE;
+
+    @Column(name = "status_updated_at", nullable = false)
+    private Instant statusUpdatedAt;
+
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
 
@@ -83,8 +91,14 @@ public class Driver {
         if (updatedAt == null) {
             updatedAt = now;
         }
+        if (statusUpdatedAt == null) {
+            statusUpdatedAt = now;
+        }
         if (status == null) {
             status = DriverStatus.PENDING;
+        }
+        if (activityStatus == null) {
+            activityStatus = DriverActivityStatus.AVAILABLE;
         }
         if (ratingAvg == null) {
             ratingAvg = BigDecimal.ZERO;

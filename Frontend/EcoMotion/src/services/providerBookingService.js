@@ -8,8 +8,8 @@ export const providerBookingService = {
     return data?.data ?? []
   },
 
-  async listBookingsPaged(status, offset = 0, limit = 10) {
-    const params = { offset, limit }
+  async listBookingsPaged(status, offset = 0, limit = 10, filters = {}) {
+    const params = { ...filters, offset, limit }
     if (status && status !== 'ALL') params.status = status
     const { data } = await apiClient.get('/provider/bookings/paged', { params })
     return data?.data ?? { items: [], total: 0, offset: 0, limit: 10, hasMore: false }
@@ -77,10 +77,12 @@ export const providerBookingService = {
     return data?.data
   },
 
-  async getAvailableDrivers(bookingCode) {
-    const { data } = await apiClient.get('/provider/drivers/available', {
-      params: bookingCode ? { bookingCode: String(bookingCode).trim().toUpperCase() } : {},
-    })
+  async getAvailableDrivers(bookingId) {
+    if (bookingId) {
+      const candidates = await this.getAssignmentCandidates(bookingId)
+      return candidates.map(driver => ({ ...driver, id: driver.driverId }))
+    }
+    const { data } = await apiClient.get('/provider/drivers/available')
     return data?.data ?? []
   },
 
@@ -96,7 +98,7 @@ export const providerBookingService = {
 
   async autoAssignDriver(idOrCode) {
     const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(idOrCode)}/auto-assign`)
-    return data?.data
+    return { ...data?.data?.booking, solverStatus: data?.data?.solverStatus }
   },
 
   async getBookingIncidents(idOrCode) {
@@ -132,8 +134,8 @@ export const providerBookingService = {
     return data?.data
   },
 
-  async exportBookings(status) {
-    const params = {}
+  async exportBookings(status, filters = {}) {
+    const params = { ...filters }
     if (status && status !== 'ALL') params.status = status
     const response = await apiClient.get('/provider/bookings/export', {
       params,

@@ -11,6 +11,7 @@ import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleSort;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import com.fptufa26.ecomotion.vehicle.service.implement.VehicleServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,7 +48,11 @@ class VehicleServiceBoundaryTest {
     private UserService userService;
 
     @Mock
+
     private ScheduleService scheduleService;
+
+    @Mock
+    private VehicleDocumentRepository vehicleDocumentRepository;
 
     @Mock
     private MapLocationService mapLocationService;
@@ -58,7 +63,7 @@ class VehicleServiceBoundaryTest {
     void setUp() {
         service = new VehicleServiceImpl(
                 vehicleRepository, vehicleImageService, rentalPlanService, userService, scheduleService,
-                mapLocationService);
+                mapLocationService, vehicleDocumentRepository);
     }
 
     @Test

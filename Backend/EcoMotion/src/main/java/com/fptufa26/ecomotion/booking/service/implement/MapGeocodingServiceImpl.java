@@ -1,21 +1,13 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptufa26.ecomotion.booking.service.MapGeocodingService;
+import com.fptufa26.ecomotion.booking.service.map.MapGeocodingProvider;
+import com.fptufa26.ecomotion.booking.service.map.MapGeocodingProviderResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.URI;
-import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,35 +18,19 @@ public class MapGeocodingServiceImpl implements MapGeocodingService {
     private static final Logger log = LoggerFactory.getLogger(MapGeocodingServiceImpl.class);
     private static final int MAX_CACHE_SIZE = 500;
 
-    private final String searchUrl;
-    private final String userAgent;
-    private final RestClient restClient;
-    private final ObjectMapper objectMapper;
+    private final MapGeocodingProviderResolver providerResolver;
+    private final MapGeocodingProvider fallbackProvider;
     private final Map<String, Optional<GeoPoint>> cache = new ConcurrentHashMap<>();
 
     @Autowired
-    public MapGeocodingServiceImpl(
-            @Value("${app.map.search-url:https://nominatim.openstreetmap.org/search}") String searchUrl,
-            @Value("${app.map.user-agent:EcoMotion-localhost/1.0}") String userAgent,
-            @Value("${app.map.connect-timeout:5s}") Duration connectTimeout,
-            @Value("${app.map.request-timeout:8s}") Duration requestTimeout) {
-        this(searchUrl, userAgent, connectTimeout, requestTimeout, new ObjectMapper());
+    public MapGeocodingServiceImpl(MapGeocodingProviderResolver providerResolver) {
+        this.providerResolver = providerResolver;
+        this.fallbackProvider = null;
     }
 
-    public MapGeocodingServiceImpl(
-            @Value("${app.map.search-url:https://nominatim.openstreetmap.org/search}") String searchUrl,
-            @Value("${app.map.user-agent:EcoMotion-localhost/1.0}") String userAgent,
-            @Value("${app.map.connect-timeout:5s}") Duration connectTimeout,
-            @Value("${app.map.request-timeout:8s}") Duration requestTimeout,
-            ObjectMapper objectMapper) {
-        this.searchUrl = searchUrl;
-        this.userAgent = userAgent;
-        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
-
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(connectTimeout);
-        factory.setReadTimeout(requestTimeout);
-        this.restClient = RestClient.builder().requestFactory(factory).build();
+    public MapGeocodingServiceImpl(MapGeocodingProvider fallbackProvider) {
+        this.providerResolver = null;
+        this.fallbackProvider = fallbackProvider;
     }
 
     @Override
@@ -69,46 +45,28 @@ public class MapGeocodingServiceImpl implements MapGeocodingService {
             return cached;
         }
 
-        Optional<GeoPoint> resolved = fetchCoordinates(address.trim());
+        Optional<GeoPoint> resolved = resolveCoordinates(address.trim());
         if (cache.size() < MAX_CACHE_SIZE) {
             cache.put(normalizedAddress, resolved);
         }
         return resolved;
     }
 
-    private Optional<GeoPoint> fetchCoordinates(String query) {
+    private Optional<GeoPoint> resolveCoordinates(String query) {
         try {
-            URI uri = UriComponentsBuilder.fromUriString(searchUrl)
-                    .queryParam("q", query)
-                    .queryParam("format", "json")
-                    .queryParam("limit", 1)
-                    .build()
-                    .encode()
-                    .toUri();
+            MapGeocodingProvider provider = providerResolver != null
+                    ? providerResolver.resolveDefaultProvider()
+                    : fallbackProvider;
 
-            String responseBody = restClient.get()
-                    .uri(uri)
-                    .header(HttpHeaders.USER_AGENT, userAgent)
-                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-                    .retrieve()
-                    .body(String.class);
-
-            if (responseBody == null || responseBody.isBlank()) {
+            if (provider == null) {
+                log.warn("No MapGeocodingProvider configured for geocoding address '{}'", query);
                 return Optional.empty();
             }
 
-            JsonNode root = objectMapper.readTree(responseBody);
-            if (root.isArray() && !root.isEmpty()) {
-                JsonNode first = root.get(0);
-                if (first.has("lat") && first.has("lon")) {
-                    double lat = Double.parseDouble(first.get("lat").asText());
-                    double lon = Double.parseDouble(first.get("lon").asText());
-                    return Optional.of(new GeoPoint(lat, lon));
-                }
-            }
+            return provider.geocode(query);
         } catch (Exception ex) {
-            log.warn("Geocoding failed for address: '{}' - {}", query, ex.getMessage());
+            log.warn("Geocoding failed for address '{}': {}", query, ex.getMessage());
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 }

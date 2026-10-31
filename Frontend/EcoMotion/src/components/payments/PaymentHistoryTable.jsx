@@ -57,8 +57,13 @@ export default function PaymentHistoryTable({
                 key={`${payment.bookingCode}-${payment.type}-${payment.createdAt}-${index}`}
                 className={selected ? "bg-brand-50/60" : "hover:bg-slate-50/70"}
               >
-                <td className="px-5 py-5 font-semibold text-slate-900">
-                  {payment.bookingCode}
+                <td className="px-5 py-5">
+                  <div className="font-semibold text-slate-900">{payment.bookingCode}</div>
+                  {payment.transactionCode && (
+                    <span className="mt-1 inline-block font-mono text-[11px] font-bold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
+                      {payment.transactionCode}
+                    </span>
+                  )}
                 </td>
 
                 <td className="px-5 py-5">

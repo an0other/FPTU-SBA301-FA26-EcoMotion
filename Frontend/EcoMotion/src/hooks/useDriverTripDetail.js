@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { driverTripService } from '../services/driverTripService'
 import { useAuth } from './useAuth'
 
@@ -8,13 +8,16 @@ export function useDriverTripDetail(tripIdOrCode) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const sequence = useRef(0)
   const fetchDetail = useCallback(async () => {
     if (!tripIdOrCode) return
+    const id = ++sequence.current
     setLoading(true)
     setError(null)
 
     try {
       const data = await driverTripService.getTripDetail(tripIdOrCode)
+      if (id !== sequence.current) return
       setTrip(data)
     } catch (err) {
       let message = 'Không thể tải thông tin chi tiết chuyến đi.'
@@ -27,9 +30,9 @@ export function useDriverTripDetail(tripIdOrCode) {
       } else if (err?.message) {
         message = err.message
       }
-      setError(message)
+      if (id === sequence.current) setError(message)
     } finally {
-      setLoading(false)
+      if (id === sequence.current) setLoading(false)
     }
   }, [tripIdOrCode])
 
@@ -40,6 +43,7 @@ export function useDriverTripDetail(tripIdOrCode) {
     })
     return () => {
       active = false
+      ++sequence.current
     }
   }, [fetchDetail, user?.id])
 

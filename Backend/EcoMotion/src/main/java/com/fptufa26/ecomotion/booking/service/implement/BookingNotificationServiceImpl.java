@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class BookingNotificationServiceImpl implements BookingNotificationService {
     private final ExternalNotificationDispatcherService dispatcher;
+    private final com.fptufa26.ecomotion.common.service.NotificationStreamService stream;
 
     @Override
     public void bookingPlaced(Booking booking, BigDecimal depositAmount) {
@@ -28,6 +29,20 @@ public class BookingNotificationServiceImpl implements BookingNotificationServic
     @Override
     public void depositPaid(Booking booking, BigDecimal depositAmount) {
         schedule(booking, depositAmount, true);
+    }
+
+    @Override
+    public void changed(Booking booking, String event) {
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("bookingId", booking.getId());
+        payload.put("bookingCode", booking.getBookingCode());
+        payload.put("driverId", booking.getDriver() == null ? null : booking.getDriver().getId());
+        payload.put("status", booking.getStatus().name());
+        payload.put("version", booking.getVersion());
+        payload.put("occurredAt", java.time.Instant.now().toString());
+        stream.sendEventToProvider(booking.getVehicle().getProvider().getId(), event, payload);
+        if (booking.getRenter() != null && booking.getRenter().getUser() != null) stream.sendEventToUser(booking.getRenter().getUser().getId(), event, payload);
+        if (booking.getDriver() != null && booking.getDriver().getUser() != null) stream.sendEventToUser(booking.getDriver().getUser().getId(), event, payload);
     }
 
     private void schedule(Booking booking, BigDecimal depositAmount, boolean depositPaid) {

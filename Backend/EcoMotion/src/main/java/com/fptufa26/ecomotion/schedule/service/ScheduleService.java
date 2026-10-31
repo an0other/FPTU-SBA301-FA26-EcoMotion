@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.schedule.service;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.schedule.entity.VehicleSchedule;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 
 import java.time.Instant;
@@ -27,7 +28,12 @@ public interface ScheduleService {
 
     void confirmHold(Long bookingId);
 
+    boolean confirmUnexpiredHold(Long bookingId, Instant now);
+
+    boolean hasUnexpiredHold(Long bookingId, Instant now);
+
     void release(Long bookingId);
 
+    List<VehicleSchedule> findActiveInRange(Long vehicleId, Instant start, Instant end);
     List<Long> expiredHoldBookingIds(Instant now);
 }

@@ -14,6 +14,8 @@ import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
+import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
 import com.fptufa26.ecomotion.booking.enums.DriverAssignmentMode;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
@@ -32,9 +34,18 @@ import com.fptufa26.ecomotion.booking.service.BookingTrackingService;
 import com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService;
 import com.fptufa26.ecomotion.booking.specification.BookingSpecification;
 import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
+import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
+import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
+import com.fptufa26.ecomotion.booking.entity.TripEvidence;
+import com.fptufa26.ecomotion.booking.entity.TripIncident;
+import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
+import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
+import com.fptufa26.ecomotion.booking.service.TripIncidentService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.user.entity.Driver;
@@ -43,6 +54,7 @@ import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import com.fptufa26.ecomotion.user.service.DriverAssignmentService;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
@@ -66,6 +78,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -111,7 +124,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final com.fptufa26.ecomotion.booking.repository.TripIncidentRepository tripIncidentRepository;
     private final com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository tripEvidenceRepository;
     private final com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository driverAssignmentRepository;
+    private final TripIncidentService tripIncidentService;
+    private final DriverStatusService driverStatusService;
     private final Clock clock;
+    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
 
     @Override
     public List<ProviderBookingResponse> listBookings(Long currentUserId, String status) {
@@ -134,7 +150,11 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         Page<Booking> page = bookingRepository.findAll(spec, effectivePageable);
 
         Map<Long, String> coverUrls = getCoverUrlsForBookings(page.getContent());
-        return page.map(booking -> toResponse(booking, coverUrls.get(booking.getVehicle().getId())));
+        List<Long> bookingIds = page.getContent().stream().map(Booking::getId).toList();
+        Map<Long, List<PaymentTransaction>> txMap = bookingIds.isEmpty() ? Collections.emptyMap()
+                : paymentTransactionRepository.findByBooking_IdIn(bookingIds).stream()
+                        .collect(Collectors.groupingBy(tx -> tx.getBooking().getId()));
+        return page.map(booking -> toResponse(booking, coverUrls.get(booking.getVehicle().getId()), txMap.getOrDefault(booking.getId(), List.of())));
     }
 
     @Override
@@ -160,17 +180,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         long awaitingDeposit = bookingRepository.countByVehicle_Provider_IdAndStatus(
                 providerId, BookingStatus.AWAITING_DEPOSIT);
         long accepted = bookingRepository.countByVehicle_Provider_IdAndStatus(providerId, BookingStatus.ACCEPTED);
-        long confirmed = bookingRepository.countByVehicle_Provider_IdAndStatusIn(providerId, List.of(
-                BookingStatus.CONFIRMED,
-                BookingStatus.DRIVER_ASSIGNED,
-                BookingStatus.DRIVER_CONFIRMED,
-                BookingStatus.DRIVER_ARRIVED
-        ));
+        long confirmed = bookingRepository.countByVehicle_Provider_IdAndStatus(providerId, BookingStatus.CONFIRMED);
         long inProgress = bookingRepository.countByVehicle_Provider_IdAndStatus(providerId, BookingStatus.IN_PROGRESS);
-        long completed = bookingRepository.countByVehicle_Provider_IdAndStatusIn(providerId, List.of(
-                BookingStatus.COMPLETED,
-                BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
-        ));
+        long completed = bookingRepository.countByVehicle_Provider_IdAndStatus(providerId, BookingStatus.COMPLETED);
         long rejected = bookingRepository.countByVehicle_Provider_IdAndStatus(providerId, BookingStatus.REJECTED);
         long cancelled = bookingRepository.countByVehicle_Provider_IdAndStatus(providerId, BookingStatus.CANCELLED);
 
@@ -183,7 +195,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 inProgress,
                 completed,
                 rejected,
-                cancelled
+                cancelled,
+                bookingRepository.findProviderQueueVehicleNames(providerId)
         );
     }
 
@@ -218,6 +231,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         List<ProviderBookingDetailResponse.PaymentTransactionDetailResponse> transactionResponses = transactions.stream()
                 .map(t -> new ProviderBookingDetailResponse.PaymentTransactionDetailResponse(
                         t.getId(),
+                        t.getTransactionCode(),
                         t.getType() != null ? t.getType().name() : null,
                         t.getAmount(),
                         t.getDirection() != null ? t.getDirection().name() : null,
@@ -366,7 +380,12 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getDriverConfirmedAt(),
                 booking.getActualArrivedAt(),
                 executionStatus,
-                bookingTrackingService.getLatestLocation(booking.getId())
+                bookingTrackingService.getLatestLocation(booking.getId()),
+                booking.getStatus() == BookingStatus.CONFIRMED || (booking.isDriverReplacementRequired()
+                        && java.util.Set.of(BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED).contains(booking.getStatus())),
+                booking.getStatus() == BookingStatus.CONFIRMED || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED,
+                resolveDriverRejectionReason(booking),
+                resolvePaymentStatus(booking, transactions)
         );
     }
 
@@ -374,10 +393,14 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     @Transactional
     public ProviderBookingResponse acceptBooking(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
+        vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId()).orElseThrow();
 
         if (booking.getStatus() != BookingStatus.PENDING) {
             throw new IllegalArgumentException("Chỉ có thể chấp nhận đơn ở trạng thái Chờ duyệt (PENDING)");
+        }
+        if (booking.getPickupTime() == null || !booking.getPickupTime().isAfter(clock.instant().plus(Duration.ofHours(1)))) {
+            throw new ConflictException("Không thể duyệt đơn đã quá hạn nhận xe hoặc không còn đủ thời gian xử lý");
         }
 
         BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
@@ -396,10 +419,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn");
         }
 
-        booking.setStatus(BookingStatus.ACCEPTED);
+        booking.setStatus(BookingStatus.AWAITING_DEPOSIT);
         Booking saved = bookingRepository.save(booking);
+        scheduleService.hold(booking.getVehicle(), booking, booking.getPickupTime(), end,
+                clock.instant().plus(Duration.ofMinutes(15)));
 
         paymentRequestService.createDepositPaymentRequest(saved);
+        bookingNotificationService.changed(saved, "BOOKING_CHANGED");
 
         Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(saved.getVehicle().getId()));
         return toResponse(saved, coverUrls.get(saved.getVehicle().getId()));
@@ -409,17 +435,21 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     @Transactional
     public ProviderBookingResponse denyBooking(Long currentUserId, String bookingCodeOrId, String reason) {
         Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
 
         if (booking.getStatus() != BookingStatus.PENDING) {
             throw new IllegalArgumentException("Chỉ có thể từ chối đơn ở trạng thái Chờ duyệt (PENDING)");
         }
 
+        if (reason == null || reason.isBlank() || reason.trim().length() > 500)
+            throw new IllegalArgumentException("Lý do từ chối phải từ 1 đến 500 ký tự");
         booking.setStatus(BookingStatus.REJECTED);
         booking.setCancelledAt(null);
         booking.setCancelledBy(null);
         booking.setCancelReason(null);
+        booking.setOperationalResolutionReason(reason == null ? null : reason.trim());
         bookingRepository.save(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
         Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(booking.getVehicle().getId()));
         return toResponse(booking, coverUrls.get(booking.getVehicle().getId()));
@@ -436,7 +466,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     public ProviderBookingResponse assignDriver(Long currentUserId, String bookingCodeOrId,
                                                 Long driverId, DriverAssignmentMode mode) {
         Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
 
         BookingStatus oldStatus = booking.getStatus();
         boolean replacingUnavailableDriver = booking.isDriverReplacementRequired()
@@ -449,19 +479,23 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
         Long selectedDriverId = driverId;
         if (mode == DriverAssignmentMode.AUTO) {
-            selectedDriverId = getAvailableDrivers(currentUserId, booking.getBookingCode()).stream()
-                    .sorted(java.util.Comparator
-                            .comparingLong(AvailableDriverResponse::activeBookingsCount)
-                            .thenComparing(AvailableDriverResponse::ratingAvg,
-                                    java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
-                            .thenComparing(AvailableDriverResponse::id))
-                    .map(AvailableDriverResponse::id)
-                    .findFirst()
-                    .orElseThrow(() -> new ConflictException("Chưa có tài xế phù hợp và rảnh cho lịch này"));
+            DriverCandidateResponse suggested = driverOptimizationService.suggestDriver(booking.getId(), provider.getId()).suggestedDriver();
+            if (suggested == null) {
+                throw new ConflictException("Chưa có tài xế phù hợp và rảnh cho lịch này");
+            }
+            selectedDriverId = suggested.driverId();
         }
+        userService.findDriverByIdForUpdate(selectedDriverId)
+                .orElseThrow(() -> new ConflictException("Không tìm thấy tài xế"));
         Driver driver = driverAssignmentService.requireEligibleForUpdate(
                 provider.getId(), selectedDriverId,
                 booking.getPickupTime().atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate());
+        DriverCandidateResponse candidate = driverOptimizationService.evaluateCandidates(booking.getId(), provider.getId()).stream()
+                .filter(item -> item.driverId().equals(driver.getId()))
+                .findFirst().orElseThrow(() -> new ConflictException("Tài xế không thuộc nhà cung cấp"));
+        if (!candidate.eligible()) {
+            throw new ConflictException(candidate.ineligibilityReason());
+        }
         if (replacingUnavailableDriver && booking.getDriver() != null
                 && booking.getDriver().getId().equals(driver.getId())) {
             throw new ConflictException("Tài xế thay thế phải khác tài xế đã báo sự cố");
@@ -476,70 +510,66 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         booking.setAssignedAt(now);
         booking.setDriverConfirmedAt(null);
         booking.setActualArrivedAt(null);
-        booking.setAssignmentExpiresAt(now.plus(Duration.ofMinutes(15)));
+        booking.setAssignmentExpiresAt(driverOptimizationService.assignmentDeadline());
         if (replacingUnavailableDriver) {
             booking.setDriverReplacementRequired(false);
             booking.setDriverIssueResolvedAt(now);
         }
         booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
+        booking.setAssignmentMode(mode == DriverAssignmentMode.AUTO ? AssignmentMode.AUTO_SUGGEST : AssignmentMode.MANUAL);
         Booking saved = bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "DRIVER_ASSIGNED");
         recordDriverAssignment(saved, driver, now);
+        driverStatusService.updateStatusTimestamp(driver.getId());
 
         Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(saved.getVehicle().getId()));
         return toResponse(saved, coverUrls.get(saved.getVehicle().getId()));
     }
 
     @Override
-    public List<com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId) {
+    public List<DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
         return driverOptimizationService.evaluateCandidates(booking.getId(), provider.getId());
     }
 
     @Override
-    public com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId) {
+    public AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
+        boolean replacement = booking.isDriverReplacementRequired()
+                && java.util.Set.of(BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED).contains(booking.getStatus());
+        if (booking.getStatus() != BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ASSIGNED && !replacement)
+            throw new ConflictException("Đơn thuê chưa ở giai đoạn phân công tài xế");
         return driverOptimizationService.suggestDriver(booking.getId(), provider.getId());
     }
 
     @Override
     @Transactional
-    public ProviderBookingResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId) {
+    public com.fptufa26.ecomotion.booking.dto.response.AutoAssignmentResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
         if (booking.getStatus() != BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ASSIGNED) {
             throw new ConflictException("Chỉ có thể phân công tài xế sau khi khoản cọc đã được xác nhận");
         }
 
-        Driver driver = driverOptimizationService.autoAssign(booking.getId());
+        var execution = driverOptimizationService.autoAssignWithResult(booking.getId());
+        Driver driver = execution.driver();
         if (driver == null) {
-            throw new ConflictException("Không tìm thấy tài xế phù hợp để phân công tự động");
+            throw new ConflictException("Chưa có tài xế phù hợp với khung giờ này");
         }
+        booking.setAssignmentMode(AssignmentMode.FULL_AUTO);
 
         Booking refreshed = bookingRepository.findById(booking.getId()).orElse(booking);
         Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(refreshed.getVehicle().getId()));
-        return toResponse(refreshed, coverUrls.get(refreshed.getVehicle().getId()));
+        return new com.fptufa26.ecomotion.booking.dto.response.AutoAssignmentResponse(
+                toResponse(refreshed, coverUrls.get(refreshed.getVehicle().getId())), execution.solverStatus());
     }
 
     @Override
     @Transactional
-    public void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest request) {
-        Provider provider = resolveProvider(currentUserId);
-        Booking booking = resolveBooking(provider, bookingCodeOrId);
-
-        com.fptufa26.ecomotion.booking.entity.TripIncident incident = tripIncidentRepository.findById(incidentId)
-                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy sự cố: " + incidentId));
-
-        if (!incident.getBooking().getId().equals(booking.getId())) {
-            throw new IllegalArgumentException("Sự cố không thuộc đơn thuê này");
-        }
-
-        incident.setStatus(request.status());
-        incident.setResolutionNote(request.resolutionNote());
-        incident.setResolvedBy(provider.getUser());
-        incident.setResolvedAt(clock.instant());
-        tripIncidentRepository.save(incident);
+    public void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, ResolveIncidentRequest request) {
+        tripIncidentService.resolveIncident(currentUserId, bookingCodeOrId, incidentId, request);
     }
 
     @Override
@@ -583,6 +613,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new ConflictException("Không thể thêm thủ công tiền thuê gốc hoặc tiền cọc");
         }
 
+        if (request.evidenceUrl() == null || request.evidenceUrl().isBlank())
+            throw new ConflictException("Cần bằng chứng cho phụ phí ghi thủ công");
+        java.net.URI proof;
+        try { proof = java.net.URI.create(request.evidenceUrl().trim()); }
+        catch (IllegalArgumentException exception) { throw new ConflictException("Đường dẫn bằng chứng không hợp lệ"); }
+        if (!("https".equalsIgnoreCase(proof.getScheme()) || "http".equalsIgnoreCase(proof.getScheme())) || proof.getHost() == null)
+            throw new ConflictException("Bằng chứng phải là đường dẫn HTTP/HTTPS hợp lệ");
         BookingCharge charge = new BookingCharge();
         charge.setBooking(booking);
         charge.setChargeType(request.chargeType());
@@ -590,12 +627,42 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         charge.setQuantity(request.quantity());
         charge.setUnitPrice(request.unitPrice());
         charge.setAppliedRate(request.appliedRate());
-        charge.setAmount(request.amount());
+        BookingPolicySnapshot policy = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
+                .orElseThrow(() -> new ConflictException("Thiếu bản chốt chính sách giá của đơn thuê"));
+        if (policy.getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY)
+            throw new ConflictException("Gói năm không có phụ phí");
+        if (request.description() == null || request.description().isBlank() || request.quantity() == null
+                || request.quantity() < 1 || request.quantity() > 1000000)
+            throw new ConflictException("Cần lý do và số lượng phụ phí hợp lệ");
+        BigDecimal price;
+        BigDecimal rate;
+        switch (request.chargeType()) {
+            case OVERTIME -> { price = policy.getSlotPrice(); rate = BigDecimal.ONE.add(java.util.Objects.requireNonNullElse(policy.getOvertimeSurchargeRatio(), BigDecimal.ZERO)); }
+            case WAITING -> { price = policy.getWaitingRate(); rate = BigDecimal.ONE; }
+            case WEEKEND -> { price = policy.getSlotPrice(); rate = policy.getWeekendSurchargeRatio(); }
+            case OUT_OF_RADIUS -> { price = policy.getOutOfRadiusRate(); rate = BigDecimal.ONE; }
+            default -> throw new ConflictException("Loại phụ phí không được hỗ trợ");
+        }
+        if (price == null || rate == null || price.signum() < 0 || rate.signum() < 0)
+            throw new ConflictException("Thiếu chính sách phụ phí hợp lệ");
+        BigDecimal amount = price.multiply(rate).multiply(BigDecimal.valueOf(request.quantity()))
+                .setScale(2, java.math.RoundingMode.HALF_UP);
+        if (amount.precision() > 14) throw new ConflictException("Số tiền phụ phí vượt giới hạn");
+        charge.setUnitPrice(price);
+        charge.setAppliedRate(rate);
+        charge.setAmount(amount);
+        var duplicate = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
+                .filter(c -> c.getChargeType() == request.chargeType() && java.util.Objects.equals(c.getQuantity(), request.quantity())
+                        && request.description().trim().equals(c.getDescription()) && amount.compareTo(c.getAmount()) == 0)
+                .findFirst();
+        if (duplicate.isPresent()) return toChargeResponse(duplicate.get());
+        charge.setDescription(request.description().trim());
         charge.setCreatedBy(provider.getUser());
         charge.setWaived(false);
         charge.setEvidenceUrl(request.evidenceUrl());
 
         BookingCharge saved = bookingChargeRepository.save(charge);
+        bookingNotificationService.changed(booking, "CHARGES_CHANGED");
 
         return toChargeResponse(saved);
     }
@@ -628,6 +695,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         if (remaining.signum() <= 0) {
             booking.setStatus(BookingStatus.COMPLETED);
             bookingRepository.save(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
             return new SettlementResultResponse(
                     booking.getBookingCode(), BookingStatus.COMPLETED, null, BigDecimal.ZERO.setScale(2));
         }
@@ -635,6 +703,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         PaymentRequest paymentRequest = paymentRequestService.createFinalBalancePaymentRequest(booking.getId());
         booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
         bookingRepository.save(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         return new SettlementResultResponse(
                 booking.getBookingCode(),
                 booking.getStatus(),
@@ -648,11 +717,45 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         List<Driver> drivers = driverAssignmentService.listEligible(provider.getId(), java.time.LocalDate.now());
 
         List<BookingStatus> activeStatuses = List.of(BookingStatus.ACCEPTED, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
+        Instant now = clock.instant();
 
         return drivers.stream().map(driver -> {
             long activeBookings = bookingRepository.countByDriver_IdAndStatusIn(driver.getId(), activeStatuses);
             String fullName = driver.getUser() != null ? driver.getUser().getFullName() : null;
             String phone = driver.getUser() != null ? driver.getUser().getPhone() : null;
+
+            com.fptufa26.ecomotion.user.enums.DriverActivityStatus act = driver.getActivityStatus() != null
+                    ? driver.getActivityStatus()
+                    : com.fptufa26.ecomotion.user.enums.DriverActivityStatus.AVAILABLE;
+            boolean onTrip = bookingRepository.existsByDriver_IdAndStatus(driver.getId(), BookingStatus.IN_PROGRESS);
+
+            com.fptufa26.ecomotion.user.enums.DriverOperationalStatus op;
+            boolean eligible;
+            String ineligibilityReason = null;
+
+            if (onTrip) {
+                op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.ON_TRIP;
+                eligible = false;
+                ineligibilityReason = "Tài xế đang thực hiện chuyến đi khác (ON_TRIP)";
+            } else if (act == com.fptufa26.ecomotion.user.enums.DriverActivityStatus.OFFLINE) {
+                op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.OFFLINE;
+                eligible = false;
+                ineligibilityReason = "Tài xế đang ngoại tuyến (OFFLINE)";
+            } else if (act == com.fptufa26.ecomotion.user.enums.DriverActivityStatus.UNAVAILABLE) {
+                op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.UNAVAILABLE;
+                eligible = false;
+                ineligibilityReason = "Tài xế đang chủ động tạm nghỉ (UNAVAILABLE)";
+            } else {
+                List<Booking> upcoming = bookingRepository.findUpcomingDriverBookings(driver.getId(), List.of(
+                        BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED
+                ), now);
+                if (!upcoming.isEmpty()) {
+                    op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.SCHEDULED;
+                } else {
+                    op = com.fptufa26.ecomotion.user.enums.DriverOperationalStatus.AVAILABLE;
+                }
+                eligible = true;
+            }
 
             return new AvailableDriverResponse(
                     driver.getId(),
@@ -664,9 +767,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                     driver.getLicenseExpiry(),
                     driver.getPortraitUrl(),
                     driver.getStatus(),
+                    act,
+                    op,
                     driver.getRatingAvg(),
                     driver.getRatingCount(),
-                    activeBookings
+                    activeBookings,
+                    eligible,
+                    ineligibilityReason
             );
         }).toList();
     }
@@ -690,9 +797,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                         driver.getLicenseExpiry(),
                         driver.getPortraitUrl(),
                         driver.getStatus(),
+                        driver.getActivityStatus(),
+                        driverStatusService.calculateOperationalStatus(driver),
                         driver.getRatingAvg(),
                         driver.getRatingCount(),
-                        bookingRepository.countByDriver_IdAndStatusIn(driver.getId(), driverOccupyingStatuses())))
+                        bookingRepository.countByDriver_IdAndStatusIn(driver.getId(), driverOccupyingStatuses()),
+                        true,
+                        null))
                 .toList();
     }
 
@@ -722,6 +833,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     public byte[] exportBookingsCsv(Long currentUserId, String status) {
         List<ProviderBookingResponse> bookings = listBookings(currentUserId, status);
 
+        return writeBookingsCsv(bookings);
+    }
+
+    private byte[] writeBookingsCsv(List<ProviderBookingResponse> bookings) {
         StringBuilder sb = new StringBuilder();
         sb.append('\ufeff');
         sb.append("Mã đơn,Khách thuê,Xe,Biển số,Hình thức,Thời lượng,Giờ đón,Điểm đón,Tài xế,Trạng thái,Tổng tiền,Ngày tạo\n");
@@ -745,6 +860,37 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         return sb.toString().getBytes(StandardCharsets.UTF_8);
     }
 
+    @Override
+    public PageResponse<ProviderBookingResponse> filterBookings(Long userId,
+            com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter, int offset, int limit) {
+        if (offset < 0 || limit < 1 || limit > 100) throw new IllegalArgumentException("Phân trang không hợp lệ");
+        Provider provider = resolveProvider(userId);
+        var spec = BookingSpecification.forProviderQueue(provider.getId(), parseStatus(filter.status()))
+                .and(com.fptufa26.ecomotion.booking.specification.ProviderWorkflowSpecification.filters(filter));
+        String sort = filter.sort() == null ? "NEWEST" : filter.sort();
+        Sort ordering = switch (sort) {
+            case "NEWEST" -> Sort.by(Sort.Direction.DESC, "updatedAt");
+            case "CREATED_DESC" -> Sort.by(Sort.Direction.DESC, "createdAt");
+            case "OLDEST" -> Sort.by(Sort.Direction.ASC, "pickupTime");
+            case "PRICE_HIGH" -> Sort.by(Sort.Direction.DESC, "totalAmount");
+            case "PRICE_LOW" -> Sort.by(Sort.Direction.ASC, "totalAmount");
+            default -> throw new IllegalArgumentException("Kiểu sắp xếp không hợp lệ");
+        };
+        Page<Booking> page = bookingRepository.findAll(spec, new QueuePage(offset, limit, ordering.and(Sort.by(Sort.Direction.DESC, "id"))));
+        return new PageResponse<>(toResponses(page.getContent()), page.getTotalElements(), offset, limit, offset + (long) limit < page.getTotalElements());
+    }
+
+    @Override
+    public byte[] exportFilteredBookings(Long userId, com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter) {
+        List<ProviderBookingResponse> rows = new java.util.ArrayList<>();
+        for (int offset = 0; ; offset += 100) {
+            var page = filterBookings(userId, filter, offset, 100);
+            rows.addAll(page.items());
+            if (!page.hasMore()) return writeBookingsCsv(rows);
+            if (rows.size() >= 10000) throw new IllegalArgumentException("Thu hẹp bộ lọc để xuất tối đa 10000 đơn");
+        }
+    }
+
     private String escapeCsv(String value) {
         if (value == null) return "";
         if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
@@ -754,13 +900,14 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     private void recordDriverAssignment(Booking booking, Driver driver, Instant now) {
+        driverOptimizationService.recallActiveAssignments(booking.getId());
         com.fptufa26.ecomotion.booking.entity.DriverAssignment assignment =
                 new com.fptufa26.ecomotion.booking.entity.DriverAssignment();
         assignment.setBooking(booking);
         assignment.setDriver(driver);
         assignment.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE);
         assignment.setAssignedAt(now);
-        assignment.setExpiresAt(now.plus(Duration.ofMinutes(15)));
+        assignment.setExpiresAt(booking.getAssignmentExpiresAt());
         assignment.setRoundNumber(booking.getReassignCount() != null ? booking.getReassignCount() + 1 : 1);
         driverAssignmentRepository.save(assignment);
     }
@@ -815,8 +962,12 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             return List.of();
         }
         Map<Long, String> coverUrls = getCoverUrlsForBookings(bookings);
+        List<Long> bookingIds = bookings.stream().map(Booking::getId).toList();
+        Map<Long, List<PaymentTransaction>> txMap = bookingIds.isEmpty() ? Collections.emptyMap()
+                : paymentTransactionRepository.findByBooking_IdIn(bookingIds).stream()
+                        .collect(Collectors.groupingBy(tx -> tx.getBooking().getId()));
         return bookings.stream()
-                .map(b -> toResponse(b, coverUrls.get(b.getVehicle().getId())))
+                .map(b -> toResponse(b, coverUrls.get(b.getVehicle().getId()), txMap.getOrDefault(b.getId(), List.of())))
                 .toList();
     }
 
@@ -831,15 +982,24 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     private ProviderBookingResponse toResponse(Booking booking, String coverUrl) {
+        List<PaymentTransaction> transactions = paymentTransactionRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId());
+        return toResponse(booking, coverUrl, transactions);
+    }
+
+    private ProviderBookingResponse toResponse(Booking booking, String coverUrl, List<PaymentTransaction> transactions) {
         Vehicle vehicle = booking.getVehicle();
         User renterUser = booking.getRenter().getUser();
         String renterName = renterUser.getFullName() != null && !renterUser.getFullName().isBlank()
                 ? renterUser.getFullName()
                 : renterUser.getEmail();
 
+        Long driverId = null;
         String driverName = null;
-        if (booking.getDriver() != null && booking.getDriver().getUser() != null) {
-            driverName = booking.getDriver().getUser().getFullName();
+        if (booking.getDriver() != null) {
+            driverId = booking.getDriver().getId();
+            if (booking.getDriver().getUser() != null) {
+                driverName = booking.getDriver().getUser().getFullName();
+            }
         }
 
         String rentalType = "Theo ngày";
@@ -850,6 +1010,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         }
 
         var risk = vehicleOperationalRiskService.assess(booking);
+        String paymentStatus = resolvePaymentStatus(booking, transactions);
         return new ProviderBookingResponse(
                 booking.getId(),
                 booking.getBookingCode(),
@@ -865,6 +1026,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getPickupLatitude(),
                 booking.getPickupLongitude(),
                 booking.getDriverNote(),
+                driverId,
                 driverName,
                 booking.getStatus(),
                 DriverTripServiceImpl.deriveExecutionStatus(booking),
@@ -876,9 +1038,53 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getActualArrivedAt(),
                 booking.getActualStartAt(),
                 booking.getActualEndAt(),
-                risk.atRisk(),
-                risk.message()
+                risk.atRisk() || booking.isDriverReplacementRequired(),
+                booking.isDriverReplacementRequired() ? booking.getDriverIssueReason() : risk.message(),
+                paymentStatus
         );
+    }
+
+    private String resolvePaymentStatus(Booking booking, List<PaymentTransaction> transactions) {
+        if (transactions != null && transactions.stream().anyMatch(t -> t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))) return "RECONCILIATION_REQUIRED";
+        if (transactions != null && transactions.stream().anyMatch(t -> t.getMethod() == PaymentMethod.VNPAY && t.getStatus() == PaymentStatus.PENDING)) return "VERIFYING";
+        if (transactions != null && !transactions.isEmpty()) {
+            Optional<PaymentTransaction> refundTx = transactions.stream()
+                    .filter(t -> t.getType() == PaymentType.REFUND)
+                    .findFirst();
+            if (refundTx.isPresent()) {
+                if (refundTx.get().getStatus() == PaymentStatus.PAID) {
+                    return "REFUNDED";
+                } else if (refundTx.get().getStatus() == PaymentStatus.PENDING) {
+                    return "REFUND_PENDING";
+                } else if (refundTx.get().getStatus() == PaymentStatus.FAILED) {
+                    return "FAILED";
+                }
+            }
+
+            boolean hasPaidSettlement = transactions.stream()
+                    .anyMatch(t -> t.getType() == PaymentType.SETTLEMENT && t.getStatus() == PaymentStatus.PAID);
+            if (hasPaidSettlement) {
+                return "FULLY_PAID";
+            }
+
+            boolean hasPaidDeposit = transactions.stream()
+                    .anyMatch(t -> (t.getType() == PaymentType.DEPOSIT_PAY || t.getType() == PaymentType.UPFRONT_PAY)
+                            && t.getStatus() == PaymentStatus.PAID);
+            if (hasPaidDeposit) {
+                if (booking.getStatus() == BookingStatus.COMPLETED) {
+                    return "FULLY_PAID";
+                }
+                return "DEPOSIT_PAID";
+            }
+
+            boolean hasFailed = transactions.stream()
+                    .anyMatch(t -> t.getStatus() == PaymentStatus.FAILED);
+            if (hasFailed) {
+                return "FAILED";
+            }
+        }
+
+        return "UNPAID";
     }
 
     @Override
@@ -888,6 +1094,17 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
         requireOperationallyMutable(booking);
+
+        if (request.resolution() != OperationalResolutionType.CANCEL_AND_REFUND) {
+            var proposal = booking.getOperationalProposal();
+            if (proposal == null || !Boolean.TRUE.equals(proposal.getAccepted())
+                    || !java.util.Objects.equals(proposal.getRespondedBy(), booking.getRenter().getUser().getId())
+                    || proposal.getResolution() != request.resolution()
+                    || !java.util.Objects.equals(proposal.getVehicleId(), request.replacementVehicleId())
+                    || !java.util.Objects.equals(proposal.getPickupTime(), request.newPickupTime())) {
+                throw new ConflictException("Khách thuê phải chấp thuận đúng đề xuất trước khi đổi xe hoặc giờ đón");
+            }
+        }
 
         Instant now = clock.instant();
         BigDecimal refundAmount = BigDecimal.ZERO;
@@ -906,7 +1123,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                     throw new IllegalArgumentException("Xe thay thế không đủ chỗ cho hành khách và tài xế");
                 }
                 Instant end = plannedEnd(booking, booking.getPickupTime());
-                scheduleService.moveBooking(booking, replacement, booking.getPickupTime(), end);
+                var window = AvailabilityPolicy.bufferedWindow(replacement, booking.getPickupTime(), end);
+                scheduleService.moveBooking(booking, replacement, window.start(), window.end());
                 booking.setPreviousVehicleId(booking.getVehicle().getId());
                 booking.setVehicle(replacement);
                 message = "Đã đổi sang xe " + replacement.getLicensePlate();
@@ -916,8 +1134,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                     throw new IllegalArgumentException("Giờ nhận mới phải sau hiện tại ít nhất 1 giờ");
                 }
                 Instant oldPickup = booking.getPickupTime();
+                vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId()).orElseThrow();
                 Instant end = plannedEnd(booking, request.newPickupTime());
-                scheduleService.moveBooking(booking, booking.getVehicle(), request.newPickupTime(), end);
+                var window = AvailabilityPolicy.bufferedWindow(booking.getVehicle(), request.newPickupTime(), end);
+                scheduleService.moveBooking(booking, booking.getVehicle(), window.start(), window.end());
                 booking.setPreviousPickupTime(oldPickup);
                 booking.setPickupTime(request.newPickupTime());
                 message = "Đã dời giờ nhận xe để xử lý nguy cơ xe về trễ";
@@ -931,6 +1151,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                         ? BookingStatus.CANCELLATION_REVIEW
                         : BookingStatus.CANCELLED);
                 scheduleService.release(booking.getId());
+                driverOptimizationService.recallActiveAssignments(booking.getId());
                 message = refundAmount.signum() > 0
                         ? "Đã hủy booking và tạo yêu cầu hoàn 100% số tiền đã nhận"
                         : "Đã hủy booking; chưa phát sinh khoản cần hoàn";
@@ -938,10 +1159,28 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             default -> throw new IllegalArgumentException("Phương án xử lý không hợp lệ");
         }
 
+        if (request.resolution() != OperationalResolutionType.CANCEL_AND_REFUND && booking.getDriver() != null) {
+            Long assignedDriverId = booking.getDriver().getId();
+            userService.findDriverByIdForUpdate(assignedDriverId).orElseThrow();
+            bookingRepository.saveAndFlush(booking);
+            boolean eligible = driverOptimizationService.evaluateCandidates(booking.getId(), provider.getId()).stream()
+                    .anyMatch(c -> c.driverId().equals(assignedDriverId) && c.eligible());
+            if (!eligible) throw new ConflictException("Tài xế hiện tại không đủ điều kiện với xe hoặc lịch mới; cần điều phối lại trước khi thay đổi");
+            driverOptimizationService.recallActiveAssignments(booking.getId());
+            booking.setDriver(null);
+            booking.setDriverConfirmedAt(null);
+            booking.setActualArrivedAt(null);
+            booking.setAssignmentExpiresAt(null);
+            booking.setDriverReplacementRequired(false);
+            booking.setStatus(BookingStatus.CONFIRMED);
+            bookingRepository.saveAndFlush(booking);
+            driverOptimizationService.manualAssign(booking.getId(), assignedDriverId, provider.getId());
+        }
         booking.setOperationalResolution(request.resolution());
         booking.setOperationalResolutionReason(request.reason().trim());
         booking.setOperationalResolvedAt(now);
         bookingRepository.save(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         return new OperationalResolutionResponse(
                 booking.getBookingCode(), booking.getStatus(), request.resolution(),
                 booking.getVehicle().getId(), booking.getPickupTime(), refundAmount, message);
@@ -1220,4 +1459,30 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         Booking booking = resolveBooking(provider, bookingCodeOrId);
         return bookingTrackingService.getLatestLocation(booking.getId());
     }
+    private record QueuePage(int offset, int size, Sort sort) implements Pageable {
+        public int getPageNumber() { return offset / size; }
+        public int getPageSize() { return size; }
+        public long getOffset() { return offset; }
+        public Sort getSort() { return sort; }
+        public Pageable next() { return new QueuePage(Math.addExact(offset, size), size, sort); }
+        public Pageable previousOrFirst() { return new QueuePage(Math.max(0, offset - size), size, sort); }
+        public Pageable first() { return new QueuePage(0, size, sort); }
+        public Pageable withPage(int page) { return new QueuePage(Math.multiplyExact(page, size), size, sort); }
+        public boolean hasPrevious() { return offset > 0; }
+    }
+
+
+    private String resolveDriverRejectionReason(Booking booking) {
+        if (booking.getStatus() == BookingStatus.REJECTED) {
+            return booking.getOperationalResolutionReason();
+        }
+        return driverAssignmentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId()).stream()
+                .filter(a -> a.getStatus() == com.fptufa26.ecomotion.booking.enums.AssignmentStatus.REJECTED)
+                .findFirst()
+                .map(a -> a.getRejectionReason() != null
+                        ? a.getRejectionReason().name() + (a.getRejectionNote() != null && !a.getRejectionNote().isBlank() ? (": " + a.getRejectionNote().trim()) : "")
+                        : a.getRejectionNote())
+                .orElse(null);
+    }
+
 }

@@ -22,11 +22,13 @@ export default function ProviderHeader({
   const location = useLocation(); 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
 
-  useEffect(() => {
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname);
     setUserMenuOpen(false);
     setMobileNavOpen(false);
-  }, [location.pathname]);
+  }
 
   const currentTab = (() => {
     if (activeTab) return activeTab;
@@ -116,53 +118,59 @@ export default function ProviderHeader({
 
   return (
     <header className="sticky top-0 z-40 bg-white shadow-[0_1px_8px_rgba(11,28,48,0.04)] border-b border-slate-200">
-      <div className="h-20 w-full px-4 sm:px-6 lg:px-8 xl:px-12 flex items-center justify-between gap-2 sm:gap-4">
+      <div className="h-16 sm:h-20 w-full px-4 sm:px-6 lg:px-8 xl:px-12 flex items-center justify-between gap-2 sm:gap-4">
         
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0 min-w-0">
-          <Link to="/provider" className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25 shrink-0">
-              <span className="material-symbols-outlined text-[24px]">
+        {/* Brand & Depot Info */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+          <Link to="/provider" className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            <span className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/25 shrink-0">
+              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                 electric_car
               </span>
             </span>
             <div className="flex flex-col">
-              <span className="text-[17px] sm:text-[19px] font-bold text-[#0b1c30] leading-tight">
+              <span className="text-[16px] sm:text-[18px] font-bold text-[#0b1c30] leading-tight">
                 EcoMotion VN
               </span>
-              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-[9.5px] sm:text-[10.5px] font-semibold text-slate-400 uppercase tracking-wider">
                 Provider Portal
               </span>
             </div>
           </Link>
 
+          {/* Depot Badge: constrained with ellipsis & tooltip */}
           <div
-            className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/60 max-w-[180px] xl:max-w-[260px] 2xl:max-w-[320px] shrink min-w-0"
+            className="hidden sm:flex items-center gap-2 px-2.5 sm:px-3 py-1.5 bg-[#f0f4f9] rounded-xl border border-slate-200/70 max-w-[140px] lg:max-w-[170px] xl:max-w-[220px] 2xl:max-w-[280px] shrink min-w-0"
             title={`${depotDisplayName} - ${displayAddress}`}
           >
-            <span className="material-symbols-outlined text-emerald-600 text-[20px] xl:text-[22px] shrink-0">
+            <span className="material-symbols-outlined text-emerald-600 text-[18px] sm:text-[20px] shrink-0">
               storefront
             </span>
-            <div className="flex flex-col text-left leading-tight truncate min-w-0 flex-1">
+            <div className="flex flex-col text-left leading-tight min-w-0 flex-1 overflow-hidden">
               <span className="font-bold text-slate-900 text-xs truncate">
                 {depotDisplayName}
               </span>
-              <span className="hidden xl:block text-[11px] text-slate-500 font-normal truncate">
+              <span className="hidden xl:block text-[10.5px] text-slate-500 font-normal truncate">
                 {displayAddress}
               </span>
             </div>
           </div>
         </div>
 
-        <nav className="hidden lg:flex items-center justify-center flex-1 mx-2 xl:mx-4 gap-1 xl:gap-1.5 2xl:gap-2 min-w-0">
+        {/* Desktop Navigation Menu */}
+        <nav
+          aria-label="Điều hướng Provider"
+          className="hidden md:flex items-center justify-center gap-1 xl:gap-1.5 min-w-0 shrink-0"
+        >
           {NAV_ITEMS.map((item) => {
             const isActive = currentTab === item.key;
             return (
               <Link
                 key={item.key}
                 to={item.to}
-                className={`px-2.5 xl:px-3.5 py-1.5 xl:py-2 rounded-xl text-xs xl:text-[13.5px] whitespace-nowrap transition-colors ${
+                className={`px-2 xl:px-3.5 py-1.5 xl:py-2 rounded-xl text-xs xl:text-[13px] whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                   isActive
-                    ? "bg-emerald-50 text-emerald-700 font-bold shadow-xs"
+                    ? "bg-emerald-50 text-emerald-700 font-bold shadow-2xs ring-1 ring-emerald-600/15"
                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium"
                 }`}
               >
@@ -173,24 +181,26 @@ export default function ProviderHeader({
           })}
         </nav>
 
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {/* Right Section: User Profile & Mobile Nav Toggle */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <div className="relative">
             <button
               type="button"
               onClick={() => setUserMenuOpen((prev) => !prev)}
-              className="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              aria-label="Tài khoản người dùng"
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-[12px] font-bold text-emerald-700 ring-2 ring-emerald-500/20 shrink-0">
+              <span className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-emerald-100 text-[12px] font-bold text-emerald-700 ring-2 ring-emerald-500/20 shrink-0">
                 {initials}
               </span>
               <div className="hidden sm:flex flex-col text-left leading-tight min-w-0">
                 <span
-                  className="text-[13px] font-bold text-slate-800 max-w-[100px] md:max-w-[130px] xl:max-w-[160px] truncate"
+                  className="text-[12.5px] font-bold text-slate-800 max-w-[90px] xl:max-w-[130px] truncate"
                   title={userDisplayName}
                 >
                   {userDisplayName}
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium">
+                <span className="text-[10.5px] text-slate-500 font-medium">
                   Provider
                 </span>
               </div>
@@ -231,7 +241,7 @@ export default function ProviderHeader({
           <button
             type="button"
             onClick={() => setMobileNavOpen((prev) => !prev)}
-            className="lg:hidden flex items-center justify-center h-10 w-10 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            className="md:hidden flex items-center justify-center h-10 w-10 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
             aria-label="Mở menu điều hướng"
           >
             <span className="material-symbols-outlined text-[24px]">menu</span>
@@ -240,7 +250,7 @@ export default function ProviderHeader({
       </div>
 
       {mobileNavOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex justify-end">
+        <div className="fixed inset-0 z-50 md:hidden flex justify-end">
           
           <div
             className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"

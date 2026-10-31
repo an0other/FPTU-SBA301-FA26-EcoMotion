@@ -227,6 +227,8 @@ CREATE TABLE driver (
     portrait_url       varchar(500) NOT NULL,
     license_image_url  varchar(500) NOT NULL,
     status             varchar(20)  NOT NULL DEFAULT 'PENDING',
+    activity_status    varchar(20)  NOT NULL DEFAULT 'AVAILABLE',
+    status_updated_at  timestamptz  NOT NULL DEFAULT now(),
     reject_reason      varchar(500),
     rating_avg         numeric(3,2) NOT NULL DEFAULT 0,
     rating_count       integer      NOT NULL DEFAULT 0,
@@ -236,6 +238,7 @@ CREATE TABLE driver (
     CONSTRAINT fk_driver_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_driver_provider FOREIGN KEY (provider_id) REFERENCES provider (id) ON DELETE RESTRICT,
     CONSTRAINT ck_driver_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED')),
+    CONSTRAINT ck_driver_activity_status CHECK (activity_status IN ('OFFLINE', 'AVAILABLE', 'UNAVAILABLE')),
     CONSTRAINT ck_driver_reject_reason CHECK (
         (status = 'REJECTED' AND reject_reason IS NOT NULL)
         OR (status <> 'REJECTED' AND reject_reason IS NULL)
@@ -250,6 +253,8 @@ CREATE TABLE driver (
 
 CREATE INDEX idx_driver_provider_id ON driver (provider_id);
 CREATE INDEX idx_driver_status ON driver (status);
+CREATE INDEX idx_driver_activity_status ON driver (activity_status);
+CREATE INDEX idx_driver_status_updated_at ON driver (status_updated_at);
 CREATE INDEX idx_driver_license_expiry ON driver (license_expiry);
 
 -- ---------------------------------------------------------------------------
@@ -453,6 +458,17 @@ CREATE TABLE booking (
     operational_resolved_at timestamptz,
     previous_vehicle_id     bigint,
     previous_pickup_time    timestamptz,
+    proposal_id             varchar(36) UNIQUE,
+    proposal_resolution     varchar(30),
+    proposal_vehicle_id     bigint REFERENCES vehicle(id),
+    proposal_pickup_time    timestamptz,
+    proposal_reason         varchar(500),
+    proposal_created_by     bigint REFERENCES users(id),
+    proposal_created_at     timestamptz,
+    proposal_accepted       boolean,
+    proposal_responded_by   bigint REFERENCES users(id),
+    proposal_responded_at   timestamptz,
+    proposal_response_reason varchar(500),
     created_at              timestamptz   NOT NULL DEFAULT now(),
     updated_at              timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT uk_booking_code UNIQUE (booking_code),
@@ -671,6 +687,8 @@ CREATE TABLE payment_transaction (
     charge_id     bigint,
     type          varchar(20)   NOT NULL,
     amount        numeric(14,2) NOT NULL,
+    payout_gross_amount numeric(14,2),
+    payout_fee_amount numeric(14,2),
     direction     varchar(3)    NOT NULL,
     method        varchar(20)   NOT NULL,
     gateway_ref   varchar(100),
@@ -700,6 +718,9 @@ CREATE TABLE payment_transaction (
 CREATE INDEX idx_payment_booking_id ON payment_transaction (booking_id);
 CREATE INDEX idx_payment_charge_id ON payment_transaction (charge_id);
 CREATE INDEX idx_payment_type_status ON payment_transaction (type, status);
+
+CREATE UNIQUE INDEX uk_refund_paid_bank_reference ON payment_transaction (UPPER(TRIM(gateway_ref)))
+    WHERE type = 'REFUND' AND direction = 'OUT' AND status = 'PAID' AND gateway_ref IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- Tầng 4 — Sau chuyến

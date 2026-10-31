@@ -51,7 +51,7 @@ export function useDriverSchedule(initialOptions = {}) {
     try {
       const [listResult, activeResult] = await Promise.all([
         driverTripService.listTrips({ view, status, date, page, size }),
-        driverTripService.getActiveTrip().catch(() => null),
+        driverTripService.getActiveTrip(),
       ])
 
       if (currentRequestId === requestIdRef.current) {
@@ -78,7 +78,8 @@ export function useDriverSchedule(initialOptions = {}) {
   }, [view, status, date, page, size])
 
   useEffect(() => {
-    queueMicrotask(fetchData)
+    const timer = setTimeout(fetchData, 0)
+    return () => { clearTimeout(timer); ++requestIdRef.current }
   }, [fetchData, user?.id])
 
   return {

@@ -43,6 +43,9 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
     @EntityGraph(attributePaths = {"booking", "booking.renter", "booking.renter.user", "evidences"})
     Optional<PaymentRequest> findByTransferReference(String transferReference);
 
+    @EntityGraph(attributePaths = {"booking", "booking.renter", "booking.renter.user", "evidences"})
+    Optional<PaymentRequest> findByPaymentCode(String paymentCode);
+
     @EntityGraph(attributePaths = {"booking", "booking.vehicle", "booking.vehicle.provider", "booking.renter", "booking.renter.user", "evidences"})
     Optional<PaymentRequest> findByIdAndBooking_Vehicle_Provider_Id(Long id, Long providerId);
 

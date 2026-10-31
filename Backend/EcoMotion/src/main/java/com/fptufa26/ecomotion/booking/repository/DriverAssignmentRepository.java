@@ -20,11 +20,14 @@ public interface DriverAssignmentRepository extends JpaRepository<DriverAssignme
 
     List<DriverAssignment> findByDriver_IdAndStatus(Long driverId, AssignmentStatus status);
 
-    @Query("SELECT da.driver.id FROM DriverAssignment da WHERE da.booking.id = :bookingId AND da.status = 'REJECTED'")
+    @Query("SELECT da.driver.id FROM DriverAssignment da WHERE da.booking.id = :bookingId AND da.status IN ('REJECTED', 'TIMEOUT')")
     List<Long> findRejectedDriverIdsForBooking(@Param("bookingId") Long bookingId);
 
-    @Query("SELECT da FROM DriverAssignment da WHERE da.status = 'PENDING_RESPONSE' AND da.expiresAt IS NOT NULL AND da.expiresAt < :now")
+    @Query("SELECT da FROM DriverAssignment da WHERE da.status = 'PENDING_RESPONSE' AND da.expiresAt IS NOT NULL AND da.expiresAt <= :now")
     List<DriverAssignment> findExpiredAssignments(@Param("now") Instant now);
+
+    @Query("select distinct da.booking.id from DriverAssignment da where da.status = 'PENDING_RESPONSE' and da.expiresAt <= :now")
+    List<Long> findExpiredBookingIds(@Param("now") Instant now);
 
     boolean existsByBooking_IdAndDriver_IdAndStatus(Long bookingId, Long driverId, AssignmentStatus status);
 }

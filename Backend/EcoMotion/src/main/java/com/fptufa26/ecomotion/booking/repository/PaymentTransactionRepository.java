@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.booking.repository;
+﻿package com.fptufa26.ecomotion.booking.repository;
 
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
@@ -9,16 +9,25 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+<<<<<<< HEAD
 import java.time.Instant;
 import org.springframework.data.repository.query.Param;
+=======
+import java.util.Collection;
+>>>>>>> origin/merge
 import java.util.Optional;
 import java.util.List;
 
 @Repository
 public interface PaymentTransactionRepository
         extends JpaRepository<PaymentTransaction, Long> {
+
+    @EntityGraph(attributePaths = "booking")
+    List<PaymentTransaction> findByMethodAndStatusAndVnpTxnRefIsNotNullOrderByUpdatedAtAscCreatedAtAsc(
+            com.fptufa26.ecomotion.booking.enums.PaymentMethod method, PaymentStatus status, Pageable pageable);
 
     List<PaymentTransaction> findAllByOrderByCreatedAtDesc();
 
@@ -27,6 +36,8 @@ public interface PaymentTransactionRepository
     List<PaymentTransaction> findByTypeOrderByCreatedAtDesc(PaymentType type);
 
     List<PaymentTransaction> findByBooking_IdOrderByCreatedAtDesc(Long bookingId);
+
+    List<PaymentTransaction> findByBooking_IdIn(Collection<Long> bookingIds);
 
     long countByStatus(PaymentStatus status);
 
@@ -59,6 +70,8 @@ public interface PaymentTransactionRepository
 
     boolean existsByBooking_IdAndType(Long bookingId, PaymentType type);
 
+    Optional<PaymentTransaction> findByTransactionCode(String transactionCode);
+
     Optional<PaymentTransaction> findByBooking_IdAndType(Long bookingId, PaymentType type);
 
     @EntityGraph(attributePaths = { "booking", "booking.vehicle", "booking.vehicle.provider" })
@@ -89,6 +102,14 @@ public interface PaymentTransactionRepository
 boolean existsByReceivingBankAccount_IdAndGatewayRef(Long receivingBankAccountId, String gatewayRef);
 
     Optional<PaymentTransaction> findByVnpTxnRef(String vnpTxnRef);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from PaymentTransaction t where t.vnpTxnRef = :ref")
+    Optional<PaymentTransaction> findByVnpTxnRefForUpdate(@Param("ref") String ref);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from PaymentTransaction t where t.id = :id")
+    Optional<PaymentTransaction> findByIdForUpdate(@Param("id") Long id);
 
     boolean existsByVnpTxnRef(String vnpTxnRef);
 

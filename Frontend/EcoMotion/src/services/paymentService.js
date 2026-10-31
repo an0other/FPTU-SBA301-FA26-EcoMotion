@@ -22,8 +22,8 @@ export const paymentService = {
     return data?.data
   },
 
-  async processVnpayCallback(params) {
-    const { data } = await apiClient.get('/v1/payment/vnpay/callback', { params })
+  async processVnpayCallback(params, signal) {
+    const { data } = await apiClient.get('/v1/payment/vnpay/callback', { params, signal })
     return data?.data
   },
 
@@ -41,9 +41,10 @@ export const paymentService = {
     return data?.data
   },
 
-  async queryVnpayTransaction(bookingCode, vnpTxnRef) {
+  async queryVnpayTransaction(bookingCode, vnpTxnRef, signal) {
     const { data } = await apiClient.get('/v1/payment/vnpay/query', {
       params: { bookingCode, vnpTxnRef },
+      signal,
     })
     return data?.data
   },

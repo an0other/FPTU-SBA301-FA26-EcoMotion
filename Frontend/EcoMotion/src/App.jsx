@@ -13,6 +13,7 @@ import DriverTripDetailPage from './pages/DriverTripDetailPage'
 import LoginPage from './pages/LoginPage'
 import MePage from './pages/MePage'
 import PaymentHistoryPage from './pages/PaymentHistoryPage'
+import PaymentSuccessPage from './pages/PaymentSuccessPage'
 import { PolicyPage } from './pages/PolicyPage'
 import ProviderBookingDetailPage from './pages/ProviderBookingDetailPage'
 import ProviderBookingQueuePage from './pages/ProviderBookingQueuePage'
@@ -71,6 +72,14 @@ export default function App() {
         element={
           <BookingShell>
             <VnpayCallbackPage />
+          </BookingShell>
+        }
+      />
+      <Route
+        path="/payment/success"
+        element={
+          <BookingShell>
+            <PaymentSuccessPage />
           </BookingShell>
         }
       />

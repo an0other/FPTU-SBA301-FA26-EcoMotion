@@ -34,7 +34,7 @@ class BookingNotificationServiceTest {
     @BeforeEach
     void setUp() {
         dispatcher = mock(ExternalNotificationDispatcherService.class);
-        service = new BookingNotificationServiceImpl(dispatcher);
+        service = new BookingNotificationServiceImpl(dispatcher, org.mockito.Mockito.mock(com.fptufa26.ecomotion.common.service.NotificationStreamService.class));
         User user = new User();
         user.setEmail("renter@example.com");
         user.setPhone("0901234567");
