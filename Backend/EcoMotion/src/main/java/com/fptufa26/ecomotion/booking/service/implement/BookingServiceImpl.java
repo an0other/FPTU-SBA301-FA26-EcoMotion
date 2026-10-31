@@ -1422,4 +1422,40 @@ public class BookingServiceImpl implements BookingService {
     public BigDecimal sumEscrowDeposits() {
         return paymentTransactionRepository.sumEscrowDeposits();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumTotalRevenue(Instant from, Instant to) {
+        return paymentTransactionRepository.sumTotalPaidInBetween(from, to);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumAdminCommission(Instant from, Instant to) {
+        return bookingRepository.sumAdminCommissionBetween(from, to);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumCompletedGrossRentalVolume(Instant from, Instant to) {
+        return bookingRepository.sumCompletedGrossRentalVolumeBetween(from, to);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal sumEscrowDeposits(Instant from, Instant to) {
+        return paymentTransactionRepository.sumEscrowDepositsBetween(from, to);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countCompletedBookings(Instant from, Instant to) {
+        return bookingRepository.countCompletedBookingsBetween(from, to);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countTotalBookings(Instant from, Instant to) {
+        return bookingRepository.countBookingsCreatedBetween(from, to);
+    }
 }

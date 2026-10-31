@@ -59,6 +59,33 @@ class AdminApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("A01: Dashboard stats supports filtering by year and month")
+    void testA01DashboardStatsMonthlyFilter() throws Exception {
+        String token = "Bearer " + getAdminToken();
+
+        // 1. Current month (Oct 2026) -> Returns 200 with selectedYear, selectedMonth, and monthlySummaries list
+        mockMvc.perform(get("/api/admin/dashboard/stats?year=2026&month=10")
+                        .header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.selectedYear").value(2026))
+                .andExpect(jsonPath("$.data.selectedMonth").value(10))
+                .andExpect(jsonPath("$.data.monthlySummaries").isArray())
+                .andExpect(jsonPath("$.data.platformCommission").isNumber())
+                .andExpect(jsonPath("$.data.escrowDeposits").isNumber());
+
+        // 2. Past month (Aug 2026) -> No active deposits exist, escrowDeposits must be 0
+        mockMvc.perform(get("/api/admin/dashboard/stats?year=2026&month=8")
+                        .header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.selectedYear").value(2026))
+                .andExpect(jsonPath("$.data.selectedMonth").value(8))
+                .andExpect(jsonPath("$.data.escrowDeposits").value(0))
+                .andExpect(jsonPath("$.data.completedBookings").value(0));
+    }
+
+    @Test
     @DisplayName("A02: List users, providers, drivers, ekyc returns 200 for ADMIN")
     void testA02UsersEndpoints() throws Exception {
         String token = "Bearer " + getAdminToken();

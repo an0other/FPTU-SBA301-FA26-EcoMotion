@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -22,9 +23,12 @@ public class AdminDashboardController {
     private final AdminDashboardService adminDashboardService;
 
     @GetMapping("/stats")
-    @Operation(summary = "Lấy các số đếm tổng quan và chờ duyệt cho trang chủ Admin (A01)")
-    public ResponseEntity<ApiResponse<AdminStatsResponse>> getStats() {
-        AdminStatsResponse stats = adminDashboardService.getStats();
+    @Operation(summary = "Lấy các số đếm tổng quan và chờ duyệt cho trang chủ Admin (A01), hỗ trợ lọc theo năm/tháng")
+    public ResponseEntity<ApiResponse<AdminStatsResponse>> getStats(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month
+    ) {
+        AdminStatsResponse stats = adminDashboardService.getStats(year, month);
         return ResponseEntity.ok(ApiResponse.ok(stats));
     }
 }

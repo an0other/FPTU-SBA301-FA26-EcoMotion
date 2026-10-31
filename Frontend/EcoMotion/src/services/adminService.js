@@ -2,8 +2,11 @@ import apiClient from './apiClient'
 
 export const adminService = {
   // A01 — Dashboard Stats
-  async getDashboardStats() {
-    const { data } = await apiClient.get('/admin/dashboard/stats')
+  async getDashboardStats({ year, month } = {}) {
+    const params = {}
+    if (year != null) params.year = year
+    if (month != null) params.month = month
+    const { data } = await apiClient.get('/admin/dashboard/stats', { params })
     return data?.data ?? null
   },
 
