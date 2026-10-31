@@ -90,6 +90,23 @@ import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
+import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
+import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
+import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse;
+import com.fptufa26.ecomotion.booking.entity.DriverAssignment;
+import com.fptufa26.ecomotion.booking.entity.TripIncident;
+import com.fptufa26.ecomotion.booking.enums.AssignmentStatus;
+import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
+import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
+import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
+import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
+import com.fptufa26.ecomotion.dispute.service.DisputeService;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
+import java.time.LocalDate;
+import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -117,13 +134,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
     private final UserService userService;
     private final VehicleService vehicleService;
-    private final com.fptufa26.ecomotion.finance.service.PaymentRequestService paymentRequestService;
-    private final com.fptufa26.ecomotion.dispute.service.DisputeService disputeService;
+    private final PaymentRequestService paymentRequestService;
+    private final DisputeService disputeService;
     private final ScheduleService scheduleService;
-    private final com.fptufa26.ecomotion.booking.service.DriverOptimizationService driverOptimizationService;
-    private final com.fptufa26.ecomotion.booking.repository.TripIncidentRepository tripIncidentRepository;
-    private final com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository tripEvidenceRepository;
-    private final com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository driverAssignmentRepository;
+    private final DriverOptimizationService driverOptimizationService;
+    private final TripIncidentRepository tripIncidentRepository;
+    private final TripEvidenceRepository tripEvidenceRepository;
+    private final DriverAssignmentRepository driverAssignmentRepository;
     private final TripIncidentService tripIncidentService;
     private final DriverStatusService driverStatusService;
     private final Clock clock;
@@ -385,7 +402,12 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                         && java.util.Set.of(BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED).contains(booking.getStatus())),
                 booking.getStatus() == BookingStatus.CONFIRMED || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED,
                 resolveDriverRejectionReason(booking),
-                resolvePaymentStatus(booking, transactions)
+                resolvePaymentStatus(booking, transactions),
+                plannedEnd(booking),
+                booking.getPricingItems().stream().map(item ->
+                        new RentalQuoteResponse.Item(
+                                item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
+                                item.getUnitPrice(), item.getQuantity())).toList()
         );
     }
 
@@ -411,7 +433,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         int slotLengthMinutes = snapshot != null
                 ? snapshot.getSlotLengthMinutes()
                 : booking.getPlan().getSlotLengthMinutes();
-        Instant end = booking.getPickupTime().plus(
+        Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt() : booking.getPickupTime().plus(
                 Duration.ofMinutes((long) slotLengthMinutes * Math.max(1, slots)));
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
                 booking.getVehicle(), booking.getPickupTime(), end);
@@ -573,20 +595,20 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     @Override
-    public List<com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse> getBookingIncidents(Long currentUserId, String bookingCodeOrId) {
+    public List<TripIncidentResponse> getBookingIncidents(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
         return tripIncidentRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId()).stream()
-                .map(com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse::fromEntity)
+                .map(TripIncidentResponse::fromEntity)
                 .toList();
     }
 
     @Override
-    public List<com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse> getBookingEvidence(Long currentUserId, String bookingCodeOrId) {
+    public List<TripEvidenceResponse> getBookingEvidence(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBooking(provider, bookingCodeOrId);
         return tripEvidenceRepository.findByBooking_IdOrderByRecordedAtAsc(booking.getId()).stream()
-                .map(com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse::fromEntity)
+                .map(TripEvidenceResponse::fromEntity)
                 .toList();
     }
 
@@ -714,7 +736,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     @Override
     public List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId) {
         Provider provider = resolveProvider(currentUserId);
-        List<Driver> drivers = driverAssignmentService.listEligible(provider.getId(), java.time.LocalDate.now());
+        List<Driver> drivers = driverAssignmentService.listEligible(provider.getId(), LocalDate.now());
 
         List<BookingStatus> activeStatuses = List.of(BookingStatus.ACCEPTED, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS);
         Instant now = clock.instant();
@@ -817,6 +839,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     private Instant plannedEnd(Booking booking) {
+        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
                 .orElse(null);
         int slotLength = snapshot != null
@@ -901,11 +924,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
     private void recordDriverAssignment(Booking booking, Driver driver, Instant now) {
         driverOptimizationService.recallActiveAssignments(booking.getId());
-        com.fptufa26.ecomotion.booking.entity.DriverAssignment assignment =
-                new com.fptufa26.ecomotion.booking.entity.DriverAssignment();
+        DriverAssignment assignment = new DriverAssignment();
         assignment.setBooking(booking);
         assignment.setDriver(driver);
-        assignment.setStatus(com.fptufa26.ecomotion.booking.enums.AssignmentStatus.PENDING_RESPONSE);
+        assignment.setStatus(AssignmentStatus.PENDING_RESPONSE);
         assignment.setAssignedAt(now);
         assignment.setExpiresAt(booking.getAssignmentExpiresAt());
         assignment.setRoundNumber(booking.getReassignCount() != null ? booking.getReassignCount() + 1 : 1);
@@ -922,7 +944,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new BookingNotFoundException("Mã đơn thuê không hợp lệ");
         }
 
-        String bookingCode = bookingCodeOrId.trim().toUpperCase(java.util.Locale.ROOT);
+        String bookingCode = bookingCodeOrId.trim().toUpperCase(Locale.ROOT);
         return bookingRepository.findByBookingCodeAndVehicle_Provider_Id(bookingCode, provider.getId())
                 .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + bookingCode));
     }
@@ -931,7 +953,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         if (bookingCodeOrId == null || bookingCodeOrId.isBlank()) {
             throw new BookingNotFoundException("Mã đơn thuê không hợp lệ");
         }
-        String bookingCode = bookingCodeOrId.trim().toUpperCase(java.util.Locale.ROOT);
+        String bookingCode = bookingCodeOrId.trim().toUpperCase(Locale.ROOT);
         return bookingRepository.findByBookingCodeAndProviderIdForUpdate(bookingCode, provider.getId())
                 .orElseThrow(() -> new BookingNotFoundException("Không tìm thấy đơn thuê: " + bookingCode));
     }
@@ -1140,6 +1162,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 scheduleService.moveBooking(booking, booking.getVehicle(), window.start(), window.end());
                 booking.setPreviousPickupTime(oldPickup);
                 booking.setPickupTime(request.newPickupTime());
+                booking.setPlannedEndAt(end);
                 message = "Đã dời giờ nhận xe để xử lý nguy cơ xe về trễ";
             }
             case CANCEL_AND_REFUND -> {
@@ -1194,6 +1217,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     private Instant plannedEnd(Booking booking, Instant start) {
+        if (booking.getPlannedEndAt() != null)
+            return start.plus(Duration.between(booking.getPickupTime(), booking.getPlannedEndAt()));
         BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
                 .orElse(null);
         int quantity = bookingChargeRepository.findByBooking_IdAndChargeType(
@@ -1251,6 +1276,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     private String calculateRentalDuration(Booking booking) {
+        if (booking.getPlannedEndAt() != null) {
+            long hours = Duration.between(booking.getPickupTime(), booking.getPlannedEndAt()).toHours();
+            return (hours / 24 > 0 ? hours / 24 + " ngày " : "") + (hours % 24 > 0 ? hours % 24 + " giờ" : "");
+        }
         if (booking.getPlan() == null) return "1 ngày";
 
         if (booking.getPlan().getSlotPrice() != null

@@ -93,7 +93,9 @@ public record ProviderBookingDetailResponse(
         boolean canAssignDriver,
         boolean canAutoAssignDriver,
         String rejectionReason,
-        String paymentStatus
+        String paymentStatus,
+        Instant plannedEndAt,
+        List<RentalQuoteResponse.Item> pricingItems
 ) {
     public ProviderBookingDetailResponse(
             Long id,
@@ -183,7 +185,8 @@ public record ProviderBookingDetailResponse(
                 driverId, driverName, driverPhone, driverLicenseNo, driverLicenseClass,
                 driverPortraitUrl, driverRatingAvg, driver, trip, charges, paymentTransactions,
                 timeline, assignedAt, driverConfirmedAt, actualArrivedAt, executionStatus,
-                latestLocation, canAssignDriver, canAutoAssignDriver, rejectionReason, null
+                latestLocation, canAssignDriver, canAutoAssignDriver, rejectionReason, null,
+                null, List.of()
         );
     }
 

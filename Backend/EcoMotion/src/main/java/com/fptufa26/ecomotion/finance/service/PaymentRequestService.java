@@ -68,5 +68,5 @@ public interface PaymentRequestService {
 
     boolean expireDepositWithoutProof(Long bookingId);
 
-    Optional<PaymentRequest> findPaymentRequest(Long bookingId, com.fptufa26.ecomotion.finance.enums.PaymentRequestType type);
+    Optional<PaymentRequest> findPaymentRequest(Long bookingId, PaymentRequestType type);
 }

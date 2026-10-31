@@ -45,6 +45,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse;
 
 @RestController
 @RequestMapping({ "/api/provider/bookings", "/api/v1/provider/bookings", "/api/v1/provider/trips" })
@@ -92,7 +94,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/operational-risk")
     @Operation(summary = "Kiểm tra nguy cơ xe chưa về kịp cho booking kế tiếp")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse> operationalRisk(
+    public ApiResponse<OperationalRiskResponse> operationalRisk(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(vehicleOperationalRiskService.assessForProvider(principal.getUserId(), id));
@@ -225,7 +227,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/incidents")
     @Operation(summary = "Get list of reported incidents for a booking")
-    public ApiResponse<List<com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse>> getBookingIncidents(
+    public ApiResponse<List<TripIncidentResponse>> getBookingIncidents(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.getBookingIncidents(principal.getUserId(), id));

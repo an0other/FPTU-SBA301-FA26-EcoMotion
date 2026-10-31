@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Locale;
 
 @Service
 public class OtpServiceImpl implements OtpService {
@@ -132,13 +133,13 @@ public class OtpServiceImpl implements OtpService {
     }
 
     private String normalizeKey(String key) {
-        return key.trim().toLowerCase(java.util.Locale.ROOT);
+        return key.trim().toLowerCase(Locale.ROOT);
     }
 
     private String normalizeRecipient(String recipient, NotificationChannel channel) {
         String normalized = recipient.trim();
         return channel == NotificationChannel.EMAIL
-                ? normalized.toLowerCase(java.util.Locale.ROOT)
+                ? normalized.toLowerCase(Locale.ROOT)
                 : normalized;
     }
 

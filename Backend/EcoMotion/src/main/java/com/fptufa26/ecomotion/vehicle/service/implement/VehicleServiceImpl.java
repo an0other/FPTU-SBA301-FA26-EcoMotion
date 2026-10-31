@@ -37,6 +37,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import com.fptufa26.ecomotion.vehicle.entity.VehicleDocument;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentStatus;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import org.springframework.security.access.AccessDeniedException;
 
 @Service
 @RequiredArgsConstructor
@@ -378,12 +385,12 @@ public class VehicleServiceImpl implements VehicleService {
     }
 
     @Override
-    public java.util.Map<Long, String> getCoverImageUrls(java.util.Collection<Long> vehicleIds) {
+    public Map<Long, String> getCoverImageUrls(Collection<Long> vehicleIds) {
         if (vehicleIds == null || vehicleIds.isEmpty()) {
-            return java.util.Collections.emptyMap();
+            return Collections.emptyMap();
         }
         Map<Long, List<String>> images = vehicleImageService.findImageUrlsByVehicleIds(vehicleIds);
-        Map<Long, String> result = new java.util.HashMap<>();
+        Map<Long, String> result = new HashMap<>();
         images.forEach((id, urls) -> {
             if (!urls.isEmpty()) {
                 result.put(id, urls.get(0));
@@ -496,7 +503,7 @@ public class VehicleServiceImpl implements VehicleService {
         Vehicle vehicle = vehicleRepository.findByIdForUpdate(vehicleId)
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
         if (vehicle.getProvider() == null || !providerId.equals(vehicle.getProvider().getId())) {
-            throw new org.springframework.security.access.AccessDeniedException(
+            throw new AccessDeniedException(
                     "Xe thay thế không thuộc nhà cung cấp hiện tại");
         }
         if (vehicle.getStatus() != VehicleStatus.APPROVED) {

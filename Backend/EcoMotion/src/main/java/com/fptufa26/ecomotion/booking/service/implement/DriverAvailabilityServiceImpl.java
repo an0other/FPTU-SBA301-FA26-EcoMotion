@@ -157,6 +157,7 @@ public class DriverAvailabilityServiceImpl implements DriverAvailabilityService 
     }
 
     private Instant plannedEnd(Booking booking) {
+        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         Integer slotLength = snapshot == null ? null : snapshot.getSlotLengthMinutes();
         int quantity = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)

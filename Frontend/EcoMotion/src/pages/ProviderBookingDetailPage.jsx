@@ -1,5 +1,6 @@
 import { incidentResolutionPayload } from '../utils/tv5Contracts'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { pricingDescription } from '../utils/rentalPricing'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import ProviderLayout from '../components/provider/ProviderLayout'
@@ -552,7 +553,11 @@ export default function ProviderBookingDetailPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Thời gian thuê:</span>
-                    <strong className="text-slate-800">{booking.rentalDuration || '1 ngày'}</strong>
+                    <strong className="text-slate-800">
+                      {booking.pricingItems?.length
+                        ? pricingDescription(booking.pricingItems)
+                        : (booking.rentalDuration || '1 ngày')}
+                    </strong>
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-1">
                     <span className="text-slate-500">Giờ đón khách:</span>

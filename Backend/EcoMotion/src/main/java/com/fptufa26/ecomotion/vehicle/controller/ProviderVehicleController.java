@@ -35,6 +35,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
+import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.vehicle.dto.response.VehicleLicensePlateHistoryResponse;
+import java.io.IOException;
+import java.util.Map;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/provider")
@@ -43,11 +49,11 @@ import java.util.List;
 public class ProviderVehicleController {
 
     private final ProviderVehicleService providerVehicleService;
-    private final com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService;
+    private final FileStorageService fileStorageService;
     private final LicensePlateHistoryService licensePlateHistoryService;
 
     public ProviderVehicleController(ProviderVehicleService providerVehicleService,
-                                     com.fptufa26.ecomotion.common.storage.FileStorageService fileStorageService,
+                                     FileStorageService fileStorageService,
                                      LicensePlateHistoryService licensePlateHistoryService) {
         this.providerVehicleService = providerVehicleService;
         this.fileStorageService = fileStorageService;
@@ -118,7 +124,7 @@ public class ProviderVehicleController {
 
     @GetMapping("/vehicles/{id}/license-plate-history")
     @Operation(summary = "Xem lịch sử thay đổi biển số xe")
-    public ApiResponse<List<com.fptufa26.ecomotion.vehicle.dto.response.VehicleLicensePlateHistoryResponse>>
+    public ApiResponse<List<VehicleLicensePlateHistoryResponse>>
     getLicensePlateHistory(@AuthenticationPrincipal SecurityUser user, @PathVariable Long id) {
         return ApiResponse.success(licensePlateHistoryService.listForProvider(user.getUserId(), id));
     }
@@ -190,11 +196,11 @@ public class ProviderVehicleController {
         return ApiResponse.success(providerVehicleService.updateVehicleDocument(user.getUserId(), id, request));
     }
 
-    @PostMapping(value = "/vehicles/documents/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/vehicles/documents/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload real vehicle legal document file (JPG, PNG, PDF)")
-    public ApiResponse<java.util.Map<String, String>> uploadDocumentFile(
+    public ApiResponse<Map<String, String>> uploadDocumentFile(
             @AuthenticationPrincipal SecurityUser user,
-            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+            @RequestParam("file") MultipartFile file
     ) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Vui lòng chọn tệp tài liệu hoặc hình ảnh");
@@ -216,20 +222,20 @@ public class ProviderVehicleController {
                     contentType
             );
             String fileUrl = "/api/files/" + storedKey;
-            return ApiResponse.success(java.util.Map.of(
+            return ApiResponse.success(Map.of(
                     "fileUrl", fileUrl,
                     "fileName", originalFilename != null ? originalFilename : "document"
             ));
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             throw new IllegalStateException("Không thể đọc tệp tải lên: " + e.getMessage());
         }
     }
 
-    @PostMapping(value = "/vehicles/images/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/vehicles/images/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload vehicle cover image (JPG, PNG, WEBP)")
-    public ApiResponse<java.util.Map<String, String>> uploadVehicleImage(
+    public ApiResponse<Map<String, String>> uploadVehicleImage(
             @AuthenticationPrincipal SecurityUser user,
-            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+            @RequestParam("file") MultipartFile file
     ) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Vui lòng chọn tệp hình ảnh xe");
@@ -258,11 +264,11 @@ public class ProviderVehicleController {
                     contentType
             );
             String imageUrl = "/api/files/" + storedKey;
-            return ApiResponse.success(java.util.Map.of(
+            return ApiResponse.success(Map.of(
                     "imageUrl", imageUrl,
                     "fileName", originalFilename != null ? originalFilename : "vehicle_image"
             ));
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             throw new IllegalStateException("Không thể đọc tệp tải lên: " + e.getMessage());
         }
     }
