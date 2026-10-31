@@ -35,6 +35,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 
 @RestController
 @RequiredArgsConstructor
@@ -86,7 +87,7 @@ public class PaymentRequestController {
     @PostMapping({"/api/v1/payment-requests/{id}/proofs", "/api/payment-requests/{id}/proofs"})
     @Operation(summary = "Deprecated proof URL submission (disabled; use multipart upload)")
     public ResponseEntity<Void> rejectLegacyProofUrlSubmission(@PathVariable Long id) {
-        return ResponseEntity.status(org.springframework.http.HttpStatus.GONE).build();
+        return ResponseEntity.status(HttpStatus.GONE).build();
     }
 
     @PostMapping(value = {"/api/v1/payment-requests/{id}/proofs/multipart",

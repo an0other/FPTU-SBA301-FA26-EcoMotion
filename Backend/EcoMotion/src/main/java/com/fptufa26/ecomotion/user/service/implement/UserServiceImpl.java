@@ -34,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.fptufa26.ecomotion.finance.enums.SupportedBank;
 
 @Service
 @RequiredArgsConstructor
@@ -310,8 +311,8 @@ public class UserServiceImpl implements UserService {
 
         boolean anyBank = !isBlank(bankName) || !isBlank(bankAccountNo) || !isBlank(bankAccountHolder);
         if (anyBank) {
-            String bCode = com.fptufa26.ecomotion.finance.enums.SupportedBank.fromName(bankName)
-                    .map(com.fptufa26.ecomotion.finance.enums.SupportedBank::getCode)
+            String bCode = SupportedBank.fromName(bankName)
+                    .map(SupportedBank::getCode)
                     .orElse("VCB");
             provider.setBankCode(bCode);
             provider.setBankName(bankName.trim());
@@ -482,7 +483,7 @@ public class UserServiceImpl implements UserService {
     public Provider updateProviderBankSnapshot(Long providerId, String bankCode, String bankName,
                                                String accountNumber, String accountHolder) {
         Provider provider = providerRepository.findById(providerId)
-                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.NotFoundException(
+                .orElseThrow(() -> new NotFoundException(
                         "Không tìm thấy nhà cung cấp"));
         provider.setBankCode(bankCode);
         provider.setBankName(bankName);

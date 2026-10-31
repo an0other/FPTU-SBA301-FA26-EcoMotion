@@ -46,6 +46,7 @@ public record BookingDetailResponse(
         boolean canConfirmEnd,
         List<DisputeCategory> disputeCategories,
         String providerName,
-        Instant holdExpiresAt
+        Instant holdExpiresAt,
+        List<RentalQuoteResponse.Item> pricingItems
 ) {
 }

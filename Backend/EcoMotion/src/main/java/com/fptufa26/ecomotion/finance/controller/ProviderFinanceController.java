@@ -31,6 +31,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest;
+import com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest;
+import com.fptufa26.ecomotion.finance.dto.response.RefundResponse;
+import com.fptufa26.ecomotion.finance.service.RefundService;
 
 @RestController
 @RequestMapping({"/api/v1/provider/finance", "/api/provider/finance"})
@@ -40,7 +44,7 @@ import java.util.List;
 public class ProviderFinanceController {
 
     private final ProviderFinanceService providerFinanceService;
-    private final com.fptufa26.ecomotion.finance.service.RefundService refundService;
+    private final RefundService refundService;
 
     @GetMapping("/summary")
     @Operation(summary = "Get provider overall finance overview and metrics")
@@ -147,25 +151,25 @@ public class ProviderFinanceController {
 
     @GetMapping("/refunds")
     @Operation(summary = "List all refund requests for the current provider")
-    public ApiResponse<List<com.fptufa26.ecomotion.finance.dto.response.RefundResponse>> listRefunds(
+    public ApiResponse<List<RefundResponse>> listRefunds(
             @AuthenticationPrincipal SecurityUser principal) {
         return ApiResponse.success(refundService.listRefundsForProvider(principal.getUserId()));
     }
 
     @PostMapping("/refunds")
     @Operation(summary = "Submit a refund request on behalf of the provider")
-    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RefundResponse> createRefund(
+    public ApiResponse<RefundResponse> createRefund(
             @AuthenticationPrincipal SecurityUser principal,
-            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest request) {
+            @Valid @RequestBody CreateRefundRequest request) {
         return ApiResponse.success(refundService.createRefundRequest(principal.getUserId(), request));
     }
 
     @PostMapping("/refunds/{refundId}/review")
     @Operation(summary = "Provider reviews, approves or rejects a refund request")
-    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RefundResponse> reviewRefund(
+    public ApiResponse<RefundResponse> reviewRefund(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long refundId,
-            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest request) {
+            @Valid @RequestBody ReviewRefundRequest request) {
         return ApiResponse.success(refundService.reviewRefundRequest(principal.getUserId(), refundId, request));
     }
 }

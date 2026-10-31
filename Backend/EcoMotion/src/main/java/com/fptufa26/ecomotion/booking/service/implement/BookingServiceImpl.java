@@ -97,6 +97,14 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import com.fptufa26.ecomotion.booking.dto.request.RentalQuoteRequest;
+import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import com.fptufa26.ecomotion.booking.entity.BookingPricingItem;
+import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
+import com.fptufa26.ecomotion.booking.service.RentalPricingService;
+import com.fptufa26.ecomotion.common.cloudinary.CloudinaryService;
+import java.util.stream.Collectors;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -134,7 +142,27 @@ public class BookingServiceImpl implements BookingService {
     private final DriverAvailabilityService driverAvailabilityService;
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
     private final Clock clock;
-    private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
+    private final RentalPricingService rentalPricingService;
+    private final CloudinaryService cloudinaryService;
+
+    @Override
+    @Transactional(readOnly = true)
+    public RentalQuoteResponse quoteRental(
+            Long userId, RentalQuoteRequest request) {
+        Renter renter = userService.requireRenterByUserId(userId);
+        var quote = rentalPricingService.quote(request);
+        if (renterOverlaps(renter.getId(), request.pickupTime(), request.requestedEndAt())) {
+            throw new ConflictException("Bạn đã có đơn thuê trùng khoảng thời gian này. Vui lòng chọn thời gian khác.");
+        }
+        var options = quote.options().stream()
+                .filter(option -> !renterOverlaps(renter.getId(), request.pickupTime(), option.plannedEndAt()))
+                .toList();
+        String reason = options.size() < quote.options().size()
+                ? "Phương án làm tròn trùng lịch đơn thuê của bạn. Vui lòng chọn phương án còn lại hoặc đổi thời gian."
+                : quote.reason();
+        return new RentalQuoteResponse(
+                quote.available(), reason, quote.searchFrom(), quote.searchTo(), quote.availableWindows(), options, quote.occupiedWindows());
+    }
 
     private static final Set<BookingStatus> CANCELLABLE = EnumSet.of(
             BookingStatus.PENDING,
@@ -220,7 +248,13 @@ public class BookingServiceImpl implements BookingService {
     public CreateBookingResponse create(Long userId, CreateBookingRequest request) {
         Renter renter = userService.requireRenterByUserId(userId);
         Vehicle vehicle = vehicleCatalogService.requireApprovedForUpdate(request.vehicleId());
-        RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(), request.planId());
+        boolean mixed = request.plannedEndAt() != null || request.pricingItems() != null;
+        var selection = mixed ? rentalPricingService.validateSelection(request.vehicleId(), request.pickupTime(),
+                request.plannedEndAt(), request.pricingItems(), request.expectedRentalAmount()) : null;
+        if (!mixed && (request.planId() == null || request.slotCount() == null || request.slotCount() < 1))
+            throw new BadRequestException("Vui lòng chọn phương án giá");
+        RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(),
+                mixed ? selection.policyPlanId() : request.planId());
 
         if (plan.getPlanType() == PlanType.YEARLY) {
             throw new ConflictException("Yearly plans must use the dedicated contract flow");
@@ -239,11 +273,11 @@ public class BookingServiceImpl implements BookingService {
         if (start.isBefore(clock.instant().plus(MINIMUM_BOOKING_LEAD_TIME))) {
             throw new ConflictException("Đơn thuê phải được tạo trước giờ nhận xe ít nhất 3 giờ");
         }
-        Instant end = start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
+        Instant end = mixed ? selection.plannedEndAt() : start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
         if (!end.isAfter(start)) {
             throw new ConflictException("Khoảng thời gian thuê không hợp lệ");
         }
-        validateDuration(plan, request.slotCount(), Duration.between(start, end));
+        if (!mixed) validateDuration(plan, request.slotCount(), Duration.between(start, end));
         if (driverAvailabilityService.findAvailable(
                 vehicle.getProvider().getId(), vehicle, start, end, null).isEmpty()) {
             throw new ConflictException("Không có tài xế phù hợp và còn trống trong thời gian đã chọn");
@@ -258,7 +292,7 @@ public class BookingServiceImpl implements BookingService {
 
         PickupQuoteResponse pickupQuote = calculatePickupQuote(vehicle.getProvider(), plan.getFreeRadiusKm(),
                 plan.getOutOfRadiusRate(), request.pickupLatitude(), request.pickupLongitude());
-        BigDecimal total = plan.getSlotPrice().multiply(BigDecimal.valueOf(request.slotCount()));
+        BigDecimal total = mixed ? selection.rentalAmount() : plan.getSlotPrice().multiply(BigDecimal.valueOf(request.slotCount()));
         User actor = renter.getUser();
 
         Booking booking = new Booking();
@@ -272,6 +306,15 @@ public class BookingServiceImpl implements BookingService {
         booking.setPickupLongitude(request.pickupLongitude());
         booking.setDriverNote(driverNote);
         booking.setPickupTime(start);
+        booking.setPlannedEndAt(end);
+        if (mixed) {
+            for (var item : selection.items()) {
+                var row = new BookingPricingItem();
+                row.setBooking(booking); row.setPlanId(item.planId()); row.setPlanType(item.planType());
+                row.setSlotLengthMinutes(item.slotLengthMinutes()); row.setUnitPrice(item.unitPrice());
+                row.setQuantity(item.quantity()); booking.getPricingItems().add(row);
+            }
+        }
         booking.setPassengerCount(request.passengerCount());
         booking.setTotalAmount(total);
         bookingRepository.saveAndFlush(booking);
@@ -307,9 +350,11 @@ public class BookingServiceImpl implements BookingService {
         BookingCharge charge = new BookingCharge();
         charge.setBooking(booking);
         charge.setChargeType(ChargeType.BASE_RENTAL);
-        charge.setDescription("Thuê " + request.slotCount() + " slot");
-        charge.setQuantity(request.slotCount());
-        charge.setUnitPrice(plan.getSlotPrice());
+        charge.setDescription(mixed ? selection.items().stream()
+                .map(item -> item.quantity() + " × " + item.slotLengthMinutes() / 60 + " giờ (" + item.unitPrice() + "đ)")
+                .collect(Collectors.joining(" + ")) : "Thuê " + request.slotCount() + " slot");
+        charge.setQuantity(mixed ? 1 : request.slotCount());
+        charge.setUnitPrice(mixed ? total : plan.getSlotPrice());
         charge.setAmount(total);
         charge.setCreatedBy(actor);
         charge.setWaived(false);
@@ -619,14 +664,17 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Passenger count exceeds seat count");
         }
 
+        vehicleCatalogService.requireApprovedForUpdate(booking.getVehicle().getId());
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
         int slots = baseSlots(booking);
-        Instant end = request.pickupTime().plus(
-                Duration.ofMinutes((long) snapshot.getSlotLengthMinutes() * slots));
+        if (!booking.getPricingItems().isEmpty())
+            RentalPricingServiceImpl.validateHours(request.pickupTime(), request.pickupTime().plus(Duration.ofHours(1)));
+        Duration purchasedDuration = Duration.between(booking.getPickupTime(), endOf(booking, snapshot, slots));
+        Instant end = request.pickupTime().plus(purchasedDuration);
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
                 booking.getVehicle(), request.pickupTime(), end);
         if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
-            scheduleService.rescheduleHold(booking, window.start(), window.end());
+            scheduleService.rescheduleHold(booking, request.pickupTime(), end);
         } else if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
             throw new ConflictException("Vehicle is not free in the selected range (including maintenance buffer)");
         }
@@ -644,6 +692,7 @@ public class BookingServiceImpl implements BookingService {
         }
 
         booking.setPickupTime(request.pickupTime());
+        booking.setPlannedEndAt(end);
         booking.setPickupAddress(request.pickupAddress().trim());
         booking.setPickupLatitude(request.pickupLatitude());
         booking.setPickupLongitude(request.pickupLongitude());
@@ -792,7 +841,7 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public String uploadDisputeEvidence(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file) {
+    public String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
         if (file == null || file.isEmpty()) {
@@ -940,7 +989,7 @@ public class BookingServiceImpl implements BookingService {
                     booking.getOperationalResolutionReason(),
                     true,
                     booking.getOperationalResolution()
-                            == com.fptufa26.ecomotion.booking.enums.OperationalResolutionType.CANCEL_AND_REFUND));
+                            == OperationalResolutionType.CANCEL_AND_REFUND));
         }
         if (booking.getStatus() == BookingStatus.REJECTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã từ chối", null, "Không có lý do", true, true));
@@ -1036,6 +1085,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Instant summaryEndTime(Booking booking, BookingPolicySnapshot snapshot) {
+        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         if (booking.getPickupTime() == null || snapshot == null || snapshot.getSlotLengthMinutes() == null) {
             return null;
         }
@@ -1206,6 +1256,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Instant endOf(Booking booking, BookingPolicySnapshot snapshot, int slots) {
+        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         return booking.getPickupTime().plus(Duration.ofMinutes((long) snapshot.getSlotLengthMinutes() * slots));
     }
 
@@ -1287,6 +1338,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private Instant endOf(Booking booking) {
+        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         if (snapshot == null) {
             return booking.getPickupTime();

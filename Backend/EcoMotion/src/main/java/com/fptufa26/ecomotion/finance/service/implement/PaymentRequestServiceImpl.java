@@ -80,6 +80,9 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import com.fptufa26.ecomotion.booking.enums.CancelReason;
+import java.io.IOException;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -409,7 +412,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             return submitPaymentProof(paymentRequestId, currentUserId,
                     new SubmitProofRequest(storedPath, qrAmount,
                             transactionReference, transferredAt, note));
-        } catch (java.io.IOException ex) {
+        } catch (IOException ex) {
             throw new InvalidPaymentOperationException("Không thể đọc ảnh chứng từ");
         }
     }
@@ -420,7 +423,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 ? bookingStatus == BookingStatus.ACCEPTED
                 || bookingStatus == BookingStatus.AWAITING_DEPOSIT
                 || (bookingStatus == BookingStatus.CANCELLED
-                && request.getBooking().getCancelReason() == com.fptufa26.ecomotion.booking.enums.CancelReason.DEPOSIT_TIMEOUT)
+                && request.getBooking().getCancelReason() == CancelReason.DEPOSIT_TIMEOUT)
                 : request.getPaymentType() == PaymentRequestType.FINAL_BALANCE
                 && bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT;
         if (!valid) {
@@ -487,7 +490,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if ("image/png".equals(contentType)) {
             byte[] signature = {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
             return bytes.length >= signature.length
-                    && java.util.stream.IntStream.range(0, signature.length)
+                    && IntStream.range(0, signature.length)
                     .allMatch(index -> bytes[index] == signature[index]);
         }
         return bytes.length >= 12
@@ -984,7 +987,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         int slots = bookingPaymentLedgerService.findCharge(booking.getId(), ChargeType.BASE_RENTAL)
                 .map(BookingCharge::getQuantity)
                 .orElse(1);
-        Instant end = booking.getPickupTime().plus(
+        Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt() : booking.getPickupTime().plus(
                 Duration.ofMinutes((long) slotLengthMinutes * slots));
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
                 lockedVehicle, booking.getPickupTime(), end);

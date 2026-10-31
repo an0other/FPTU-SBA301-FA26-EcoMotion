@@ -46,7 +46,7 @@ public final class BookingSpecification {
         };
     }
 
-    public static Specification<Booking> hasStatusIn(java.util.Collection<BookingStatus> statuses) {
+    public static Specification<Booking> hasStatusIn(Collection<BookingStatus> statuses) {
         return (root, query, cb) -> (statuses == null || statuses.isEmpty()) ? null : root.get("status").in(statuses);
     }
 
