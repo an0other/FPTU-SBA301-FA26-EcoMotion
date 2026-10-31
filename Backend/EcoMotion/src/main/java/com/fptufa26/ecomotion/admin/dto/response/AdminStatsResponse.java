@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 @Builder
@@ -28,4 +29,7 @@ public class AdminStatsResponse {
     private BigDecimal providerPayoutDue;
     private BigDecimal escrowDeposits;
     private long completedBookings;
+    private Integer selectedYear;
+    private Integer selectedMonth;
+    private List<MonthlyFinancialSummaryDto> monthlySummaries;
 }

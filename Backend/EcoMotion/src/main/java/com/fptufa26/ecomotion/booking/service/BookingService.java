@@ -26,6 +26,7 @@ import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -89,4 +90,11 @@ public interface BookingService {
     BigDecimal sumCompletedGrossRentalVolume();
 
     BigDecimal sumEscrowDeposits();
+
+    BigDecimal sumTotalRevenue(Instant from, Instant to);
+    BigDecimal sumAdminCommission(Instant from, Instant to);
+    BigDecimal sumCompletedGrossRentalVolume(Instant from, Instant to);
+    BigDecimal sumEscrowDeposits(Instant from, Instant to);
+    long countCompletedBookings(Instant from, Instant to);
+    long countTotalBookings(Instant from, Instant to);
 }

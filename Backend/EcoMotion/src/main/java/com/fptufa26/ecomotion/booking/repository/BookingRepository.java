@@ -41,6 +41,24 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     @Query("SELECT COALESCE(SUM(b.totalAmount), 0) FROM Booking b WHERE b.status = com.fptufa26.ecomotion.booking.enums.BookingStatus.COMPLETED")
     BigDecimal sumCompletedGrossRentalVolume();
 
+    @Query("SELECT COALESCE(SUM(b.totalAmount * p.commissionRate), 0) FROM Booking b JOIN b.vehicle v JOIN v.provider p " +
+           "WHERE b.status = com.fptufa26.ecomotion.booking.enums.BookingStatus.COMPLETED " +
+           "AND COALESCE(b.actualEndAt, b.createdAt) >= :from AND COALESCE(b.actualEndAt, b.createdAt) < :to")
+    BigDecimal sumAdminCommissionBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("SELECT COALESCE(SUM(b.totalAmount), 0) FROM Booking b " +
+           "WHERE b.status = com.fptufa26.ecomotion.booking.enums.BookingStatus.COMPLETED " +
+           "AND COALESCE(b.actualEndAt, b.createdAt) >= :from AND COALESCE(b.actualEndAt, b.createdAt) < :to")
+    BigDecimal sumCompletedGrossRentalVolumeBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("SELECT COUNT(b) FROM Booking b " +
+           "WHERE b.status = com.fptufa26.ecomotion.booking.enums.BookingStatus.COMPLETED " +
+           "AND COALESCE(b.actualEndAt, b.createdAt) >= :from AND COALESCE(b.actualEndAt, b.createdAt) < :to")
+    long countCompletedBookingsBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    @Query("SELECT COUNT(b) FROM Booking b WHERE b.createdAt >= :from AND b.createdAt < :to")
+    long countBookingsCreatedBetween(@Param("from") Instant from, @Param("to") Instant to);
+
     @Override
     @EntityGraph(attributePaths = {
             "vehicle", "renter", "renter.user", "driver", "driver.user", "plan"
