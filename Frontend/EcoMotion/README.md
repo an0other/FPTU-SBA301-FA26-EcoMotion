@@ -10,7 +10,7 @@ npm run test:e2e
 ```
 
 `test:e2e` khởi động Vite và chạy Playwright trên Google Chrome. Các kịch bản trong
-`e2e/` kiểm tra UI renter/provider cho cảnh báo xe về trễ và thao tác đổi xe;
+`e2e/` kiểm tra chọn thời gian, phương án ghép gói và khoảng xe trống;
 API được chặn ở biên HTTP để bài test ổn định và không sửa dữ liệu phát triển.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

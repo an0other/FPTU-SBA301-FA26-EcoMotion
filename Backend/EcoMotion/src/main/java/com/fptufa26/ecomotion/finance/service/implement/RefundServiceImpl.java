@@ -40,6 +40,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -239,7 +240,7 @@ public class RefundServiceImpl implements RefundService {
                     try {
                         return bookingService.getBookingById(Long.parseLong(token));
                     } catch (NumberFormatException ex) {
-                        return java.util.Optional.empty();
+                        return Optional.empty();
                     }
                 })
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn thuê: " + token));

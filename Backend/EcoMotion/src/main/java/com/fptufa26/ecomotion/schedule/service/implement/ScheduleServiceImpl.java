@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.schedule.service.implement;
 
 import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
 import com.fptufa26.ecomotion.schedule.enums.ScheduleType;
 import com.fptufa26.ecomotion.schedule.entity.VehicleSchedule;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import com.fptufa26.ecomotion.common.exception.ConflictException;
 
 @Service
 @RequiredArgsConstructor
@@ -82,9 +84,10 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .filter(schedule -> schedule.getStatus() == ScheduleStatus.HELD)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Booking does not have an active vehicle hold"));
+        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(booking.getVehicle(), start, end);
         if (vehicleScheduleRepository.existsOccupiedOverlapExcludingBooking(
-                booking.getVehicle().getId(), start, end, bookingId)) {
-            throw new com.fptufa26.ecomotion.common.exception.ConflictException(
+                booking.getVehicle().getId(), window.start(), window.end(), bookingId)) {
+            throw new ConflictException(
                     "Vehicle is not free in the selected range (including maintenance buffer)");
         }
         row.setStartAt(start);
@@ -101,7 +104,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .orElseThrow(() -> new IllegalStateException("Không tìm thấy lịch xe của booking"));
         if (vehicleScheduleRepository.existsOccupiedOverlapExcludingBooking(
                 vehicle.getId(), start, end, bookingId)) {
-            throw new com.fptufa26.ecomotion.common.exception.ConflictException(
+            throw new ConflictException(
                     "Xe thay thế không còn trống trong khoảng thời gian đã chọn");
         }
         row.setVehicle(vehicle);
@@ -119,7 +122,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .orElseGet(() -> newLegacyHold(booking));
         if (vehicleScheduleRepository.existsOccupiedOverlapExcludingBooking(
                 row.getVehicle().getId(), row.getStartAt(), row.getEndAt(), bookingId)) {
-            throw new com.fptufa26.ecomotion.common.exception.ConflictException(
+            throw new ConflictException(
                     "Lịch xe đã được đơn khác giữ; không thể cấp lại yêu cầu đặt cọc");
         }
         row.setStatus(ScheduleStatus.HELD);
@@ -127,6 +130,12 @@ public class ScheduleServiceImpl implements ScheduleService {
     }
 
     private VehicleSchedule newLegacyHold(Booking booking) {
+        if (booking.getPlannedEndAt() != null) {
+            VehicleSchedule row = new VehicleSchedule();
+            row.setVehicle(booking.getVehicle()); row.setBooking(booking); row.setType(ScheduleType.BOOKED);
+            row.setStartAt(booking.getPickupTime()); row.setEndAt(booking.getPlannedEndAt()); row.setExtension(false);
+            return vehicleScheduleRepository.save(row);
+        }
         if (booking.getPlan() == null || booking.getPlan().getSlotPrice() == null
                 || booking.getPlan().getSlotPrice().signum() <= 0) {
             throw new IllegalStateException("Không thể xác định thời gian thuê của đơn cũ");

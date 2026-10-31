@@ -347,7 +347,7 @@ export default function VehicleDetailPage() {
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
                   <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Giá thuê theo gói
+                      Bảng giá tham khảo
                     </span>
                     <p className="mt-2 text-2xl font-bold tracking-tight text-brand-700 sm:text-3xl">
                       {selectedPlan
@@ -388,7 +388,7 @@ export default function VehicleDetailPage() {
                     {selectedPlan && (
                       <dl className="mt-4 space-y-2 border-t border-slate-100 pt-4 text-[13px]">
                         <div className="flex items-center justify-between gap-3">
-                          <dt className="text-slate-500">Độ dài mỗi slot</dt>
+                          <dt className="text-slate-500">Thời lượng mỗi gói</dt>
                           <dd className="font-semibold text-slate-900">
                             {slotDurationLabel(selectedPlan.slotLengthMinutes) ?? '—'}
                           </dd>
@@ -426,7 +426,9 @@ export default function VehicleDetailPage() {
                           disabled={!selectedPlan}
                           onClick={() => {
                             if (!vehicle || !selectedPlan) return
-                            navigate(bookingRequestPath(vehicle.id, selectedPlan.id))
+                            navigate(selectedPlan.planType === 'YEARLY'
+                              ? '/renter/yearly-rental?vehicleId=' + vehicle.id + '&planId=' + selectedPlan.id
+                              : bookingRequestPath(vehicle.id))
                           }}
                           className={`w-full rounded-xl px-5 py-3 text-sm font-bold transition-colors ${
                             selectedPlan
@@ -434,7 +436,7 @@ export default function VehicleDetailPage() {
                               : 'cursor-not-allowed bg-slate-200 text-slate-500'
                           }`}
                         >
-                          {selectedPlan?.planType === 'YEARLY' ? 'Tiếp tục sang thuê năm' : 'Gửi yêu cầu đặt xe'}
+                          {selectedPlan?.planType === 'YEARLY' ? 'Tiếp tục sang thuê năm' : 'Chọn thời gian và xem giá'}
                         </button>
                       </div>
                     </div>

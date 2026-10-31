@@ -29,6 +29,7 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 
 import java.math.BigDecimal;
 import java.util.List;
+import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 
 @Service
 @RequiredArgsConstructor
@@ -187,7 +188,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
 
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID)
-                .filter(payment -> payment.getDirection() == com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN)
+                .filter(payment -> payment.getDirection() == PaymentDirection.IN)
                 .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
                         ? payment.getAppliedAmount()
                         : payment.getAmount())

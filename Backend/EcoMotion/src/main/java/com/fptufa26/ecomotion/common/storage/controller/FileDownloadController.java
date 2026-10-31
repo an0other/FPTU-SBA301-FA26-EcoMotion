@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Locale;
+import org.springframework.http.ContentDisposition;
 
 @RestController
 @RequestMapping("/api/files")
@@ -55,7 +56,7 @@ public class FileDownloadController {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(mediaType);
-            headers.setContentDisposition(org.springframework.http.ContentDisposition.inline().filename(filename).build());
+            headers.setContentDisposition(ContentDisposition.inline().filename(filename).build());
             headers.setCacheControl("public, max-age=86400");
 
             return new ResponseEntity<>(data, headers, HttpStatus.OK);

@@ -1,5 +1,7 @@
 # AGENT_CONTEXT.md — EcoMotion
 
+> **Quyết định cập nhật 2026-10-29:** Booking giờ/ngày/tháng chọn thời gian theo giờ tròn và xác nhận tổ hợp gói. Giữ xe hết thời lượng đã mua; lưu giờ trả chính thức ở planned_end_at. Giá chốt theo booking_pricing_item, chính sách theo booking_policy_snapshot của gói dài nhất. booking.plan_id là gói đại diện chính sách. Thuê năm và flow tài xế giữ nguyên. Chi tiết và migration: [MIXED_RENTAL_PRICING](docs/MIXED_RENTAL_PRICING.md). Quyết định này thay các mô tả một gói/một số slot ở phần cũ bên dưới.
+
 > **Tài liệu ngữ cảnh chính cho AI agent.**  
 > Đọc file này **trước tiên** mỗi khi mở lại phiên làm việc để khôi phục hiểu biết về dự án.  
 > Cập nhật file này mỗi khi có thay đổi kiến trúc hoặc quyết định kỹ thuật mới.
