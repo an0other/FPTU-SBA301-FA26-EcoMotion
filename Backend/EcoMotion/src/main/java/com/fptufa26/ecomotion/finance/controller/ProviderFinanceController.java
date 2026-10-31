@@ -2,9 +2,10 @@ package com.fptufa26.ecomotion.finance.controller;
 
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
-import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.finance.dto.request.CreateBankAccountRequest;
+import com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest;
 import com.fptufa26.ecomotion.finance.dto.request.PatchBankAccountRequest;
+import com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest;
 import com.fptufa26.ecomotion.finance.dto.request.UpdateBankAccountRequest;
 import com.fptufa26.ecomotion.finance.dto.response.BookingFinancialBreakdownResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderBankAccountResponse;
@@ -13,7 +14,10 @@ import com.fptufa26.ecomotion.finance.dto.response.ProviderFinanceSummaryRespons
 import com.fptufa26.ecomotion.finance.dto.response.ProviderPayoutDetailResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderPayoutSummaryResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
+import com.fptufa26.ecomotion.finance.dto.response.RefundResponse;
 import com.fptufa26.ecomotion.finance.service.ProviderFinanceService;
+import com.fptufa26.ecomotion.finance.service.RefundService;
+import com.fptufa26.ecomotion.common.security.SecurityUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,14 +37,21 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping({"/api/v1/provider/finance", "/api/provider/finance"})
+@RequestMapping({ "/api/v1/provider/finance", "/api/provider/finance" })
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
 @Tag(name = "Provider Finance", description = "Provider finance overview, bank accounts, and transaction ledger (O11)")
 public class ProviderFinanceController {
 
     private final ProviderFinanceService providerFinanceService;
-    private final com.fptufa26.ecomotion.finance.service.RefundService refundService;
+    private final RefundService refundService;
+
+    @PostMapping("/sandbox/payouts/{bookingId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<ProviderPayoutSummaryResponse> createSandboxPayout(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long bookingId) {
+        return ApiResponse.success(providerFinanceService.createSandboxPayout(principal.getUserId(), bookingId));
+    }
 
     @GetMapping("/summary")
     @Operation(summary = "Get provider overall finance overview and metrics")
@@ -64,48 +75,14 @@ public class ProviderFinanceController {
         return ApiResponse.success(providerFinanceService.createBankAccount(principal.getUserId(), request));
     }
 
-    @PatchMapping("/bank-accounts/{id}")
-    @Operation(summary = "Partially update or activate/deactivate an existing bank account")
+    @PatchMapping("/bank-accounts/{accountId}")
+    @Operation(summary = "Update or change status of a provider bank account")
     public ApiResponse<ProviderBankAccountResponse> patchBankAccount(
             @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable Long id,
+            @PathVariable Long accountId,
             @Valid @RequestBody PatchBankAccountRequest request) {
-        return ApiResponse.success(providerFinanceService.patchBankAccount(principal.getUserId(), id, request));
+        return ApiResponse.success(providerFinanceService.patchBankAccount(principal.getUserId(), accountId, request));
     }
-
-    @GetMapping("/transactions")
-    @Operation(summary = "List provider incoming/outgoing financial transactions")
-    public ApiResponse<PageResponse<ProviderTransactionResponse>> listTransactions(
-            @AuthenticationPrincipal SecurityUser principal,
-            @RequestParam(required = false) String type,
-            @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "10") int limit,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-        int effectiveLimit = (size != null && size > 0) ? size : limit;
-        int effectiveOffset = (page != null && page >= 0) ? page * effectiveLimit : offset;
-        return ApiResponse.success(providerFinanceService.listTransactions(
-                principal.getUserId(), type, effectiveOffset, effectiveLimit));
-    }
-
-    @GetMapping("/bookings/{bookingId}/breakdown")
-    @Operation(summary = "Get detailed financial breakdown of a specific booking")
-    public ApiResponse<BookingFinancialBreakdownResponse> getBookingBreakdown(
-            @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable String bookingId) {
-        return ApiResponse.success(providerFinanceService.getBookingBreakdown(principal.getUserId(), bookingId));
-    }
-
-    @GetMapping("/commissions")
-    @Operation(summary = "Get platform commission overview and itemized records")
-    public ApiResponse<ProviderCommissionSummaryResponse> getCommissions(
-            @AuthenticationPrincipal SecurityUser principal) {
-        return ApiResponse.success(providerFinanceService.getCommissionSummary(principal.getUserId()));
-    }
-
-    // ==========================================
-    // Backward-Compatible Aliases
-    // ==========================================
 
     @GetMapping("/bank-account")
     @Operation(summary = "View current active provider bank account (alias)")
@@ -122,8 +99,37 @@ public class ProviderFinanceController {
         return ApiResponse.success(providerFinanceService.updateBankAccount(principal.getUserId(), request));
     }
 
+    @GetMapping("/transactions")
+    @Operation(summary = "List paginated provider financial ledger transactions")
+    public ApiResponse<PageResponse<ProviderTransactionResponse>> listTransactions(
+            @AuthenticationPrincipal SecurityUser principal,
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        int effectiveLimit = (size != null && size > 0) ? size : limit;
+        int effectiveOffset = (page != null && page >= 0) ? page * effectiveLimit : offset;
+        return ApiResponse.success(providerFinanceService.listTransactions(principal.getUserId(), type, effectiveOffset, effectiveLimit));
+    }
+
+    @GetMapping({ "/breakdown/{bookingCodeOrId}", "/bookings/{bookingCodeOrId}/breakdown" })
+    @Operation(summary = "View financial breakdown (rental, deposit, charges, settlement) for a booking")
+    public ApiResponse<BookingFinancialBreakdownResponse> getBookingBreakdown(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCodeOrId) {
+        return ApiResponse.success(providerFinanceService.getBookingBreakdown(principal.getUserId(), bookingCodeOrId));
+    }
+
+    @GetMapping("/commissions")
+    @Operation(summary = "Get platform commission breakdown across completed bookings")
+    public ApiResponse<ProviderCommissionSummaryResponse> getCommissionSummary(
+            @AuthenticationPrincipal SecurityUser principal) {
+        return ApiResponse.success(providerFinanceService.getCommissionSummary(principal.getUserId()));
+    }
+
     @GetMapping("/payouts")
-    @Operation(summary = "Legacy payout ledger (backward compatibility)")
+    @Operation(summary = "List payouts for the current provider (backward compatibility)")
     public ApiResponse<PageResponse<ProviderPayoutSummaryResponse>> listPayouts(
             @AuthenticationPrincipal SecurityUser principal,
             @RequestParam(required = false) String status,
@@ -133,8 +139,7 @@ public class ProviderFinanceController {
             @RequestParam(required = false) Integer size) {
         int effectiveLimit = (size != null && size > 0) ? size : limit;
         int effectiveOffset = (page != null && page >= 0) ? page * effectiveLimit : offset;
-        return ApiResponse.success(providerFinanceService.listPayouts(
-                principal.getUserId(), status, effectiveOffset, effectiveLimit));
+        return ApiResponse.success(providerFinanceService.listPayouts(principal.getUserId(), status, effectiveOffset, effectiveLimit));
     }
 
     @GetMapping("/payouts/{payoutId}")
@@ -147,25 +152,25 @@ public class ProviderFinanceController {
 
     @GetMapping("/refunds")
     @Operation(summary = "List all refund requests for the current provider")
-    public ApiResponse<List<com.fptufa26.ecomotion.finance.dto.response.RefundResponse>> listRefunds(
+    public ApiResponse<List<RefundResponse>> listRefunds(
             @AuthenticationPrincipal SecurityUser principal) {
         return ApiResponse.success(refundService.listRefundsForProvider(principal.getUserId()));
     }
 
     @PostMapping("/refunds")
     @Operation(summary = "Submit a refund request on behalf of the provider")
-    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RefundResponse> createRefund(
+    public ApiResponse<RefundResponse> createRefund(
             @AuthenticationPrincipal SecurityUser principal,
-            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest request) {
+            @Valid @RequestBody CreateRefundRequest request) {
         return ApiResponse.success(refundService.createRefundRequest(principal.getUserId(), request));
     }
 
     @PostMapping("/refunds/{refundId}/review")
     @Operation(summary = "Provider reviews, approves or rejects a refund request")
-    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RefundResponse> reviewRefund(
+    public ApiResponse<RefundResponse> reviewRefund(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long refundId,
-            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest request) {
+            @Valid @RequestBody ReviewRefundRequest request) {
         return ApiResponse.success(refundService.reviewRefundRequest(principal.getUserId(), refundId, request));
     }
 }

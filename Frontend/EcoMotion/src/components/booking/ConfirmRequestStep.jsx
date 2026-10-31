@@ -1,4 +1,5 @@
 import { formatCurrency } from '../../utils/formatCurrency'
+import { useState } from 'react'
 import { PickupFeeSummary } from './PickupFeeSummary'
 import { DEPOSIT_HOLD_COPY } from '../../utils/bookingCopy'
 
@@ -63,9 +64,21 @@ export const ConfirmRequestStep = ({
   pickupQuote,
   depositAmount,
   submitting = false,
+  errorMessage = '',
   onBack,
   onSubmit,
 }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isPending = submitting || isSubmitting
+  const handleSubmit = async () => {
+    if (isPending) return
+    setIsSubmitting(true)
+    try {
+      await onSubmit()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
   return (
     <div className="space-y-5">
       <div>
@@ -214,6 +227,7 @@ export const ConfirmRequestStep = ({
         </div>
       </section>
 
+      {errorMessage && <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{errorMessage}</p>}
       {/* Navigation */}
       <div className="flex flex-col-reverse items-center justify-between gap-3 pt-2 sm:flex-row">
         <button
@@ -229,12 +243,12 @@ export const ConfirmRequestStep = ({
         </button>
 
         <button
-          onClick={onSubmit}
-          disabled={submitting}
+          onClick={handleSubmit}
+          disabled={isPending}
           className="flex w-full min-w-[220px] items-center justify-center gap-2 rounded-xl bg-brand-700 px-7 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-60 sm:w-auto"
           type="button"
         >
-          {submitting ? (
+          {isPending ? (
             <>
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

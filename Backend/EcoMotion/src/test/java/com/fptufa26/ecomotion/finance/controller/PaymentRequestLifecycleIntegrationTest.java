@@ -65,97 +65,113 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class PaymentRequestLifecycleIntegrationTest {
 
-    @Autowired PaymentRequestService paymentRequestService;
-    @Autowired BookingRepository bookingRepository;
-    @Autowired BookingChargeRepository chargeRepository;
-    @Autowired VehicleScheduleRepository scheduleRepository;
-    @Autowired ProviderRepository providerRepository;
-    @Autowired ProviderBankAccountRepository bankAccountRepository;
-    @Autowired PaymentTransactionRepository transactionRepository;
-    @Autowired ProviderBookingService providerBookingService;
-    @Autowired BookingService bookingService;
-    @Autowired DisputeService disputeService;
-    @Autowired DisputeRepository disputeRepository;
-    @Autowired PaymentRequestRepository paymentRequestRepository;
-    @Autowired PaymentEvidenceRepository paymentEvidenceRepository;
-    @Autowired UserRepository userRepository;
-    @Autowired JwtService jwtService;
-    @Autowired MockMvc mockMvc;
+        @Autowired
+        PaymentRequestService paymentRequestService;
+        @Autowired
+        BookingRepository bookingRepository;
+        @Autowired
+        BookingChargeRepository chargeRepository;
+        @Autowired
+        VehicleScheduleRepository scheduleRepository;
+        @Autowired
+        ProviderRepository providerRepository;
+        @Autowired
+        ProviderBankAccountRepository bankAccountRepository;
+        @Autowired
+        PaymentTransactionRepository transactionRepository;
+        @Autowired
+        ProviderBookingService providerBookingService;
+        @Autowired
+        BookingService bookingService;
+        @Autowired
+        DisputeService disputeService;
+        @Autowired
+        DisputeRepository disputeRepository;
+        @Autowired
+        PaymentRequestRepository paymentRequestRepository;
+        @Autowired
+        PaymentEvidenceRepository paymentEvidenceRepository;
+        @Autowired
+        UserRepository userRepository;
+        @Autowired
+        JwtService jwtService;
+        @Autowired
+        MockMvc mockMvc;
 
-    @Test
-    void renterUploadsImageProofAndInvalidFilesDoNotCreateEvidence() throws Exception {
-        Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
-        booking.setStatus(BookingStatus.ACCEPTED);
-        bookingRepository.saveAndFlush(booking);
-        ensureBankAccount(booking);
-        PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
-        Long renterUserId = booking.getRenter().getUser().getId();
+        @Test
+        void renterUploadsImageProofAndInvalidFilesDoNotCreateEvidence() throws Exception {
+                Booking booking = bookingRepository.findByBookingCode("BK-4M1P88").orElseThrow();
+                booking.setStatus(BookingStatus.ACCEPTED);
+                bookingRepository.saveAndFlush(booking);
+                ensureBankAccount(booking);
+                PaymentRequest request = paymentRequestService.createDepositPaymentRequest(booking);
+                Long renterUserId = booking.getRenter().getUser().getId();
 
-        byte[] png = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
-        MockMultipartFile empty = new MockMultipartFile("file", "receipt.png", "image/png", new byte[0]);
-        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
-                request.getId(), renterUserId, empty, request.getAmount(), null, null, null))
-                .hasMessageContaining("trống");
-        MockMultipartFile oversized = new MockMultipartFile(
-                "file", "receipt.png", "image/png", new byte[5 * 1024 * 1024 + 1]);
-        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
-                request.getId(), renterUserId, oversized, request.getAmount(), null, null, null))
-                .hasMessageContaining("5 MB");
-        MockMultipartFile spoofed = new MockMultipartFile(
-                "file", "receipt.png", "image/png", new byte[] {1, 2, 3, 4});
-        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
-                request.getId(), renterUserId, spoofed, request.getAmount(), null, null, null))
-                .hasMessageContaining("không khớp");
-        assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
-                request.getId(), -999L, new MockMultipartFile("file", "receipt.png", "image/png", png),
-                request.getAmount(), null, null, null))
-                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+                byte[] png = new byte[] { (byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a };
+                MockMultipartFile empty = new MockMultipartFile("file", "receipt.png", "image/png", new byte[0]);
+                assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                                request.getId(), renterUserId, empty, request.getAmount(), null, null, null))
+                                .hasMessageContaining("trống");
+                MockMultipartFile oversized = new MockMultipartFile(
+                                "file", "receipt.png", "image/png", new byte[5 * 1024 * 1024 + 1]);
+                assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                                request.getId(), renterUserId, oversized, request.getAmount(), null, null, null))
+                                .hasMessageContaining("5 MB");
+                MockMultipartFile spoofed = new MockMultipartFile(
+                                "file", "receipt.png", "image/png", new byte[] { 1, 2, 3, 4 });
+                assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                                request.getId(), renterUserId, spoofed, request.getAmount(), null, null, null))
+                                .hasMessageContaining("không khớp");
+                assertThatThrownBy(() -> paymentRequestService.submitPaymentProof(
+                                request.getId(), -999L, new MockMultipartFile("file", "receipt.png", "image/png", png),
+                                request.getAmount(), null, null, null))
+                                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
 
-        MockMultipartFile image = new MockMultipartFile("file", "receipt.png", "image/png", png);
-        var submitted = paymentRequestService.submitPaymentProof(
-                request.getId(), renterUserId, image, request.getAmount(),
-                "BANK-IMAGE-001", null, "VietQR receipt");
-        assertThat(submitted.proofImageUrl()).startsWith("/api/v1/payment-evidences/");
-        assertThat(paymentRequestService.getPaymentEvidenceFile(submitted.id(), renterUserId).content())
-                .containsExactly(png);
-        assertThatThrownBy(() -> paymentRequestService.getPaymentEvidenceFile(submitted.id(), -999L))
-                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
-        assertThat(paymentRequestRepository.findById(request.getId()).orElseThrow().getEvidences()).hasSize(1);
+                MockMultipartFile image = new MockMultipartFile("file", "receipt.png", "image/png", png);
+                var submitted = paymentRequestService.submitPaymentProof(
+                                request.getId(), renterUserId, image, request.getAmount(),
+                                "BANK-IMAGE-001", null, "VietQR receipt");
+                assertThat(submitted.proofImageUrl()).startsWith("/api/v1/payment-evidences/");
+                assertThat(paymentRequestService.getPaymentEvidenceFile(submitted.id(), renterUserId).content())
+                                .containsExactly(png);
+                assertThatThrownBy(() -> paymentRequestService.getPaymentEvidenceFile(submitted.id(), -999L))
+                                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+                assertThat(paymentRequestRepository.findById(request.getId()).orElseThrow().getEvidences()).hasSize(1);
 
-        String renterToken = jwtService.generateAccessToken(booking.getRenter().getUser());
-        String providerToken = jwtService.generateAccessToken(booking.getVehicle().getProvider().getUser());
-        String adminToken = jwtService.generateAccessToken(userRepository.findAll().stream()
-                .filter(user -> user.getRole() == Role.ADMIN).findFirst().orElseThrow());
-        String storedPath = paymentEvidenceRepository.findById(submitted.id()).orElseThrow().getProofImageUrl();
+                String renterToken = jwtService.generateAccessToken(booking.getRenter().getUser());
+                String providerToken = jwtService.generateAccessToken(booking.getVehicle().getProvider().getUser());
+                String adminToken = jwtService.generateAccessToken(userRepository.findAll().stream()
+                                .filter(user -> user.getRole() == Role.ADMIN).findFirst().orElseThrow());
+                String storedPath = paymentEvidenceRepository.findById(submitted.id()).orElseThrow().getProofImageUrl();
 
-        mockMvc.perform(get("/api/v1/payment-evidences/{id}/file", submitted.id()))
-                .andExpect(status().isUnauthorized());
-        for (String token : java.util.List.of(renterToken, providerToken, adminToken)) {
-            mockMvc.perform(get("/api/v1/payment-evidences/{id}/file", submitted.id())
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-                    .andExpect(status().isOk())
-                    .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
-                    .andExpect(content().contentType(MediaType.IMAGE_PNG))
-                    .andExpect(content().bytes(png));
-        }
-        mockMvc.perform(get("/api/files/" + storedPath))
-                .andExpect(status().isNotFound());
-        mockMvc.perform(post("/api/v1/payment-requests/{id}/proofs", request.getId())
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isGone());
+                mockMvc.perform(get("/api/v1/payment-evidences/{id}/file", submitted.id()))
+                                .andExpect(status().isUnauthorized());
+                for (String token : java.util.List.of(renterToken, providerToken, adminToken)) {
+                        mockMvc.perform(get("/api/v1/payment-evidences/{id}/file", submitted.id())
+                                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                                        .andExpect(status().isOk())
+                                        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                                        .andExpect(content().contentType(MediaType.IMAGE_PNG))
+                                        .andExpect(content().bytes(png));
+                }
+                mockMvc.perform(get("/api/files/" + storedPath))
+                                .andExpect(status().isNotFound());
+                mockMvc.perform(post("/api/v1/payment-requests/{id}/proofs", request.getId())
+                                .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                                .andExpect(status().isGone());
 
-        PaymentRequest retry = paymentRequestRepository.findById(request.getId()).orElseThrow();
-        retry.setStatus(PaymentRequestStatus.REJECTED);
-        retry.getEvidences().getFirst().setStatus(
-                com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus.REJECTED);
-        paymentRequestRepository.saveAndFlush(retry);
-        var second = paymentRequestService.submitPaymentProof(
-                request.getId(), renterUserId,
-                new MockMultipartFile("file", "receipt.png", "image/png", png),
-                request.getAmount(), "BANK-IMAGE-002", null, null);
-        assertThat(second.proofImageUrl()).isNotEqualTo(submitted.proofImageUrl());
+                PaymentRequest retry = paymentRequestRepository.findById(request.getId()).orElseThrow();
+                retry.setStatus(PaymentRequestStatus.REJECTED);
+                retry.getEvidences().getFirst().setStatus(
+                                com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus.REJECTED);
+                paymentRequestRepository.saveAndFlush(retry);
+                var second = paymentRequestService.submitPaymentProof(
+                                request.getId(), renterUserId,
+                                new MockMultipartFile("file", "receipt.png", "image/png", png),
+                                request.getAmount(), "BANK-IMAGE-002", null, null);
+                assertThat(second.proofImageUrl()).isNotEqualTo(submitted.proofImageUrl());
 
         retry = paymentRequestRepository.findById(request.getId()).orElseThrow();
         retry.setStatus(PaymentRequestStatus.REJECTED);

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MyBookingsList } from '../../components/booking/MyBookingsList'
 import { readErrorMessage } from '../../services/apiClient'
@@ -108,12 +109,14 @@ export function MyBookingsPage() {
     setSearchParams(merged, { replace })
   }
 
-  const refreshList = () => listMyBookings({
+  const refreshList = useCallback(() => listMyBookings({
     group: activeFilter, keyword, sort, page, size: PAGE_SIZE,
   }).then((result) => {
     setBookings(result.items.map(toCard))
     setPageInfo({ total: result.total, hasMore: result.hasMore })
-  })
+  }), [activeFilter, keyword, sort, page])
+
+  useRealtimeSync({ onResync: refreshList })
 
   const runCardAction = async (booking, action) => {
     setActionError('')

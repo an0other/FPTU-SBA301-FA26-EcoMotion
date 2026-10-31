@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
+import DriverAvailability from './DriverAvailability'
 import { useAuth } from '../../hooks/useAuth'
 
 function Icon({ name, className = '' }) {
@@ -69,6 +70,7 @@ export default function DriverLayout({ activeTab = 'schedule', children }) {
 
       {/* Main Content Area */}
       <main className="flex-1 mx-auto w-full max-w-4xl px-4 py-5 pb-24 sm:px-6 sm:pb-8">
+        <DriverAvailability />
         {children}
       </main>
 

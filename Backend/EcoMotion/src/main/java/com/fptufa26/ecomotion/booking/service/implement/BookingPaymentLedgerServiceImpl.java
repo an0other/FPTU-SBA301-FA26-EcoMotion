@@ -31,6 +31,7 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
     private final BookingPolicySnapshotRepository snapshotRepository;
     private final BookingChargeRepository chargeRepository;
     private final PaymentTransactionRepository transactionRepository;
+    private final jakarta.persistence.EntityManager entityManager;
 
     @Override
     public Booking requireBooking(Long bookingId) {
@@ -40,8 +41,10 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
 
     @Override
     public Booking requireBookingForUpdate(Long bookingId) {
-        return bookingRepository.findByIdForUpdate(bookingId)
-                .orElseThrow(() -> new NotFoundException("Không tìm thấy booking"));
+        Booking booking = entityManager.find(Booking.class, bookingId);
+        if (booking == null) throw new NotFoundException("Không tìm thấy booking");
+        entityManager.refresh(booking, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        return booking;
     }
 
     @Override
@@ -124,6 +127,14 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
     @Override
     public Optional<PaymentTransaction> findProviderTransaction(Long transactionId, Long providerId) {
         return transactionRepository.findByIdAndBooking_Vehicle_Provider_Id(transactionId, providerId);
+    }
+
+    @Override
+    @Transactional
+    public Optional<PaymentTransaction> findTransactionByIdForUpdate(Long transactionId) {
+        var transaction = transactionRepository.findByIdForUpdate(transactionId);
+        transaction.ifPresent(t -> entityManager.refresh(t, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE));
+        return transaction;
     }
 
     @Override

@@ -39,11 +39,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ProviderScheduleServiceTest {
 
-    @Mock
-    private VehicleScheduleRepository vehicleScheduleRepository;
-
-    @Mock
-    private VehicleRepository vehicleRepository;
+        @Mock
+        private VehicleScheduleRepository vehicleScheduleRepository;
 
     @Mock
     private VehicleCatalogService vehicleCatalogService;
@@ -51,154 +48,155 @@ class ProviderScheduleServiceTest {
     @Mock
     private UserService userService;
 
-    @InjectMocks
-    private ProviderScheduleServiceImpl providerScheduleService;
+        @InjectMocks
+        private ProviderScheduleServiceImpl providerScheduleService;
 
-    private Provider mockProvider;
-    private Vehicle mockVehicle;
-    private final Long userId = 100L;
-    private final Long providerId = 1L;
-    private final Long vehicleId = 10L;
+        private Provider mockProvider;
+        private Vehicle mockVehicle;
+        private final Long userId = 100L;
+        private final Long providerId = 1L;
+        private final Long vehicleId = 10L;
 
-    @BeforeEach
-    void setUp() {
-        mockProvider = new Provider();
-        mockProvider.setId(providerId);
+        @BeforeEach
+        void setUp() {
+                mockProvider = new Provider();
+                mockProvider.setId(providerId);
 
-        mockVehicle = new Vehicle();
-        mockVehicle.setId(vehicleId);
-        mockVehicle.setProvider(mockProvider);
-        mockVehicle.setLicensePlate("51A-111.11");
-        mockVehicle.setBrand("VinFast");
-        mockVehicle.setModel("VF 6");
-    }
+                mockVehicle = new Vehicle();
+                mockVehicle.setId(vehicleId);
+                mockVehicle.setProvider(mockProvider);
+                mockVehicle.setLicensePlate("51A-111.11");
+                mockVehicle.setBrand("VinFast");
+                mockVehicle.setModel("VF 6");
+        }
 
-    @Test
-    @DisplayName("getScheduleStats - Returns 4 accurate KPI numbers")
-    void getScheduleStats_Success() {
-        when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
-        when(vehicleScheduleRepository.countActiveBlocksByProviderId(eq(providerId), any(Instant.class))).thenReturn(6L);
-        when(vehicleScheduleRepository.countActiveMaintenanceByProviderId(eq(providerId), any(Instant.class))).thenReturn(2L);
-        when(vehicleScheduleRepository.countActiveBlockedByProviderId(eq(providerId), any(Instant.class))).thenReturn(4L);
-        when(vehicleScheduleRepository.countUpcomingBookingsByProviderId(eq(providerId), any(Instant.class))).thenReturn(18L);
+        @Test
+        @DisplayName("getScheduleStats - Returns 4 accurate KPI numbers")
+        void getScheduleStats_Success() {
+                when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
+                when(vehicleScheduleRepository.countActiveBlocksByProviderId(eq(providerId), any(Instant.class)))
+                                .thenReturn(6L);
+                when(vehicleScheduleRepository.countActiveMaintenanceByProviderId(eq(providerId), any(Instant.class)))
+                                .thenReturn(2L);
+                when(vehicleScheduleRepository.countActiveBlockedByProviderId(eq(providerId), any(Instant.class)))
+                                .thenReturn(4L);
+                when(vehicleScheduleRepository.countUpcomingBookingsByProviderId(eq(providerId), any(Instant.class)))
+                                .thenReturn(18L);
 
-        ProviderScheduleStatsResponse stats = providerScheduleService.getScheduleStats(userId);
+                ProviderScheduleStatsResponse stats = providerScheduleService.getScheduleStats(userId);
 
-        assertThat(stats).isNotNull();
-        assertThat(stats.totalActiveBlocks()).isEqualTo(6L);
-        assertThat(stats.activeMaintenance()).isEqualTo(2L);
-        assertThat(stats.activeBlocked()).isEqualTo(4L);
-        assertThat(stats.upcomingBookings()).isEqualTo(18L);
-    }
+                assertThat(stats).isNotNull();
+                assertThat(stats.totalActiveBlocks()).isEqualTo(6L);
+                assertThat(stats.activeMaintenance()).isEqualTo(2L);
+                assertThat(stats.activeBlocked()).isEqualTo(4L);
+                assertThat(stats.upcomingBookings()).isEqualTo(18L);
+        }
 
-    @Test
-    @DisplayName("countCurrentlyBlockedVehiclesByProviderId - Returns accurate count")
-    void countCurrentlyBlockedVehiclesByProviderId_Success() {
-        when(vehicleScheduleRepository.countCurrentlyBlockedVehiclesByProviderId(eq(providerId), any(Instant.class)))
-                .thenReturn(1L);
+        @Test
+        @DisplayName("countCurrentlyBlockedVehiclesByProviderId - Returns accurate count")
+        void countCurrentlyBlockedVehiclesByProviderId_Success() {
+                when(vehicleScheduleRepository.countCurrentlyBlockedVehiclesByProviderId(eq(providerId),
+                                any(Instant.class)))
+                                .thenReturn(1L);
 
-        long result = providerScheduleService.countCurrentlyBlockedVehiclesByProviderId(providerId);
+                long result = providerScheduleService.countCurrentlyBlockedVehiclesByProviderId(providerId);
 
-        assertThat(result).isEqualTo(1L);
-    }
+                assertThat(result).isEqualTo(1L);
+        }
 
-    @Test
-    @DisplayName("getProviderSchedules - Filters schedules by type and status correctly")
-    void getProviderSchedules_Success_Filtered() {
-        when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
+        @Test
+        @DisplayName("getProviderSchedules - Filters schedules by type and status correctly")
+        void getProviderSchedules_Success_Filtered() {
+                when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
 
-        VehicleSchedule s1 = new VehicleSchedule();
-        s1.setId(1L);
-        s1.setVehicle(mockVehicle);
-        s1.setType(ScheduleType.MAINTENANCE);
-        s1.setStatus(ScheduleStatus.ACTIVE);
-        s1.setStartAt(Instant.now());
-        s1.setEndAt(Instant.now().plus(4, ChronoUnit.HOURS));
+                VehicleSchedule s1 = new VehicleSchedule();
+                s1.setId(1L);
+                s1.setVehicle(mockVehicle);
+                s1.setType(ScheduleType.MAINTENANCE);
+                s1.setStatus(ScheduleStatus.ACTIVE);
+                s1.setStartAt(Instant.now());
+                s1.setEndAt(Instant.now().plus(4, ChronoUnit.HOURS));
 
-        VehicleSchedule s2 = new VehicleSchedule();
-        s2.setId(2L);
-        s2.setVehicle(mockVehicle);
-        s2.setType(ScheduleType.BLOCKED);
-        s2.setStatus(ScheduleStatus.CANCELLED);
-        s2.setStartAt(Instant.now());
-        s2.setEndAt(Instant.now().plus(4, ChronoUnit.HOURS));
+                VehicleSchedule s2 = new VehicleSchedule();
+                s2.setId(2L);
+                s2.setVehicle(mockVehicle);
+                s2.setType(ScheduleType.BLOCKED);
+                s2.setStatus(ScheduleStatus.CANCELLED);
+                s2.setStartAt(Instant.now());
+                s2.setEndAt(Instant.now().plus(4, ChronoUnit.HOURS));
 
-        when(vehicleScheduleRepository.findByProviderIdOrderDesc(providerId)).thenReturn(List.of(s1, s2));
+                when(vehicleScheduleRepository.findByProviderIdOrderDesc(providerId)).thenReturn(List.of(s1, s2));
 
-        List<ProviderScheduleItemResponse> results = providerScheduleService.getProviderSchedules(
-                userId,
-                vehicleId,
-                ScheduleType.MAINTENANCE,
-                ScheduleStatus.ACTIVE,
-                null,
-                null
-        );
+                List<ProviderScheduleItemResponse> results = providerScheduleService.getProviderSchedules(
+                                userId,
+                                vehicleId,
+                                ScheduleType.MAINTENANCE,
+                                ScheduleStatus.ACTIVE,
+                                null,
+                                null);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).id()).isEqualTo(1L);
-        assertThat(results.get(0).type()).isEqualTo(ScheduleType.MAINTENANCE);
-        assertThat(results.get(0).status()).isEqualTo(ScheduleStatus.ACTIVE);
-    }
+                assertThat(results).hasSize(1);
+                assertThat(results.get(0).id()).isEqualTo(1L);
+                assertThat(results.get(0).type()).isEqualTo(ScheduleType.MAINTENANCE);
+                assertThat(results.get(0).status()).isEqualTo(ScheduleStatus.ACTIVE);
+        }
 
-    @Test
-    @DisplayName("createBlockSchedule - Throws BadRequest when type is BOOKED")
-    void createBlockSchedule_ThrowsBadRequest_WhenTypeIsBooked() {
-        when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
+        @Test
+        @DisplayName("createBlockSchedule - Throws BadRequest when type is BOOKED")
+        void createBlockSchedule_ThrowsBadRequest_WhenTypeIsBooked() {
+                when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
 
-        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
-        Instant end = start.plus(2, ChronoUnit.HOURS);
-        CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
-                vehicleId,
-                ScheduleType.BOOKED,
-                start,
-                end,
-                "Khách đặt"
-        );
+                Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+                Instant end = start.plus(2, ChronoUnit.HOURS);
+                CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
+                                vehicleId,
+                                ScheduleType.BOOKED,
+                                start,
+                                end,
+                                "Khách đặt");
 
-        assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Không thể tự tạo lịch loại đơn đặt xe");
-    }
+                assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Không thể tự tạo lịch loại đơn đặt xe");
+        }
 
-    @Test
-    @DisplayName("createBlockSchedule - Throws BadRequest when endAt <= startAt")
-    void createBlockSchedule_ThrowsBadRequest_WhenEndBeforeStart() {
-        when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
+        @Test
+        @DisplayName("createBlockSchedule - Throws BadRequest when endAt <= startAt")
+        void createBlockSchedule_ThrowsBadRequest_WhenEndBeforeStart() {
+                when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
 
-        Instant start = Instant.now().plus(2, ChronoUnit.HOURS);
-        Instant end = start.minus(1, ChronoUnit.HOURS);
-        CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
-                vehicleId,
-                ScheduleType.MAINTENANCE,
-                start,
-                end,
-                "Bảo dưỡng pin"
-        );
+                Instant start = Instant.now().plus(2, ChronoUnit.HOURS);
+                Instant end = start.minus(1, ChronoUnit.HOURS);
+                CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
+                                vehicleId,
+                                ScheduleType.MAINTENANCE,
+                                start,
+                                end,
+                                "Bảo dưỡng pin");
 
-        assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Thời gian kết thúc phải lớn hơn thời gian bắt đầu");
-    }
+                assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Thời gian kết thúc phải lớn hơn thời gian bắt đầu");
+        }
 
-    @Test
-    @DisplayName("createBlockSchedule - Throws BadRequest when startAt is in the past")
-    void createBlockSchedule_ThrowsBadRequest_WhenStartAtInPast() {
-        when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
+        @Test
+        @DisplayName("createBlockSchedule - Throws BadRequest when startAt is in the past")
+        void createBlockSchedule_ThrowsBadRequest_WhenStartAtInPast() {
+                when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
 
-        Instant start = Instant.now().minus(2, ChronoUnit.HOURS);
-        Instant end = start.plus(4, ChronoUnit.HOURS);
-        CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
-                vehicleId,
-                ScheduleType.MAINTENANCE,
-                start,
-                end,
-                "Bảo dưỡng quá khứ"
-        );
+                Instant start = Instant.now().minus(2, ChronoUnit.HOURS);
+                Instant end = start.plus(4, ChronoUnit.HOURS);
+                CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
+                                vehicleId,
+                                ScheduleType.MAINTENANCE,
+                                start,
+                                end,
+                                "Bảo dưỡng quá khứ");
 
-        assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Thời gian bắt đầu không được ở trong quá khứ");
-    }
+                assertThatThrownBy(() -> providerScheduleService.createBlockSchedule(userId, request))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Thời gian bắt đầu không được ở trong quá khứ");
+        }
 
     @Test
     @DisplayName("createBlockSchedule - Throws ConflictException when customer booking overlaps")
@@ -206,15 +204,14 @@ class ProviderScheduleServiceTest {
         when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
         when(vehicleCatalogService.requireOwnedByProvider(vehicleId, providerId)).thenReturn(mockVehicle);
 
-        Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
-        Instant end = start.plus(4, ChronoUnit.HOURS);
-        CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
-                vehicleId,
-                ScheduleType.MAINTENANCE,
-                start,
-                end,
-                "Bảo dưỡng định kỳ"
-        );
+                Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
+                Instant end = start.plus(4, ChronoUnit.HOURS);
+                CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
+                                vehicleId,
+                                ScheduleType.MAINTENANCE,
+                                start,
+                                end,
+                                "Bảo dưỡng định kỳ");
 
         when(vehicleScheduleRepository.existsActiveOverlap(eq(vehicleId), any(Instant.class), any(Instant.class)))
                 .thenReturn(true);
@@ -230,15 +227,14 @@ class ProviderScheduleServiceTest {
         when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
         when(vehicleCatalogService.requireOwnedByProvider(vehicleId, providerId)).thenReturn(mockVehicle);
 
-        Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
-        Instant end = start.plus(4, ChronoUnit.HOURS);
-        CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
-                vehicleId,
-                ScheduleType.BLOCKED,
-                start,
-                end,
-                "Bận việc riêng"
-        );
+                Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
+                Instant end = start.plus(4, ChronoUnit.HOURS);
+                CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
+                                vehicleId,
+                                ScheduleType.BLOCKED,
+                                start,
+                                end,
+                                "Bận việc riêng");
 
         when(vehicleScheduleRepository.existsActiveOverlap(eq(vehicleId), any(Instant.class), any(Instant.class)))
                 .thenReturn(true);
@@ -254,15 +250,14 @@ class ProviderScheduleServiceTest {
         when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
         when(vehicleCatalogService.requireOwnedByProvider(vehicleId, providerId)).thenReturn(mockVehicle);
 
-        Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
-        Instant end = start.plus(4, ChronoUnit.HOURS);
-        CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
-                vehicleId,
-                ScheduleType.MAINTENANCE,
-                start,
-                end,
-                "Bảo dưỡng pin định kỳ 10.000km"
-        );
+                Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
+                Instant end = start.plus(4, ChronoUnit.HOURS);
+                CreateBlockScheduleRequest request = new CreateBlockScheduleRequest(
+                                vehicleId,
+                                ScheduleType.MAINTENANCE,
+                                start,
+                                end,
+                                "Bảo dưỡng pin định kỳ 10.000km");
 
         VehicleSchedule savedSchedule = new VehicleSchedule();
         savedSchedule.setId(101L);
@@ -273,54 +268,55 @@ class ProviderScheduleServiceTest {
         savedSchedule.setStatus(ScheduleStatus.ACTIVE);
         savedSchedule.setReason("Bảo dưỡng pin định kỳ 10.000km");
 
-        when(vehicleScheduleRepository.save(any(VehicleSchedule.class))).thenReturn(savedSchedule);
+                when(vehicleScheduleRepository.save(any(VehicleSchedule.class))).thenReturn(savedSchedule);
 
-        ProviderScheduleItemResponse response = providerScheduleService.createBlockSchedule(userId, request);
+                ProviderScheduleItemResponse response = providerScheduleService.createBlockSchedule(userId, request);
 
-        assertThat(response).isNotNull();
-        assertThat(response.id()).isEqualTo(101L);
-        assertThat(response.vehicleLicensePlate()).isEqualTo("51A-111.11");
-        assertThat(response.type()).isEqualTo(ScheduleType.MAINTENANCE);
-        assertThat(response.status()).isEqualTo(ScheduleStatus.ACTIVE);
-        assertThat(response.reason()).isEqualTo("Bảo dưỡng pin định kỳ 10.000km");
-    }
+                assertThat(response).isNotNull();
+                assertThat(response.id()).isEqualTo(101L);
+                assertThat(response.vehicleLicensePlate()).isEqualTo("51A-111.11");
+                assertThat(response.type()).isEqualTo(ScheduleType.MAINTENANCE);
+                assertThat(response.status()).isEqualTo(ScheduleStatus.ACTIVE);
+                assertThat(response.reason()).isEqualTo("Bảo dưỡng pin định kỳ 10.000km");
+        }
 
-    @Test
-    @DisplayName("cancelBlockSchedule - Successfully cancels ACTIVE schedule")
-    void cancelBlockSchedule_Success() {
-        when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
+        @Test
+        @DisplayName("cancelBlockSchedule - Successfully cancels ACTIVE schedule")
+        void cancelBlockSchedule_Success() {
+                when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
 
-        VehicleSchedule schedule = new VehicleSchedule();
-        schedule.setId(102L);
-        schedule.setVehicle(mockVehicle);
-        schedule.setType(ScheduleType.BLOCKED);
-        schedule.setStatus(ScheduleStatus.ACTIVE);
+                VehicleSchedule schedule = new VehicleSchedule();
+                schedule.setId(102L);
+                schedule.setVehicle(mockVehicle);
+                schedule.setType(ScheduleType.BLOCKED);
+                schedule.setStatus(ScheduleStatus.ACTIVE);
 
-        when(vehicleScheduleRepository.findById(102L)).thenReturn(Optional.of(schedule));
-        when(vehicleScheduleRepository.save(any(VehicleSchedule.class))).thenAnswer(invocation -> invocation.getArgument(0));
+                when(vehicleScheduleRepository.findById(102L)).thenReturn(Optional.of(schedule));
+                when(vehicleScheduleRepository.save(any(VehicleSchedule.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProviderScheduleItemResponse response = providerScheduleService.cancelBlockSchedule(userId, 102L);
+                ProviderScheduleItemResponse response = providerScheduleService.cancelBlockSchedule(userId, 102L);
 
-        assertThat(response).isNotNull();
-        assertThat(response.status()).isEqualTo(ScheduleStatus.CANCELLED);
-        verify(vehicleScheduleRepository).save(schedule);
-    }
+                assertThat(response).isNotNull();
+                assertThat(response.status()).isEqualTo(ScheduleStatus.CANCELLED);
+                verify(vehicleScheduleRepository).save(schedule);
+        }
 
-    @Test
-    @DisplayName("cancelBlockSchedule - Throws BadRequest when trying to cancel BOOKED schedule")
-    void cancelBlockSchedule_ThrowsBadRequest_WhenCancelingBookedSchedule() {
-        when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
+        @Test
+        @DisplayName("cancelBlockSchedule - Throws BadRequest when trying to cancel BOOKED schedule")
+        void cancelBlockSchedule_ThrowsBadRequest_WhenCancelingBookedSchedule() {
+                when(userService.findProviderByUserId(userId)).thenReturn(Optional.of(mockProvider));
 
-        VehicleSchedule bookedSchedule = new VehicleSchedule();
-        bookedSchedule.setId(103L);
-        bookedSchedule.setVehicle(mockVehicle);
-        bookedSchedule.setType(ScheduleType.BOOKED);
-        bookedSchedule.setStatus(ScheduleStatus.ACTIVE);
+                VehicleSchedule bookedSchedule = new VehicleSchedule();
+                bookedSchedule.setId(103L);
+                bookedSchedule.setVehicle(mockVehicle);
+                bookedSchedule.setType(ScheduleType.BOOKED);
+                bookedSchedule.setStatus(ScheduleStatus.ACTIVE);
 
-        when(vehicleScheduleRepository.findById(103L)).thenReturn(Optional.of(bookedSchedule));
+                when(vehicleScheduleRepository.findById(103L)).thenReturn(Optional.of(bookedSchedule));
 
-        assertThatThrownBy(() -> providerScheduleService.cancelBlockSchedule(userId, 103L))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Không thể hủy lịch đặt xe của khách");
-    }
+                assertThatThrownBy(() -> providerScheduleService.cancelBlockSchedule(userId, 103L))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Không thể hủy lịch đặt xe của khách");
+        }
 }

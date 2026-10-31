@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
 
 test('renter sees AT_RISK warning for a vehicle that has not returned', async ({ page }) => {
+  await page.route('**/api/**', route => new URL(route.request().url()).pathname.endsWith('/stream')
+    ? route.abort() : route.fulfill({ json: { data: {} } }))
   await page.addInitScript(() => localStorage.setItem('ecomotion_access_token', 'e2e-token'))
 
   await page.route('**/api/auth/me', (route) => route.fulfill({
@@ -36,10 +38,15 @@ test('renter sees AT_RISK warning for a vehicle that has not returned', async ({
 
   await expect(page.getByRole('alert')).toContainText('Nguy cơ xe về trễ')
   await expect(page.getByRole('alert')).toContainText('BK-CURRENT')
-  await expect(page.getByText('Nhà cung cấp sẽ chủ động đổi xe, dời lịch hoặc hủy và hoàn tiền nếu cần.')).toBeVisible()
+  await expect(page.getByText(/chỉ áp dụng khi bạn đồng ý phương án/)).toBeVisible()
 })
 
 test('provider can choose a replacement vehicle for an AT_RISK booking', async ({ page }) => {
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/stream')) return route.abort()
+    return route.fulfill({ json: { data: path.endsWith('/incidents') || path.endsWith('/evidence') ? [] : {} } })
+  })
   await page.addInitScript(() => localStorage.setItem('ecomotion_access_token', 'provider-e2e-token'))
   await page.route('**/api/auth/me', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
@@ -53,6 +60,10 @@ test('provider can choose a replacement vehicle for an AT_RISK booking', async (
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ data: { atRisk: true, blockingBookingCode: 'BK-CURRENT', message: 'Xe chưa về từ chuyến BK-CURRENT.' } }),
   }))
+  await page.route('**/api/provider/bookings/BK-RISK/workflow', route => route.fulfill({ json: { data: {
+    bookingCode: 'BK-RISK', bookingStatus: 'CONFIRMED', canProposeAlternative: true, needsDriver: true,
+    driverStatus: 'NOT_ASSIGNED', paymentStatus: 'PARTIALLY_PAID', tripStatus: 'NOT_STARTED', settlementStatus: 'NOT_READY',
+  } } }))
   await page.route('**/api/provider/vehicles**', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ data: { items: [{ id: 4, licensePlate: '51B99999', brand: 'VinFast', model: 'VF 8' }] } }),
@@ -75,16 +86,16 @@ test('provider can choose a replacement vehicle for an AT_RISK booking', async (
     resolutionPayload = route.request().postDataJSON()
     await route.fulfill({
       status: 200, contentType: 'application/json',
-      body: JSON.stringify({ data: { message: 'Đã đổi sang xe 51B99999' } }),
+      body: JSON.stringify({ data: { message: 'Đã gửi đề xuất xe 51B99999; chờ khách đồng ý' } }),
     })
   })
 
   await page.goto('/provider/bookings/BK-RISK')
   await page.getByRole('combobox').nth(1).selectOption('4')
-  await page.getByRole('button', { name: 'Xác nhận phương án' }).click()
+  await page.getByRole('button', { name: 'Gửi đề xuất cho khách' }).click()
 
   await expect.poll(() => resolutionPayload).toMatchObject({
     resolution: 'CHANGE_VEHICLE', replacementVehicleId: 4,
   })
-  await expect(page.getByText('Đã đổi sang xe 51B99999')).toBeVisible()
+  await expect(page.getByText('Đã gửi đề xuất xe 51B99999; chờ khách đồng ý')).toBeVisible()
 })
