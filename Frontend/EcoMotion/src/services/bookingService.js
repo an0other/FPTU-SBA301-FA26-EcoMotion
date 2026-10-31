@@ -148,3 +148,8 @@ export const bookingService = {
     return data.data || data
   },
 }
+
+export async function quoteRental(body) {
+  const { data } = await apiClient.post('/renter/bookings/rental-quote', body)
+  return data.data
+}

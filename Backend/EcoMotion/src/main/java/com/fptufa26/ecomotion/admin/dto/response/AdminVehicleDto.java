@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
 
 @Data
 @Builder
@@ -41,7 +42,7 @@ public class AdminVehicleDto {
     private Integer ratingCount;
     private List<String> imageUrls;
     private List<DocumentDto> documents;
-    private List<com.fptufa26.ecomotion.vehicle.dto.RentalPlanData> rentalPlans;
+    private List<RentalPlanData> rentalPlans;
     private Instant createdAt;
 
     @Data

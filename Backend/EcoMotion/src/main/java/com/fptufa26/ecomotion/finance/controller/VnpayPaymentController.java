@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 import java.util.Map;
+import com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse;
 
 @RestController
 @RequestMapping({"/api/v1/payment/vnpay", "/api/payment/vnpay", "/v1/payment/vnpay", "/payment/vnpay"})
@@ -47,7 +48,7 @@ public class VnpayPaymentController {
 
     @GetMapping({"/settlement/{bookingCode}", "/settlements/{bookingCode}"})
     @Operation(summary = "Get settlement and final payable calculation for a booking")
-    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse> getSettlement(
+    public ApiResponse<RenterSettlementResponse> getSettlement(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable String bookingCode) {
         Long userId = principal != null ? principal.getUserId() : null;

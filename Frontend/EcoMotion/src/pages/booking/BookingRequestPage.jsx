@@ -4,288 +4,135 @@ import { BookingWizardShell } from '../../components/booking/BookingWizardShell'
 import { ChoosePlanStep } from '../../components/booking/ChoosePlanStep'
 import { ConfirmRequestStep } from '../../components/booking/ConfirmRequestStep'
 import { PickupStep } from '../../components/booking/PickupStep'
-import { createBooking, listVehiclesForBooking, quotePickup } from '../../services/bookingService'
+import { BookingErrorDialog } from '../../components/booking/BookingErrorDialog'
+import { createBooking, listVehiclesForBooking, quotePickup, quoteRental } from '../../services/bookingService'
 import { readErrorMessage } from '../../services/apiClient'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { formatSlotPrice, planLabel, rentalSpanLabel } from '../../utils/planLabels'
-import { formatBookingWhen, parseVietnamDateTime } from '../../utils/bookingDateTime'
-import { buildBookingPayload, estimateBookingTotals, hasValidPickup } from '../../utils/bookingAvailability'
-
-import { BookingErrorDialog } from '../../components/booking/BookingErrorDialog'
+import { formatBookingWhen } from '../../utils/bookingDateTime'
+import { hasValidPickup } from '../../utils/bookingAvailability'
+import { pricingDescription, rentalSelection, rentalPayload, rentalTimeInput, rentalTimeError } from '../../utils/rentalPricing'
 
 export function BookingRequestPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [vehicles, setVehicles] = useState([])
-  const [vehicleId, setVehicleId] = useState(null)
-  const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [step, setStep] = useState(1)
-  const [slots, setSlots] = useState(3)
-  const [startDate, setStartDate] = useState('')
-  const [startTime, setStartTime] = useState('')
+  const [choice, setChoice] = useState(null)
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
   const [pickup, setPickup] = useState({ address: '', latitude: null, longitude: null })
   const [driverNote, setDriverNote] = useState('')
   const [passengerCount, setPassengerCount] = useState(3)
   const [error, setError] = useState('')
-  const [fieldErrors, setFieldErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [loadingVehicles, setLoadingVehicles] = useState(true)
-  const [vehicleRetry, setVehicleRetry] = useState(0)
-  const [quoteState, setQuoteState] = useState(null)
-  const [quoteRetry, setQuoteRetry] = useState(0)
+  const [rentalState, setRentalState] = useState(null)
+  const [rentalRetry, setRentalRetry] = useState(0)
+  const [pickupState, setPickupState] = useState(null)
+  const requestedVehicleId = Number(searchParams.get('vehicleId'))
+  const vehicle = vehicles.find(row => row.id === requestedVehicleId) ?? vehicles[0] ?? null
+  const vehicleId = vehicle?.id
 
   useEffect(() => {
     let cancelled = false
-    listVehiclesForBooking()
-      .then((rows) => {
-        if (cancelled) return
-        setVehicles(rows)
-        setStep(1)
-        const requested = Number(searchParams.get('vehicleId'))
-        const match = rows.find((row) => row.id === requested) ?? rows[0]
-        if (!match) return
-        setVehicleId(match.id)
-        const requestedPlanId = Number(searchParams.get('planId'))
-        const byId = match.plans.find((plan) => plan.id === requestedPlanId)
-        const daily = match.plans.find((plan) => plan.planType === 'DAILY') ?? match.plans[0]
-        setSelectedPlanId(byId?.id ?? daily?.id ?? null)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(readErrorMessage(err))
-      })
+    listVehiclesForBooking().then(rows => { if (!cancelled) setVehicles(rows) })
+      .catch(err => { if (!cancelled) setError(readErrorMessage(err)) })
       .finally(() => { if (!cancelled) setLoadingVehicles(false) })
-    return () => {
-      cancelled = true
-    }
-  }, [searchParams, vehicleRetry])
-
-  const vehicle = vehicles.find((row) => row.id === vehicleId) ?? null
-  const plan = vehicle?.plans.find((row) => row.id === selectedPlanId) ?? null
-  const driverIncluded = plan?.planType !== 'YEARLY'
-  const maxPassengers = vehicle
-    ? driverIncluded
-      ? Math.max(1, vehicle.seatCount - 1)
-      : vehicle.seatCount
-    : 1
-  const effectivePassengerCount = Math.min(passengerCount, maxPassengers)
-  const quoteSelection = useMemo(() => vehicleId && selectedPlanId && hasValidPickup(pickup)
-    ? { vehicleId, planId: selectedPlanId, pickupLatitude: Number(pickup.latitude), pickupLongitude: Number(pickup.longitude) }
-    : null, [vehicleId, selectedPlanId, pickup])
-  const currentQuote = quoteState?.selection === quoteSelection && quoteState?.retry === quoteRetry ? quoteState : null
-  const pickupQuote = currentQuote?.data ?? null
-  const quotePending = Boolean(quoteSelection && !currentQuote)
-  const quoteError = currentQuote?.error ?? ''
-
-  useEffect(() => {
-    if (!quoteSelection) return undefined
-    let cancelled = false
-    quotePickup(quoteSelection)
-      .then((data) => {
-        if (!cancelled) setQuoteState({ selection: quoteSelection, retry: quoteRetry, data })
-      })
-      .catch((err) => {
-        if (!cancelled) setQuoteState({ selection: quoteSelection, retry: quoteRetry, error: readErrorMessage(err) })
-      })
     return () => { cancelled = true }
-  }, [quoteSelection, quoteRetry])
+  }, [])
 
-  const { totalAmount: baseRentalAmount, depositAmount } = plan
-    ? estimateBookingTotals({
-      slotPrice: plan.slotPrice,
-      slots,
-      depositRatio: vehicle?.depositRatio,
-      minimumDepositAmount: vehicle?.minimumDepositAmount,
-      planType: plan.planType,
-      upfrontAmount: plan.upfrontAmount,
+  const timeError = rentalTimeError(start, end)
+  const request = useMemo(() => rentalSelection(vehicleId, start, end), [vehicleId, start, end])
+  const currentRental = rentalState?.request === request && rentalState?.retry === rentalRetry ? rentalState : null
+  const rentalPending = Boolean(request && !currentRental)
+  const selected = choice?.quote === currentRental && currentRental?.data ? choice.option : null
+  useEffect(() => {
+    if (!request) return undefined
+    let cancelled = false
+    const timer = setTimeout(() => {
+      quoteRental(request).then(data => {
+        if (!cancelled) setRentalState({ request, retry: rentalRetry, data })
+      }).catch(err => {
+        if (!cancelled) setRentalState({ request, retry: rentalRetry, error: readErrorMessage(err) })
+      })
+    }, 250)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [request, rentalRetry])
+
+  const pickupRequest = useMemo(() => selected && hasValidPickup(pickup)
+    ? { vehicleId, planId: selected.policyPlanId, pickupLatitude: Number(pickup.latitude), pickupLongitude: Number(pickup.longitude) }
+    : null, [vehicleId, selected, pickup])
+  const currentPickup = pickupState?.request === pickupRequest ? pickupState : null
+  const pickupQuote = currentPickup?.data ?? null
+  const pickupPending = Boolean(pickupRequest && !currentPickup)
+  const pickupError = currentPickup?.error ?? ''
+  useEffect(() => {
+    if (!pickupRequest) return undefined
+    let cancelled = false
+    quotePickup(pickupRequest).then(data => {
+      if (!cancelled) setPickupState({ request: pickupRequest, data })
+    }).catch(err => {
+      if (!cancelled) setPickupState({ request: pickupRequest, error: readErrorMessage(err) })
     })
-    : { totalAmount: 0, depositAmount: 0 }
+    return () => { cancelled = true }
+  }, [pickupRequest])
 
-  const totalAmount = baseRentalAmount + Number(pickupQuote?.pickupFee ?? 0)
-
-  const startInstant = useMemo(
-    () => parseVietnamDateTime(startDate, startTime),
-    [startDate, startTime],
-  )
-  const endInstant = useMemo(() => {
-    if (!plan || !startInstant) return null
-    return new Date(startInstant.getTime() + slots * plan.slotLengthMinutes * 60 * 1000)
-  }, [plan, slots, startInstant])
-  const formattedStart = startInstant ? formatBookingWhen(startInstant) : ''
-  const projectedEnd = endInstant ? formatBookingWhen(endInstant) : ''
-  const spanLabel = plan ? rentalSpanLabel(plan.slotLengthMinutes, slots) : ''
-  const timeRangeLabel = formattedStart && projectedEnd
-    ? `Nhận ${formattedStart} → Trả ${projectedEnd}`
-    : ''
-  const durationLabel = spanLabel
-    ? `${spanLabel}${slots > 1 ? ` (${slots} slot liên tiếp)` : ''}`
-    : plan ? `${slots} slot` : ''
-
-  function selectPlan(nextPlanId) {
-    if (nextPlanId === selectedPlanId) return
-    setSelectedPlanId(nextPlanId)
-    setStep(1)
-    setFieldErrors({})
-  }
+  const maxPassengers = Math.max(1, (vehicle?.seatCount ?? 2) - 1)
+  const effectivePassengers = Math.min(passengerCount, maxPassengers)
+  const baseAmount = Number(selected?.rentalAmount ?? 0)
+  const total = baseAmount + Number(pickupQuote?.pickupFee ?? 0)
+  const deposit = Number(selected?.depositAmount ?? 0)
+  const formattedStart = request ? formatBookingWhen(request.pickupTime) : ''
+  const formattedEnd = selected ? formatBookingWhen(selected.plannedEndAt) : ''
+  const description = pricingDescription(selected?.items)
 
   async function handleSubmit() {
-    if (!vehicle || !plan || submitting || !startInstant || plan.planType === 'YEARLY' || !pickupQuote || quotePending || quoteError) return
-    setSubmitting(true)
-    setError('')
+    if (!vehicle || !request || !selected || !pickupQuote || pickupPending || pickupError || submitting) return
+    setSubmitting(true); setError('')
     try {
-      const created = await createBooking(buildBookingPayload({
-        vehicleId: vehicle.id,
-        planId: plan.id,
-        slotCount: slots,
-        pickupTime: startInstant.toISOString(),
-        pickup,
-        passengerCount: effectivePassengerCount,
-        driverNote,
-      }))
-      navigate(`/renter/bookings/${created.bookingCode}/submitted`, {
-        state: {
-          booking: {
-            id: created.bookingCode,
-            vehicle: {
-              name: vehicle.name,
-              year: String(vehicle.manufactureYear),
-              plateNumber: vehicle.licensePlate,
-              fuelType: vehicle.fuelType,
-              image: vehicle.imageUrl,
-            },
-            slots,
-            planType: plan.planType,
-            formattedStart,
-            pickupAddress: pickup.address,
-            depositAmount: Number(created.depositAmount),
-            totalAmount: Number(created.totalAmount),
-            holdExpiresAt: created.holdExpiresAt,
-          },
-        },
-      })
+      const created = await createBooking(rentalPayload(vehicle.id, request, selected, pickup, effectivePassengers, driverNote))
+      navigate('/renter/bookings/' + created.bookingCode + '/submitted')
     } catch (err) {
       setError(readErrorMessage(err))
-    } finally {
-      setSubmitting(false)
-    }
+      if (err?.status === 409) { setStep(1); setRentalRetry(value => value + 1) }
+    } finally { setSubmitting(false) }
   }
-
-  const retryVehicles = () => {
-    setError('')
-    setLoadingVehicles(true)
-    setVehicleRetry((value) => value + 1)
+  function changeTime(setter, value) { setter(value); setStep(1) }
+  function chooseWindow(window) {
+    const hours = request ? (new Date(request.requestedEndAt) - new Date(request.pickupTime)) / 3600000 : 1
+    setStart(rentalTimeInput(window.startAt))
+    setEnd(rentalTimeInput(new Date(new Date(window.startAt).getTime() + hours * 3600000)))
+    setRentalRetry(value => value + 1)
   }
-
-  const errorDialog = <BookingErrorDialog message={error} onClose={() => setError('')}
-    title={vehicle ? 'Chưa thể gửi yêu cầu đặt xe' : 'Không tải được thông tin xe'}
-    onRetry={vehicle ? undefined : retryVehicles} />
-
-  if (!vehicle) return (
-    <div className="mx-auto max-w-3xl space-y-4 px-6 py-16 text-sm text-[#14221A]">
-      {errorDialog}
-      <p>{loadingVehicles ? 'Đang tải xe...' : 'Chưa tải được thông tin xe để đặt.'}</p>
-      {!loadingVehicles ? <button type="button" onClick={retryVehicles} className="rounded-xl border border-[#E6EBE8] px-4 py-2 font-semibold text-[#15803D]">Tải lại thông tin xe</button> : null}
+  const dialog = <BookingErrorDialog message={error} onClose={() => setError('')} title="Chưa thể đặt xe" />
+  if (!vehicle) return <div className="mx-auto max-w-3xl space-y-4 px-6 py-16">{dialog}
+    <p>{loadingVehicles ? 'Đang tải xe…' : 'Chưa tải được thông tin xe.'}</p>
     </div>
-  )
 
-  return (
-    <div>
-      {errorDialog}
-      <BookingWizardShell
-        vehicleId={vehicle.id}
-        vehicleName={vehicle.name}
-        vehicleImage={vehicle.imageUrl}
-        plateNumber={vehicle.licensePlate}
-        planTitle={plan ? planLabel(plan.planType).title : ''}
-        timeRangeLabel={timeRangeLabel}
-        totalLabel={plan ? formatCurrency(totalAmount) : ''}
-        depositAmount={depositAmount}
-        currentStep={step}
-        onStepSelect={(next) => next < step && setStep(next)}
-        contentWidth={step === 1 ? 'wide' : 'form'}
-      >
-        {step === 1 ? (
-          <ChoosePlanStep
-            vehicleId={vehicle.id}
-            plans={vehicle.plans}
-            selectedPlanId={selectedPlanId}
-            onSelectPlan={selectPlan}
-            slots={slots}
-            setSlots={setSlots}
-            startDate={startDate}
-            setStartDate={setStartDate}
-            startTime={startTime}
-            setStartTime={setStartTime}
-            formattedStart={formattedStart}
-            projectedEnd={projectedEnd}
-            spanLabel={spanLabel}
-            fieldErrors={fieldErrors}
-            setFieldErrors={setFieldErrors}
-            totalAmount={totalAmount}
-            depositAmount={depositAmount}
-            depositRatio={Number(vehicle?.depositRatio ?? 0)}
-            onNext={() => {
-              if (plan?.planType === 'YEARLY') {
-                navigate(`/renter/yearly-rental?vehicleId=${vehicle.id}&planId=${plan.id}`)
-                return
-              }
-              const errs = {}
-              if (!startDate) errs.startDate = 'Vui lòng chọn ngày nhận xe'
-              if (!startTime) errs.startTime = 'Vui lòng chọn giờ nhận xe'
-              if (startInstant && startInstant <= new Date()) {
-                errs.startTime = 'Giờ nhận xe đã qua, vui lòng chọn thời gian trong tương lai'
-              }
-              setFieldErrors(errs)
-              if (Object.keys(errs).length === 0) setStep(2)
-            }}
-          />
-        ) : null}
-        {step === 2 ? (
-          <PickupStep
-            pickup={pickup}
-            setPickup={setPickup}
-            pickupQuote={pickupQuote}
-            quotePending={quotePending}
-            quoteError={quoteError}
-            onRetryQuote={() => setQuoteRetry((value) => value + 1)}
-            driverNote={driverNote}
-            setDriverNote={setDriverNote}
-            passengerCount={effectivePassengerCount}
-            setPassengerCount={setPassengerCount}
-            seatCount={vehicle.seatCount}
-            driverIncluded={driverIncluded}
-            maxPassengers={maxPassengers}
-            onBack={() => setStep(1)}
-            onNext={() => { if (pickupQuote && !quotePending && !quoteError) setStep(3) }}
-          />
-        ) : null}
-        {step === 3 ? (
-          <ConfirmRequestStep
-            vehicleName={vehicle.name}
-            vehicleImage={vehicle.imageUrl}
-            plateNumber={vehicle.licensePlate}
-            vehicleYear={vehicle.manufactureYear}
-            planTitle={plan ? planLabel(plan.planType).title : ''}
-            durationLabel={durationLabel}
-            formattedStart={formattedStart}
-            projectedEnd={projectedEnd}
-            priceNote={plan ? `${slots} × ${formatSlotPrice(plan.slotPrice, plan.slotLengthMinutes)}` : ''}
-            depositNote={plan?.planType === 'YEARLY'
-              ? 'Trả trước theo hợp đồng'
-              : `${formatCurrency(baseRentalAmount)} × ${Math.round(Number(vehicle.depositRatio ?? 0) * 100)}%`}
-            pickupAddress={pickup.address}
-            pickupQuote={pickupQuote}
-            baseRentalAmount={baseRentalAmount}
-            pickup={pickup}
-            driverNote={driverNote}
-            passengerCount={effectivePassengerCount}
-            totalAmount={totalAmount}
-            depositAmount={depositAmount}
-            submitting={submitting}
-            onBack={() => setStep(2)}
-            onSubmit={handleSubmit}
-          />
-        ) : null}
-      </BookingWizardShell>
-    </div>
-  )
+  return <div>{dialog}<BookingWizardShell vehicleId={vehicle.id} vehicleName={vehicle.name} vehicleImage={vehicle.imageUrl}
+    plateNumber={vehicle.licensePlate} planTitle={description} currentStep={step}
+    timeRangeLabel={selected ? 'Nhận ' + formattedStart + ' → Trả ' + formattedEnd : ''}
+    totalLabel={selected ? formatCurrency(total) : ''} depositAmount={deposit}
+    onStepSelect={next => next < step && setStep(next)} contentWidth={step === 1 ? 'wide' : 'form'}>
+    {step === 1 ? <ChoosePlanStep plans={vehicle.plans} start={start} end={end}
+      onStart={value => changeTime(setStart, value)} onEnd={value => changeTime(setEnd, value)}
+      quote={currentRental?.data} pending={rentalPending} requestedEnd={request?.requestedEndAt}
+      error={timeError || currentRental?.error || ''} timeError={timeError}
+      selected={selected} onSelect={option => setChoice({ quote: currentRental, option })}
+      onWindow={chooseWindow}
+      onNext={() => selected && setStep(2)}
+      onYearly={planId => navigate('/renter/yearly-rental?vehicleId=' + vehicle.id + '&planId=' + planId)} /> : null}
+    {step === 2 ? <PickupStep pickup={pickup} setPickup={setPickup} pickupQuote={pickupQuote}
+      quotePending={pickupPending} quoteError={pickupError}
+      driverNote={driverNote} setDriverNote={setDriverNote} passengerCount={effectivePassengers}
+      setPassengerCount={setPassengerCount} seatCount={vehicle.seatCount} driverIncluded maxPassengers={maxPassengers}
+      onBack={() => setStep(1)} onNext={() => pickupQuote && !pickupPending && !pickupError && setStep(3)} /> : null}
+    {step === 3 ? <ConfirmRequestStep vehicleName={vehicle.name} vehicleImage={vehicle.imageUrl}
+      plateNumber={vehicle.licensePlate} vehicleYear={vehicle.manufactureYear}
+      formattedStart={formattedStart} pricingItems={selected?.items ?? []}
+      projectedEnd={formattedEnd} depositNote="Tiền cọc theo báo giá đã chọn"
+      pickupAddress={pickup.address} pickupQuote={pickupQuote} baseRentalAmount={baseAmount} pickup={pickup}
+      driverNote={driverNote} passengerCount={effectivePassengers} totalAmount={total} depositAmount={deposit}
+      submitting={submitting} onBack={() => setStep(2)} onSubmit={handleSubmit} /> : null}
+  </BookingWizardShell></div>
 }

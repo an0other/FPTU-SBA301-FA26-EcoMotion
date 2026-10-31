@@ -1,5 +1,5 @@
 const STEPS = [
-  { id: 1, label: 'Chọn gói & Thời gian' },
+  { id: 1, label: 'Thời gian & Giá thuê' },
   { id: 2, label: 'Điểm đón & Khách' },
   { id: 3, label: 'Xác nhận & Gửi' },
 ]

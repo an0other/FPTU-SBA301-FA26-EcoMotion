@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.Comparator;
+import org.springframework.security.access.AccessDeniedException;
 
 @Service
 @RequiredArgsConstructor
@@ -42,7 +44,7 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
                 .filter(other -> other.getPickupTime() != null
                         && other.getPickupTime().isBefore(booking.getPickupTime()))
                 .filter(other -> other.getActualEndAt() == null)
-                .min(java.util.Comparator.comparing(Booking::getPickupTime).reversed())
+                .min(Comparator.comparing(Booking::getPickupTime).reversed())
                 .map(other -> new OperationalRiskResponse(
                         true,
                         other.getBookingCode(),
@@ -62,7 +64,7 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
     @Override
     public OperationalRiskResponse assessForProvider(Long userId, String bookingCode) {
         Long providerId = userService.findProviderByUserId(userId)
-                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException(
+                .orElseThrow(() -> new AccessDeniedException(
                         "Tài khoản không thuộc provider"))
                 .getId();
         String normalized = normalize(bookingCode);

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 
 @Service
 @RequiredArgsConstructor
@@ -123,8 +124,8 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
 
         Vehicle vehicle = vehicleCatalogService.requireOwnedByProvider(request.vehicleId(), provider.getId());
 
-        com.fptufa26.ecomotion.booking.service.AvailabilityPolicy.Window protectedWindow =
-                com.fptufa26.ecomotion.booking.service.AvailabilityPolicy.bufferedWindow(
+        AvailabilityPolicy.Window protectedWindow =
+                AvailabilityPolicy.bufferedWindow(
                         vehicle, request.startAt(), request.endAt());
         boolean hasConflictSchedule = vehicleScheduleRepository.existsActiveOverlap(
                 vehicle.getId(),

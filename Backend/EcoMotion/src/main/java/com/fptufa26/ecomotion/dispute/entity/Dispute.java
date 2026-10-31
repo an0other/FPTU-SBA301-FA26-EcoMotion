@@ -22,6 +22,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.time.Instant;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 @Entity
 @Table(name = "dispute")
@@ -67,30 +72,30 @@ public class Dispute {
     @Column(length = 1000)
     private String resolution;
 
-    public java.util.List<String> getEvidenceUrlList() {
+    public List<String> getEvidenceUrlList() {
         if (evidenceUrls == null || evidenceUrls.isBlank()) {
-            return java.util.Collections.emptyList();
+            return Collections.emptyList();
         }
         try {
             if (evidenceUrls.trim().startsWith("[")) {
-                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
-                        evidenceUrls, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {});
+                return new ObjectMapper().readValue(
+                        evidenceUrls, new TypeReference<List<String>>() {});
             }
-            return java.util.Arrays.stream(evidenceUrls.split("[,;\\n\\r]+"))
+            return Arrays.stream(evidenceUrls.split("[,;\\n\\r]+"))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
                     .toList();
         } catch (Exception e) {
-            return java.util.List.of(evidenceUrls.trim());
+            return List.of(evidenceUrls.trim());
         }
     }
 
-    public void setEvidenceUrlList(java.util.List<String> urls) {
+    public void setEvidenceUrlList(List<String> urls) {
         if (urls == null || urls.isEmpty()) {
             this.evidenceUrls = null;
         } else {
             try {
-                this.evidenceUrls = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(urls);
+                this.evidenceUrls = new ObjectMapper().writeValueAsString(urls);
             } catch (Exception e) {
                 this.evidenceUrls = String.join(",", urls);
             }

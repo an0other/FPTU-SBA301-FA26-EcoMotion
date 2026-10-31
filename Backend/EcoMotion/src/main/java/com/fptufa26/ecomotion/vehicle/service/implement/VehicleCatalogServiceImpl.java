@@ -59,7 +59,7 @@ public class VehicleCatalogServiceImpl implements VehicleCatalogService {
     @Override
     public Vehicle requireOwnedByProvider(Long vehicleId, Long providerId) {
         return vehicleRepository.findByIdAndProvider_Id(vehicleId, providerId)
-                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.NotFoundException(
+                .orElseThrow(() -> new NotFoundException(
                         "Phương tiện không tồn tại hoặc không thuộc sở hữu của nhà xe"));
     }
 

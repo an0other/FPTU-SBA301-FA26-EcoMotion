@@ -7,6 +7,8 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.HashMap;
 import java.util.Map;
+import jakarta.annotation.PostConstruct;
+import java.net.URI;
 
 @Configuration
 public class CloudinaryConfig {
@@ -26,11 +28,11 @@ public class CloudinaryConfig {
     @Value("${app.cloudinary.mock:false}")
     private boolean mockMode;
 
-    @jakarta.annotation.PostConstruct
+    @PostConstruct
     public void init() {
         if (cloudinaryUrl != null && cloudinaryUrl.startsWith("cloudinary://")) {
             try {
-                java.net.URI uri = java.net.URI.create(cloudinaryUrl);
+                URI uri = URI.create(cloudinaryUrl);
                 if (uri.getHost() != null && !uri.getHost().isBlank()) {
                     this.cloudName = uri.getHost();
                 }

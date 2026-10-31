@@ -1,4 +1,5 @@
 import { formatCurrency } from '../../utils/formatCurrency'
+import { slotDurationLabel } from '../../utils/planLabels'
 import { PickupFeeSummary } from './PickupFeeSummary'
 import { DEPOSIT_HOLD_COPY } from '../../utils/bookingCopy'
 
@@ -52,11 +53,9 @@ export const ConfirmRequestStep = ({
   pickup,
   driverNote,
   passengerCount,
-  planTitle,
-  durationLabel,
   formattedStart,
   projectedEnd,
-  priceNote,
+  pricingItems = [],
   depositNote,
   totalAmount,
   baseRentalAmount = totalAmount,
@@ -118,17 +117,13 @@ export const ConfirmRequestStep = ({
           Lịch trình
         </SectionHeader>
         <dl className="bg-white px-5 py-3 sm:px-6">
-          <InfoRow label="Gói thuê">
-            <p className="text-[15px] font-extrabold text-[#14221A]">{planTitle}</p>
-            <p className="mt-0.5 text-xs font-medium text-[#14221A]/55">{durationLabel}</p>
-          </InfoRow>
-          <InfoRow label="Nhận xe">
+          <InfoRow label="Thời gian bắt đầu">
             <p className="text-[15px] font-bold text-[#14221A]">{formattedStart}</p>
           </InfoRow>
-          <InfoRow label="Trả xe">
+          <InfoRow label="Thời gian kết thúc">
             <p className="text-[15px] font-bold text-[#14221A]">{projectedEnd}</p>
           </InfoRow>
-          <InfoRow label="Hành khách">
+          <InfoRow label="Số lượng người">
             <p className="text-[15px] font-bold text-[#14221A]">{passengerCount} người</p>
           </InfoRow>
         </dl>
@@ -171,25 +166,50 @@ export const ConfirmRequestStep = ({
         </SectionHeader>
         <div className="bg-white p-5 sm:p-6">
           <div className="space-y-3">
-            <div className="flex items-start justify-between gap-4">
+            <div className="rounded-xl border border-slate-200 p-4">
+              <h3 className="text-sm font-bold text-ink">Tiền thuê theo từng gói</h3>
+              <ul className="mt-3 divide-y divide-slate-100">
+                {pricingItems.map(item => <li key={item.planId} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-3 first:pt-0">
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Gói {slotDurationLabel(item.slotLengthMinutes)}</p>
+                    <p className="mt-1 text-sm tabular-nums text-slate-600">
+                      {item.quantity} gói × {formatCurrency(item.unitPrice)} / gói
+                    </p>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums text-ink">{formatCurrency(Number(item.unitPrice) * item.quantity)}</p>
+                </li>)}
+              </ul>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-t border-slate-200 pt-3">
               <div>
                 <p className="text-[15px] font-bold text-[#14221A]">Tổng tiền thuê</p>
-                <p className="mt-0.5 text-xs font-medium text-[#14221A]/55">{priceNote}</p>
+                <p className="mt-1 text-sm text-slate-600">Cộng thành tiền của các gói ở trên.</p>
               </div>
               <p className="text-xl font-extrabold tabular-nums text-[#14221A]">{formatCurrency(baseRentalAmount)}</p>
+              </div>
             </div>
             <PickupFeeSummary quote={pickupQuote} />
             <div className="flex flex-wrap justify-between gap-2 font-bold text-[#14221A]">
               <span>Tổng dự kiến (gồm phí đón)</span>
               <span>{formatCurrency(totalAmount)}</span>
             </div>
+            <p className="text-sm tabular-nums text-slate-600">
+              {formatCurrency(baseRentalAmount)} tiền thuê + {formatCurrency(pickupQuote?.pickupFee ?? 0)} phí đón = {formatCurrency(totalAmount)}
+            </p>
+            <p className="text-sm leading-relaxed text-slate-600">Chưa gồm phụ phí phát sinh như vượt giờ hoặc thời gian chờ. Các khoản này được tính theo chính sách áp dụng khi phát sinh.</p>
             <div className="border-t-2 border-dashed border-[#E6EBE8]" />
-            <div className="flex items-start justify-between gap-4 rounded-xl bg-brand-50/50 p-3 -mx-1">
+            <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl bg-brand-50/50 p-3 -mx-1">
               <div>
                 <p className="text-[15px] font-bold text-brand-800">Cọc giữ chỗ 15 phút</p>
-                <p className="mt-0.5 text-xs font-medium text-brand-700/60">{depositNote}</p>
+                <p className="mt-1 text-sm text-brand-800">{depositNote}. Cọc là một phần của tổng tiền, không cộng thêm.</p>
               </div>
               <p className="text-xl font-extrabold tabular-nums text-brand-700">{formatCurrency(depositAmount)}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-4 text-sm">
+              <div className="flex flex-wrap justify-between gap-2 font-semibold text-ink">
+                <span>Còn lại dự kiến sau khi thanh toán cọc</span>
+                <span className="tabular-nums">{formatCurrency(Number(totalAmount) - Number(depositAmount))}</span>
+              </div>
+              <p className="mt-2 tabular-nums text-slate-600">{formatCurrency(totalAmount)} tổng dự kiến − {formatCurrency(depositAmount)} tiền cọc</p>
             </div>
           </div>
           <p className="mt-4 text-[13px] leading-relaxed text-[#14221A]/70">{DEPOSIT_HOLD_COPY.submitHint}</p>

@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -49,7 +50,7 @@ public class CloudinaryServiceImpl implements CloudinaryService {
 
         // If credentials are mock/demo or offline mode, simulate safe Cloudinary upload
         if (cloudinaryConfig != null && cloudinaryConfig.isMockOrDemo()) {
-            String mockPublicId = String.format("%s/%s_%d", folder, java.util.UUID.randomUUID().toString().substring(0, 8), System.currentTimeMillis());
+            String mockPublicId = String.format("%s/%s_%d", folder, UUID.randomUUID().toString().substring(0, 8), System.currentTimeMillis());
             String mockSecureUrl = String.format("https://res.cloudinary.com/%s/image/upload/v1/%s.%s",
                     cloudinaryConfig.getCloudName(), mockPublicId, ext);
             log.info("Simulated Cloudinary upload in demo/mock mode: publicId={}, url={}", mockPublicId, mockSecureUrl);
@@ -94,7 +95,7 @@ public class CloudinaryServiceImpl implements CloudinaryService {
         String folder = String.format("%s/dispute-evidence/%d", folderPrefix, bookingId);
 
         if (cloudinaryConfig != null && cloudinaryConfig.isMockOrDemo()) {
-            String mockPublicId = String.format("%s/%s_%d", folder, java.util.UUID.randomUUID().toString().substring(0, 8), System.currentTimeMillis());
+            String mockPublicId = String.format("%s/%s_%d", folder, UUID.randomUUID().toString().substring(0, 8), System.currentTimeMillis());
             String mockSecureUrl = String.format("https://res.cloudinary.com/%s/image/upload/v1/%s.%s",
                     cloudinaryConfig.getCloudName(), mockPublicId, ext);
             log.info("Simulated Cloudinary dispute upload in demo/mock mode: publicId={}, url={}", mockPublicId, mockSecureUrl);
