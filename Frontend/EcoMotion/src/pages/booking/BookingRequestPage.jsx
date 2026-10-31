@@ -10,7 +10,7 @@ import { readErrorMessage } from '../../services/apiClient'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { hasValidPickup } from '../../utils/bookingAvailability'
-import { pricingDescription, rentalDurationLabel, rentalSelection, rentalPayload, rentalTimeInput, rentalTimeError } from '../../utils/rentalPricing'
+import { pricingDescription, rentalSelection, rentalPayload, rentalTimeInput, rentalTimeError } from '../../utils/rentalPricing'
 
 export function BookingRequestPage() {
   const navigate = useNavigate()
@@ -128,9 +128,9 @@ export function BookingRequestPage() {
       setPassengerCount={setPassengerCount} seatCount={vehicle.seatCount} driverIncluded maxPassengers={maxPassengers}
       onBack={() => setStep(1)} onNext={() => pickupQuote && !pickupPending && !pickupError && setStep(3)} /> : null}
     {step === 3 ? <ConfirmRequestStep vehicleName={vehicle.name} vehicleImage={vehicle.imageUrl}
-      plateNumber={vehicle.licensePlate} vehicleYear={vehicle.manufactureYear} planTitle={description}
-      durationLabel={rentalDurationLabel(selected?.coveredHours ?? 0)} formattedStart={formattedStart}
-      projectedEnd={formattedEnd} priceNote={description} depositNote="Tiền cọc theo báo giá đã chọn"
+      plateNumber={vehicle.licensePlate} vehicleYear={vehicle.manufactureYear}
+      formattedStart={formattedStart} pricingItems={selected?.items ?? []}
+      projectedEnd={formattedEnd} depositNote="Tiền cọc theo báo giá đã chọn"
       pickupAddress={pickup.address} pickupQuote={pickupQuote} baseRentalAmount={baseAmount} pickup={pickup}
       driverNote={driverNote} passengerCount={effectivePassengers} totalAmount={total} depositAmount={deposit}
       submitting={submitting} onBack={() => setStep(2)} onSubmit={handleSubmit} /> : null}

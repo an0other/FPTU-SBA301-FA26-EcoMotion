@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { formatSlotPrice, slotDurationLabel } from '../../utils/planLabels'
+import ReferencePlanPrices from './ReferencePlanPrices'
+import { slotDurationLabel } from '../../utils/planLabels'
 import { formatBookingWhen, parseVietnamDateTime } from '../../utils/bookingDateTime'
 import { rentalDurationLabel } from '../../utils/rentalPricing'
 
@@ -13,13 +14,7 @@ export function ChoosePlanStep({ plans, start, end, onStart, onEnd, quote, pendi
   return <div className="space-y-6">
     <div><h1 className="text-2xl font-bold text-[#14221A]">1. Chọn thời gian thuê</h1>
       <p className="mt-2 text-sm text-[#14221A]/75">Chọn giờ tròn, đặt trước ít nhất 3 giờ. Chúng tôi tìm cách ghép gói có giá tốt nhất cho bạn.</p></div>
-    <section className="rounded-2xl border border-[#D9DFD9] bg-white p-5">
-      <h2 className="font-semibold">Bảng giá tham khảo</h2>
-      <ul className="mt-3 flex flex-wrap gap-4 text-sm">{plans.filter(p => p.planType !== 'YEARLY').map(p =>
-        <li key={p.id}>{formatSlotPrice(p.slotPrice, p.slotLengthMinutes)}</li>)}</ul>
-      {plans.filter(p => p.planType === 'YEARLY').map(p => <button key={p.id} type="button" onClick={() => onYearly(p.id)}
-        className="mt-4 text-sm font-semibold text-brand-700 underline focus-visible:outline-2">Xem hợp đồng thuê năm</button>)}
-    </section>
+    <ReferencePlanPrices plans={plans} onYearly={onYearly} />
     <div className="grid gap-4 sm:grid-cols-2">
       <RentalTimeInput legend="Giờ nhận xe (giờ Việt Nam)" dateLabel="Ngày nhận xe" hourLabel="Giờ nhận xe"
         value={start} onChange={onStart} inputClass={inputClass} />
