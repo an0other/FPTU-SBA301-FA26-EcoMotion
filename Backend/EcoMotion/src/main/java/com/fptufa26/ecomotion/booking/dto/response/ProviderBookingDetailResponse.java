@@ -89,7 +89,9 @@ public record ProviderBookingDetailResponse(
         Instant driverConfirmedAt,
         Instant actualArrivedAt,
         String executionStatus,
-        TripLocationResponse latestLocation
+        TripLocationResponse latestLocation,
+        Instant plannedEndAt,
+        List<RentalQuoteResponse.Item> pricingItems
 ) {
     public record DriverSummary(
             Long id,

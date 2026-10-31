@@ -1,3 +1,4 @@
+import { pricingDescription } from '../utils/rentalPricing'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'

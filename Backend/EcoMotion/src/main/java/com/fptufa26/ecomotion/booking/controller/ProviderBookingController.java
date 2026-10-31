@@ -34,6 +34,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
+import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
+import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
+import com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
+import com.fptufa26.ecomotion.booking.enums.TripEvidenceType;
+import com.fptufa26.ecomotion.booking.service.TripEvidenceService;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping({"/api/provider/bookings", "/api/v1/provider/bookings", "/api/v1/provider/trips"})
@@ -43,7 +54,7 @@ public class ProviderBookingController {
 
     private final ProviderBookingService providerBookingService;
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
-    private final com.fptufa26.ecomotion.booking.service.TripEvidenceService tripEvidenceService;
+    private final TripEvidenceService tripEvidenceService;
 
     @GetMapping
     @Operation(summary = "List the current provider's bookings")
@@ -81,7 +92,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/operational-risk")
     @Operation(summary = "Kiểm tra nguy cơ xe chưa về kịp cho booking kế tiếp")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse> operationalRisk(
+    public ApiResponse<OperationalRiskResponse> operationalRisk(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(vehicleOperationalRiskService.assessForProvider(principal.getUserId(), id));
@@ -152,7 +163,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/tracking")
     @Operation(summary = "Get live trip tracking and vehicle location for provider")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse> getTripTracking(
+    public ApiResponse<TripTrackingResponse> getTripTracking(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.getTripTracking(principal.getUserId(), id));
@@ -160,7 +171,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/location")
     @Operation(summary = "Get latest reported location of the vehicle for provider")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse> getTripLocation(
+    public ApiResponse<TripLocationResponse> getTripLocation(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.getTripLocation(principal.getUserId(), id));
@@ -180,7 +191,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/assign-candidates")
     @Operation(summary = "Get list of eligible driver candidates with suitability scores and ETA")
-    public ApiResponse<List<com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse>> getAssignmentCandidates(
+    public ApiResponse<List<DriverCandidateResponse>> getAssignmentCandidates(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.getAssignmentCandidates(principal.getUserId(), id));
@@ -188,7 +199,7 @@ public class ProviderBookingController {
 
     @PostMapping("/{id}/assign-suggest")
     @Operation(summary = "Run Google OR-Tools CP-SAT solver and suggest optimal driver for booking")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse> suggestDriverAssignment(
+    public ApiResponse<AssignmentSuggestionResponse> suggestDriverAssignment(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.suggestDriverAssignment(principal.getUserId(), id));
@@ -204,7 +215,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/incidents")
     @Operation(summary = "Get list of reported incidents for a booking")
-    public ApiResponse<List<com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse>> getBookingIncidents(
+    public ApiResponse<List<TripIncidentResponse>> getBookingIncidents(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.getBookingIncidents(principal.getUserId(), id));
@@ -216,18 +227,18 @@ public class ProviderBookingController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id,
             @PathVariable("incidentId") Long incidentId,
-            @Valid @RequestBody com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest request) {
+            @Valid @RequestBody ResolveIncidentRequest request) {
         providerBookingService.resolveIncident(principal.getUserId(), id, incidentId, request);
         return ApiResponse.success("Đã cập nhật trạng thái sự cố thành công");
     }
 
-    @PostMapping(value = "/{id}/evidence/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/{id}/evidence/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Provider uploads trip evidence photo to Cloudinary")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse> uploadEvidence(
+    public ApiResponse<TripEvidenceResponse> uploadEvidence(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id,
-            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
-            @RequestParam("type") com.fptufa26.ecomotion.booking.enums.TripEvidenceType type,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("type") TripEvidenceType type,
             @RequestParam(value = "note", required = false) String note) {
         return ApiResponse.success(tripEvidenceService.uploadEvidence(
                 principal.getUserId(),
@@ -251,7 +262,7 @@ public class ProviderBookingController {
 
     @GetMapping("/{id}/evidence")
     @Operation(summary = "Get trip handover, pickup, and completion evidence photos")
-    public ApiResponse<List<com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse>> getBookingEvidence(
+    public ApiResponse<List<TripEvidenceResponse>> getBookingEvidence(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(tripEvidenceService.listEvidence(principal.getUserId(), principal.getRole(), id));

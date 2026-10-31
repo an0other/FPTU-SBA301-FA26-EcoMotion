@@ -560,6 +560,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private Instant calculateBookingEndTime(Booking booking) {
+        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         int slotMinutes = snapshot != null
                 ? snapshot.getSlotLengthMinutes()

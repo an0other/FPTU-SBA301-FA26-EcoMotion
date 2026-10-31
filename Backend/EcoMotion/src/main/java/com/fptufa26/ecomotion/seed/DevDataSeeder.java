@@ -410,6 +410,7 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
         booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
         booking.setPickupTime(pickupTime);
+        booking.setPlannedEndAt(pickupTime.plus(Duration.ofMinutes(plan.getSlotLengthMinutes())));
         booking.setPassengerCount(passengerCount);
         booking.setTotalAmount(new BigDecimal(totalAmountStr));
         booking.setActualStartAt(actualStartAt);
@@ -576,6 +577,7 @@ public class DevDataSeeder implements ApplicationRunner {
             b1.setStatus(BookingStatus.CONFIRMED);
             b1.setPickupAddress("12 Ngô Đức Kế, Bến Nghé, Quận 1, TP. Hồ Chí Minh");
             b1.setPickupTime(Instant.now().plus(Duration.ofDays(1)));
+            b1.setPlannedEndAt(b1.getPickupTime().plus(Duration.ofMinutes(b1.getPlan().getSlotLengthMinutes())));
             b1.setPassengerCount(2);
             b1.setTotalAmount(new BigDecimal("1800000.00"));
             Booking savedBooking1 = bookingRepository.save(b1);
@@ -621,7 +623,7 @@ public class DevDataSeeder implements ApplicationRunner {
             dispute.setCategory(DisputeCategory.CHARGE);
             dispute.setStatus(DisputeStatus.OPEN);
             dispute.setDescription("Khách khiếu nại phụ phí vệ sinh: Khách ói ra sàn xe nhưng đã tự lau dọn kỹ và khử mùi bằng tinh dầu, đề nghị giảm phí vệ sinh chuyên sâu.");
-            dispute.setEvidenceUrlList(java.util.List.of(
+            dispute.setEvidenceUrlList(List.of(
                     "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80",
                     "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80"
             ));
@@ -866,7 +868,7 @@ public class DevDataSeeder implements ApplicationRunner {
         if (!rentalPlanRepository.findByVehicle_IdOrderByIdAsc(vehicle.getId()).isEmpty()) {
             return;
         }
-        createPlan(vehicle, PlanType.HOURLY, 240, prices.hourly(), UPFRONT_HOURLY, true);
+        createPlan(vehicle, PlanType.HOURLY, 60, prices.hourly(), UPFRONT_HOURLY, true);
         createPlan(vehicle, PlanType.DAILY, 1440, prices.daily(), UPFRONT_DAILY, false);
         createPlan(vehicle, PlanType.MONTHLY, 43200, prices.monthly(), UPFRONT_MONTHLY, false);
         createPlan(vehicle, PlanType.YEARLY, 525600, "280000000.00", "50000000.00", false);
@@ -923,6 +925,7 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setStatus(BookingStatus.IN_PROGRESS);
         booking.setPickupAddress(provider.getDepotAddress());
         booking.setPickupTime(pickup);
+        booking.setPlannedEndAt(pickup.plus(Duration.ofMinutes(daily.getSlotLengthMinutes())));
         booking.setPassengerCount(2);
         booking.setTotalAmount(daily.getSlotPrice());
         booking.setActualStartAt(pickup.plus(Duration.ofMinutes(5)));

@@ -72,7 +72,7 @@ export const BookingDetail = ({
               item.id === tempId ? { ...item, url: uploadedUrl, uploading: false } : item
             )
           );
-        } catch (err) {
+        } catch {
           setEvidenceList((prev) =>
             prev.map((item) =>
               item.id === tempId
@@ -407,7 +407,7 @@ export const BookingDetail = ({
                     {booking.planTitle}
                   </span>
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#F3F4F6] text-[#14221A]">
-                    {booking.slots} slot
+                    {booking.durationLabel || (booking.slots + ' slot')}
                   </span>
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#E8F6EE] text-[#15803D]">
                     {booking.totalAmount.toLocaleString('vi-VN')} đ

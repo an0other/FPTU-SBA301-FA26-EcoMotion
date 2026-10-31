@@ -1,3 +1,4 @@
+import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { RequestSubmitted } from '../../components/booking/RequestSubmitted'
@@ -16,8 +17,11 @@ function fromDetail(detail) {
       image: detail.imageUrl,
     },
     slots: detail.slotCount,
+    durationLabel: detail.endTime ? rentalDurationLabel((new Date(detail.endTime) - new Date(detail.pickupTime)) / 3600000) : '',
+    pricingDescription: pricingDescription(detail.pricingItems),
     planType: detail.planType,
     formattedStart: formatBookingWhen(detail.pickupTime),
+    formattedEnd: formatBookingWhen(detail.endTime),
     pickupAddress: detail.pickupAddress,
     depositAmount: Number(detail.depositAmount ?? 0),
     totalAmount: Number(detail.totalAmount),

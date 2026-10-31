@@ -34,6 +34,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import com.fptufa26.ecomotion.vehicle.entity.VehicleDocument;
+import com.fptufa26.ecomotion.vehicle.enums.DocumentStatus;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import org.springframework.security.access.AccessDeniedException;
 
 @Service
 @RequiredArgsConstructor
@@ -47,7 +54,7 @@ public class VehicleServiceImpl implements VehicleService {
     private final ScheduleService scheduleService;
     private final MapLocationService mapLocationService;
 
-    @Autowired private com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository vehicleDocumentRepository;
+    @Autowired private VehicleDocumentRepository vehicleDocumentRepository;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -375,12 +382,12 @@ public class VehicleServiceImpl implements VehicleService {
     }
 
     @Override
-    public java.util.Map<Long, String> getCoverImageUrls(java.util.Collection<Long> vehicleIds) {
+    public Map<Long, String> getCoverImageUrls(Collection<Long> vehicleIds) {
         if (vehicleIds == null || vehicleIds.isEmpty()) {
-            return java.util.Collections.emptyMap();
+            return Collections.emptyMap();
         }
         Map<Long, List<String>> images = vehicleImageService.findImageUrlsByVehicleIds(vehicleIds);
-        Map<Long, String> result = new java.util.HashMap<>();
+        Map<Long, String> result = new HashMap<>();
         images.forEach((id, urls) -> {
             if (!urls.isEmpty()) {
                 result.put(id, urls.get(0));
@@ -444,7 +451,7 @@ public class VehicleServiceImpl implements VehicleService {
     }
 
     @Override
-    public List<com.fptufa26.ecomotion.vehicle.entity.VehicleDocument> getVehicleDocuments(Long vehicleId) {
+    public List<VehicleDocument> getVehicleDocuments(Long vehicleId) {
         return vehicleDocumentRepository.findByVehicle_Id(vehicleId);
     }
 
@@ -457,18 +464,18 @@ public class VehicleServiceImpl implements VehicleService {
         vehicle.setStatus(status != null ? status : VehicleStatus.APPROVED);
 
         if (status == VehicleStatus.APPROVED) {
-            List<com.fptufa26.ecomotion.vehicle.entity.VehicleDocument> docs = vehicleDocumentRepository.findByVehicle_Id(vehicleId);
-            for (com.fptufa26.ecomotion.vehicle.entity.VehicleDocument doc : docs) {
-                if (doc.getStatus() == com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.PENDING) {
-                    doc.setStatus(com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.VERIFIED);
+            List<VehicleDocument> docs = vehicleDocumentRepository.findByVehicle_Id(vehicleId);
+            for (VehicleDocument doc : docs) {
+                if (doc.getStatus() == DocumentStatus.PENDING) {
+                    doc.setStatus(DocumentStatus.VERIFIED);
                     vehicleDocumentRepository.save(doc);
                 }
             }
         } else if (status == VehicleStatus.REJECTED) {
-            List<com.fptufa26.ecomotion.vehicle.entity.VehicleDocument> docs = vehicleDocumentRepository.findByVehicle_Id(vehicleId);
-            for (com.fptufa26.ecomotion.vehicle.entity.VehicleDocument doc : docs) {
-                if (doc.getStatus() == com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.PENDING) {
-                    doc.setStatus(com.fptufa26.ecomotion.vehicle.enums.DocumentStatus.REJECTED);
+            List<VehicleDocument> docs = vehicleDocumentRepository.findByVehicle_Id(vehicleId);
+            for (VehicleDocument doc : docs) {
+                if (doc.getStatus() == DocumentStatus.PENDING) {
+                    doc.setStatus(DocumentStatus.REJECTED);
                     vehicleDocumentRepository.save(doc);
                 }
             }
@@ -493,7 +500,7 @@ public class VehicleServiceImpl implements VehicleService {
         Vehicle vehicle = vehicleRepository.findByIdForUpdate(vehicleId)
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
         if (vehicle.getProvider() == null || !providerId.equals(vehicle.getProvider().getId())) {
-            throw new org.springframework.security.access.AccessDeniedException(
+            throw new AccessDeniedException(
                     "Xe thay thế không thuộc nhà cung cấp hiện tại");
         }
         if (vehicle.getStatus() != VehicleStatus.APPROVED) {

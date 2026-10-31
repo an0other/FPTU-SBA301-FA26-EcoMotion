@@ -176,7 +176,7 @@ public class DisputeServiceImpl implements DisputeService {
     @Override
     public boolean hasOpenDispute(Long bookingId) {
         return disputeRepository.existsByBooking_IdAndStatusIn(
-                bookingId, java.util.List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
+                bookingId, List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
     }
 
     @Override

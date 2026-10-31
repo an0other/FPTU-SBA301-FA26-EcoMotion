@@ -19,6 +19,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import com.fptufa26.ecomotion.user.entity.User;
 
 @Entity
 @Table(name = "trip_evidence")
@@ -41,7 +42,7 @@ public class TripEvidence {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "uploaded_by_id")
-    private com.fptufa26.ecomotion.user.entity.User uploadedBy;
+    private User uploadedBy;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "evidence_type", nullable = false, length = 50)
