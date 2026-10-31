@@ -1,4 +1,4 @@
-﻿package com.fptufa26.ecomotion.booking.repository;
+package com.fptufa26.ecomotion.booking.repository;
 
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
@@ -12,12 +12,8 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
-<<<<<<< HEAD
 import java.time.Instant;
-import org.springframework.data.repository.query.Param;
-=======
 import java.util.Collection;
->>>>>>> origin/merge
 import java.util.Optional;
 import java.util.List;
 
