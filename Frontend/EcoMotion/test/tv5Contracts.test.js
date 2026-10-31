@@ -19,10 +19,11 @@ test('incident resolution uses the exact DTO fields and validates the note', () 
   assert.throws(() => incidentResolutionPayload('x'.repeat(1001)))
 })
 
-test('charge preview follows each snapshot formula rather than a freely entered amount', () => {
-  const policy = { slotPrice: 100000, overtimeSurchargeRatio: 0.2, waitingRate: 3000, outOfRadiusRate: 10000, weekendSurchargeRatio: 0.1 }
+test('charge preview uses overtime policy and entered money for toll, parking and other', () => {
+  const policy = { slotPrice: 100000, overtimeSurchargeRatio: 0.2 }
   assert.equal(chargeQuote(policy, 'OVERTIME', 2).amount, 240000)
-  assert.equal(chargeQuote(policy, 'WAITING', 3).amount, 9000)
-  assert.equal(chargeQuote(policy, 'OUT_OF_RADIUS', 3).amount, 30000)
-  assert.equal(chargeQuote(policy, 'WEEKEND', 2).amount, 20000)
+  assert.equal(chargeQuote(policy, 'PARKING', 1, 20000).amount, 20000)
+  assert.equal(chargeQuote(policy, 'TOLL', 1, 15000).amount, 15000)
+  assert.throws(() => chargeQuote(policy, 'WEEKEND', 2))
+  assert.throws(() => chargeQuote(policy, 'WAITING', 3))
 })

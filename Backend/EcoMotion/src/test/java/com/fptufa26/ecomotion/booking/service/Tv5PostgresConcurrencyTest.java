@@ -327,7 +327,7 @@ class Tv5PostgresConcurrencyTest {
         });
         var request = new com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest(
                 com.fptufa26.ecomotion.booking.enums.ChargeType.OVERTIME, "Overtime evidence", 2,
-                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE, "https://example.test/proof.png");
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE, "https://example.test/proof.png", "overtime-repeat");
         var charge = providerBookings.addCharge(providerUser, bookings.findById(first).orElseThrow().getBookingCode(), request);
         assertThat(charge.amount()).isEqualByComparingTo("240000");
         assertThat(providerBookings.addCharge(providerUser, bookings.findById(first).orElseThrow().getBookingCode(), request).id()).isEqualTo(charge.id());

@@ -59,7 +59,8 @@ public interface BookingMapper {
                 charge.getAppliedRate(),
                 charge.getAmount(),
                 charge.isWaived(),
-                charge.isWaived() ? BigDecimal.ZERO : charge.getAmount());
+                charge.isWaived() ? BigDecimal.ZERO : charge.getAmount(),
+                charge.getConfirmationStatus());
     }
 
     @Mapping(target = "fullName", source = "user.fullName")

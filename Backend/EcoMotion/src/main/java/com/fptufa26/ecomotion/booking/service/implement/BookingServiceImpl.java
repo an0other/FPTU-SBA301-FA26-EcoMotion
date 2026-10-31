@@ -146,6 +146,7 @@ public class BookingServiceImpl implements BookingService {
     private final Clock clock;
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
+    private final com.fptufa26.ecomotion.finance.service.implement.RefundEventService refundEventService;
 
     @Override
     @Transactional(readOnly = true)
@@ -205,14 +206,19 @@ public class BookingServiceImpl implements BookingService {
         if (plan.getPlanType() == PlanType.YEARLY) {
             throw new ConflictException("Yearly plans must use the dedicated contract flow");
         }
-        return calculatePickupQuote(vehicle.getProvider(), plan.getFreeRadiusKm(), plan.getOutOfRadiusRate(),
+        return calculatePickupQuote(vehicle, plan.getFreeRadiusKm(), plan.getOutOfRadiusRate(),
                 request.pickupLatitude(), request.pickupLongitude());
     }
 
-    private PickupQuoteResponse calculatePickupQuote(Provider provider, Integer freeRadiusKm,
+    private PickupQuoteResponse calculatePickupQuote(Vehicle vehicle, Integer freeRadiusKm,
                                                       BigDecimal rate, BigDecimal latitude, BigDecimal longitude) {
-        if (provider == null || provider.getDepotLatitude() == null || provider.getDepotLongitude() == null) {
-            throw new ConflictException("Nhà cung cấp chưa cấu hình vị trí bãi xe để tính phí đón");
+        Provider provider = vehicle == null ? null : vehicle.getProvider();
+        BigDecimal originLat = vehicle != null && vehicle.getDispatchLatitude() != null && vehicle.getDispatchLongitude() != null
+                ? vehicle.getDispatchLatitude() : provider == null ? null : provider.getDepotLatitude();
+        BigDecimal originLng = vehicle != null && vehicle.getDispatchLatitude() != null && vehicle.getDispatchLongitude() != null
+                ? vehicle.getDispatchLongitude() : provider == null ? null : provider.getDepotLongitude();
+        if (originLat == null || originLng == null) {
+            throw new ConflictException("Nhà cung cấp chưa cấu hình vị trí xuất phát của xe để tính phí đón");
         }
         if (freeRadiusKm == null || freeRadiusKm < 0 || rate == null || rate.signum() < 0) {
             throw new ConflictException("Gói thuê chưa cấu hình hợp lệ bán kính miễn phí và đơn giá vượt bán kính");
@@ -220,28 +226,55 @@ public class BookingServiceImpl implements BookingService {
         if (latitude == null || longitude == null) {
             throw new BadRequestException("Vui lòng chọn tọa độ điểm đón hợp lệ");
         }
-        double distance = mapLocationService.distanceKm(provider.getDepotLatitude().doubleValue(),
-                provider.getDepotLongitude().doubleValue(), latitude.doubleValue(), longitude.doubleValue());
+        double distance = mapLocationService.distanceKm(originLat.doubleValue(), originLng.doubleValue(),
+                latitude.doubleValue(), longitude.doubleValue());
         int chargeableKm = (int) Math.ceil(Math.max(0, distance - freeRadiusKm));
         return new PickupQuoteResponse(distance, freeRadiusKm, chargeableKm, rate,
-                rate.multiply(BigDecimal.valueOf(chargeableKm)));
+                rate.multiply(BigDecimal.valueOf(chargeableKm)), originLat, originLng);
     }
 
     private void savePickupCharge(Booking booking, PickupQuoteResponse quote, User actor) {
-        BookingCharge charge = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.OUT_OF_RADIUS)
-                .orElseGet(BookingCharge::new);
+        List<BookingCharge> rows = chargeRepository.findAllByBooking_IdAndChargeType(booking.getId(), ChargeType.OUT_OF_RADIUS);
+        BookingCharge charge = rows.isEmpty() ? null : rows.get(0);
+        if (rows.size() > 1) {
+            rows.stream().skip(1).forEach(extra -> {
+                extra.setWaived(true);
+                chargeRepository.save(extra);
+            });
+        }
+        snapshotRepository.findByBooking_Id(booking.getId()).ifPresent(snapshot -> {
+            snapshot.setDispatchOriginLatitude(quote.originLatitude());
+            snapshot.setDispatchOriginLongitude(quote.originLongitude());
+            snapshot.setDistanceKm(BigDecimal.valueOf(quote.distanceKm()).setScale(3, java.math.RoundingMode.HALF_UP));
+            snapshot.setDistanceSource("HAVERSINE");
+            snapshot.setPickupFee(quote.pickupFee());
+            snapshotRepository.save(snapshot);
+        });
         if (quote.pickupFee().signum() == 0) {
-            if (charge.getId() != null) chargeRepository.delete(charge);
+            if (charge != null && charge.getId() != null) {
+                charge.setWaived(true);
+                charge.setAmount(BigDecimal.ZERO);
+                charge.setQuantity(1);
+                charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+                chargeRepository.save(charge);
+            }
             return;
         }
-        charge.setBooking(booking);
+        if (charge == null) {
+            charge = new BookingCharge();
+            charge.setBooking(booking);
+            charge.setCreatedBy(actor);
+        }
         charge.setChargeType(ChargeType.OUT_OF_RADIUS);
         charge.setDescription("Phí đón vượt bán kính miễn phí " + quote.freeRadiusKm() + " km");
-        charge.setQuantity(quote.chargeableKm());
+        charge.setQuantity(Math.max(quote.chargeableKm(), 1));
         charge.setUnitPrice(quote.outOfRadiusRate());
         charge.setAmount(quote.pickupFee());
-        charge.setCreatedBy(actor);
         charge.setWaived(false);
+        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        if (charge.getCreatedBy() == null) {
+            charge.setCreatedBy(actor);
+        }
         chargeRepository.save(charge);
     }
 
@@ -292,7 +325,7 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Bạn đã có đơn thuê trùng khoảng thời gian này");
         }
 
-        PickupQuoteResponse pickupQuote = calculatePickupQuote(vehicle.getProvider(), plan.getFreeRadiusKm(),
+        PickupQuoteResponse pickupQuote = calculatePickupQuote(vehicle, plan.getFreeRadiusKm(),
                 plan.getOutOfRadiusRate(), request.pickupLatitude(), request.pickupLongitude());
         BigDecimal total = mixed ? selection.rentalAmount() : plan.getSlotPrice().multiply(BigDecimal.valueOf(request.slotCount()));
         User actor = renter.getUser();
@@ -669,6 +702,19 @@ public class BookingServiceImpl implements BookingService {
 
         vehicleCatalogService.requireApprovedForUpdate(booking.getVehicle().getId());
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
+        boolean pinChanged = booking.getPickupLatitude() == null || booking.getPickupLongitude() == null
+                || booking.getPickupLatitude().compareTo(request.pickupLatitude()) != 0
+                || booking.getPickupLongitude().compareTo(request.pickupLongitude()) != 0;
+        if (pinChanged) {
+            PickupQuoteResponse preview = calculatePickupQuote(booking.getVehicle(),
+                    snapshot.getFreeRadiusKm(), snapshot.getOutOfRadiusRate(),
+                    request.pickupLatitude(), request.pickupLongitude());
+            BigDecimal currentFee = snapshot.getPickupFee() == null ? BigDecimal.ZERO : snapshot.getPickupFee();
+            if (currentFee.compareTo(preview.pickupFee()) != 0 && !Boolean.TRUE.equals(request.confirmPickupFeeChange())) {
+                throw new ConflictException("Phí đón thay đổi thành " + preview.pickupFee()
+                        + "đ. Xác nhận chênh lệch trước khi lưu điểm đón mới.");
+            }
+        }
         int slots = baseSlots(booking);
         if (!booking.getPricingItems().isEmpty())
             RentalPricingServiceImpl.validateHours(request.pickupTime(), request.pickupTime().plus(Duration.ofHours(1)));
@@ -688,7 +734,7 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getPickupLatitude() == null || booking.getPickupLongitude() == null
                 || booking.getPickupLatitude().compareTo(request.pickupLatitude()) != 0
                 || booking.getPickupLongitude().compareTo(request.pickupLongitude()) != 0) {
-            PickupQuoteResponse quote = calculatePickupQuote(booking.getVehicle().getProvider(),
+            PickupQuoteResponse quote = calculatePickupQuote(booking.getVehicle(),
                     snapshot.getFreeRadiusKm(), snapshot.getOutOfRadiusRate(),
                     request.pickupLatitude(), request.pickupLongitude());
             savePickupCharge(booking, quote, booking.getRenter().getUser());
@@ -833,6 +879,8 @@ public class BookingServiceImpl implements BookingService {
             if (charge.isWaived()) {
                 throw new ConflictException("Khoản phí này đã được miễn");
             }
+            charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.DISPUTED);
+            chargeRepository.save(charge);
         } else if (request.category() == DisputeCategory.DEPOSIT_REFUND
                 && chargeRepository.findAllByBooking_IdAndChargeType(booking.getId(), ChargeType.DEPOSIT).isEmpty()) {
             throw new ConflictException("No deposit to dispute");
@@ -857,6 +905,24 @@ public class BookingServiceImpl implements BookingService {
             paymentRequestService.savePaymentRequest(finalRequest);
         }
         return response;
+    }
+
+    @Override
+    @Transactional
+    public com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        BookingCharge charge = chargeRepository.findByIdAndBooking_Id(chargeId, booking.getId())
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy khoản phí"));
+        if (charge.getConfirmationStatus() != com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING) {
+            throw new ConflictException("Khoản phí không còn chờ xác nhận");
+        }
+        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        chargeRepository.save(charge);
+        return new com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse(
+                charge.getId(), charge.getChargeType(), charge.getDescription(), charge.getQuantity(),
+                charge.getUnitPrice(), charge.getAppliedRate(), charge.getAmount(), charge.isWaived(),
+                charge.getEvidenceUrl(), null, charge.getCreatedAt(), charge.getConfirmationStatus());
     }
 
     @Override
@@ -979,19 +1045,8 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private void saveRefund(Booking booking, BigDecimal amount) {
-        PaymentTransaction depositPayment = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
-                .filter(payment -> payment.getType() == PaymentType.DEPOSIT_PAY && payment.getStatus() == PaymentStatus.PAID)
-                .findFirst()
-                .orElseThrow(() -> new ConflictException("Paid deposit not found"));
-        PaymentTransaction refund = new PaymentTransaction();
-        refund.setBooking(booking);
-        refund.setType(PaymentType.REFUND);
-        refund.setAmount(amount);
-        refund.setDirection(PaymentDirection.OUT);
-        refund.setMethod(depositPayment.getMethod());
-        refund.setStatus(PaymentStatus.PENDING);
-        refund.setProcessingNote("Chờ nhà cung cấp hoàn tiền và tải minh chứng");
-        paymentTransactionRepository.save(refund);
+        refundEventService.reserve(booking.getId(), "CANCEL:" + booking.getId(), amount,
+                "Hoàn cọc theo chính sách hủy", booking.getRenter().getUser());
     }
 
     private List<TimelineStepResponse> timeline(Booking booking, List<PaymentTransaction> payments) {

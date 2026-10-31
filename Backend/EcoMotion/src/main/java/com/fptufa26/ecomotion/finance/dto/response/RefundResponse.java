@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.finance.dto.response;
 
+import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.finance.enums.RefundStatus;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ public record RefundResponse(
         String rejectionReason,
         String gatewayRefundRef,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        PaymentMethod refundMethod
 ) {
 }

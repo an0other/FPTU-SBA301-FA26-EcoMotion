@@ -24,6 +24,7 @@ export const BookingDetail = ({
   onCompleteBooking,
   onConfirmStart,
   onOpenDispute,
+  onAcceptCharge,
   onUploadDisputeEvidence,
   onEditRequest,
   trackingData,
@@ -570,6 +571,7 @@ export const BookingDetail = ({
                     <th className="py-2.5 px-3 font-semibold">Mô tả</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Cách tính</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Thành tiền</th>
+                    <th className="py-2.5 px-3 font-semibold">Xác nhận</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E6EBE8]">
@@ -580,6 +582,11 @@ export const BookingDetail = ({
                       <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">{charge.formula}</td>
                       <td className="py-3 px-3 text-right font-bold font-mono text-[#14221A]">
                         {charge.amount.toLocaleString('vi-VN')} đ
+                      </td>
+                      <td className="py-3 px-3 text-[#6D7A72]">
+                        {charge.confirmationStatus === 'PENDING' ? (
+                          <button type="button" className="rounded-lg border border-[#14221A] px-2 py-1 text-[11px] font-semibold text-[#14221A]" onClick={() => onAcceptCharge?.(charge.chargeId)}>Chấp nhận</button>
+                        ) : charge.confirmationStatus === 'DISPUTED' ? 'Đang tranh chấp' : 'Đã nhận'}
                       </td>
                     </tr>
                   ))}

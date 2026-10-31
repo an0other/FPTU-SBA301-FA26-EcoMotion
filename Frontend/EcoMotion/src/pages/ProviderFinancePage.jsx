@@ -255,7 +255,7 @@ export default function ProviderFinancePage() {
     try {
       await providerFinanceService.reviewRefund(reviewingRefund.id, refundReviewPayload(reviewDecision, reviewNote))
       setToast({
-        message: reviewDecision === 'APPROVE' ? 'Đã duyệt yêu cầu. Cần chuyển khoản và tải biên lai để xác nhận hoàn tiền.' : 'Đã từ chối yêu cầu hoàn tiền.',
+        message: reviewDecision === 'APPROVE' ? 'Đã duyệt yêu cầu. Tiền chỉ được tính là đã hoàn khi trạng thái hoàn tiền xác nhận thành công.' : 'Đã từ chối yêu cầu hoàn tiền.',
         type: 'success',
       })
       setReviewingRefund(null)
@@ -1063,7 +1063,12 @@ export default function ProviderFinancePage() {
                             {formatDateTime(ref.createdAt)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {canReview ? (
+                            {canReview && (ref.status === 'UNDER_REVIEW' || ref.status === 'FAILED') ? (
+                              <div className="flex flex-col gap-1">
+                                <button type="button" className="text-[11px] font-semibold text-brand-800 underline" onClick={() => providerFinanceService.reviewRefund(ref.id, refundReviewPayload('CONTINUE')).then(() => fetchFinanceData())}>Tiếp tục phương thức gốc</button>
+                                <button type="button" className="text-[11px] font-semibold text-slate-700 underline" onClick={() => providerFinanceService.reviewRefund(ref.id, refundReviewPayload('MANUAL')).then(() => fetchFinanceData())}>Chuyển chứng từ ngân hàng</button>
+                              </div>
+                            ) : canReview ? (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1076,7 +1081,7 @@ export default function ProviderFinancePage() {
                                 Xem xét duyệt
                               </button>
                             ) : (
-                              ref.status === 'PROCESSING' && ref.paymentTransactionId ? (
+                              ref.status === 'PROCESSING' && ref.paymentTransactionId && ref.refundMethod !== 'VNPAY' ? (
                                 <button
                                   type="button"
                                   onClick={() => setProofRefund(ref)}

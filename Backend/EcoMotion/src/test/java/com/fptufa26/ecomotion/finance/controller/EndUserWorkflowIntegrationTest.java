@@ -73,11 +73,11 @@ class EndUserWorkflowIntegrationTest {
         trips.confirmTrip(driver[1], code()); trips.arriveAtPickup(driver[1], code());
         trips.startTrip(driver[1], code()); renterBookings.confirmStart(renterId, code());
         trips.finishTrip(driver[1], code()); renterBookings.confirmEnd(renterId, code());
-        tx.executeWithoutResult(s -> snapshots.findByBooking_Id(bookingId).orElseThrow().setWaitingRate(new BigDecimal("10000")));
         var charge = providerBookings.addCharge(providerId, code(), new com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest(
-                ChargeType.WAITING, "Waiting at pickup", 2, new BigDecimal("99999"), BigDecimal.ONE,
-                new BigDecimal("99999"), "https://example.test/waiting.jpg"));
+                ChargeType.PARKING, "Parking at the return point for this trip", 1, new BigDecimal("20000"), BigDecimal.ONE,
+                new BigDecimal("20000"), "https://example.test/waiting.jpg", "park-dispute-1"));
         assertThat(charge.amount()).isEqualByComparingTo("20000");
+        assertThat(charge.confirmationStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING);
         var dispute = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
                 com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE, charge.id(), null,
                 "Passenger disputes the recorded waiting time", List.of("https://example.test/passenger.jpg"), null));

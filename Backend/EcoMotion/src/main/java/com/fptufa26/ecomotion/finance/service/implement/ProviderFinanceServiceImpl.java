@@ -757,7 +757,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 charge.isWaived(),
                 charge.getEvidenceUrl(),
                 charge.getCreatedBy() != null ? charge.getCreatedBy().getFullName() : null,
-                charge.getCreatedAt()
+                charge.getCreatedAt(),
+                charge.getConfirmationStatus()
         );
     }
 

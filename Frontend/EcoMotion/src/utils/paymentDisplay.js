@@ -18,7 +18,10 @@ export const CHARGE_TYPE_LABELS = {
   OVERTIME: 'Phụ phí quá giờ',
   WAITING: 'Phụ phí chờ',
   WEEKEND: 'Phụ phí cuối tuần / lễ',
-  OUT_OF_RADIUS: 'Phụ phí đón ngoài bán kính',
+  OUT_OF_RADIUS: 'Phí đón ngoài phạm vi',
+  TOLL: 'Phí cầu đường',
+  PARKING: 'Phí gửi xe',
+  OTHER: 'Phụ phí khác',
 }
 
 export const BOOKING_STATUS_LABELS = {

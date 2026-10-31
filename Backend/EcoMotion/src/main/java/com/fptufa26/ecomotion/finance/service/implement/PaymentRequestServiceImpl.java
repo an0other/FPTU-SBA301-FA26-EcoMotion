@@ -106,6 +106,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private final PaymentCodeGenerator paymentCodeGenerator;
     private final Clock clock;
     private final Environment environment;
+    private final RefundEventService refundEventService;
 
     @Override
     @Transactional
@@ -1037,18 +1038,16 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     }
 
     private void createExcessRefund(PaymentRequest request, BigDecimal excessAmount, User processor) {
-        PaymentTransaction refund = new PaymentTransaction();
-        refund.setBooking(request.getBooking());
-        refund.setType(PaymentType.REFUND);
-        refund.setDirection(PaymentDirection.OUT);
-        refund.setMethod(PaymentMethod.BANK_TRANSFER);
-        refund.setAmount(excessAmount);
-        refund.setAppliedAmount(BigDecimal.ZERO);
-        refund.setStatus(PaymentStatus.PENDING);
-        refund.setPaymentRequest(request);
-        refund.setConfirmedBy(processor);
-        refund.setProcessingNote("Hoàn tiền chuyển thừa cho yêu cầu thanh toán #" + request.getId());
-        bookingPaymentLedgerService.saveTransaction(refund);
+        PaymentTransaction source = bookingPaymentLedgerService.listTransactions(request.getBooking().getId()).stream()
+                .filter(tx -> tx.getPaymentRequest() != null && request.getId().equals(tx.getPaymentRequest().getId())
+                        && tx.getDirection() == PaymentDirection.IN && tx.getStatus() == PaymentStatus.PAID)
+                .reduce((first, second) -> second)
+                .orElse(null);
+        if (source == null) {
+            return;
+        }
+        refundEventService.reserveOnTransaction(request.getBooking().getId(), "EXCESS:" + source.getId(), excessAmount,
+                "Hoàn tiền chuyển thừa cho yêu cầu thanh toán #" + request.getId(), processor, source.getId());
     }
 
     private BigDecimal calculateDepositAmount(Booking booking) {
@@ -1091,8 +1090,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         List<BookingCharge> charges = bookingPaymentLedgerService.listCharges(booking.getId());
         BigDecimal approvedCharges = charges.stream()
                 .filter(c -> !c.isWaived()
+                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
-                        && c.getChargeType() != ChargeType.BASE_RENTAL)
+                        && c.getChargeType() != ChargeType.BASE_RENTAL
+                        && c.getChargeType() != ChargeType.WEEKEND)
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -1101,12 +1102,19 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactions(booking.getId());
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
-                .map(t -> t.getAppliedAmount() != null && t.getAppliedAmount().compareTo(BigDecimal.ZERO) > 0
-                        ? t.getAppliedAmount()
-                        : t.getAmount())
+                .map(t -> com.fptufa26.ecomotion.finance.service.RefundMath.appliedPortion(
+                        t.getAmount(), t.getAppliedAmount(), t.getProcessingNote()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal refundedAllocated = transactions.stream()
+                .filter(t -> t.getType() == PaymentType.REFUND && t.getDirection() == PaymentDirection.OUT
+                        && t.getStatus() == PaymentStatus.PAID)
+                .filter(t -> t.getProcessingNote() == null || (!t.getProcessingNote().contains("thừa")
+                        && !t.getProcessingNote().contains("EXCESS") && !t.getProcessingNote().startsWith("LATE_IPN")))
+                .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return totalPayable.subtract(allocatedPayments).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        return totalPayable.subtract(allocatedPayments).add(refundedAllocated).max(BigDecimal.ZERO)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private String generateTransferReference(String bookingCode, PaymentRequestType type) {

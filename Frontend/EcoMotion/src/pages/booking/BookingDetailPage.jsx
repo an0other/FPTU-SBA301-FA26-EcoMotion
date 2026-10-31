@@ -4,7 +4,7 @@ import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPrici
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
+import { acceptCharge, cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
@@ -17,7 +17,10 @@ const CHARGE_LABELS = {
   OVERTIME: 'Quá giờ',
   WAITING: 'Chờ',
   WEEKEND: 'Cuối tuần',
-  OUT_OF_RADIUS: 'Ngoài bán kính',
+  OUT_OF_RADIUS: 'Phí đón ngoài phạm vi',
+  TOLL: 'Phí cầu đường',
+  PARKING: 'Phí gửi xe',
+  OTHER: 'Phụ phí khác',
 }
 
 function formatWhen(value) {
@@ -69,6 +72,7 @@ function toCard(detail) {
       formula: formula(charge),
       amount: Number(charge.effectiveAmount ?? charge.amount),
       isWaived: Boolean(charge.isWaived),
+      confirmationStatus: charge.confirmationStatus,
     })),
     driver: detail.driver
       ? {
@@ -171,6 +175,10 @@ export function BookingDetailPage() {
         }}
         onConfirmStart={async () => {
           await confirmTripStart(booking.id)
+          await refreshDetail()
+        }}
+        onAcceptCharge={async (chargeId) => {
+          await acceptCharge(booking.id, chargeId)
           await refreshDetail()
         }}
         onOpenDispute={async body => { const result = await openDispute(booking.id, body); await refreshDetail(); return result }}

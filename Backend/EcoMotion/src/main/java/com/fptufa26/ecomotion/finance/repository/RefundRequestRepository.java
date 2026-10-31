@@ -31,4 +31,6 @@ public interface RefundRequestRepository extends JpaRepository<RefundRequest, Lo
     BigDecimal sumCompletedRefundsForProvider(@Param("providerId") Long providerId);
 
     boolean existsByBooking_IdAndStatusIn(Long bookingId, List<RefundStatus> statuses);
+
+    Optional<RefundRequest> findBySourceEventId(String sourceEventId);
 }

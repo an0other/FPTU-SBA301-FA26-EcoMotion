@@ -21,6 +21,7 @@ export function EditBookingRequestModal({ booking, onClose, onSave }) {
   const [checkingAvailability, setCheckingAvailability] = useState(false)
   const [availabilityError, setAvailabilityError] = useState('')
   const [availabilityRetry, setAvailabilityRetry] = useState(0)
+  const [confirmPickupFeeChange, setConfirmPickupFeeChange] = useState(false)
   const durationMs = useMemo(() => Math.max(0,
     new Date(booking.endTime).getTime() - new Date(booking.pickupTime).getTime()),
   [booking.endTime, booking.pickupTime])
@@ -70,11 +71,14 @@ export function EditBookingRequestModal({ booking, onClose, onSave }) {
         pickupLongitude: Number(pickup.longitude),
         passengerCount: Number(passengerCount),
         driverNote: driverNote.trim() || null,
+        confirmPickupFeeChange,
       })
       onClose()
     } catch (err) {
-      setError(err.message || 'Không thể cập nhật yêu cầu')
-      if (err.status === 409) setAvailabilityRetry((value) => value + 1)
+      const message = err.message || 'Không thể cập nhật yêu cầu'
+      setError(message)
+      if (message.includes('Phí đón')) setConfirmPickupFeeChange(true)
+      else if (err.status === 409) setAvailabilityRetry((value) => value + 1)
     } finally { setSaving(false) }
   }
 
@@ -90,7 +94,7 @@ export function EditBookingRequestModal({ booking, onClose, onSave }) {
               ? <span>{availabilityError} <button type="button" className="font-semibold underline" onClick={() => setAvailabilityRetry((value) => value + 1)}>Thử lại</button></span>
               : conflicts ? 'Xe đã có lịch trong khoảng thời gian này.' : 'Xe đang trống trong khoảng thời gian đã chọn.'}
         </div>
-        <PickupMap value={pickup} onChange={setPickup} onError={setError} />
+        <PickupMap value={pickup} onChange={(next) => { setConfirmPickupFeeChange(false); setPickup(next) }} onError={setError} />
         <label className="block text-sm font-semibold">Số khách<input required min="1" type="number" value={passengerCount} onChange={(e) => setPassengerCount(e.target.value)} className="mt-1 w-full rounded-xl border p-2.5 font-normal" /></label>
         <label className="block text-sm font-semibold">Ghi chú cho tài xế<textarea maxLength="160" value={driverNote} onChange={(e) => setDriverNote(e.target.value.replace(/[\r\n]+/g, ' '))} className="mt-1 w-full rounded-xl border p-2.5 font-normal" /></label>
         {error ? <p className="text-sm text-red-700">{error}</p> : null}

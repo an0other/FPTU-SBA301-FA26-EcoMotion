@@ -66,6 +66,8 @@ public interface BookingService {
 
     DisputeOpenedResponse openDispute(Long userId, String bookingCode, OpenDisputeRequest request);
 
+    com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId);
+
     String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file);
 
     // Admin methods

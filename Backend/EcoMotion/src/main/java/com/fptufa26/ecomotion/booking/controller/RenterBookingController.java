@@ -175,6 +175,14 @@ public class RenterBookingController {
         return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
     }
 
+    @PostMapping("/{bookingCode}/charges/{chargeId}/accept")
+    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse> acceptCharge(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            @PathVariable Long chargeId) {
+        return ApiResponse.success(bookingService.acceptCharge(user.getUserId(), bookingCode, chargeId));
+    }
+
     @PostMapping(value = "/{bookingCode}/disputes/upload-evidence", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<Map<String, String>> uploadDisputeEvidence(
             @AuthenticationPrincipal SecurityUser user,

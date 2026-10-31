@@ -71,6 +71,25 @@ public class RefundRequest {
     @Column(name = "gateway_refund_ref", length = 100)
     private String gatewayRefundRef;
 
+    @Column(name = "source_event_id", length = 120, unique = true)
+    private String sourceEventId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_payment_transaction_id")
+    private PaymentTransaction sourcePaymentTransaction;
+
+    @Column(name = "vnp_request_id", length = 32)
+    private String vnpRequestId;
+
+    @Column(name = "refund_transaction_no", length = 40)
+    private String refundTransactionNo;
+
+    @Column(name = "vnp_response_code", length = 10)
+    private String vnpResponseCode;
+
+    @Column(name = "vnp_transaction_status", length = 10)
+    private String vnpTransactionStatus;
+
     @Version
     @Column(name = "version")
     private Long version;

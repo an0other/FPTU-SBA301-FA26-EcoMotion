@@ -65,6 +65,11 @@ export async function confirmTripStart(bookingCode) {
   return data.data
 }
 
+export async function acceptCharge(bookingCode, chargeId) {
+  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/charges/${chargeId}/accept`)
+  return data.data
+}
+
 export async function openDispute(bookingCode, body) {
   const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/disputes`, body)
   return data.data
@@ -94,6 +99,7 @@ export const bookingService = {
   updateBookingRequestDetails,
   cancelMyBooking,
   confirmTripEnd,
+  acceptCharge,
   openDispute,
   uploadDisputeEvidence,
   createVnpayPaymentUrl,

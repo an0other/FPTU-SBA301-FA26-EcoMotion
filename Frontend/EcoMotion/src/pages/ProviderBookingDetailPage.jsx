@@ -869,6 +869,7 @@ export default function ProviderBookingDetailPage() {
                         <th className="px-3.5 py-2.5">Số lượng</th>
                         <th className="px-3.5 py-2.5 text-right">Đơn giá</th>
                         <th className="px-3.5 py-2.5 text-right">Thành tiền</th>
+                        <th className="px-3.5 py-2.5">Thao tác</th>
                         <th className="px-3.5 py-2.5">Minh chứng</th>
                       </tr>
                     </thead>
@@ -884,6 +885,14 @@ export default function ProviderBookingDetailPage() {
                           <td className="px-3.5 py-2.5 text-slate-600">{c.quantity ?? '1'}</td>
                           <td className="px-3.5 py-2.5 text-right font-mono text-slate-600">{formatVnd(c.unitPrice)}</td>
                           <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">{formatVnd(c.amount)}</td>
+                          <td className="px-3.5 py-2.5">
+                            {c.confirmationStatus === 'PENDING' && (
+                              <button type="button" className="text-[11px] font-semibold text-slate-700 underline" onClick={async () => {
+                                await providerBookingService.withdrawCharge(booking.bookingCode, c.id)
+                                window.location.reload()
+                              }}>Rút phụ phí</button>
+                            )}
+                          </td>
                           <td className="px-3.5 py-2.5 text-slate-500">
                             {c.evidenceUrl ? (
                               <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline">
