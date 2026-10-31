@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   IconCar,
   IconShield,
@@ -10,6 +10,10 @@ import {
   IconArrowRight,
   IconSparkles,
   IconRefresh,
+  IconCalendar,
+  IconChevronDown,
+  IconChevronRight,
+  IconX,
 } from '../../components/icons/Icons'
 
 function formatVND(amount) {
@@ -32,9 +36,69 @@ function formatCompactVND(amount) {
   return `${num.toLocaleString('vi-VN')} ₫`
 }
 
-export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh }) {
+function generateFallbackMonths() {
+  const list = []
+  const now = new Date()
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const y = d.getFullYear()
+    const m = d.getMonth() + 1
+    const key = `${y}-${String(m).padStart(2, '0')}`
+    const label = `Tháng ${String(m).padStart(2, '0')}/${y}`
+    list.push({ key, year: y, month: m, label })
+  }
+  return list
+}
+
+export default function AdminOverviewTab({
+  stats,
+  loading,
+  selectedMonthKey = 'ALL',
+  onMonthChange,
+  onNavigate,
+  onRefresh,
+}) {
   const [chartView, setChartView] = useState('both') // 'both' | 'donut' | 'bar'
   const [activeSegment, setActiveSegment] = useState(null)
+
+  // Derive month options from backend monthlySummaries or fallback
+  const monthOptions = useMemo(() => {
+    if (stats?.monthlySummaries && stats.monthlySummaries.length > 0) {
+      return stats.monthlySummaries.map((m) => {
+        const key = `${m.year}-${String(m.month).padStart(2, '0')}`
+        return {
+          key,
+          year: m.year,
+          month: m.month,
+          label: m.label,
+        }
+      })
+    }
+    return generateFallbackMonths()
+  }, [stats?.monthlySummaries])
+
+  const isAllTime = selectedMonthKey === 'ALL'
+  const currentMonthOption = monthOptions.find((opt) => opt.key === selectedMonthKey)
+  const currentPeriodLabel = isAllTime ? 'Toàn thời gian' : (currentMonthOption?.label || selectedMonthKey)
+
+  // Month navigation helpers
+  const currentMonthIndex = monthOptions.findIndex((opt) => opt.key === selectedMonthKey)
+  const canGoNextMonth = !isAllTime && currentMonthIndex > 0 // index 0 is newest month
+  const canGoPrevMonth = isAllTime ? monthOptions.length > 0 : currentMonthIndex < monthOptions.length - 1
+
+  function handlePrevMonth() {
+    if (isAllTime) {
+      if (monthOptions.length > 0) onMonthChange?.(monthOptions[0].key)
+    } else if (canGoPrevMonth) {
+      onMonthChange?.(monthOptions[currentMonthIndex + 1].key)
+    }
+  }
+
+  function handleNextMonth() {
+    if (!isAllTime && canGoNextMonth) {
+      onMonthChange?.(monthOptions[currentMonthIndex - 1].key)
+    }
+  }
 
   if (loading && !stats) {
     return (
@@ -73,9 +137,11 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
       id: 'commission',
       label: 'Doanh thu sàn (Hoa hồng)',
       shortLabel: 'Hoa hồng sàn',
-      sublabel: `Thu từ ${completedBookings} chuyến xong`,
+      sublabel: isAllTime
+        ? `Thu từ ${completedBookings} chuyến xong`
+        : `Thu từ ${completedBookings} chuyến xong trong tháng`,
       value: commission,
-      heightPct: Math.max(Math.round((commission / maxBarValue) * 100), 6),
+      heightPct: commission > 0 ? Math.max(Math.round((commission / maxBarValue) * 100), 6) : 0,
       color: 'emerald',
       barBg: 'bg-gradient-to-t from-emerald-600 via-emerald-500 to-teal-400',
       pillBg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
@@ -87,9 +153,11 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
       id: 'gmv',
       label: 'Tổng giao dịch (GMV)',
       shortLabel: 'Tổng GMV',
-      sublabel: `Tổng giá trị ${completedBookings} chuyến`,
+      sublabel: isAllTime
+        ? `Tổng giá trị ${completedBookings} chuyến`
+        : `Tổng giá trị ${completedBookings} chuyến tháng này`,
       value: gmv,
-      heightPct: Math.max(Math.round((gmv / maxBarValue) * 100), 6),
+      heightPct: gmv > 0 ? Math.max(Math.round((gmv / maxBarValue) * 100), 6) : 0,
       color: 'sky',
       barBg: 'bg-gradient-to-t from-sky-600 via-sky-500 to-blue-400',
       pillBg: 'bg-sky-50 text-sky-800 border-sky-200',
@@ -103,7 +171,7 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
       shortLabel: 'Trả Chủ xe',
       sublabel: 'Nghĩa vụ chi trả NCC',
       value: payout,
-      heightPct: Math.max(Math.round((payout / maxBarValue) * 100), 6),
+      heightPct: payout > 0 ? Math.max(Math.round((payout / maxBarValue) * 100), 6) : 0,
       color: 'indigo',
       barBg: 'bg-gradient-to-t from-indigo-600 via-indigo-500 to-indigo-400',
       pillBg: 'bg-indigo-50 text-indigo-800 border-indigo-200',
@@ -115,9 +183,14 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
       id: 'escrow',
       label: 'Quỹ cọc đang tạm giữ',
       shortLabel: 'Quỹ cọc',
-      sublabel: 'Đơn đang chạy / chờ hoàn',
+      sublabel:
+        escrow > 0
+          ? 'Đơn đang chạy / chờ hoàn'
+          : !isAllTime
+          ? 'Không còn cọc tạm giữ (0 ₫)'
+          : '0 đơn đang cọc',
       value: escrow,
-      heightPct: Math.max(Math.round((escrow / maxBarValue) * 100), 6),
+      heightPct: escrow > 0 ? Math.max(Math.round((escrow / maxBarValue) * 100), 6) : 0,
       color: 'amber',
       barBg: 'bg-gradient-to-t from-amber-600 via-amber-500 to-orange-400',
       pillBg: 'bg-amber-50 text-amber-800 border-amber-200',
@@ -126,6 +199,45 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
       icon: IconClock,
     },
   ]
+
+  const centerTitle =
+    activeSegment === 'commission'
+      ? 'Hoa hồng sàn'
+      : activeSegment === 'payout'
+      ? 'Đối soát NCC'
+      : activeSegment === 'escrow'
+      ? 'Quỹ cọc lưu ký'
+      : activeSegment === 'gmv'
+      ? 'Tổng GMV Sàn'
+      : 'Tổng dòng tiền'
+
+  const centerValue =
+    activeSegment === 'commission'
+      ? formatCompactVND(commission)
+      : activeSegment === 'payout'
+      ? formatCompactVND(payout)
+      : activeSegment === 'escrow'
+      ? formatCompactVND(escrow)
+      : activeSegment === 'gmv'
+      ? formatCompactVND(gmv)
+      : totalAllocated > 0
+      ? formatCompactVND(totalAllocated)
+      : '0 ₫'
+
+  const centerSub =
+    activeSegment === 'commission'
+      ? `${pctCommission.toFixed(1)}% cơ cấu`
+      : activeSegment === 'payout'
+      ? `${pctPayout.toFixed(1)}% cơ cấu`
+      : activeSegment === 'escrow'
+      ? escrow > 0
+        ? `${pctEscrow.toFixed(1)}% cơ cấu`
+        : '0.0% (Không còn cọc)'
+      : activeSegment === 'gmv'
+      ? `${completedBookings} chuyến xong`
+      : totalAllocated > 0
+      ? `${formatCompactVND(gmv)} GMV`
+      : 'Chưa có dòng tiền'
 
   const kpis = [
     {
@@ -227,16 +339,64 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
             <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1 border border-slate-200/70 font-medium">
                 <IconCar className="h-3.5 w-3.5 text-emerald-600" />
-                <span>Xe mở bán: <strong className="text-slate-900">{stats?.approvedVehicles ?? 0}</strong>/{stats?.totalVehicles ?? 0}</span>
+                <span>
+                  Xe mở bán: <strong className="text-slate-900">{stats?.approvedVehicles ?? 0}</strong>/{stats?.totalVehicles ?? 0}
+                </span>
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1 border border-slate-200/70 font-medium">
                 <IconUsers className="h-3.5 w-3.5 text-blue-600" />
-                <span>Tài khoản hoạt động: <strong className="text-slate-900">{stats?.activeUsers ?? 0}</strong>/{stats?.totalUsers ?? 0}</span>
+                <span>
+                  Tài khoản hoạt động: <strong className="text-slate-900">{stats?.activeUsers ?? 0}</strong>/{stats?.totalUsers ?? 0}
+                </span>
               </span>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Month Filter Selector */}
+            <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold text-slate-700 shadow-inner">
+              <span className="flex items-center gap-1.5 px-2 text-slate-500">
+                <IconCalendar className="h-4 w-4 text-brand-600" />
+                <span className="hidden sm:inline">Kỳ đối soát:</span>
+              </span>
+
+              <div className="relative">
+                <select
+                  value={selectedMonthKey}
+                  onChange={(e) => onMonthChange?.(e.target.value)}
+                  className="appearance-none rounded-lg border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-bold text-slate-900 shadow-xs transition-all hover:border-slate-300 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 cursor-pointer"
+                >
+                  <option value="ALL">Toàn thời gian (All-time)</option>
+                  {monthOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <IconChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              </div>
+
+              {/* Prev / Next quick stepper buttons */}
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                disabled={!canGoPrevMonth}
+                title="Tháng trước đó"
+                className="rounded-lg p-1.5 text-slate-600 hover:bg-white hover:shadow-xs disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+              >
+                <IconChevronRight className="h-3.5 w-3.5 rotate-180" />
+              </button>
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                disabled={!canGoNextMonth}
+                title="Tháng sau đó"
+                className="rounded-lg p-1.5 text-slate-600 hover:bg-white hover:shadow-xs disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+              >
+                <IconChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
             {/* View Mode Toggle */}
             <div className="inline-flex items-center rounded-xl bg-slate-100 p-1 text-xs font-medium text-slate-600 shadow-inner">
               <button
@@ -284,6 +444,35 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
             </button>
           </div>
         </div>
+
+        {/* Selected Period Status Pill / Alert */}
+        {!isAllTime && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/90 bg-gradient-to-r from-blue-50/90 via-sky-50/50 to-white px-4 py-2.5 text-xs text-blue-900">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                <IconClock className="h-3.5 w-3.5" />
+              </span>
+              <span>
+                Đang hiển thị cấu trúc tài chính: <strong className="text-slate-900">{currentPeriodLabel}</strong>
+              </span>
+              {escrow === 0 && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
+                  <IconCheckCircle className="h-3 w-3 text-emerald-600" />
+                  Quỹ cọc = 0 ₫ (Không còn cọc tạm giữ)
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onMonthChange?.('ALL')}
+              className="inline-flex items-center gap-1 font-bold text-blue-700 hover:text-blue-900 hover:underline"
+            >
+              <span>Xem toàn thời gian</span>
+              <IconX className="h-3 w-3" />
+            </button>
+          </div>
+        )}
 
         {/* 4 Summary Metric Cards (Interactive Key) */}
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -333,7 +522,9 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">Cơ cấu phân bổ dòng tiền</h3>
-                    <p className="text-[11px] text-slate-500">Tỷ trọng dòng tiền trong hệ thống</p>
+                    <p className="text-[11px] text-slate-500">
+                      Tỷ trọng dòng tiền trong hệ thống — {currentPeriodLabel}
+                    </p>
                   </div>
                   <span className="rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 border border-emerald-100">
                     Phân bổ %
@@ -426,37 +617,13 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                   {/* Center Stat Overlay */}
                   <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {activeSegment === 'commission'
-                        ? 'Hoa hồng sàn'
-                        : activeSegment === 'payout'
-                        ? 'Đối soát NCC'
-                        : activeSegment === 'escrow'
-                        ? 'Quỹ cọc lưu ký'
-                        : activeSegment === 'gmv'
-                        ? 'Tổng GMV Sàn'
-                        : 'Tổng dòng tiền'}
+                      {centerTitle}
                     </span>
                     <span className="text-xl font-black tracking-tight text-slate-900">
-                      {activeSegment === 'commission'
-                        ? formatCompactVND(commission)
-                        : activeSegment === 'payout'
-                        ? formatCompactVND(payout)
-                        : activeSegment === 'escrow'
-                        ? formatCompactVND(escrow)
-                        : activeSegment === 'gmv'
-                        ? formatCompactVND(gmv)
-                        : formatCompactVND(totalAllocated)}
+                      {centerValue}
                     </span>
                     <span className="mt-0.5 text-[11px] font-bold text-emerald-600">
-                      {activeSegment === 'commission'
-                        ? `${pctCommission.toFixed(1)}% cơ cấu`
-                        : activeSegment === 'payout'
-                        ? `${pctPayout.toFixed(1)}% cơ cấu`
-                        : activeSegment === 'escrow'
-                        ? `${pctEscrow.toFixed(1)}% cơ cấu`
-                        : activeSegment === 'gmv'
-                        ? `${completedBookings} chuyến xong`
-                        : `${formatCompactVND(gmv)} GMV`}
+                      {centerSub}
                     </span>
                   </div>
                 </div>
@@ -533,7 +700,14 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                       <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
                       Quỹ cọc đang tạm giữ
                     </span>
-                    <span className="font-bold text-slate-900">{formatVND(escrow)}</span>
+                    <div className="flex items-center gap-1.5">
+                      {escrow === 0 && !isAllTime && (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.2 text-[10px] font-medium text-slate-500">
+                          Hết cọc
+                        </span>
+                      )}
+                      <span className="font-bold text-slate-900">{formatVND(escrow)}</span>
+                    </div>
                   </div>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -562,7 +736,9 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">So sánh quy mô tài chính</h3>
-                    <p className="text-[11px] text-slate-500">Đối chiếu 4 chỉ số tài chính theo quy mô tiền tệ</p>
+                    <p className="text-[11px] text-slate-500">
+                      Đối chiếu 4 chỉ số tài chính theo quy mô tiền tệ — {currentPeriodLabel}
+                    </p>
                   </div>
                   <span className="rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 border border-blue-100">
                     Cột so sánh (VND)
@@ -617,10 +793,13 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                             className="relative w-full max-w-[56px] overflow-hidden rounded-t-xl transition-all duration-500 ease-out shadow-xs"
                             style={{
                               height: `${bar.heightPct}%`,
+                              minHeight: bar.value > 0 ? '12px' : '3px',
                             }}
                           >
                             <div
-                              className={`h-full w-full ${bar.barBg} transition-all duration-300 ${
+                              className={`h-full w-full ${
+                                bar.value > 0 ? bar.barBg : 'bg-slate-200'
+                              } transition-all duration-300 ${
                                 isHovered ? 'brightness-110 ring-2 ring-white/50' : 'opacity-90'
                               }`}
                             />
@@ -630,6 +809,7 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
                           {isHovered && (
                             <div className="absolute -top-10 z-20 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white shadow-lg pointer-events-none">
                               {bar.shortLabel}: {formatVND(bar.value)}
+                              {bar.id === 'escrow' && bar.value === 0 && !isAllTime && ' (Không còn cọc giữ)'}
                             </div>
                           )}
                         </div>
@@ -667,13 +847,122 @@ export default function AdminOverviewTab({ stats, loading, onNavigate, onRefresh
               </div>
 
               {/* Footer Note */}
-              <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500 border border-slate-100">
-                <span>Dữ liệu tính từ các giao dịch thanh toán thành công (PAID) và đơn COMPLETED</span>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500 border border-slate-100">
+                <span>
+                  {isAllTime
+                    ? 'Dữ liệu tính từ các giao dịch thanh toán thành công (PAID) và đơn COMPLETED toàn thời gian'
+                    : `Dữ liệu tính cho ${currentPeriodLabel} — Đơn đã hoàn thành & cọc đang lưu ký`}
+                </span>
                 <span className="font-semibold text-slate-700">Quy mô lớn nhất: {formatCompactVND(maxBarValue)}</span>
               </div>
             </div>
           )}
         </div>
+
+        {/* Monthly Breakdown History Table */}
+        {stats?.monthlySummaries && stats.monthlySummaries.length > 0 && (
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>Bảng đối soát tài chính theo từng tháng</span>
+                  <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-extrabold text-purple-700 border border-purple-200">
+                    6 kỳ gần nhất
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Chọn tháng bất kỳ để xem chi tiết cơ cấu dòng tiền và quy mô tài chính
+                </p>
+              </div>
+              <div className="text-[11px] text-slate-500 italic">
+                * Quỹ cọc hiển thị 0 ₫ đối với các kỳ đối soát đã kết thúc hoàn toàn
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3">Kỳ đối soát</th>
+                    <th className="px-4 py-3 text-right">Tổng GMV</th>
+                    <th className="px-4 py-3 text-right">Hoa hồng sàn</th>
+                    <th className="px-4 py-3 text-right">Trả Chủ xe</th>
+                    <th className="px-4 py-3 text-right">Quỹ cọc lưu ký</th>
+                    <th className="px-4 py-3 text-center">Chuyến xong</th>
+                    <th className="px-4 py-3 text-center">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {stats.monthlySummaries.map((m) => {
+                    const rowKey = `${m.year}-${String(m.month).padStart(2, '0')}`
+                    const isSelected = selectedMonthKey === rowKey
+                    const hasEscrow = Number(m.escrowDeposits ?? 0) > 0
+
+                    return (
+                      <tr
+                        key={rowKey}
+                        className={`transition-colors ${
+                          isSelected ? 'bg-brand-50/40 font-semibold' : 'hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <td className="px-4 py-3 font-bold text-slate-900 flex items-center gap-2">
+                          <IconCalendar className="h-3.5 w-3.5 text-brand-600" />
+                          <span>{m.label}</span>
+                          {isSelected && (
+                            <span className="rounded-full bg-brand-600 text-white px-1.5 py-0.2 text-[9px] font-extrabold uppercase">
+                              Đang xem
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                          {formatVND(m.grossMerchandiseValue)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-emerald-600">
+                          {formatVND(m.platformCommission)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-indigo-600">
+                          {formatVND(m.providerPayoutDue)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {hasEscrow ? (
+                            <span className="font-bold text-amber-700">{formatVND(m.escrowDeposits)}</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-slate-400">
+                              <span>0 ₫</span>
+                              <span className="text-[10px] text-slate-400 font-normal">(Đã tất toán)</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-slate-800">
+                          {m.completedBookings}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {isSelected ? (
+                            <button
+                              type="button"
+                              onClick={() => onMonthChange?.('ALL')}
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50 shadow-2xs"
+                            >
+                              Bỏ lọc
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onMonthChange?.(rowKey)}
+                              className="rounded-lg bg-brand-50 border border-brand-200/80 px-2.5 py-1 text-[11px] font-bold text-brand-700 hover:bg-brand-600 hover:text-white transition-all shadow-2xs"
+                            >
+                              Xem biểu đồ
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* KPI Cards Grid */}
