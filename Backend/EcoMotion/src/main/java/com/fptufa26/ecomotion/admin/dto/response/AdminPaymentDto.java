@@ -18,6 +18,7 @@ import java.time.Instant;
 @AllArgsConstructor
 public class AdminPaymentDto {
     private Long id;
+    private String transactionCode;
     private Long bookingId;
     private String bookingCode;
     private PaymentType type;

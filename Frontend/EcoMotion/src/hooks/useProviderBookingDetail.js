@@ -1,114 +1,33 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { providerBookingService } from '../services/providerBookingService'
+import { bookingWorkflowService } from '../services/bookingWorkflowService'
 
 export function useProviderBookingDetail(idOrCode) {
-  const [booking, setBooking] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [operationalRisk, setOperationalRisk] = useState(null)
-
+  const [state, setState] = useState({ key: null })
+  const sequence = useRef(0)
+  const refetch = useCallback(async () => {
+    const id = ++sequence.current
+    const [row, risk, workflow] = await Promise.allSettled([
+      providerBookingService.getBookingDetail(idOrCode),
+      providerBookingService.getOperationalRisk(idOrCode),
+      bookingWorkflowService.get(idOrCode, 'provider'),
+    ])
+    if (id !== sequence.current) return
+    setState(previous => ({
+      key: idOrCode,
+      booking: row.status === 'fulfilled' ? row.value : previous.key === idOrCode ? previous.booking : null,
+      operationalRisk: risk.status === 'fulfilled' ? risk.value : null,
+      workflow: workflow.status === 'fulfilled' ? workflow.value : null,
+      workflowError: workflow.status === 'rejected' ? workflow.reason.message : null,
+      error: row.status === 'rejected' ? row.reason.message : null,
+    }))
+  }, [idOrCode])
   useEffect(() => {
-    if (!idOrCode) {
-      return
-    }
-
-    let active = true
-
-    async function fetchDetail(silent = false) {
-      if (!silent) {
-        setLoading(true)
-      }
-      try {
-        const [data, risk] = await Promise.all([
-          providerBookingService.getBookingDetail(idOrCode),
-          providerBookingService.getOperationalRisk(idOrCode),
-        ])
-        if (active) {
-          setBooking(data)
-          setOperationalRisk(risk)
-          setError(null)
-          if (!silent) {
-            setLoading(false)
-          }
-        }
-      } catch (err) {
-        if (active) {
-          if (!silent) {
-            setError(
-              err?.status === 404
-                ? 'Không tìm thấy thông tin đơn thuê này.'
-                : err?.status === 403
-                ? 'Bạn không có quyền xem chi tiết đơn thuê này.'
-                : err?.message || 'Không thể tải thông tin chi tiết đơn thuê.',
-            )
-            setLoading(false)
-          }
-        }
-      }
-    }
-
-    fetchDetail(false)
-
-    // Sync on window focus or tab visibility
-    const handleSync = () => {
-      if (document.visibilityState === 'visible' && active) {
-        fetchDetail(true)
-      }
-    }
-
-    window.addEventListener('focus', handleSync)
-    document.addEventListener('visibilitychange', handleSync)
-
-    // Auto-polling every 5 seconds for real-time driver/trip synchronization
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === 'visible' && active) {
-        fetchDetail(true)
-      }
-    }, 5000)
-
-    return () => {
-      active = false
-      window.removeEventListener('focus', handleSync)
-      document.removeEventListener('visibilitychange', handleSync)
-      clearInterval(intervalId)
-    }
-  }, [idOrCode])
-
-  const refetch = useCallback(async (silent = false) => {
-    if (!idOrCode) return
-    if (!silent) {
-      setLoading(true)
-    }
-    setError(null)
-    try {
-      const [data, risk] = await Promise.all([
-        providerBookingService.getBookingDetail(idOrCode),
-        providerBookingService.getOperationalRisk(idOrCode),
-      ])
-      setBooking(data)
-      setOperationalRisk(risk)
-    } catch (err) {
-      if (!silent) {
-        setError(
-          err?.status === 404
-            ? 'Không tìm thấy thông tin đơn thuê này.'
-            : err?.status === 403
-            ? 'Bạn không có quyền xem chi tiết đơn thuê này.'
-            : err?.message || 'Không thể tải thông tin chi tiết đơn thuê.',
-        )
-      }
-    } finally {
-      if (!silent) {
-        setLoading(false)
-      }
-    }
-  }, [idOrCode])
-
-  return {
-    booking,
-    loading,
-    error,
-    refetch,
-    operationalRisk,
-  }
+    const timer = setTimeout(refetch, 0)
+    return () => { clearTimeout(timer); ++sequence.current }
+  }, [refetch])
+  const loaded = state.key === idOrCode
+  return { booking: loaded ? state.booking : null, operationalRisk: loaded ? state.operationalRisk : null,
+    workflow: loaded ? state.workflow : null, workflowError: loaded ? state.workflowError : null,
+    loading: !loaded, error: loaded ? state.error : null, refetch }
 }

@@ -119,7 +119,7 @@ public interface BookingMapper {
             BookingActionKind actionKind
     ) {
         Vehicle vehicle = booking.getVehicle();
-        boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
+        boolean vehicleReplaced = booking.getPreviousVehicleId() != null || booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
         PlanType planType = snapshot != null ? snapshot.getPlanType() : booking.getPlan().getPlanType();
         String vehicleName = !vehicleReplaced && snapshot != null && snapshot.getVehicleName() != null
                 ? snapshot.getVehicleName()
@@ -174,7 +174,7 @@ public interface BookingMapper {
                                            List<DisputeCategory> disputeCategories,
                                            Instant holdExpiresAt) {
         Vehicle vehicle = booking.getVehicle();
-        boolean vehicleReplaced = booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
+        boolean vehicleReplaced = booking.getPreviousVehicleId() != null || booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
         String vehicleName = !vehicleReplaced && snapshot.getVehicleName() != null
                 ? snapshot.getVehicleName()
                 : vehicle.getBrand() + " " + vehicle.getModel();
@@ -232,6 +232,7 @@ public interface BookingMapper {
                 disputeCategories,
                 providerName,
                 holdExpiresAt,
+                booking.getStatus() == BookingStatus.REJECTED ? booking.getOperationalResolutionReason() : null,
                 booking.getPricingItems().stream().map(item ->
                         new RentalQuoteResponse.Item(
                                 item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),

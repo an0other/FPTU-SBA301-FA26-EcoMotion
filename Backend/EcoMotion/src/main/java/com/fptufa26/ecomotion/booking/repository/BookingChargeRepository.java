@@ -19,6 +19,8 @@ public interface BookingChargeRepository extends JpaRepository<BookingCharge, Lo
 
     Optional<BookingCharge> findByBooking_IdAndChargeType(Long bookingId, ChargeType chargeType);
 
+    List<BookingCharge> findByBooking_IdInAndChargeType(java.util.Collection<Long> bookingIds, ChargeType chargeType);
+
     List<BookingCharge> findByBooking_IdOrderByIdAsc(Long bookingId);
 
     List<BookingCharge> findAllByBooking_IdAndChargeType(Long bookingId, ChargeType chargeType);

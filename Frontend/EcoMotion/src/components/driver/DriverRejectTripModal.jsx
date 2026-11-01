@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { driverTripService } from '../../services/driverTripService'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
+  return (
+    <span className={`material-symbols-rounded select-none leading-none inline-flex items-center justify-center shrink-0 ${className}`}>
+      {name}
+    </span>
+  )
 }
 
 const REJECT_REASONS = [
@@ -23,6 +27,7 @@ export default function DriverRejectTripModal({ trip, isOpen, onClose, onSuccess
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (loading) return
     if (!reason) {
       setError('Vui lòng chọn lý do từ chối chuyến.')
       return
@@ -47,7 +52,12 @@ export default function DriverRejectTripModal({ trip, isOpen, onClose, onSuccess
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-md border border-slate-200">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Từ chối nhận chuyến xe"
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5 shadow-lg border border-slate-200"
+      >
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <div className="flex items-center gap-2 text-rose-700">
             <Icon name="cancel" className="text-xl" />
@@ -57,7 +67,7 @@ export default function DriverRejectTripModal({ trip, isOpen, onClose, onSuccess
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
             <Icon name="close" className="text-lg" />
           </button>
@@ -82,7 +92,7 @@ export default function DriverRejectTripModal({ trip, isOpen, onClose, onSuccess
               {REJECT_REASONS.map((r) => (
                 <label
                   key={r.value}
-                  className={`flex items-center gap-2.5 p-2 rounded-xl border text-xs cursor-pointer transition ${
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
                     reason === r.value
                       ? 'border-rose-500 bg-rose-50/60 text-rose-950 font-bold'
                       : 'border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -111,7 +121,7 @@ export default function DriverRejectTripModal({ trip, isOpen, onClose, onSuccess
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Chi tiết hoàn cảnh phát sinh..."
-              className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-800 placeholder-slate-400 focus:border-rose-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:border-rose-500 focus:outline-none"
             />
           </div>
 
@@ -120,14 +130,14 @@ export default function DriverRejectTripModal({ trip, isOpen, onClose, onSuccess
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
               Hủy
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 transition disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-4 text-xs font-bold text-white hover:bg-rose-700 transition disabled:opacity-50"
             >
               {loading && <Icon name="sync" className="animate-spin text-[16px]" />}
               <span>{loading ? 'Đang gửi...' : 'Xác nhận từ chối'}</span>

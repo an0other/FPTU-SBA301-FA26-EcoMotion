@@ -42,6 +42,7 @@ public record DriverTripDetailResponse(
         Instant actualArrivedAt,
         String executionStatus,
         TripLocationResponse latestLocation,
+        Instant assignmentExpiresAt,
         Instant plannedEndAt,
         List<RentalQuoteResponse.Item> pricingItems
 ) {
@@ -100,6 +101,7 @@ public record DriverTripDetailResponse(
                 null,
                 null,
                 status != null ? status.name() : null,
+                null,
                 null,
                 null,
                 List.of()

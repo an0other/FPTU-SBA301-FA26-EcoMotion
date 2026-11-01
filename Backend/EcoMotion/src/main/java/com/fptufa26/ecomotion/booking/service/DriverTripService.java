@@ -1,17 +1,24 @@
 package com.fptufa26.ecomotion.booking.service;
 
+import com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest;
+import com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest;
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest;
 import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
+import com.fptufa26.ecomotion.booking.entity.TripEvidence;
+import com.fptufa26.ecomotion.booking.entity.TripIncident;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest;
 import com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest;
 import com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest;
 import com.fptufa26.ecomotion.booking.entity.TripEvidence;
 import com.fptufa26.ecomotion.booking.entity.TripIncident;
+import java.util.List;
+
 import java.util.List;
 
 public interface DriverTripService {
@@ -28,6 +35,8 @@ public interface DriverTripService {
     DriverTripDetailResponse getTripDetail(Long currentUserId, String tripIdOrCode);
 
     DriverTripDetailResponse confirmTrip(Long currentUserId, String tripIdOrCode);
+
+    DriverTripDetailResponse confirmTrip(Long currentUserId, String tripIdOrCode, java.time.Instant expectedAssignedAt);
 
     DriverTripDetailResponse arriveAtPickup(Long currentUserId, String tripIdOrCode);
 

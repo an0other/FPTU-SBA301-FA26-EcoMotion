@@ -1,12 +1,20 @@
 package com.fptufa26.ecomotion.booking.controller;
 
+import com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest;
+import com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest;
 import com.fptufa26.ecomotion.booking.dto.request.LocationUpdateRequest;
+import com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest;
 import com.fptufa26.ecomotion.booking.dto.request.ReportDriverIssueRequest;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverTripResponse;
+import com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
+import com.fptufa26.ecomotion.booking.entity.TripEvidence;
+import com.fptufa26.ecomotion.booking.entity.TripIncident;
+import com.fptufa26.ecomotion.booking.enums.TripEvidenceType;
 import com.fptufa26.ecomotion.booking.service.DriverTripService;
+import com.fptufa26.ecomotion.booking.service.TripEvidenceService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
@@ -17,6 +25,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -27,17 +36,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest;
-import com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest;
-import com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest;
-import com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse;
-import com.fptufa26.ecomotion.booking.entity.TripEvidence;
-import com.fptufa26.ecomotion.booking.entity.TripIncident;
-import com.fptufa26.ecomotion.booking.enums.TripEvidenceType;
-import com.fptufa26.ecomotion.booking.service.TripEvidenceService;
-import java.util.List;
-import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping({"/api/v1/driver/trips", "/api/driver/trips", "/api/driver/schedule"})
@@ -117,8 +118,9 @@ public class DriverTripController {
     @Operation(summary = "Driver confirms assignment of the trip")
     public ApiResponse<DriverTripDetailResponse> confirmTrip(
             @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable("tripId") String tripId) {
-        DriverTripDetailResponse response = driverTripService.confirmTrip(principal.getUserId(), tripId);
+            @PathVariable("tripId") String tripId,
+            @org.springframework.web.bind.annotation.RequestBody(required = false) com.fptufa26.ecomotion.booking.dto.request.ConfirmDriverAssignmentRequest request) {
+        DriverTripDetailResponse response = driverTripService.confirmTrip(principal.getUserId(), tripId, request == null ? null : request.assignedAt());
         return ApiResponse.success(response);
     }
 

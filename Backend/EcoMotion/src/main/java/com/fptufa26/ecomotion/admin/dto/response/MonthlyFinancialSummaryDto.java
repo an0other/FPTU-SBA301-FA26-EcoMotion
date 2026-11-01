@@ -22,4 +22,3 @@ public class MonthlyFinancialSummaryDto {
     private long completedBookings;
     private long totalBookings;
 }
-
