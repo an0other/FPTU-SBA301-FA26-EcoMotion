@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
 
 @Data
 @Builder

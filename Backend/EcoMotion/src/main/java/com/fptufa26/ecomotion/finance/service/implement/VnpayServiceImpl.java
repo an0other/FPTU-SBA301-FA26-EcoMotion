@@ -430,7 +430,7 @@ public class VnpayServiceImpl implements VnpayService {
                 int slotMinutes = snapshot.getSlotLengthMinutes();
                 int slots = bookingQueryService.findChargeByBookingIdAndType(booking.getId(), ChargeType.BASE_RENTAL)
                         .map(BookingCharge::getQuantity).orElse(1);
-                Instant end = booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * slots));
+                Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt() : booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * slots));
                 AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, booking.getPickupTime(), end);
 
                 if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT

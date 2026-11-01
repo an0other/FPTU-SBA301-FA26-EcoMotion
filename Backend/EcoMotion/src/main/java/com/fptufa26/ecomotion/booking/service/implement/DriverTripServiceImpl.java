@@ -68,6 +68,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import com.fptufa26.ecomotion.booking.enums.TripIncidentStatus;
+import com.fptufa26.ecomotion.booking.enums.TripIncidentUrgency;
 
 @Service
 @RequiredArgsConstructor
@@ -1073,7 +1076,12 @@ public class DriverTripServiceImpl implements DriverTripService {
                 booking.getActualArrivedAt(),
                 executionStatus,
                 latestLocation,
-                booking.getAssignmentExpiresAt()
+                booking.getAssignmentExpiresAt(),
+                booking.getPlannedEndAt(),
+                booking.getPricingItems().stream().map(item ->
+                        new RentalQuoteResponse.Item(
+                                item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
+                                item.getUnitPrice(), item.getQuantity())).toList()
         );
     }
 
@@ -1088,6 +1096,10 @@ public class DriverTripServiceImpl implements DriverTripService {
     }
 
     private String calculateRentalDuration(Booking booking) {
+        if (booking.getPlannedEndAt() != null) {
+            long hours = Duration.between(booking.getPickupTime(), booking.getPlannedEndAt()).toHours();
+            return (hours / 24 > 0 ? hours / 24 + " ngày " : "") + (hours % 24 > 0 ? hours % 24 + " giờ" : "");
+        }
         if (booking.getPlan() == null) return "1 ngày";
 
         if (booking.getPlan().getSlotPrice() != null

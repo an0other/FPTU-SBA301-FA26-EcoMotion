@@ -12,6 +12,8 @@ Quyết định bổ sung 29/10/2026 (TV5): assignment hiện hành khớp drive
 
 Quyết định bổ sung 28/10/2026: availability theo booking được tổng hợp trong `booking/service/implement/DriverAvailabilityServiceImpl`, dùng chung bởi bộ đánh giá Manual/OR-Tools. Contract `assign-candidates` có thêm `availability`; không thêm bảng hoặc trạng thái lưu trữ. Khoảng giao nhau áp dụng buffer một lần theo từng phía và biên mở khi buffer bằng 0. `AWAITING_END_CONFIRMATION` tiếp tục chiếm tài xế cho đến khi kết thúc hợp lệ. Xem `docs/DRIVER_ASSIGNMENT_AVAILABILITY_REPORT.md` để biết contract và kiểm chứng.
 
+> **Quyết định cập nhật 2026-10-29:** Booking giờ/ngày/tháng chọn thời gian theo giờ tròn và xác nhận tổ hợp gói. Giữ xe hết thời lượng đã mua; lưu giờ trả chính thức ở planned_end_at. Giá chốt theo booking_pricing_item, chính sách theo booking_policy_snapshot của gói dài nhất. booking.plan_id là gói đại diện chính sách. Thuê năm và flow tài xế giữ nguyên. Chi tiết và migration: [MIXED_RENTAL_PRICING](docs/MIXED_RENTAL_PRICING.md). Quyết định này thay các mô tả một gói/một số slot ở phần cũ bên dưới.
+
 > **Tài liệu ngữ cảnh chính cho AI agent.**  
 > Đọc file này **trước tiên** mỗi khi mở lại phiên làm việc để khôi phục hiểu biết về dự án.  
 > Cập nhật file này mỗi khi có thay đổi kiến trúc hoặc quyết định kỹ thuật mới.

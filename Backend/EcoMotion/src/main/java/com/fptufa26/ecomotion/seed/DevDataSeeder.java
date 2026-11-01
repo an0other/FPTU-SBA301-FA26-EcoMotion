@@ -67,6 +67,8 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -378,6 +380,89 @@ public class DevDataSeeder implements ApplicationRunner {
                 2, "1600000.00", null, null, 102L, CancelReason.RENTER_REQUEST,
                 now.minus(4, ChronoUnit.DAYS));
 
+        seedPastMonthsBookings(driverNam, driverCuong, driverKiet);
+    }
+
+
+    private void seedPastMonthsBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
+        ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
+
+        // --- Thang 08/2026 (7 completed bookings) ---
+        Instant aug05 = ZonedDateTime.of(2026, 8, 5, 8, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-AUG-01", 101L, 1L, PlanType.DAILY, driverCuong, BookingStatus.COMPLETED,
+                "San bay Tan Son Nhat - Ga Quoc noi", aug05,
+                4, "1100000.00", aug05, aug05.plus(1, ChronoUnit.DAYS), null, null, null);
+
+        Instant aug08 = ZonedDateTime.of(2026, 8, 8, 9, 30, 0, 0, zone).toInstant();
+        seedBooking("BK-AUG-02", 102L, 2L, PlanType.HOURLY, driverNam, BookingStatus.COMPLETED,
+                "Vincom Center Landmark 81", aug08,
+                1, "600000.00", aug08, aug08.plus(4, ChronoUnit.HOURS), null, null, null);
+
+        Instant aug12 = ZonedDateTime.of(2026, 8, 12, 6, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-AUG-03", 103L, 3L, PlanType.DAILY, driverKiet, BookingStatus.COMPLETED,
+                "Mui Ne, Phan Thiet", aug12,
+                2, "3200000.00", aug12, aug12.plus(2, ChronoUnit.DAYS), null, null, null);
+
+        Instant aug16 = ZonedDateTime.of(2026, 8, 16, 14, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-AUG-04", 104L, 4L, PlanType.DAILY, driverNam, BookingStatus.COMPLETED,
+                "InterContinental Saigon, Q.1", aug16,
+                2, "1400000.00", aug16, aug16.plus(1, ChronoUnit.DAYS), null, null, null);
+
+        Instant aug20 = ZonedDateTime.of(2026, 8, 20, 10, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-AUG-05", 5L, 1L, PlanType.DAILY, driverCuong, BookingStatus.COMPLETED,
+                "Aeon Mall Tan Phu", aug20,
+                3, "1100000.00", aug20, aug20.plus(1, ChronoUnit.DAYS), null, null, null);
+
+        Instant aug23 = ZonedDateTime.of(2026, 8, 23, 13, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-AUG-06", 105L, 2L, PlanType.HOURLY, driverKiet, BookingStatus.COMPLETED,
+                "Gigamall Thu Duc", aug23,
+                2, "450000.00", aug23, aug23.plus(3, ChronoUnit.HOURS), null, null, null);
+
+        Instant aug27 = ZonedDateTime.of(2026, 8, 27, 8, 30, 0, 0, zone).toInstant();
+        seedBooking("BK-AUG-07", 106L, 4L, PlanType.DAILY, driverNam, BookingStatus.COMPLETED,
+                "Khu du lich Dai Nam", aug27,
+                4, "1400000.00", aug27, aug27.plus(1, ChronoUnit.DAYS), null, null, null);
+
+        // --- Thang 09/2026 (8 completed bookings) ---
+        Instant sep03 = ZonedDateTime.of(2026, 9, 3, 15, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-01", 101L, 1L, PlanType.HOURLY, driverCuong, BookingStatus.COMPLETED,
+                "Takashimaya Saigon, Q.1", sep03,
+                2, "720000.00", sep03, sep03.plus(4, ChronoUnit.HOURS), null, null, null);
+
+        Instant sep06 = ZonedDateTime.of(2026, 9, 6, 8, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-02", 102L, 2L, PlanType.HOURLY, driverNam, BookingStatus.COMPLETED,
+                "Saigon Centre, 65 Le Loi, Q.1", sep06,
+                1, "600000.00", sep06, sep06.plus(4, ChronoUnit.HOURS), null, null, null);
+
+        Instant sep10 = ZonedDateTime.of(2026, 9, 10, 7, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-03", 103L, 3L, PlanType.DAILY, driverKiet, BookingStatus.COMPLETED,
+                "Vung Tau - Bai Sau", sep10,
+                2, "3200000.00", sep10, sep10.plus(2, ChronoUnit.DAYS), null, null, null);
+
+        Instant sep14 = ZonedDateTime.of(2026, 9, 14, 9, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-04", 104L, 4L, PlanType.DAILY, driverNam, BookingStatus.COMPLETED,
+                "Sheraton Saigon, 88 Dong Khoi, Q.1", sep14,
+                2, "1400000.00", sep14, sep14.plus(1, ChronoUnit.DAYS), null, null, null);
+
+        Instant sep18 = ZonedDateTime.of(2026, 9, 18, 6, 30, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-05", 105L, 1L, PlanType.DAILY, driverCuong, BookingStatus.COMPLETED,
+                "San bay Tan Son Nhat - Ga Quoc te", sep18,
+                4, "2200000.00", sep18, sep18.plus(2, ChronoUnit.DAYS), null, null, null);
+
+        Instant sep21 = ZonedDateTime.of(2026, 9, 21, 10, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-06", 106L, 3L, PlanType.DAILY, driverKiet, BookingStatus.COMPLETED,
+                "Cao toc Long Thanh - Dau Giay", sep21,
+                2, "1600000.00", sep21, sep21.plus(1, ChronoUnit.DAYS), null, null, null);
+
+        Instant sep25 = ZonedDateTime.of(2026, 9, 25, 14, 0, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-07", 107L, 4L, PlanType.DAILY, driverNam, BookingStatus.COMPLETED,
+                "Diamond Island, TP. Thu Duc", sep25,
+                4, "1400000.00", sep25, sep25.plus(1, ChronoUnit.DAYS), null, null, null);
+
+        Instant sep28 = ZonedDateTime.of(2026, 9, 28, 7, 30, 0, 0, zone).toInstant();
+        seedBooking("BK-SEP-08", 5L, 3L, PlanType.DAILY, driverCuong, BookingStatus.COMPLETED,
+                "Ho Tram Resort, Xuyen Moc", sep28,
+                3, "3200000.00", sep28, sep28.plus(2, ChronoUnit.DAYS), null, null, null);
     }
 
     private void seedBooking(String bookingCode, Long renterUserId, Long vehicleId, PlanType planType,
@@ -410,10 +495,12 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setPickupLongitude(vehicle.getProvider().getDepotLongitude());
         booking.setDriverNote("Vui lòng liên hệ trước khi đến điểm đón");
         booking.setPickupTime(pickupTime);
+        booking.setPlannedEndAt(pickupTime.plus(Duration.ofMinutes(plan.getSlotLengthMinutes())));
         booking.setPassengerCount(passengerCount);
         booking.setTotalAmount(new BigDecimal(totalAmountStr));
         booking.setActualStartAt(actualStartAt);
         booking.setActualEndAt(actualEndAt);
+        booking.setCreatedAt(actualStartAt != null ? actualStartAt.minus(1, ChronoUnit.DAYS) : pickupTime.minus(1, ChronoUnit.DAYS));
 
         if (driver != null && (status == BookingStatus.CONFIRMED
                 || status == BookingStatus.DRIVER_ASSIGNED
@@ -576,6 +663,7 @@ public class DevDataSeeder implements ApplicationRunner {
             b1.setStatus(BookingStatus.CONFIRMED);
             b1.setPickupAddress("12 Ngô Đức Kế, Bến Nghé, Quận 1, TP. Hồ Chí Minh");
             b1.setPickupTime(Instant.now().plus(Duration.ofDays(1)));
+            b1.setPlannedEndAt(b1.getPickupTime().plus(Duration.ofMinutes(b1.getPlan().getSlotLengthMinutes())));
             b1.setPassengerCount(2);
             b1.setTotalAmount(new BigDecimal("1800000.00"));
             Booking savedBooking1 = bookingRepository.save(b1);
@@ -621,7 +709,7 @@ public class DevDataSeeder implements ApplicationRunner {
             dispute.setCategory(DisputeCategory.CHARGE);
             dispute.setStatus(DisputeStatus.OPEN);
             dispute.setDescription("Khách khiếu nại phụ phí vệ sinh: Khách ói ra sàn xe nhưng đã tự lau dọn kỹ và khử mùi bằng tinh dầu, đề nghị giảm phí vệ sinh chuyên sâu.");
-            dispute.setEvidenceUrlList(java.util.List.of(
+            dispute.setEvidenceUrlList(List.of(
                     "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80",
                     "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80"
             ));
@@ -866,7 +954,7 @@ public class DevDataSeeder implements ApplicationRunner {
         if (!rentalPlanRepository.findByVehicle_IdOrderByIdAsc(vehicle.getId()).isEmpty()) {
             return;
         }
-        createPlan(vehicle, PlanType.HOURLY, 240, prices.hourly(), UPFRONT_HOURLY, true);
+        createPlan(vehicle, PlanType.HOURLY, 60, prices.hourly(), UPFRONT_HOURLY, true);
         createPlan(vehicle, PlanType.DAILY, 1440, prices.daily(), UPFRONT_DAILY, false);
         createPlan(vehicle, PlanType.MONTHLY, 43200, prices.monthly(), UPFRONT_MONTHLY, false);
         createPlan(vehicle, PlanType.YEARLY, 525600, "280000000.00", "50000000.00", false);
@@ -923,6 +1011,7 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setStatus(BookingStatus.IN_PROGRESS);
         booking.setPickupAddress(provider.getDepotAddress());
         booking.setPickupTime(pickup);
+        booking.setPlannedEndAt(pickup.plus(Duration.ofMinutes(daily.getSlotLengthMinutes())));
         booking.setPassengerCount(2);
         booking.setTotalAmount(daily.getSlotPrice());
         booking.setActualStartAt(pickup.plus(Duration.ofMinutes(5)));

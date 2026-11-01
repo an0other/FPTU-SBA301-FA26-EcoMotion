@@ -154,8 +154,10 @@ for (const width of [1440, 1024, 390]) {
 
     await page.goto('/provider/bookings')
     await expect(page.getByRole('heading', { name: 'Quản lý đơn đặt xe' })).toBeVisible()
-    await expect(page.getByText('BK-261001')).toBeVisible()
+    await expect(page.getByText('BK-261001', { exact: true }).filter({ visible: true })).toBeVisible()
     await page.evaluate(() => document.fonts?.ready)
+    await page.getByRole('button', { name: /Bộ lọc nâng cao/ }).click()
+    await expect(page.getByLabel('Lọc theo tài xế')).toBeVisible()
 
     // 1. Verify no horizontal page overflow
     const overflow = await page.evaluate(() => ({
@@ -256,7 +258,7 @@ test('TV5 Provider Booking Queue interactive filters, clear filters, sort, pagin
   await setupProviderMocks(page, queryLog, exportCalls)
 
   await page.goto('/provider/bookings')
-  await expect(page.getByText('BK-261001')).toBeVisible()
+  await expect(page.getByText('BK-261001', { exact: true }).filter({ visible: true })).toBeVisible()
 
   // Initial sort is NEWEST
   await expect(page.getByLabel('Sắp xếp đơn đặt xe')).toHaveValue('NEWEST')
@@ -270,8 +272,10 @@ test('TV5 Provider Booking Queue interactive filters, clear filters, sort, pagin
   await expect.poll(() => queryLog.at(-1)?.search).toBe('BK-261001')
 
   // Driver filter
+  await page.getByRole('button', { name: /Bộ lọc nâng cao/ }).click()
   await page.getByLabel('Lọc theo tài xế').selectOption('UNASSIGNED')
   await expect.poll(() => queryLog.at(-1)?.driver).toBe('UNASSIGNED')
+  await page.getByRole('button', { name: /Bộ lọc nâng cao/ }).click()
 
   // Date filters + Vietnamese date badge verification
   await page.getByLabel('Từ ngày').fill('2026-10-01')
@@ -286,7 +290,9 @@ test('TV5 Provider Booking Queue interactive filters, clear filters, sort, pagin
   await expect(clearBtn).toBeVisible()
   await clearBtn.click()
   await expect(page.getByLabel('Tìm kiếm')).toHaveValue('')
+  await page.getByRole('button', { name: /Bộ lọc nâng cao/ }).click()
   await expect(page.getByLabel('Lọc theo tài xế')).toHaveValue('ALL')
+  await page.getByRole('button', { name: /Bộ lọc nâng cao/ }).click()
   await expect(page.getByLabel('Từ ngày')).toHaveValue('')
   await expect(page.getByLabel('Đến ngày')).toHaveValue('')
 

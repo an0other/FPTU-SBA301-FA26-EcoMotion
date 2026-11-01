@@ -33,6 +33,7 @@ export default function AdminDashboard() {
   const [tabOptions, setTabOptions] = useState({})
   const [stats, setStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
+  const [selectedMonthKey, setSelectedMonthKey] = useState('ALL') // 'ALL' | 'YYYY-MM'
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
   const profileDropdownRef = useRef(null)
 
@@ -54,16 +55,28 @@ export default function AdminDashboard() {
     loadStats()
   }, [])
 
-  async function loadStats() {
+  async function loadStats(monthKey = selectedMonthKey) {
     setLoadingStats(true)
     try {
-      const data = await adminService.getDashboardStats()
+      let year = null
+      let month = null
+      if (monthKey && monthKey !== 'ALL') {
+        const [y, m] = monthKey.split('-')
+        year = parseInt(y, 10)
+        month = parseInt(m, 10)
+      }
+      const data = await adminService.getDashboardStats({ year, month })
       setStats(data)
     } catch (err) {
       console.error('Failed to load admin stats:', err)
     } finally {
       setLoadingStats(false)
     }
+  }
+
+  function handleMonthChange(newMonthKey) {
+    setSelectedMonthKey(newMonthKey)
+    loadStats(newMonthKey)
   }
 
   async function handleLogout() {
@@ -269,7 +282,9 @@ export default function AdminDashboard() {
           <AdminOverviewTab
             stats={stats}
             loading={loadingStats}
-            onRefresh={loadStats}
+            selectedMonthKey={selectedMonthKey}
+            onMonthChange={handleMonthChange}
+            onRefresh={() => loadStats(selectedMonthKey)}
             onNavigate={handleNavigate}
           />
         )}
@@ -278,14 +293,14 @@ export default function AdminDashboard() {
           <AdminUsersTab
             initialSubTab={tabOptions.subTab || 'users'}
             initialFilter={tabOptions}
-            onStatsUpdate={loadStats}
+            onStatsUpdate={() => loadStats(selectedMonthKey)}
           />
         )}
 
         {activeTab === 'vehicles' && (
           <AdminVehiclesTab
             initialStatus={tabOptions.status || 'ALL'}
-            onStatsUpdate={loadStats}
+            onStatsUpdate={() => loadStats(selectedMonthKey)}
           />
         )}
 
@@ -293,7 +308,7 @@ export default function AdminDashboard() {
           <AdminOperationsTab
             initialSubTab={tabOptions.subTab || 'bookings'}
             initialFilter={tabOptions}
-            onStatsUpdate={loadStats}
+            onStatsUpdate={() => loadStats(selectedMonthKey)}
           />
         )}
       </main>
