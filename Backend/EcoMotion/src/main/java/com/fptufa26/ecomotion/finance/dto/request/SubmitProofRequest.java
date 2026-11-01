@@ -9,7 +9,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 public record SubmitProofRequest(
-        @NotBlank(message = "Ảnh bằng chứng thanh toán không được để trống")
         @Size(max = 500, message = "Đường dẫn ảnh tối đa 500 ký tự")
         String proofImageUrl,
 

@@ -31,7 +31,8 @@ public record DriverTripResponse(
         Instant assignedAt,
         Instant driverConfirmedAt,
         Instant actualArrivedAt,
-        String executionStatus
+        String executionStatus,
+        Instant assignmentExpiresAt
 ) {
     public DriverTripResponse(
             Long tripId,
@@ -73,7 +74,8 @@ public record DriverTripResponse(
                 null,
                 null,
                 null,
-                status != null ? status.name() : null
+                status != null ? status.name() : null,
+                null
         );
     }
 

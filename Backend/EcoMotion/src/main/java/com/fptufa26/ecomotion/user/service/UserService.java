@@ -113,4 +113,22 @@ public interface UserService {
     long countPendingProviders();
 
     long countPendingDrivers();
+
+    Optional<Provider> findProviderById(Long providerId);
+
+    List<Provider> findAllProviders();
+
+    Optional<Driver> findDriverById(Long driverId);
+
+    List<Driver> findDriversByProviderId(Long providerId);
+
+    List<Driver> findDriversByProviderIdAndStatus(Long providerId, DriverStatus status);
+
+    Optional<Driver> findDriverByIdAndProviderId(Long driverId, Long providerId);
+
+    Optional<Driver> findDriverByIdForUpdate(Long driverId);
+
+    Driver saveDriver(Driver driver);
+
+    Provider saveProvider(Provider provider);
 }

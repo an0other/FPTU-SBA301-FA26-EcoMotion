@@ -12,6 +12,7 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.service.BookingService;
+import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.dispute.entity.Dispute;
@@ -198,6 +199,7 @@ public class AdminOperationsController {
         Booking b = p.getBooking();
         return AdminPaymentDto.builder()
                 .id(p.getId())
+                .transactionCode(p.getTransactionCode())
                 .bookingId(b != null ? b.getId() : null)
                 .bookingCode(b != null ? b.getBookingCode() : null)
                 .type(p.getType())

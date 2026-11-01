@@ -1,6 +1,11 @@
 import apiClient from './apiClient.js'
 
 export const paymentService = {
+  async getReceipt(reference, signal) {
+    const { data } = await apiClient.get('/v1/payments/receipt', { params: { reference }, signal })
+    return data?.data
+  },
+
   async getHistory({ page = 0, size = 10 } = {}) {
     const { data } = await apiClient.get('/renter/payments', {
       params: { page, size },
@@ -22,8 +27,8 @@ export const paymentService = {
     return data?.data
   },
 
-  async processVnpayCallback(params) {
-    const { data } = await apiClient.get('/v1/payment/vnpay/callback', { params })
+  async processVnpayCallback(params, signal) {
+    const { data } = await apiClient.get('/v1/payment/vnpay/callback', { params, signal })
     return data?.data
   },
 
@@ -41,9 +46,10 @@ export const paymentService = {
     return data?.data
   },
 
-  async queryVnpayTransaction(bookingCode, vnpTxnRef) {
+  async queryVnpayTransaction(bookingCode, vnpTxnRef, signal) {
     const { data } = await apiClient.get('/v1/payment/vnpay/query', {
       params: { bookingCode, vnpTxnRef },
+      signal,
     })
     return data?.data
   },

@@ -18,6 +18,7 @@ public record ProviderPayoutSummaryResponse(
         String gatewayRef,
         DestinationBankSnapshotResponse destinationBank,
         Instant createdAt,
-        Instant paidAt
+        Instant paidAt,
+        com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod verificationMethod
 ) {
 }

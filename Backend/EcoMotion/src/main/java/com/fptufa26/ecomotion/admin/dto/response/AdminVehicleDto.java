@@ -4,6 +4,7 @@ import com.fptufa26.ecomotion.vehicle.enums.DocumentStatus;
 import com.fptufa26.ecomotion.vehicle.enums.DocumentType;
 import com.fptufa26.ecomotion.vehicle.enums.FuelType;
 import com.fptufa26.ecomotion.vehicle.enums.Transmission;
+import com.fptufa26.ecomotion.vehicle.dto.RentalPlanData;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -63,6 +63,7 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
@@ -132,6 +133,7 @@ public class BookingServiceImpl implements BookingService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final BookingMapper bookingMapper;
     private final UserService userService;
+    private final DriverStatusService driverStatusService;
     private final VehicleCatalogService vehicleCatalogService;
     private final ScheduleService scheduleService;
     private final DisputeService disputeService;
@@ -266,7 +268,7 @@ public class BookingServiceImpl implements BookingService {
                 ? vehicle.getSeatCount()
                 : vehicle.getSeatCount() - 1;
         if (passengerLimit < 1 || request.passengerCount() > passengerLimit) {
-            throw new ConflictException("Passenger count exceeds seat count");
+            throw new ConflictException("Số lượng hành khách vượt quá số chỗ ngồi khả dụng của xe (tối đa " + passengerLimit + " khách)");
         }
 
         Instant start = request.pickupTime();
@@ -318,6 +320,7 @@ public class BookingServiceImpl implements BookingService {
         booking.setPassengerCount(request.passengerCount());
         booking.setTotalAmount(total);
         bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         booking.setBookingCode(nextBookingCode(booking.getId()));
         bookingRepository.save(booking);
 
@@ -657,11 +660,11 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Booking request details can no longer be edited");
         }
         if (!request.pickupTime().isAfter(Instant.now())) {
-            throw new ConflictException("Pickup time must be in the future");
+            throw new ConflictException("Thời gian đón phải ở tương lai");
         }
         int passengerLimit = Math.max(0, booking.getVehicle().getSeatCount() - 1);
         if (request.passengerCount() > passengerLimit) {
-            throw new ConflictException("Passenger count exceeds seat count");
+            throw new ConflictException("Số lượng hành khách vượt quá số chỗ ngồi khả dụng của xe (tối đa " + passengerLimit + " khách)");
         }
 
         vehicleCatalogService.requireApprovedForUpdate(booking.getVehicle().getId());
@@ -679,7 +682,7 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Vehicle is not free in the selected range (including maintenance buffer)");
         }
         if (renterOverlaps(booking.getRenter().getId(), request.pickupTime(), end, booking.getId())) {
-            throw new ConflictException("Renter already has a booking in the selected range");
+            throw new ConflictException("Bạn đang có một đơn đặt xe khác trùng khung giờ này. Vui lòng kiểm tra lại đơn của bạn.");
         }
 
         if (booking.getPickupLatitude() == null || booking.getPickupLongitude() == null
@@ -738,13 +741,17 @@ public class BookingServiceImpl implements BookingService {
             depositRequest.setStatus(needsReview ? PaymentRequestStatus.REVIEW_REQUIRED : PaymentRequestStatus.VOIDED);
         }
         scheduleService.release(booking.getId());
+        if (booking.getDriver() != null) {
+            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
+        }
         return bookingMapper.toCancel(booking, refundAmount);
     }
 
     @Override
     @Transactional
     public ConfirmStartResponse confirmStart(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, normalizeBookingCode(bookingCode));
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
         if (booking.getRenterStartConfirmedAt() != null) {
             return toConfirmStart(booking);
         }
@@ -760,13 +767,19 @@ public class BookingServiceImpl implements BookingService {
         } else {
             booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
         }
+        bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
+        if (booking.getDriver() != null) {
+            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
+        }
         return toConfirmStart(booking);
     }
 
     @Override
     @Transactional
     public ConfirmEndResponse confirmEnd(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, normalizeBookingCode(bookingCode));
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
         if (booking.getStatus() != BookingStatus.IN_PROGRESS
                 && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION
                 && booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
@@ -779,9 +792,15 @@ public class BookingServiceImpl implements BookingService {
         booking.setRenterEndConfirmedAt(now);
         booking.setRenterConfirmedAt(now);
         if (booking.getDriverEndConfirmedAt() != null || booking.getProviderConfirmedAt() != null) {
+            booking.setActualEndAt(now);
             booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         } else {
             booking.setStatus(BookingStatus.IN_PROGRESS);
+        }
+        bookingRepository.saveAndFlush(booking);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
+        if (booking.getDriver() != null) {
+            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
         }
         return bookingMapper.toConfirmEnd(booking);
     }
@@ -835,6 +854,7 @@ public class BookingServiceImpl implements BookingService {
         if (finalRequest != null) {
             finalRequest.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
             finalRequest.setIssueNote("Payment held while a charge dispute is reviewed");
+            paymentRequestService.savePaymentRequest(finalRequest);
         }
         return response;
     }
@@ -1275,11 +1295,22 @@ public class BookingServiceImpl implements BookingService {
 
     private boolean renterOverlaps(Long renterId, Instant start, Instant end, Long excludeBookingId) {
         List<Booking> existing = bookingRepository.findByRenter_IdAndStatusIn(renterId, BLOCKING);
+        Instant now = Instant.now();
         for (Booking booking : existing) {
             if (excludeBookingId != null && excludeBookingId.equals(booking.getId())) {
                 continue;
             }
+            // Ignore stale PENDING bookings whose pickup time has already passed
+            if (booking.getStatus() == BookingStatus.PENDING
+                    && booking.getPickupTime() != null
+                    && booking.getPickupTime().isBefore(now)) {
+                continue;
+            }
             Instant otherEnd = endOf(booking);
+            // Ignore bookings that have already completely concluded in the past
+            if (otherEnd != null && otherEnd.isBefore(now)) {
+                continue;
+            }
             if (start.isBefore(otherEnd) && booking.getPickupTime().isBefore(end)) {
                 return true;
             }
@@ -1341,6 +1372,12 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         if (snapshot == null) {
+            if (booking.getPlan() != null && booking.getPlan().getSlotLengthMinutes() != null) {
+                int slots = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
+                        .map(BookingCharge::getQuantity)
+                        .orElse(1);
+                return booking.getPickupTime().plus(Duration.ofMinutes((long) booking.getPlan().getSlotLengthMinutes() * slots));
+            }
             return booking.getPickupTime();
         }
         int slots = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)

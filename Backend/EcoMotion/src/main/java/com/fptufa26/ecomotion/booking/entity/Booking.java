@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.entity;
 
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
@@ -189,6 +190,9 @@ public class Booking {
 
     @Column(name = "previous_pickup_time")
     private Instant previousPickupTime;
+
+    @jakarta.persistence.Embedded
+    private OperationalProposal operationalProposal;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

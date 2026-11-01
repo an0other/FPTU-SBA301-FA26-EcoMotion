@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { providerBookingService } from '../../../services/providerBookingService'
 
 function Icon({ name, className = '' }) {
-  return <span className={`material-symbols-rounded ${className}`}>{name}</span>
+  return (
+    <span className={`material-symbols-rounded select-none leading-none inline-flex items-center justify-center shrink-0 ${className}`}>
+      {name}
+    </span>
+  )
 }
 
 export default function DenyBookingModal({ booking, isOpen, onClose, onSuccess }) {
@@ -14,6 +18,7 @@ export default function DenyBookingModal({ booking, isOpen, onClose, onSuccess }
   if (!isOpen || !booking) return null
 
   async function handleConfirm() {
+    if (loading) return
     if (!reason.trim()) {
       setValidationError('Vui lòng nhập lý do từ chối đơn thuê.')
       return
@@ -35,9 +40,14 @@ export default function DenyBookingModal({ booking, isOpen, onClose, onSuccess }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <div className="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-md border border-slate-200 transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Từ chối đơn thuê"
+        className="w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden rounded-xl bg-white shadow-lg border border-slate-200"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-red-50/50">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4 bg-red-50/50">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-100 text-red-700">
               <Icon name="block" className="text-[22px]" />
@@ -51,14 +61,15 @@ export default function DenyBookingModal({ booking, isOpen, onClose, onSuccess }
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+            aria-label="Đóng cửa sổ"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
           >
             <Icon name="close" className="text-[20px]" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {error && (
             <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 font-medium">
               <Icon name="error" className="text-[18px] text-red-600 shrink-0 mt-0.5" />
@@ -96,19 +107,19 @@ export default function DenyBookingModal({ booking, isOpen, onClose, onSuccess }
             )}
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-[11.5px] text-amber-800 border border-amber-200/60 font-medium">
+          <div className="flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 border border-amber-200/60 font-medium">
             <Icon name="info" className="text-[18px] text-amber-600 shrink-0" />
             <span>Thao tác từ chối sẽ chuyển trạng thái đơn sang REJECTED và không thể hoàn tác.</span>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/50 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/50 px-6 py-4">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
           >
             Đóng
           </button>
@@ -116,7 +127,7 @@ export default function DenyBookingModal({ booking, isOpen, onClose, onSuccess }
             type="button"
             onClick={handleConfirm}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-red-700 transition disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-xs font-bold text-white shadow-2xs hover:bg-red-700 transition disabled:opacity-50"
           >
             {loading && <Icon name="progress_activity" className="animate-spin text-[16px]" />}
             <span>{loading ? 'Đang từ chối...' : 'Xác nhận từ chối'}</span>

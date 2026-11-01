@@ -1,14 +1,19 @@
 package com.fptufa26.ecomotion.booking.service;
 
 import com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest;
+import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
+import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
 import com.fptufa26.ecomotion.booking.dto.response.AvailableDriverResponse;
 import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingSummaryResponse;
+import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingDetailResponse;
 import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingResponse;
+import com.fptufa26.ecomotion.booking.dto.response.ProviderBookingSummaryResponse;
+import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
-import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
+import com.fptufa26.ecomotion.booking.entity.TripEvidence;
+import com.fptufa26.ecomotion.booking.entity.TripIncident;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.booking.enums.DriverAssignmentMode;
 import com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest;
@@ -24,6 +29,11 @@ import com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse;
 
 public interface ProviderBookingService {
+    com.fptufa26.ecomotion.common.response.PageResponse<ProviderBookingResponse> filterBookings(
+            Long userId, com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter, int offset, int limit);
+
+    byte[] exportFilteredBookings(Long userId, com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter);
+
 
     List<ProviderBookingResponse> listBookings(Long currentUserId, String status);
 
@@ -67,7 +77,7 @@ public interface ProviderBookingService {
 
     AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId);
 
-    ProviderBookingResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId);
+    com.fptufa26.ecomotion.booking.dto.response.AutoAssignmentResponse autoAssignDriver(Long currentUserId, String bookingCodeOrId);
 
     void resolveIncident(Long currentUserId, String bookingCodeOrId, Long incidentId, ResolveIncidentRequest request);
 
