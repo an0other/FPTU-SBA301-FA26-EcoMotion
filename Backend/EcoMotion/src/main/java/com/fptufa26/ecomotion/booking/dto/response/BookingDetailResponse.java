@@ -47,6 +47,7 @@ public record BookingDetailResponse(
         List<DisputeCategory> disputeCategories,
         String providerName,
         Instant holdExpiresAt,
-        String rejectionReason
+        String rejectionReason,
+        List<RentalQuoteResponse.Item> pricingItems
 ) {
 }

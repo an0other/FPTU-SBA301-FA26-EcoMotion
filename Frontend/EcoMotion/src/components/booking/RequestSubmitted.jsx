@@ -122,8 +122,10 @@ export const RequestSubmitted = ({
             <span className="block text-sm font-bold text-[#14221A]">
               {booking.formattedStart}
             </span>
+            {booking.formattedEnd ? <span className="block text-sm">Trả xe: {booking.formattedEnd}</span> : null}
+            {booking.pricingDescription ? <span className="block text-sm">{booking.pricingDescription}</span> : null}
             <span className="block text-xs text-[#14221A]/55">
-              {booking.slots} slot liên tiếp
+              {booking.durationLabel || (booking.slots + ' slot liên tiếp')}
               {booking.planType === 'YEARLY' ? ' · theo hợp đồng' : ' · kèm tài xế'}
             </span>
           </InfoRow>

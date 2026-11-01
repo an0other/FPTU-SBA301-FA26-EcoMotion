@@ -43,6 +43,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.time.Duration;
 
 @Component
 @Profile("dev")
@@ -116,6 +117,7 @@ public class RenterReviewDataSeeder {
         booking.setStatus(BookingStatus.PENDING);
         booking.setPickupAddress(provider.getDepotAddress());
         booking.setPickupTime(startAt);
+        booking.setPlannedEndAt(startAt.plus(Duration.ofMinutes(plan.getSlotLengthMinutes())));
         booking.setPassengerCount(1);
         booking.setTotalAmount(plan.getSlotPrice());
         booking.setCreatedAt(requestedAt);

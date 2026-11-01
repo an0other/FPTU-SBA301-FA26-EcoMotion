@@ -29,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -202,7 +203,7 @@ public class AuthServiceImpl implements AuthService {
     static String sha256Hex(String value) {
         try {
             byte[] hashed = MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder(hashed.length * 2);
             for (byte b : hashed) {
                 hex.append(Character.forDigit((b >> 4) & 0xF, 16));

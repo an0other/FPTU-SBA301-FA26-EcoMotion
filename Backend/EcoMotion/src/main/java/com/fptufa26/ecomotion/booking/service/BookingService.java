@@ -26,10 +26,17 @@ import com.fptufa26.ecomotion.dispute.dto.response.DisputeOpenedResponse;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import com.fptufa26.ecomotion.booking.dto.request.RentalQuoteRequest;
+import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface BookingService {
+
+    RentalQuoteResponse quoteRental(
+            Long userId, RentalQuoteRequest request);
 
     PickupQuoteResponse quotePickup(PickupQuoteRequest request);
 
@@ -59,7 +66,7 @@ public interface BookingService {
 
     DisputeOpenedResponse openDispute(Long userId, String bookingCode, OpenDisputeRequest request);
 
-    String uploadDisputeEvidence(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file);
+    String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file);
 
     // Admin methods
     List<Booking> listAdminBookings(BookingStatus status, String keyword);
@@ -89,4 +96,11 @@ public interface BookingService {
     BigDecimal sumCompletedGrossRentalVolume();
 
     BigDecimal sumEscrowDeposits();
+
+    BigDecimal sumTotalRevenue(Instant from, Instant to);
+    BigDecimal sumAdminCommission(Instant from, Instant to);
+    BigDecimal sumCompletedGrossRentalVolume(Instant from, Instant to);
+    BigDecimal sumEscrowDeposits(Instant from, Instant to);
+    long countCompletedBookings(Instant from, Instant to);
+    long countTotalBookings(Instant from, Instant to);
 }

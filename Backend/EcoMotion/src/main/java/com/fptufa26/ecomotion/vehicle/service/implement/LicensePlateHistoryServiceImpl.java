@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import org.springframework.security.access.AccessDeniedException;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +39,7 @@ public class LicensePlateHistoryServiceImpl implements LicensePlateHistoryServic
     @Transactional(readOnly = true)
     public List<VehicleLicensePlateHistoryResponse> listForProvider(Long userId, Long vehicleId) {
         Long providerId = userService.findProviderByUserId(userId)
-                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException(
+                .orElseThrow(() -> new AccessDeniedException(
                         "Tài khoản không thuộc provider"))
                 .getId();
         vehicleRepository.findByIdAndProvider_Id(vehicleId, providerId)

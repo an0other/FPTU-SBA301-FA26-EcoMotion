@@ -25,6 +25,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
+import com.fptufa26.ecomotion.user.entity.User;
 
 @Entity
 @Table(name = "payment_transaction")
@@ -107,7 +111,7 @@ public class PaymentTransaction {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "receiving_bank_account_id")
-    private com.fptufa26.ecomotion.finance.entity.ProviderBankAccount receivingBankAccount;
+    private ProviderBankAccount receivingBankAccount;
 
     @Column(name = "processing_note", length = 500)
     private String processingNote;

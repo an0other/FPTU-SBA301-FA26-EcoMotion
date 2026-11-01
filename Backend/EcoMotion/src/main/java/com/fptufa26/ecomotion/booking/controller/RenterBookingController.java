@@ -46,6 +46,12 @@ import com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse;
 import com.fptufa26.ecomotion.finance.dto.response.VnpayPaymentUrlResponse;
 import com.fptufa26.ecomotion.finance.service.VnpayService;
 import jakarta.servlet.http.HttpServletRequest;
+import com.fptufa26.ecomotion.booking.dto.request.RentalQuoteRequest;
+import com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse;
+import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import java.util.Map;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping({"/api/v1/renter/bookings", "/api/renter/bookings"})
@@ -54,6 +60,13 @@ import jakarta.servlet.http.HttpServletRequest;
 public class RenterBookingController {
 
     private final BookingService bookingService;
+
+    @PostMapping("/rental-quote")
+    public ApiResponse<RentalQuoteResponse> quoteRental(
+            @AuthenticationPrincipal SecurityUser user,
+            @Valid @RequestBody RentalQuoteRequest request) {
+        return ApiResponse.success(bookingService.quoteRental(user.getUserId(), request));
+    }
     private final VehicleCatalogService vehicleCatalogService;
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
     private final VnpayService vnpayService;
@@ -112,7 +125,7 @@ public class RenterBookingController {
     }
 
     @GetMapping("/{bookingCode}/operational-risk")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse> operationalRisk(
+    public ApiResponse<OperationalRiskResponse> operationalRisk(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode) {
         return ApiResponse.success(vehicleOperationalRiskService.assessForRenter(user.getUserId(), bookingCode));
@@ -162,13 +175,13 @@ public class RenterBookingController {
         return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
     }
 
-    @PostMapping(value = "/{bookingCode}/disputes/upload-evidence", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<java.util.Map<String, String>> uploadDisputeEvidence(
+    @PostMapping(value = "/{bookingCode}/disputes/upload-evidence", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, String>> uploadDisputeEvidence(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode,
-            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+            @RequestParam("file") MultipartFile file) {
         String url = bookingService.uploadDisputeEvidence(user.getUserId(), bookingCode, file);
-        return ApiResponse.success(java.util.Map.of("url", url));
+        return ApiResponse.success(Map.of("url", url));
     }
 
     @GetMapping({"/{bookingCode}/settlement", "/{bookingCode}/settlements"})

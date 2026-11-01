@@ -44,6 +44,7 @@ class DriverAssignmentConcurrencyIntegrationTest {
                 assignments.deleteAll(assignments.findByBooking_IdOrderByCreatedAtDesc(booking.getId()));
                 booking.setDriver(null); booking.setStatus(BookingStatus.CONFIRMED);
                 booking.setPickupTime(Instant.now().plus(Duration.ofDays(30)));
+                booking.setPlannedEndAt(booking.getPickupTime().plus(Duration.ofDays(1)));
                 booking.setPickupAddress(""); booking.setActualStartAt(null); booking.setActualEndAt(null);
             }
             bookings.flush(); drivers.flush(); incidents.flush();
