@@ -59,6 +59,7 @@ import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
+import com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
@@ -121,6 +122,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (booking.getStatus() != BookingStatus.ACCEPTED
                 && booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
             throw new InvalidPaymentOperationException("Chỉ có thể tạo yêu cầu đặt cọc cho đơn thuê đang chờ đặt cọc");
+        }
+        if (booking.getPlan().getPlanType() == PlanType.YEARLY && !hasYearlyContract(booking)) {
+            throw new InvalidPaymentOperationException(
+                    "Cần có hợp đồng thuê năm đã ký trước khi tạo yêu cầu thanh toán trả trước.");
         }
 
         Optional<PaymentRequest> existingOpt = paymentRequestRepository.findByBooking_IdAndPaymentType(
@@ -437,8 +442,22 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 || bookingStatus == BookingStatus.AWAITING_DEPOSIT
                 || (bookingStatus == BookingStatus.CANCELLED
                 && request.getBooking().getCancelReason() == CancelReason.DEPOSIT_TIMEOUT)
+                : request.getPaymentType() == PaymentRequestType.MONTHLY_INSTALLMENT
+                ? request.getBooking().getPlan().getPlanType() == PlanType.YEARLY
+                && bookingStatus == BookingStatus.IN_PROGRESS
                 : request.getPaymentType() == PaymentRequestType.FINAL_BALANCE
                 && bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT;
+        if (valid && request.getPaymentType() == PaymentRequestType.DEPOSIT
+                && request.getBooking().getPlan().getPlanType() == PlanType.YEARLY) {
+            valid = hasYearlyContract(request.getBooking());
+            if (valid) {
+                DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
+                        request.getBooking().getRenter(),
+                        request.getBooking().getVehicle(),
+                        request.getBooking().getPickupTime(),
+                        request.getBooking().getPlannedEndAt());
+            }
+        }
         if (!valid) {
             throw new InvalidPaymentOperationException("Yêu cầu thanh toán không thuộc giai đoạn có thể gửi chứng từ");
         }
@@ -581,7 +600,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (!booking.getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền xác nhận thanh toán này");
         }
-        if (pr.getPaymentType() != PaymentRequestType.DEPOSIT && pr.getPaymentType() != PaymentRequestType.FINAL_BALANCE) {
+        if (pr.getPaymentType() != PaymentRequestType.DEPOSIT
+                && pr.getPaymentType() != PaymentRequestType.FINAL_BALANCE
+                && pr.getPaymentType() != PaymentRequestType.MONTHLY_INSTALLMENT) {
             throw new InvalidPaymentOperationException("Loại yêu cầu không hỗ trợ xác nhận chuyển khoản");
         }
         if (pr.getStatus() == PaymentRequestStatus.CONFIRMED
@@ -625,7 +646,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         BigDecimal excessAmount = receivedAmount.subtract(appliedAmount).max(BigDecimal.ZERO);
         PaymentTransaction tx = new PaymentTransaction();
         tx.setBooking(pr.getBooking());
-        tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT);
+        tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                ? initialPaymentType(pr.getBooking()) : PaymentType.SETTLEMENT);
         tx.setDirection(PaymentDirection.IN);
         tx.setMethod(PaymentMethod.BANK_TRANSFER);
         tx.setAmount(receivedAmount);
@@ -746,6 +768,13 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             if (!validHold) {
                 return "Hold đã hết hạn, không tồn tại hoặc lịch xe đã bị đơn khác chiếm";
             }
+        } else if (request.getPaymentType() == PaymentRequestType.MONTHLY_INSTALLMENT) {
+            if (booking.getPlan().getPlanType() != PlanType.YEARLY
+                    || booking.getStatus() != BookingStatus.IN_PROGRESS
+                    || booking.getActualStartAt() == null
+                    || booking.getCancelledAt() != null) {
+                return "Booking không còn đủ điều kiện xác nhận kỳ thanh toán gói năm";
+            }
         } else if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT || booking.getActualEndAt() == null
                 || booking.getCancelledAt() != null || booking.getProviderConfirmedAt() == null || booking.getRenterConfirmedAt() == null) {
             return "Booking chưa đủ điều kiện tất toán chuyến";
@@ -840,7 +869,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
                 PaymentTransaction tx = new PaymentTransaction();
                 tx.setBooking(pr.getBooking());
-                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT);
+                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                        ? initialPaymentType(pr.getBooking()) : PaymentType.SETTLEMENT);
                 tx.setDirection(PaymentDirection.IN);
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(amount);
@@ -876,7 +906,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 BigDecimal half = amount.divide(new BigDecimal("2"), 0, RoundingMode.HALF_UP);
                 PaymentTransaction tx = new PaymentTransaction();
                 tx.setBooking(pr.getBooking());
-                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT);
+                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                        ? initialPaymentType(pr.getBooking()) : PaymentType.SETTLEMENT);
                 tx.setDirection(PaymentDirection.IN);
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(half);
@@ -901,7 +932,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 BigDecimal extra = amount.add(new BigDecimal("100000.00"));
                 PaymentTransaction tx = new PaymentTransaction();
                 tx.setBooking(pr.getBooking());
-                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT);
+                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                        ? initialPaymentType(pr.getBooking()) : PaymentType.SETTLEMENT);
                 tx.setDirection(PaymentDirection.IN);
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(extra);
@@ -937,7 +969,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 // Save one transaction then throw conflict
                 PaymentTransaction tx = new PaymentTransaction();
                 tx.setBooking(pr.getBooking());
-                tx.setType(PaymentType.DEPOSIT_PAY);
+                tx.setType(initialPaymentType(pr.getBooking()));
                 tx.setDirection(PaymentDirection.IN);
                 tx.setMethod(PaymentMethod.BANK_TRANSFER);
                 tx.setAmount(amount);
@@ -1095,7 +1127,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                     BookingCharge charge = new BookingCharge();
                     charge.setBooking(booking);
                     charge.setChargeType(ChargeType.DEPOSIT);
-                    charge.setDescription("Cọc giữ chỗ qua VietQR");
+                    charge.setDescription(snapshot != null && snapshot.getPlanType() == PlanType.YEARLY
+                            ? "Khoản trả trước gói năm qua VietQR"
+                            : "Cọc giữ chỗ qua VietQR");
                     charge.setUnitPrice(booking.getTotalAmount());
                     charge.setAppliedRate(snapshot != null
                             ? snapshot.getDepositRatio()
@@ -1156,6 +1190,19 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 : BigDecimal.ZERO;
         BigDecimal calculated = base.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
         return calculated.max(minimum).min(base).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private PaymentType initialPaymentType(Booking booking) {
+        return booking.getPlan().getPlanType() == PlanType.YEARLY
+                ? PaymentType.UPFRONT_PAY
+                : PaymentType.DEPOSIT_PAY;
+    }
+
+    private boolean hasYearlyContract(Booking booking) {
+        String path = booking.getContractUrl();
+        return path != null
+                && path.startsWith("booking/" + booking.getRenter().getUser().getId() + "/")
+                && path.endsWith(".pdf");
     }
 
     @Override

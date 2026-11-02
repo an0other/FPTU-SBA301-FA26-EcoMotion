@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import DrivingLicenseForm from '../components/yearly-rental/DrivingLicenseForm'
 import YearlyContractPanel from '../components/yearly-rental/YearlyContractPanel'
+import YearlyBookingFlow from '../components/yearly-rental/YearlyBookingFlow'
 import { useYearlyRental } from '../hooks/useYearlyRental'
 import { BookingErrorDialog } from '../components/booking/BookingErrorDialog'
 
@@ -22,6 +23,9 @@ function ErrorPanel({ onRetry }) {
 
 export default function YearlyRentalPage() {
   const { bookingCode } = useParams()
+  const [searchParams] = useSearchParams()
+  const vehicleId = searchParams.get('vehicleId')
+  const planId = searchParams.get('planId')
   const { licenseState, contractState, reloadLicense, reloadContract } =
     useYearlyRental(bookingCode)
   const [message, setMessage] = useState('')
@@ -54,8 +58,8 @@ export default function YearlyRentalPage() {
             Hồ sơ thuê xe theo năm
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
-            Gói năm là hình thức tự lái, cần GPLX hợp lệ được duyệt và hợp đồng
-            trước khi xác nhận nhận xe.
+            Gói năm là hình thức tự lái. Tải hai mặt GPLX để đọc dữ liệu, gửi yêu cầu thuê,
+            chờ nhà cung cấp chấp nhận rồi tải hợp đồng đã ký và thanh toán khoản trả trước.
           </p>
         </div>
 
@@ -66,7 +70,7 @@ export default function YearlyRentalPage() {
         )}
 
         <div className="grid items-start gap-6 lg:grid-cols-2">
-          <div>
+          <div className="space-y-6">
             {licenseState.loading ? (
               <p role="status" className="rounded-xl bg-white p-6 text-sm text-slate-500">
                 Đang tải GPLX…
@@ -78,7 +82,7 @@ export default function YearlyRentalPage() {
                 key={JSON.stringify(licenseState.data)}
                 license={licenseState.data}
                 onSaved={() => {
-                  setMessage('Đã lưu thông tin GPLX.')
+                  setMessage('DocumentAI đã đọc và lưu dữ liệu GPLX.')
                   reloadLicense()
                 }}
               />
@@ -86,13 +90,21 @@ export default function YearlyRentalPage() {
           </div>
 
           <div>
-            {!bookingCode ? (
+            {!bookingCode && vehicleId && planId ? (
+              <YearlyBookingFlow
+                vehicleId={vehicleId}
+                planId={planId}
+                license={licenseState.data}
+                licenseLoading={licenseState.loading}
+              />
+            ) : !bookingCode ? (
               <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-card">
                 <h2 className="text-lg font-bold text-slate-900">
-                  Hợp đồng của đơn thuê
+                  Bắt đầu thuê năm
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                  Sau khi gửi yêu cầu thuê năm, mở hồ sơ của đơn để tải hợp đồng.
+                  Chọn một xe có gói năm ở trang danh sách hoặc chi tiết xe. Bạn sẽ cần GPLX hạng được hỗ trợ,
+                  còn hạn đến hết kỳ thuê.
                 </p>
                 <Link
                   to="/"

@@ -82,6 +82,16 @@ public class LocalDocumentStorageService implements DocumentStorageService {
         }
     }
 
+    @Override
+    public void delete(String storedPath) {
+        Path target = resolvePath(DocumentStorageObjectPath.validateStoredPath(storedPath));
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException ex) {
+            throw new FileStorageException("Could not delete the document", ex);
+        }
+    }
+
     private Path resolvePath(String key) {
         Path target = root.resolve(key).normalize();
 

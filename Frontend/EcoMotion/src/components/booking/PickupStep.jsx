@@ -16,6 +16,7 @@ export const PickupStep = ({
   setPassengerCount,
   seatCount,
   driverIncluded,
+  selfDrive = false,
   maxPassengers,
   onBack,
   onNext,
@@ -23,6 +24,7 @@ export const PickupStep = ({
   const [errorMsg, setErrorMsg] = useState(null)
   const [requestError, setRequestError] = useState('')
   const located = hasValidPickup(pickup)
+  const minimumPassengers = 1
 
   const handleNextClick = () => {
     if (!hasValidPickup(pickup)) {
@@ -38,9 +40,13 @@ export const PickupStep = ({
     <div className="space-y-5">
       <BookingErrorDialog title="Chưa xác định được điểm đón" message={requestError} onClose={() => setRequestError('')} />
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[#14221A]">2. Điểm đón và số khách</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[#14221A]">
+          2. {selfDrive ? 'Điểm nhận xe và số khách' : 'Điểm đón và số khách'}
+        </h1>
         <p className="mt-1.5 text-sm leading-relaxed text-[#14221A]/65">
-          Cung cấp vị trí đón thuận tiện để tài xế chuyên trách phục vụ chu đáo
+          {selfDrive
+            ? 'Bạn là người lái xe trong suốt thời hạn thuê năm.'
+            : 'Cung cấp vị trí đón thuận tiện để tài xế chuyên trách phục vụ chu đáo'}
         </p>
       </div>
 
@@ -86,9 +92,11 @@ export const PickupStep = ({
 
       {/* Trip info */}
       <section className="space-y-5 rounded-2xl border border-[#E6EBE8] bg-white p-4 shadow-xs sm:p-6">
-        <h2 className="text-sm font-semibold text-[#14221A]">Thông tin chuyến đi</h2>
+        <h2 className="text-sm font-semibold text-[#14221A]">
+          {selfDrive ? 'Thông tin người đi cùng' : 'Thông tin chuyến đi'}
+        </h2>
 
-        <div className="space-y-2">
+        {!selfDrive && <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-semibold text-[#14221A]" htmlFor="driver-note">Ghi chú cho tài xế</label>
             <span className="text-[11px] tabular-nums text-[#14221A]/45">{driverNote.length}/160</span>
@@ -102,19 +110,20 @@ export const PickupStep = ({
             placeholder="Ví dụ: Có người lớn tuổi, cần hỗ trợ hành lý"
             className="w-full resize-none rounded-xl border border-[#BEC9C1] bg-white px-3.5 py-2.5 text-sm text-[#14221A] placeholder:text-[#14221A]/35 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           />
-        </div>
+        </div>}
 
         <div className="space-y-2.5">
           <label className="text-sm font-semibold text-[#14221A]">
-            Số hành khách (không tính tài xế) <span className="text-red-600" aria-hidden="true">*</span>
+            Số hành khách (không tính người lái)
+            <span className="text-red-600" aria-hidden="true"> *</span>
           </label>
           <div className="flex flex-wrap items-center gap-4">
             <div className="inline-flex items-center rounded-xl border border-[#E6EBE8] bg-[#F7F8F6] p-1">
               <button
                 type="button"
                 aria-label="Giảm số hành khách"
-                onClick={() => setPassengerCount(Math.max(1, passengerCount - 1))}
-                disabled={passengerCount <= 1}
+                onClick={() => setPassengerCount(Math.max(minimumPassengers, passengerCount - 1))}
+                disabled={passengerCount <= minimumPassengers}
                 className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-[#14221A] shadow-xs transition-colors hover:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-35"
               >
                 <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -137,8 +146,8 @@ export const PickupStep = ({
               </button>
             </div>
             <p className="text-xs font-medium text-[#14221A]/60">
-              Xe {seatCount} chỗ
-              {driverIncluded ? ` · tối đa ${maxPassengers} hành khách` : ` · tối đa ${maxPassengers} người`}
+              Xe {seatCount} chỗ · tối đa {maxPassengers} hành khách
+              {selfDrive ? ' ngoài người lái' : driverIncluded ? ' ngoài tài xế' : ''}
             </p>
           </div>
         </div>

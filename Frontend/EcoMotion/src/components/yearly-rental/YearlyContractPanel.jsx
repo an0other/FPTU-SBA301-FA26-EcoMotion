@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { yearlyRentalService } from '../../services/yearlyRentalService'
 import { BOOKING_STATUS_LABELS } from '../../utils/paymentDisplay'
 import { BookingErrorDialog } from '../booking/BookingErrorDialog'
@@ -78,7 +79,11 @@ export default function YearlyContractPanel({ contract, onUploaded }) {
         <p className="font-semibold text-slate-900">{contract.vehicleName}</p>
         <p className="mt-1 text-sm text-slate-600">{contract.bookingCode}</p>
         <p className="mt-1 text-xs text-slate-500">
-          {BOOKING_STATUS_LABELS[contract.bookingStatus] ?? contract.bookingStatus}
+          {contract.bookingStatus === 'ACCEPTED'
+            ? 'Đã được chấp nhận · chờ hợp đồng'
+            : contract.bookingStatus === 'AWAITING_DEPOSIT'
+              ? 'Chờ thanh toán khoản trả trước'
+              : BOOKING_STATUS_LABELS[contract.bookingStatus] ?? contract.bookingStatus}
         </p>
 
         <p className="mt-3 text-sm font-semibold text-brand-800">
@@ -140,6 +145,15 @@ export default function YearlyContractPanel({ contract, onUploaded }) {
         >
           {busy === 'download' ? 'Đang tải…' : 'Tải hợp đồng PDF'}
         </button>
+      )}
+
+      {contract.contractUploaded && contract.bookingStatus === 'AWAITING_DEPOSIT' && (
+        <Link
+          to={`/renter/bookings/${encodeURIComponent(contract.bookingCode)}/payment?yearly=true`}
+          className="mt-4 inline-flex rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+        >
+          Thanh toán khoản trả trước
+        </Link>
       )}
 
       {error && (

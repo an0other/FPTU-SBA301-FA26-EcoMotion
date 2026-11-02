@@ -8,8 +8,8 @@ import {
 
 export default function PaymentHistoryTable({
   items,
-  selectedBookingCode,
   onSelectBooking,
+  planType,
 }) {
   return (
     <div className="overflow-x-auto">
@@ -48,14 +48,13 @@ export default function PaymentHistoryTable({
 
         <tbody className="divide-y divide-slate-100">
           {items.map((payment, index) => {
-            const selected = selectedBookingCode === payment.bookingCode;
             const refunded = payment.type === "REFUND";
             const succeeded = payment.status === "PAID";
 
             return (
               <tr
                 key={`${payment.bookingCode}-${payment.type}-${payment.createdAt}-${index}`}
-                className={selected ? "bg-brand-50/60" : "hover:bg-slate-50/70"}
+                className="hover:bg-slate-50/70"
               >
                 <td className="px-5 py-5">
                   <div className="font-semibold text-slate-900">{payment.bookingCode}</div>
@@ -68,7 +67,9 @@ export default function PaymentHistoryTable({
 
                 <td className="px-5 py-5">
                   <p className="font-medium text-slate-800">
-                    {PAYMENT_TYPE_LABELS[payment.type] ?? payment.type}
+                    {payment.type === 'SETTLEMENT' && planType === 'YEARLY'
+                      ? 'Thanh toán kỳ thuê'
+                      : PAYMENT_TYPE_LABELS[payment.type] ?? payment.type}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {refunded ? "Hoàn về khách thuê" : "Khách thuê thanh toán"}
@@ -102,9 +103,8 @@ export default function PaymentHistoryTable({
                   <td className="px-5 py-5">
                     <button
                       type="button"
-                      aria-pressed={selected}
                       onClick={() => onSelectBooking(payment.bookingCode)}
-                      className="whitespace-nowrap rounded-lg border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 transition hover:bg-brand-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                      className="whitespace-nowrap rounded-lg border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
                     >
                       Xem khoản phí
                     </button>

@@ -1,0 +1,39 @@
+{
+  "version": "0.32.0",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "pytest": {
+    "passed": 321,
+    "skipped": 5,
+    "warning": "Starlette/httpx deprecation",
+    "skipReasons": [
+      "Rust release library not built",
+      "4 optional torch tests: torch unavailable in this runtime"
+    ]
+  },
+  "compileall": "PASS",
+  "coverage": [
+    "image module contract/error isolation",
+    "JPEG/PNG diagnostic semantics",
+    "quality/pair early exit ordering",
+    "original image source and hash",
+    "manual approval remains separate",
+    "read/jobs FastAPI TestClient serialization",
+    "HTTP client orchestration with fake network responses"
+  ],
+  "notTested": [
+    "Pretrained YOLO/Paddle/VietOCR inference",
+    "Windows PowerShell execution",
+    "RTX4050 latency or CUDA",
+    "real Windows HTTP model benchmark",
+    "Photoshop/screen/print classifier accuracy",
+    "concurrent user throughput"
+  ],
+  "capabilityLimits": {
+    "digitalTamperingModel": "NOT_IMPLEMENTED",
+    "screenPrintRecaptureModel": "NOT_IMPLEMENTED",
+    "elaFftVerdict": "INCONCLUSIVE_ONLY",
+    "automaticApproval": false
+  },
+  "note": "Test engines and synthetic images do not establish document authenticity or general OCR accuracy. Rust not required; skipped checks are not passes."
+}

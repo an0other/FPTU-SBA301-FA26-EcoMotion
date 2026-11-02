@@ -1,6 +1,6 @@
 import { formatPaymentMoney } from '../../utils/paymentDisplay'
 
-function SummaryItem({ label, value, highlighted = false }) {
+function SummaryItem({ label, value, highlighted = false, note }) {
   return (
     <div
       className={`rounded-xl border p-4 ${
@@ -11,12 +11,19 @@ function SummaryItem({ label, value, highlighted = false }) {
     >
       <dt className="text-xs font-medium text-slate-500">{label}</dt>
       <dd
-        className={`mt-2 text-xl font-bold tabular-nums ${
+        className={`mt-2 text-xl font-bold ${
+          typeof value === 'number' ? 'tabular-nums' : ''
+        } ${
           highlighted ? 'text-brand-800' : 'text-slate-900'
         }`}
       >
-        {value == null ? 'Chưa xác định' : formatPaymentMoney(value)}
+        {value == null
+          ? 'Chưa xác định'
+          : typeof value === 'number'
+            ? formatPaymentMoney(value)
+            : value}
       </dd>
+      {note && <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{note}</p>}
     </div>
   )
 }
@@ -34,6 +41,9 @@ export default function BookingPaymentSummary({ summary, planType }) {
   const provisional = summary.provisional
   const hasRefund = Number(summary.refundedAmount) > 0
   const hasCredit = Number(summary.creditAmount) > 0
+  const upfrontValue = summary.upfrontRequired == null
+    ? 'Chưa ghi nhận'
+    : summary.upfrontRequired
 
   return (
     <div className="space-y-4">
@@ -41,10 +51,10 @@ export default function BookingPaymentSummary({ summary, planType }) {
         <SummaryItem
           label={
             yearly
-              ? 'Chi phí đã ghi nhận'
+              ? 'Tổng tiền thuê và phụ phí'
               : provisional
-                ? 'Tổng chi phí dự tính'
-                : 'Tổng chi phí đã ghi nhận'
+                ? 'Tổng chi phí tạm tính'
+                : 'Tổng chi phí ghi nhận'
           }
           value={summary.recordedCost}
         />
@@ -56,16 +66,32 @@ export default function BookingPaymentSummary({ summary, planType }) {
 
         <SummaryItem
           label={
-            yearly
-              ? 'Khoản trả trước theo hợp đồng'
-              : provisional
-                ? 'Còn lại dự tính'
-                : 'Còn lại theo ghi nhận'
+            provisional ? 'Còn lại tạm tính' : 'Còn lại theo ghi nhận'
           }
-          value={yearly ? summary.upfrontRequired : summary.remainingAmount}
+          value={summary.remainingAmount}
           highlighted
         />
       </dl>
+
+      {yearly && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="font-semibold text-slate-700">
+              Khoản trả trước theo hợp đồng
+            </span>
+            <strong className="text-slate-900">
+              {typeof upfrontValue === 'number'
+                ? formatPaymentMoney(upfrontValue)
+                : upfrontValue}
+            </strong>
+          </div>
+          {summary.upfrontRequired == null && (
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              Đơn thuê chưa có số tiền trả trước được ghi nhận; thông tin này không đồng nghĩa khoản trả trước bằng 0 đồng.
+            </p>
+          )}
+        </div>
+      )}
 
       {hasRefund && (
         <dl className="grid gap-3 rounded-lg bg-slate-50 p-4 text-sm sm:grid-cols-2">

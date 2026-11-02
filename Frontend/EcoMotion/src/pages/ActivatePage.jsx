@@ -152,7 +152,7 @@ function Shell({ title, subtitle, children }) {
             onClick={() => navigate('/me')}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-[13px] font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-100"
           >
-            ← Trang của tôi
+            ← Hồ sơ của tôi
           </button>
           <span className="flex items-center gap-2 text-base font-extrabold tracking-tight text-slate-900">
             <IconShield className="h-4 w-4 text-brand-600" />
