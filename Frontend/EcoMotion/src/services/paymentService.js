@@ -1,6 +1,20 @@
 import apiClient from './apiClient.js'
 
 export const paymentService = {
+  async getVietQrCallbacks(page, signal) {
+    const { data } = await apiClient.get('/v1/provider/vietqr/callbacks', { params: { page }, signal })
+    return data?.data
+  },
+  async createVietQr(paymentRequestId) {
+    const { data } = await apiClient.post('/v1/payments/vietqr/create', { paymentRequestId })
+    return data?.data
+  },
+
+  async getVietQrStatus(paymentCode, signal) {
+    const { data } = await apiClient.get(`/v1/payments/${encodeURIComponent(paymentCode)}/status`, { signal })
+    return data?.data
+  },
+
   async getReceipt(reference, signal) {
     const { data } = await apiClient.get('/v1/payments/receipt', { params: { reference }, signal })
     return data?.data

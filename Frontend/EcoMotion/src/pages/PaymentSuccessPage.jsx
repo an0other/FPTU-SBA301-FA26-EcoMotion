@@ -54,7 +54,9 @@ export default function PaymentSuccessPage() {
         )}
         {success && (
           <>
-            <p className="text-sm text-slate-600">{receipt.verificationMethod === 'GATEWAY_VERIFIED'
+            <p className="text-sm text-slate-600">{receipt.verificationMethod === 'VIETQR_CALLBACK'
+              ? 'Khoản chuyển khoản trực tiếp cho nhà xe đã được VietQR xác minh tự động.'
+              : receipt.verificationMethod === 'GATEWAY_VERIFIED'
               ? 'Giao dịch đã được cổng thanh toán xác minh và máy chủ ghi nhận.'
               : 'Khoản chuyển khoản đã được xác nhận thủ công và máy chủ ghi nhận.'}</p>
             <dl className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-left text-sm space-y-4" aria-label="Biên lai thanh toán">

@@ -54,7 +54,7 @@ public class PaymentReceiptServiceImpl implements PaymentReceiptService {
         if (payment.getStatus() == PaymentStatus.PAID) {
             boolean verified = payment.getMethod() == PaymentMethod.VNPAY
                     ? payment.getVerificationMethod() == PaymentVerificationMethod.GATEWAY_VERIFIED
-                    : payment.getVerificationMethod() != null && Set.of(PaymentVerificationMethod.PROVIDER_CONFIRMED, PaymentVerificationMethod.ADMIN_RECONCILED)
+                    : payment.getVerificationMethod() != null && Set.of(PaymentVerificationMethod.PROVIDER_CONFIRMED, PaymentVerificationMethod.ADMIN_RECONCILED, PaymentVerificationMethod.VIETQR_CALLBACK)
                         .contains(payment.getVerificationMethod());
             boolean reconciliation = payment.getProcessingNote() != null
                     && payment.getProcessingNote().startsWith("RECONCILIATION_REQUIRED");

@@ -190,7 +190,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID)
                 .filter(payment -> payment.getDirection() == PaymentDirection.IN)
-                .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
+                .map(payment -> payment.getAppliedAmount() != null
                         ? payment.getAppliedAmount()
                         : payment.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

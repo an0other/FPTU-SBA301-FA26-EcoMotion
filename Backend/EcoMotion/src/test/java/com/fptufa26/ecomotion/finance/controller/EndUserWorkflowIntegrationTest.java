@@ -435,7 +435,7 @@ class EndUserWorkflowIntegrationTest {
 
     PaymentTransaction incoming(Booking b, PaymentMethod method, BigDecimal amount) {
         PaymentTransaction t = new PaymentTransaction(); t.setBooking(b); t.setType(PaymentType.DEPOSIT_PAY);
-        t.setDirection(PaymentDirection.IN); t.setMethod(method); t.setAmount(amount); t.setStatus(PaymentStatus.PAID);
+        t.setDirection(PaymentDirection.IN); t.setMethod(method); t.setAmount(amount); t.setAppliedAmount(amount); t.setStatus(PaymentStatus.PAID);
         t.setVerificationMethod(method == PaymentMethod.VNPAY ? PaymentVerificationMethod.GATEWAY_VERIFIED : PaymentVerificationMethod.PROVIDER_CONFIRMED);
         em.persist(t); return t;
     }

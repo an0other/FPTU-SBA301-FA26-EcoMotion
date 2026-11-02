@@ -190,7 +190,7 @@ public class VnpayServiceImpl implements VnpayService {
         paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(),
                         isFinalPayment ? PaymentRequestType.FINAL_BALANCE : PaymentRequestType.DEPOSIT)
                 .ifPresent(pr -> {
-                    if (pr.getStatus() != PaymentRequestStatus.PENDING && pr.getStatus() != PaymentRequestStatus.REJECTED
+                    if (pr.isVietQrManaged() || pr.getStatus() != PaymentRequestStatus.PENDING && pr.getStatus() != PaymentRequestStatus.REJECTED
                             || pr.getPaidAmount() != null && pr.getPaidAmount().signum() > 0
                             || pr.getExpiresAt() != null && !pr.getExpiresAt().isAfter(clock.instant())) {
                         throw new InvalidPaymentOperationException("Yêu cầu thanh toán đang đối soát, đã thu tiền hoặc đã kết thúc; không thể tạo giao dịch VNPay mới");

@@ -971,7 +971,7 @@ public class BookingServiceImpl implements BookingService {
                 .filter(payment -> payment.getType() == PaymentType.DEPOSIT_PAY
                         && payment.getDirection() == PaymentDirection.IN
                         && payment.getStatus() == PaymentStatus.PAID)
-                .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
+                .map(payment -> payment.getAppliedAmount() != null
                         ? payment.getAppliedAmount()
                         : payment.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

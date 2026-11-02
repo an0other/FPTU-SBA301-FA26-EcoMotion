@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import Toast from '../components/Toast'
 import { BookingErrorDialog } from '../components/booking/BookingErrorDialog'
 import { HoldCountdown } from '../components/payments/HoldCountdown'
+import { DynamicVietQr } from '../components/payments/DynamicVietQr'
 import { providerFinanceService } from '../services/providerFinanceService'
 import { paymentService } from '../services/paymentService'
 import { formatPaymentMoney, isPaymentRequestExpired } from '../utils/paymentDisplay'
@@ -117,6 +118,21 @@ export default function CustomerPaymentPage() {
       setToast({ message: 'Không thể kiểm tra trạng thái lúc này', type: 'error' })
     } finally {
       setCheckingStatus(false)
+    }
+  }
+
+  const handleCreateVietQr = async () => {
+    if (paymentCreating || !selectedRequest) return
+    setPaymentCreating(true)
+    setInlineError(null)
+    try {
+      const request = await paymentService.createVietQr(selectedRequest.id)
+      setSelectedRequest(request)
+      setRequests(items => items.map(item => item.id === request.id ? request : item))
+    } catch (err) {
+      setInlineError(err?.response?.data?.message || err?.message || 'Không thể tạo QR tự động. Vui lòng kiểm tra tài khoản nhận.')
+    } finally {
+      setPaymentCreating(false)
     }
   }
 
@@ -282,7 +298,7 @@ export default function CustomerPaymentPage() {
               onClick={() => setPayMethod('vietqr')}
               disabled={selectedRequest.gatewayManaged}
               className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
-                payMethod === 'vietqr'
+                (selectedRequest.vietQrManaged ? 'vietqr' : payMethod) === 'vietqr'
                   ? 'border-brand-600 bg-brand-50/50 shadow-xs ring-1 ring-brand-600'
                   : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
@@ -292,15 +308,16 @@ export default function CustomerPaymentPage() {
               </div>
               <div>
                 <strong className="block text-sm text-[#14221A]">Chuyển khoản VietQR</strong>
-                <span className="mt-0.5 block text-xs text-slate-500">Chuyển khoản trực tiếp, nhà cung cấp đối soát</span>
+                <span className="mt-0.5 block text-xs text-slate-500">Chuyển trực tiếp cho nhà xe, xác minh tự động</span>
               </div>
             </button>
 
             <button
               type="button"
               onClick={() => setPayMethod('vnpay')}
+              disabled={selectedRequest.vietQrManaged}
               className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
-                payMethod === 'vnpay'
+                (selectedRequest.vietQrManaged ? 'vietqr' : payMethod) === 'vnpay'
                   ? 'border-brand-600 bg-brand-50/50 shadow-xs ring-1 ring-brand-600'
                   : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
@@ -316,21 +333,19 @@ export default function CustomerPaymentPage() {
           </div>
         </div>
 
-        {payMethod === 'vietqr' && !selectedRequest.gatewayManaged ? (
+        {(selectedRequest.vietQrManaged ? 'vietqr' : payMethod) === 'vietqr' && !selectedRequest.gatewayManaged ? (
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
               {/* QR Code */}
               <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
-                {selectedRequest.qrCodeUrl ? (
-                  <img
-                    src={selectedRequest.qrCodeUrl}
-                    alt="VietQR Code"
-                    className="h-64 w-64 max-w-full rounded-lg object-contain shadow-xs bg-white p-2"
-                  />
-                ) : (
-                  <div className="flex h-64 w-64 items-center justify-center rounded-lg bg-slate-200 text-slate-400">
-                    <Icon name="qr_code" className="text-6xl" />
-                  </div>
+                {requestExpired || selectedRequest.status === 'REVIEW_REQUIRED'
+                  ? <p className="p-6 text-sm text-amber-800">Yêu cầu đã hết hạn hoặc cần đối soát. Vui lòng không chuyển thêm tiền.</p>
+                  : <DynamicVietQr payload={selectedRequest.qrCodePayload} />}
+                {!selectedRequest.vietQrManaged && !requestExpired && (
+                  <button type="button" onClick={handleCreateVietQr} disabled={paymentCreating}
+                    className="mt-3 rounded-xl bg-brand-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                    {paymentCreating ? 'Đang tạo QR...' : 'Tạo mã QR tự động'}
+                  </button>
                 )}
                 <p className="mt-3 text-xs font-semibold text-slate-600">Quét mã bằng app ngân hàng bất kỳ</p>
                 <span className="text-[11px] text-slate-400">Số tiền và nội dung đã được nhúng sẵn</span>
@@ -411,7 +426,7 @@ export default function CustomerPaymentPage() {
               <div>
                 <strong className="block font-bold">Xác nhận thanh toán tự động</strong>
                 <p className="mt-0.5 text-emerald-800">
-                  Sau khi bạn chuyển khoản thành công với đúng nội dung trên, hệ thống sẽ tự động đối soát và cập nhật đơn thuê sang trạng thái <strong>ĐÃ XÁC NHẬN</strong>. Bạn không cần chụp ảnh màn hình hay tải biên lai thủ công.
+                  Chỉ chuyển tiền sau khi tạo mã QR thành công. Hệ thống cập nhật khi nhận được xác nhận từ VietQR. Nếu số tiền hoặc thông tin không khớp, giao dịch sẽ cần đối soát. Bạn không cần tải ảnh biên lai.
                 </p>
               </div>
             </div>
@@ -438,13 +453,13 @@ export default function CustomerPaymentPage() {
         {/* Action bar */}
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-4 backdrop-blur-sm sm:static sm:mt-6 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
           <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row sm:justify-end">
-            {requestExpired && selectedRequest.paymentType === 'DEPOSIT' ? (
+            {requestExpired && !selectedRequest.vietQrManaged && selectedRequest.paymentType === 'DEPOSIT' ? (
               <button type="button" onClick={handleReissue} className="rounded-xl border border-brand-600 px-5 py-2.5 text-sm font-semibold text-brand-800 hover:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-500/40">
                 Cấp lại yêu cầu thanh toán
               </button>
             ) : null}
 
-            {payMethod === 'vnpay' || selectedRequest.gatewayManaged ? (
+            {(selectedRequest.vietQrManaged ? 'vietqr' : payMethod) === 'vnpay' || selectedRequest.gatewayManaged ? (
               <button
                 type="button"
                 onClick={handlePayWithVnpay}

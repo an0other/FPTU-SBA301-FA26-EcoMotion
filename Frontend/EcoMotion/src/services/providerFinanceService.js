@@ -167,20 +167,6 @@ export const providerFinanceService = {
   },
 
   // ==========================================
-  // Admin Mock Sandbox
-  // ==========================================
-
-  async simulatePayment(paymentRequestId, payload) {
-    const { data } = await apiClient.post(`/v1/admin/sandbox/payment-requests/${paymentRequestId}/simulate`, payload)
-    return data?.data
-  },
-
-  async seedSandbox() {
-    const { data } = await apiClient.post('/v1/admin/sandbox/seed')
-    return data?.data
-  },
-
-  // ==========================================
   // Refunds Management (TV5)
   // ==========================================
 

@@ -55,6 +55,8 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
     @EntityGraph(attributePaths = {"booking", "booking.vehicle", "booking.renter", "booking.renter.user", "evidences"})
     Page<PaymentRequest> findByBooking_Vehicle_Provider_IdAndStatus(Long providerId, PaymentRequestStatus status, Pageable pageable);
 
+    Optional<PaymentRequest> findByVietQrOrderId(String orderId);
+
     boolean existsByBooking_IdAndPaymentTypeAndStatusIn(Long bookingId, PaymentRequestType paymentType, Collection<PaymentRequestStatus> statuses);
 
     long countByBooking_Vehicle_Provider_IdAndStatus(Long providerId, PaymentRequestStatus status);

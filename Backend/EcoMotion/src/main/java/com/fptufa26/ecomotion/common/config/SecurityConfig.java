@@ -23,6 +23,18 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
+    @org.springframework.core.annotation.Order(1)
+    public SecurityFilterChain vietQrSecurityFilterChain(HttpSecurity http) throws Exception {
+        return http.securityMatcher("/api/v1/integrations/vietqr/token_generate", "/api/v1/integrations/vietqr/transaction-sync")
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(a -> a.requestMatchers(HttpMethod.POST,
+                        "/api/v1/integrations/vietqr/token_generate", "/api/v1/integrations/vietqr/transaction-sync").permitAll()
+                        .anyRequest().denyAll()).build();
+    }
+
+    @Bean
+    @org.springframework.core.annotation.Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
                                                    RestAuthenticationEntryPoint restAuthenticationEntryPoint,

@@ -5,13 +5,11 @@ import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.ReportIssueRequest;
-import com.fptufa26.ecomotion.finance.dto.request.SimulatePaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.SubmitProofRequest;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
-import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 
@@ -22,6 +20,10 @@ import java.time.Instant;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface PaymentRequestService {
+
+    boolean hasValidVietQrHold(Long bookingId);
+
+    String applyVietQrPayment(PaymentRequest request, com.fptufa26.ecomotion.finance.dto.request.VietQrTransactionSyncRequest input);
 
     Optional<PaymentRequest> findByBookingIdAndPaymentType(Long bookingId, PaymentRequestType paymentType);
 
@@ -61,10 +63,6 @@ public interface PaymentRequestService {
     PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request);
 
     PaymentRequestResponse reportIssue(Long paymentRequestId, Long currentUserId, ReportIssueRequest request);
-
-    SimulatePaymentResponse simulatePayment(Long paymentRequestId, Long adminUserId, SimulatePaymentRequest request);
-
-    void seedSandboxData(Long adminUserId);
 
     boolean expireDepositWithoutProof(Long bookingId);
 
