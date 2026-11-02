@@ -10,7 +10,6 @@ export const PickupStep = ({
   pickupQuote,
   quotePending,
   quoteError,
-  onRetryQuote,
   driverNote,
   setDriverNote,
   passengerCount,
@@ -68,7 +67,7 @@ export const PickupStep = ({
         <PickupMap value={pickup} onChange={(next) => { setPickup(next); setErrorMsg(null) }} onError={setRequestError} />
         <div aria-live="polite" aria-atomic="true">
           {quotePending ? <p className="text-sm text-[#3D4A42]">Đang tính khoảng cách và phí đón...</p> : null}
-          {quoteError ? <p className="text-sm text-red-700">{quoteError}{' '}<button type="button" onClick={onRetryQuote} className="font-semibold underline">Thử lại phí đón</button></p> : null}
+          {quoteError ? <p className="text-sm text-red-700">{quoteError}</p> : null}
           <PickupFeeSummary quote={pickupQuote} />
         </div>
         {errorMsg ? (

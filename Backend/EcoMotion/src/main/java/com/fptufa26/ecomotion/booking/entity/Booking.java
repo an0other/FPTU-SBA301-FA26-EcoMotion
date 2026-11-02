@@ -28,6 +28,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Version;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(
@@ -124,7 +130,7 @@ public class Booking {
     @Column(name = "driver_issue_resolved_at")
     private Instant driverIssueResolvedAt;
 
-    @jakarta.persistence.Version
+    @Version
     @Column(name = "version")
     private Long version;
 
@@ -142,6 +148,12 @@ public class Booking {
 
     @Column(name = "pickup_time", nullable = false)
     private Instant pickupTime;
+
+    @Column(name = "planned_end_at")
+    private Instant plannedEndAt;
+
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL)
+    private List<BookingPricingItem> pricingItems = new ArrayList<>();
 
     @Column(name = "passenger_count", nullable = false)
     private Integer passengerCount;

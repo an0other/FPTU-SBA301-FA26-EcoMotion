@@ -430,7 +430,7 @@ public class VnpayServiceImpl implements VnpayService {
                 int slotMinutes = snapshot.getSlotLengthMinutes();
                 int slots = bookingQueryService.findChargeByBookingIdAndType(booking.getId(), ChargeType.BASE_RENTAL)
                         .map(BookingCharge::getQuantity).orElse(1);
-                Instant end = booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * slots));
+                Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt() : booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * slots));
                 AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, booking.getPickupTime(), end);
 
                 if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT
@@ -567,7 +567,7 @@ public class VnpayServiceImpl implements VnpayService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public VnpayCallbackResultResponse processCallback(Map<String, String> params) {
         PaymentVerificationResult verification = paymentGatewayResolver.resolve(PaymentMethod.VNPAY).verifyCallback(params);
         if (!verification.validSignature()) {
@@ -589,15 +589,7 @@ public class VnpayServiceImpl implements VnpayService {
             return invalidCallback("Số tiền giao dịch không hợp lệ");
         }
 
-        bookingQueryService.lockBookingForPayment(candidate.getBooking().getId());
-        PaymentTransaction transaction = bookingQueryService.findTransactionByVnpTxnRefForUpdate(vnpTxnRef).orElse(candidate);
-
-        if (transaction.getStatus() == PaymentStatus.PENDING) {
-            applyVerifiedPayment(transaction, verification, params);
-            transaction = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(transaction);
-        }
-
-        return transactionResult(transaction);
+        return transactionResult(candidate);
     }
 
     @Override

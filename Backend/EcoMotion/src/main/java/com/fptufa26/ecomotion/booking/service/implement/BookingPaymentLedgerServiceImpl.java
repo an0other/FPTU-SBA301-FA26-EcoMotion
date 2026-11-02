@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -143,6 +144,12 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
     }
 
     @Override
+    public Optional<PaymentTransaction> findTransactionByReference(String reference) {
+        return transactionRepository.findByTransactionCode(reference)
+                .or(() -> transactionRepository.findByVnpTxnRef(reference));
+    }
+
+    @Override
     public Optional<PaymentTransaction> findTransaction(Long bookingId, PaymentType type) {
         return transactionRepository.findByBooking_IdAndType(bookingId, type);
     }
@@ -156,7 +163,7 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
     public Optional<Booking> findProviderBooking(String bookingCodeOrId, Long providerId) {
         String bookingCode = bookingCodeOrId == null
                 ? ""
-                : bookingCodeOrId.trim().toUpperCase(java.util.Locale.ROOT);
+                : bookingCodeOrId.trim().toUpperCase(Locale.ROOT);
         return bookingRepository.findByBookingCodeAndVehicle_Provider_Id(bookingCode, providerId);
     }
 }

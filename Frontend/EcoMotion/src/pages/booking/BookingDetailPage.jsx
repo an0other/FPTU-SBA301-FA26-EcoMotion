@@ -1,5 +1,6 @@
 import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
@@ -47,7 +48,7 @@ function toCard(detail) {
     vehicleId: detail.vehicleId,
     status: detail.status,
     planType: detail.planType,
-    planTitle: label.title,
+    planTitle: pricingDescription(detail.pricingItems) || label.title,
     upfront: detail.planType === 'YEARLY',
     createdAt: formatWhen(detail.createdAt),
     actualStartTime: formatWhen(detail.actualStartAt),
@@ -79,6 +80,8 @@ function toCard(detail) {
         }
       : null,
     slots: detail.slotCount,
+    durationLabel: detail.endTime ? rentalDurationLabel((new Date(detail.endTime) - new Date(detail.pickupTime)) / 3600000) : '',
+    pricingDescription: pricingDescription(detail.pricingItems),
     totalAmount: Number(detail.totalAmount),
     vehicle: {
       name: detail.vehicleName,

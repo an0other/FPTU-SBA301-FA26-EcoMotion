@@ -108,7 +108,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
             throw new IllegalArgumentException("Cần lý do từ 1 đến 500 ký tự");
         if (request.resolution() == OperationalResolutionType.CANCEL_AND_REFUND) {
             var pending = booking.getOperationalProposal();
-            if (pending != null && pending.getRespondedAt() == null) respond(pending, userId, false, "Nhà xe hủy đơn và bắt đầu hoàn tiền");
+            if (pending != null && pending.getRespondedAt() == null) respond(booking, userId, false, "Nhà xe hủy đơn và bắt đầu hoàn tiền");
             return providerBookings.resolveOperationalRisk(userId, code, request);
         }
         if (request.resolution() == OperationalResolutionType.CHANGE_VEHICLE) {
@@ -155,7 +155,8 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         }
         if (!MUTABLE.contains(booking.getStatus())) throw new ConflictException("Đề xuất không còn áp dụng cho trạng thái hiện tại");
         if (request.reason() != null && request.reason().length() > 500) throw new IllegalArgumentException("Lý do tối đa 500 ký tự");
-        respond(proposal, userId, accept, request.reason());
+        respond(booking, userId, accept, request.reason());
+        proposal = booking.getOperationalProposal();
         if (accept) {
             users.findById(proposal.getCreatedBy()).filter(u -> u.getStatus() == UserStatus.ACTIVE && u.getRole() == Role.PROVIDER)
                     .orElseThrow(() -> new ConflictException("Nhà xe không còn hoạt động; cần hỗ trợ xử lý"));
@@ -166,9 +167,12 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         return getWorkflow(userId, code);
     }
 
-    private void respond(OperationalProposal proposal, Long userId, boolean accepted, String reason) {
+    private void respond(Booking booking, Long userId, boolean accepted, String reason) {
+        var proposal = new OperationalProposal();
+        org.springframework.beans.BeanUtils.copyProperties(booking.getOperationalProposal(), proposal);
         proposal.setAccepted(accepted); proposal.setRespondedAt(clock.instant()); proposal.setRespondedBy(userId);
         proposal.setResponseReason(reason == null ? null : reason.trim());
+        booking.setOperationalProposal(proposal);
     }
 
     @Override
@@ -183,7 +187,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         if (Boolean.TRUE.equals(proposal.getAccepted()) || proposal.getRespondedAt() != null && !Objects.equals(proposal.getRespondedBy(), userId))
             throw new ConflictException("Đề xuất đã có phản hồi của khách");
         if (proposal.getRespondedAt() == null) {
-            respond(proposal, userId, false, "Nhà xe đã rút phương án để xem xét lại");
+            respond(booking, userId, false, "Nhà xe đã rút phương án để xem xét lại");
             bookings.saveAndFlush(booking); notifications.changed(booking, "OPERATIONAL_PROPOSAL_CHANGED");
         }
         return getWorkflow(userId, code);

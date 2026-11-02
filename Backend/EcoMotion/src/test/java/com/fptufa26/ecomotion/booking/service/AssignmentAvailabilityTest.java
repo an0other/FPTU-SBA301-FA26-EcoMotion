@@ -201,4 +201,31 @@ class AssignmentAvailabilityTest {
         verify(snapshots, times(1)).findByBooking_IdIn(any());
         verify(charges, times(1)).findByBooking_IdInAndChargeType(any(), any());
     }
+
+    @Test void mixedRentalUsesOfficialEndForBatchAndIndividualAvailability() {
+        Booking b = occupied(BookingStatus.DRIVER_CONFIRMED, now.minusSeconds(7200));
+        b.setPlannedEndAt(now.plusSeconds(10800));
+        when(bookings.findPotentialDriverConflicts(eq(1L), any(), any(), any())).thenReturn(List.of(b));
+        assertThat(inspect().availabilityStatus()).isEqualTo("SCHEDULE_CONFLICT");
+        assertThat(inspect().conflictEnd()).isEqualTo(b.getPlannedEndAt());
+        assertThat(service.isAvailable(1L, vehicle, now.plusSeconds(3600), now.plusSeconds(7200), 99L)).isFalse();
+    }
+
+    @Test void mixedRentalKeepsLateStartExtensionInBothAvailabilityPaths() {
+        Booking b = occupied(BookingStatus.IN_PROGRESS, now.minusSeconds(3600));
+        b.setPlannedEndAt(now.plusSeconds(3600));
+        b.setActualStartAt(now);
+        when(bookings.findPotentialDriverConflicts(eq(1L), any(), any(), any())).thenReturn(List.of(b));
+        assertThat(inspect().conflictEnd()).isEqualTo(now.plusSeconds(7200));
+        assertThat(service.isAvailable(1L, vehicle, now.plusSeconds(3600), now.plusSeconds(7200), 99L)).isFalse();
+    }
+
+    @Test void mixedRentalOfficialEndDoesNotRequireLegacySnapshotDuration() {
+        Booking b = occupied(BookingStatus.DRIVER_CONFIRMED, now);
+        b.setPlannedEndAt(now.plusSeconds(10800));
+        when(snapshots.findByBooking_IdIn(any())).thenReturn(List.of());
+        when(charges.findByBooking_IdInAndChargeType(any(), any())).thenReturn(List.of());
+        assertThat(inspect().availabilityStatus()).isEqualTo("SCHEDULE_CONFLICT");
+        assertThat(inspect().conflictEnd()).isEqualTo(b.getPlannedEndAt());
+    }
 }
