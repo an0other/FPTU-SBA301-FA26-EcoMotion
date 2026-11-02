@@ -104,6 +104,8 @@ class PaymentIntegrityIntegrationTest {
     @Autowired ScheduleService schedule;
     @Autowired MockMvc mvc;
     @Autowired JwtService jwt;
+    @Autowired com.fptufa26.ecomotion.finance.service.VnpayService vnpay;
+    @Autowired com.fptufa26.ecomotion.finance.config.VnpayConfig vnpayConfig;
     TransactionTemplate tx;
     long bookingId;
     long requestId;
@@ -163,6 +165,159 @@ class PaymentIntegrityIntegrationTest {
 
     private void confirm(String amount, String reference) {
         payments.confirmPayment(requestId, providerId, new ConfirmPaymentRequest(new BigDecimal(amount), reference, "Received transfer"));
+    }
+
+    private java.util.Map<String, String> gatewayPayment(boolean finalPayment) {
+        String code = tx.execute(s -> em.find(Booking.class, bookingId).getBookingCode());
+        var url = vnpay.createPaymentUrl(renterId,
+                new com.fptufa26.ecomotion.finance.dto.request.CreateVnpayPaymentUrlRequest(
+                        code, finalPayment ? "FINAL_PAYMENT" : "DEPOSIT", null, "vn"), "127.0.0.1");
+        var params = new java.util.HashMap<String, String>();
+        params.put("vnp_TmnCode", vnpayConfig.getTmnCode());
+        params.put("vnp_TxnRef", url.vnpTxnRef());
+        params.put("vnp_Amount", url.amount().movePointRight(2).toBigIntegerExact().toString());
+        params.put("vnp_TransactionNo", "123456789");
+        params.put("vnp_ResponseCode", "00");
+        params.put("vnp_TransactionStatus", "00");
+        sign(params);
+        return params;
+    }
+
+    private void sign(java.util.Map<String, String> params) {
+        params.remove("vnp_SecureHash");
+        params.put("vnp_SecureHash", com.fptufa26.ecomotion.finance.config.VnpayUtils.hmacSHA512(
+                vnpayConfig.getHashSecret(), com.fptufa26.ecomotion.finance.config.VnpayUtils.buildHashData(params)));
+    }
+
+    @Test
+    void vnpayReturnBeforeIpnCannotWriteAndIpnAutomaticallyConfirms() {
+        var params = gatewayPayment(false);
+        assertThat(vnpay.processCallback(params).status()).isEqualTo("PENDING_VERIFICATION");
+        assertThat(ledger.findByBooking_Id(bookingId)).singleElement().extracting(PaymentTransaction::getStatus)
+                .isEqualTo(PaymentStatus.PENDING);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        assertThat(receipts.getReceipt(renterId, requestCode).status()).isEqualTo(PaymentReceiptStatus.SUCCESS);
+    }
+
+    @Test
+    void vnpayIpnBeforeReturnAndRepeatedReceiptReadsNeverDoubleCount() {
+        var params = gatewayPayment(false);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("02");
+        for (int i = 0; i < 3; i++) {
+            assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+            assertThat(receipts.getReceipt(renterId, requestCode).status()).isEqualTo(PaymentReceiptStatus.SUCCESS);
+        }
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        assertThat(requests.findById(requestId).orElseThrow().getPaidAmount()).isEqualByComparingTo("30000");
+    }
+
+    @Test
+    void vnpayRejectsForgedSignatureMerchantAmountAndMissingTransactionNumber() {
+        var params = gatewayPayment(false);
+        params.put("vnp_SecureHash", "forged");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("97");
+        params.put("vnp_TmnCode", "OTHER"); sign(params);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("97");
+        params.put("vnp_TmnCode", vnpayConfig.getTmnCode());
+        params.put("vnp_Amount", "1"); sign(params);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("04");
+        params.put("vnp_Amount", "3000000"); params.remove("vnp_TransactionNo"); sign(params);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("99");
+        assertThat(ledger.findByBooking_Id(bookingId)).singleElement().extracting(PaymentTransaction::getStatus)
+                .isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void vnpayExpiredHoldPreservesMoneyAndReceiptForReconciliation() {
+        var params = gatewayPayment(false);
+        tx.executeWithoutResult(s -> schedules.findByBooking_Id(bookingId).forEach(h -> h.setExpiresAt(Instant.now().minusSeconds(1))));
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertReconciliation(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(vnpay.processCallback(params).status()).isEqualTo("RECONCILIATION_REQUIRED");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("02");
+        assertThat(requests.findById(requestId).orElseThrow().getPaidAmount()).isEqualByComparingTo("30000");
+        assertThat(receipts.getReceipt(renterId, requestCode).status()).isEqualTo(PaymentReceiptStatus.RECONCILIATION_REQUIRED);
+    }
+
+    @Test
+    void vnpayProviderCannotConfirmPendingOrPaidGatewayPayment() {
+        var params = gatewayPayment(false);
+        assertThatThrownBy(() -> confirm("30000", "MANUAL")).isInstanceOf(InvalidPaymentOperationException.class)
+                .hasMessageContaining("VNPay");
+        assertThat(payments.getPaymentRequestDetail(requestId, providerId).gatewayManaged()).isTrue();
+        vnpay.processIpn(params);
+        assertThatThrownBy(() -> confirm("30000", "MANUAL-AGAIN")).isInstanceOf(InvalidPaymentOperationException.class);
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+    }
+
+    @Test
+    void vnpayTimeoutAndUnknownStatusStayPending() {
+        var params = gatewayPayment(false);
+        params.put("vnp_ResponseCode", "99"); params.put("vnp_TransactionStatus", "01"); sign(params);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("99");
+        String code = tx.execute(s -> em.find(Booking.class, bookingId).getBookingCode());
+        assertThat(vnpay.queryTransaction(code, params.get("vnp_TxnRef")).status()).isEqualTo("PENDING_VERIFICATION");
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
+    }
+
+    @Test
+    void vnpayLateCaptureAfterVerifiedFailureStillRecordsMoney() {
+        var params = gatewayPayment(false);
+        params.put("vnp_ResponseCode", "24"); params.put("vnp_TransactionStatus", "02"); sign(params);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertThat(vnpay.processCallback(params).status()).isEqualTo("FAILED");
+        tx.executeWithoutResult(s -> schedules.findByBooking_Id(bookingId).forEach(h -> h.setExpiresAt(Instant.now().minusSeconds(1))));
+        params.put("vnp_ResponseCode", "00"); params.put("vnp_TransactionStatus", "00"); sign(params);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertReconciliation(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+    }
+
+    private void prepareGatewaySettlement() {
+        tx.executeWithoutResult(s -> {
+            Booking booking = em.find(Booking.class, bookingId);
+            booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT); booking.setActualEndAt(Instant.now());
+            booking.setProviderConfirmedAt(Instant.now()); booking.setRenterConfirmedAt(Instant.now());
+            PaymentRequest request = em.find(PaymentRequest.class, requestId);
+            request.setPaymentType(PaymentRequestType.FINAL_BALANCE); request.setAmount(new BigDecimal("100000"));
+        });
+    }
+
+    @Test
+    void vnpayFinalPaymentCompletesAutomatically() {
+        prepareGatewaySettlement();
+        var params = gatewayPayment(true);
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.COMPLETED);
+        assertThat(receipts.getReceipt(renterId, requestCode).status()).isEqualTo(PaymentReceiptStatus.SUCCESS);
+    }
+
+    @Test
+    void vnpayFinalPaymentWithUnresolvedTripConfirmationRequiresReconciliation() {
+        prepareGatewaySettlement();
+        var params = gatewayPayment(true);
+        tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setRenterConfirmedAt(null));
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertReconciliation(BookingStatus.AWAITING_FINAL_PAYMENT);
+    }
+
+    @Test
+    void concurrentVnpayIpnsApplyMoneyOnce() throws Exception {
+        var params = gatewayPayment(false);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(() -> { start.await(); return vnpay.processIpn(params).rspCode(); });
+            var second = pool.submit(() -> { start.await(); return vnpay.processIpn(params).rspCode(); });
+            start.countDown();
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder("00", "02");
+        }
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        assertThat(requests.findById(requestId).orElseThrow().getPaidAmount()).isEqualByComparingTo("30000");
     }
 
     private void assertReconciliation(BookingStatus bookingStatus) {

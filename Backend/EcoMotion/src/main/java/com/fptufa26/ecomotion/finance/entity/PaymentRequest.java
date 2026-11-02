@@ -66,16 +66,16 @@ public class PaymentRequest {
     @Column(name = "transfer_reference", nullable = false, unique = true, length = 100)
     private String transferReference;
 
-    @Column(name = "bank_code_snapshot", nullable = false, length = 20)
+    @Column(name = "bank_code_snapshot", updatable = false, nullable = false, length = 20)
     private String bankCodeSnapshot;
 
-    @Column(name = "bank_name_snapshot", nullable = false, length = 150)
+    @Column(name = "bank_name_snapshot", updatable = false, nullable = false, length = 150)
     private String bankNameSnapshot;
 
-    @Column(name = "account_number_snapshot", nullable = false, length = 255)
+    @Column(name = "account_number_snapshot", updatable = false, nullable = false, length = 255)
     private String accountNumberSnapshot;
 
-    @Column(name = "account_holder_snapshot", nullable = false, length = 150)
+    @Column(name = "account_holder_snapshot", updatable = false, nullable = false, length = 150)
     private String accountHolderSnapshot;
 
     @Enumerated(EnumType.STRING)
@@ -107,6 +107,18 @@ public class PaymentRequest {
 
     @Column(name = "issue_note", length = 500)
     private String issueNote;
+
+    @Column(name = "vietqr_managed", nullable = false)
+    private boolean vietQrManaged;
+
+    @Column(name = "vietqr_order_id", unique = true, length = 19)
+    private String vietQrOrderId;
+
+    @Column(name = "vietqr_payload", columnDefinition = "text")
+    private String vietQrPayload;
+
+    @Column(name = "vietqr_link", length = 2000)
+    private String vietQrLink;
 
     @Version
     @Column(name = "version", nullable = false)

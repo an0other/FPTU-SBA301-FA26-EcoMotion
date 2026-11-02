@@ -285,3 +285,16 @@ app.vnpay.query-interval=${VNPAY_QUERY_INTERVAL:60s}
 app.finance.sandbox-payout-enabled=${SANDBOX_PAYOUT_ENABLED:false}
 app.vnpay.reconciliation-batch-size=${VNPAY_RECONCILIATION_BATCH_SIZE:25}
 app.vnpay.reconciliation-delay-ms=${VNPAY_RECONCILIATION_DELAY_MS:60000}
+
+app.vietqr.enabled=${VIETQR_ENABLED:false}
+app.vietqr.environment=${VIETQR_ENVIRONMENT:sandbox}
+app.vietqr.base-url=${VIETQR_BASE_URL:https://dev.vietqr.org}
+app.vietqr.username=${VIETQR_USERNAME:}
+app.vietqr.password=${VIETQR_PASSWORD:}
+app.vietqr.callback-username=${VIETQR_CALLBACK_USERNAME:}
+app.vietqr.callback-password=${VIETQR_CALLBACK_PASSWORD:}
+app.vietqr.callback-secret=${VIETQR_CALLBACK_SECRET:}
+app.vietqr.connect-timeout=${VIETQR_CONNECT_TIMEOUT:5s}
+app.vietqr.read-timeout=${VIETQR_READ_TIMEOUT:10s}
+app.vietqr.token-skew=30s
+app.vietqr.callback-token-ttl=5m

@@ -42,6 +42,7 @@ import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -125,7 +126,8 @@ public class VnpayServiceImpl implements VnpayService {
                 int minutes = requireSnapshot(booking).getSlotLengthMinutes();
                 int quantity = bookingQueryService.findChargeByBookingIdAndType(booking.getId(), ChargeType.BASE_RENTAL)
                         .map(BookingCharge::getQuantity).orElse(1);
-                Instant end = booking.getPickupTime().plus(Duration.ofMinutes((long) minutes * quantity));
+                Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt()
+                        : booking.getPickupTime().plus(Duration.ofMinutes((long) minutes * quantity));
                 var window = AvailabilityPolicy.bufferedWindow(vehicle, booking.getPickupTime(), end);
                 if (!scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
                     throw new InvalidPaymentOperationException("Xe không còn trống, không thể giữ chỗ để thanh toán");
@@ -149,7 +151,8 @@ public class VnpayServiceImpl implements VnpayService {
             }
 
             // Business rule: Trip must be finished (TC02)
-            if (booking.getActualEndAt() == null && booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
+            if (booking.getActualEndAt() == null || booking.getProviderConfirmedAt() == null
+                    || booking.getRenterConfirmedAt() == null || booking.getCancelledAt() != null) {
                 throw new InvalidPaymentOperationException("Chuyến đi chưa kết thúc, không thể thực hiện quyết toán số dư");
             }
 
@@ -187,7 +190,7 @@ public class VnpayServiceImpl implements VnpayService {
         paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(),
                         isFinalPayment ? PaymentRequestType.FINAL_BALANCE : PaymentRequestType.DEPOSIT)
                 .ifPresent(pr -> {
-                    if (pr.getStatus() != PaymentRequestStatus.PENDING && pr.getStatus() != PaymentRequestStatus.REJECTED
+                    if (pr.isVietQrManaged() || pr.getStatus() != PaymentRequestStatus.PENDING && pr.getStatus() != PaymentRequestStatus.REJECTED
                             || pr.getPaidAmount() != null && pr.getPaidAmount().signum() > 0
                             || pr.getExpiresAt() != null && !pr.getExpiresAt().isAfter(clock.instant())) {
                         throw new InvalidPaymentOperationException("Yêu cầu thanh toán đang đối soát, đã thu tiền hoặc đã kết thúc; không thể tạo giao dịch VNPay mới");
@@ -228,6 +231,9 @@ public class VnpayServiceImpl implements VnpayService {
                     newTx.setGatewayRef(vnpTxnRef);
                     newTx.setCreatedAt(now);
                     newTx.setUpdatedAt(now);
+                    paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(),
+                                    isFinalPayment ? PaymentRequestType.FINAL_BALANCE : PaymentRequestType.DEPOSIT)
+                            .ifPresent(newTx::setPaymentRequest);
                     return bookingQueryService.saveTransaction(newTx);
                 });
 
@@ -287,12 +293,12 @@ public class VnpayServiceImpl implements VnpayService {
         List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingId(booking.getId());
         BigDecimal depositPaid = transactions.stream()
                 .filter(t -> t.getType() == PaymentType.DEPOSIT_PAY && t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
-                .map(PaymentTransaction::getAmount)
+                .map(PaymentTransaction::getAppliedAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal otherPaid = transactions.stream()
                 .filter(t -> t.getType() != PaymentType.DEPOSIT_PAY && t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
-                .map(PaymentTransaction::getAmount)
+                .map(PaymentTransaction::getAppliedAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalPaid = depositPaid.add(otherPaid);
@@ -385,7 +391,8 @@ public class VnpayServiceImpl implements VnpayService {
             return new VnpayIpnResponse("04", "Invalid Amount");
         }
 
-        if (transaction.getStatus() == PaymentStatus.PAID || transaction.getStatus() == PaymentStatus.FAILED) {
+        if (transaction.getStatus() == PaymentStatus.PAID
+                || transaction.getStatus() == PaymentStatus.FAILED && !verification.success()) {
             return new VnpayIpnResponse("02", "Order already confirmed");
         }
 
@@ -394,6 +401,11 @@ public class VnpayServiceImpl implements VnpayService {
         }
         String responseCode = verification.responseCode();
         boolean success = verification.success();
+        if (success && (verification.gatewayTransactionNo() == null
+                || !verification.gatewayTransactionNo().matches("[0-9]+")
+                || new BigDecimal(verification.gatewayTransactionNo()).signum() <= 0)) {
+            return new VnpayIpnResponse("99", "Missing gateway transaction number");
+        }
         if (!success && !"02".equals(params.get("vnp_TransactionStatus"))) {
             return new VnpayIpnResponse("99", "Transaction requires reconciliation");
         }
@@ -413,6 +425,18 @@ public class VnpayServiceImpl implements VnpayService {
         }
 
         Booking booking = transaction.getBooking();
+        PaymentRequestType requestType = transaction.getType() == PaymentType.DEPOSIT_PAY
+                ? PaymentRequestType.DEPOSIT : PaymentRequestType.FINAL_BALANCE;
+        PaymentRequest paymentRequest = paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), requestType)
+                .orElse(null);
+        transaction.setPaymentRequest(paymentRequest);
+        if (booking.getCancelledAt() != null || disputeService.hasActiveDispute(booking.getId())
+                || paymentRequest != null && (paymentRequest.getStatus() != PaymentRequestStatus.PENDING
+                    && paymentRequest.getStatus() != PaymentRequestStatus.REJECTED
+                    || paymentRequest.getExpiresAt() != null && !paymentRequest.getExpiresAt().isAfter(clock.instant())
+                    || paymentRequest.getAmount().subtract(paymentRequest.getPaidAmount()).compareTo(transaction.getAmount()) != 0)) {
+            return recordPaymentForReconciliation(transaction, "Payment request or booking no longer eligible");
+        }
         boolean alreadyPaid = bookingQueryService.findTransactionsByBookingId(booking.getId()).stream()
                 .anyMatch(tx -> !tx.getId().equals(transaction.getId())
                         && tx.getType() == transaction.getType() && tx.getDirection() == PaymentDirection.IN
@@ -423,23 +447,14 @@ public class VnpayServiceImpl implements VnpayService {
         if (transaction.getType() == PaymentType.DEPOSIT_PAY) {
             if (booking.getStatus() == BookingStatus.ACCEPTED
                     || booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
-                Vehicle vehicle = vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Xe không tồn tại"));
-
-                BookingPolicySnapshot snapshot = requireSnapshot(booking);
-                int slotMinutes = snapshot.getSlotLengthMinutes();
-                int slots = bookingQueryService.findChargeByBookingIdAndType(booking.getId(), ChargeType.BASE_RENTAL)
-                        .map(BookingCharge::getQuantity).orElse(1);
-                Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt() : booking.getPickupTime().plus(Duration.ofMinutes((long) slotMinutes * slots));
-                AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, booking.getPickupTime(), end);
-
-                if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT
-                        && !scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
-                    return recordPaymentForReconciliation(transaction, "Slot conflict after gateway payment");
+                Vehicle vehicle = vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId()).orElse(null);
+                BookingPolicySnapshot snapshot = bookingQueryService.findPolicySnapshotByBookingId(booking.getId()).orElse(null);
+                if (vehicle == null || vehicle.getStatus() != VehicleStatus.APPROVED || snapshot == null
+                        || booking.getPickupTime() == null || !booking.getPickupTime().isAfter(clock.instant())
+                        || !matchesDepositAmount(transaction, booking)) {
+                    return recordPaymentForReconciliation(transaction, "Vehicle, pickup time or pricing no longer eligible");
                 }
-
-                if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT
-                        && !scheduleService.confirmUnexpiredHold(booking.getId(), clock.instant())) {
+                if (!scheduleService.confirmUnexpiredHold(booking.getId(), clock.instant())) {
                     return recordPaymentForReconciliation(transaction, "Hold expired, missing or slot no longer available");
                 }
 
@@ -464,9 +479,6 @@ public class VnpayServiceImpl implements VnpayService {
                 transaction.setPaidAt(clock.instant());
                 bookingQueryService.saveTransaction(transaction);
 
-                if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
-                    scheduleService.book(vehicle, booking, booking.getPickupTime(), end);
-                }
                 booking.setStatus(BookingStatus.CONFIRMED);
                 bookingQueryService.saveBooking(booking);
                 notifyPaymentAfterCommit(booking);
@@ -488,6 +500,8 @@ public class VnpayServiceImpl implements VnpayService {
             }
         } else if (transaction.getType() == PaymentType.SETTLEMENT) {
             if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT
+                    || booking.getActualEndAt() == null || booking.getProviderConfirmedAt() == null
+                    || booking.getRenterConfirmedAt() == null
                     || disputeService.hasActiveDispute(booking.getId())
                     || transaction.getAmount().compareTo(calculateFinalPayable(booking)) != 0) {
                 return recordPaymentForReconciliation(transaction, "Settlement no longer eligible or dispute is active");
@@ -533,7 +547,9 @@ public class VnpayServiceImpl implements VnpayService {
                 transaction.getType() == PaymentType.DEPOSIT_PAY ? PaymentRequestType.DEPOSIT : PaymentRequestType.FINAL_BALANCE)
                 .filter(pr -> pr.getStatus() != PaymentRequestStatus.CONFIRMED)
                 .ifPresent(pr -> {
+                    transaction.setPaymentRequest(pr);
                     pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
+                    pr.setPaidAmount(pr.getPaidAmount().add(transaction.getAmount()));
                     pr.setIssueNote(transaction.getProcessingNote());
                     paymentRequestRepository.save(pr);
                 });
@@ -677,6 +693,14 @@ public class VnpayServiceImpl implements VnpayService {
         return base.multiply(ratio).setScale(0, RoundingMode.HALF_UP);
     }
 
+    private boolean matchesDepositAmount(PaymentTransaction transaction, Booking booking) {
+        try {
+            return transaction.getAmount().compareTo(calculateDepositAmount(booking)) == 0;
+        } catch (InvalidPaymentOperationException | ArithmeticException ex) {
+            return false;
+        }
+    }
+
     public BigDecimal calculateFinalPayable(Booking booking) {
         BigDecimal baseRental = booking.getTotalAmount() != null ? booking.getTotalAmount() : BigDecimal.ZERO;
 
@@ -693,7 +717,7 @@ public class VnpayServiceImpl implements VnpayService {
         List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingId(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
-                .map(PaymentTransaction::getAmount)
+                .map(PaymentTransaction::getAppliedAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal confirmedRefunds = transactions.stream()

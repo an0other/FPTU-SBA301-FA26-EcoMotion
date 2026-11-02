@@ -57,8 +57,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -79,6 +77,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     private final UserService userService;
     private final ProviderBankAccountRepository providerBankAccountRepository;
     private final PaymentRequestRepository paymentRequestRepository;
+    private final com.fptufa26.ecomotion.finance.service.PaymentRequestService paymentRequestService;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final org.springframework.core.env.Environment environment;
     private final com.fptufa26.ecomotion.dispute.service.DisputeService disputeService;
@@ -179,6 +178,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 .orElseThrow(() -> new BankAccountConflictException("Không tìm thấy tài khoản ngân hàng #" + bankAccountId));
 
         if (request.bankCode() != null && !request.bankCode().isBlank()) {
+            account.setVietQrLinkedAt(null);
             SupportedBank bank = SupportedBank.fromCode(request.bankCode())
                     .orElseThrow(() -> new InvalidBankCodeException("Mã ngân hàng '" + request.bankCode() + "' không hợp lệ"));
             account.setBankCode(bank.getCode());
@@ -195,6 +195,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
             if (!bank.isValidAccountNumber(cleanNumber)) {
                 throw new InvalidAccountNumberException("Số tài khoản không hợp lệ đối với ngân hàng " + bank.getShortName());
             }
+            account.setVietQrLinkedAt(null);
             account.setAccountNumber(cleanNumber);
         }
 
@@ -203,6 +204,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
             if (cleanHolder.length() < 2 || cleanHolder.length() > 150 || !ACCOUNT_HOLDER_PATTERN.matcher(cleanHolder).matches()) {
                 throw new InvalidAccountHolderNameException("Tên chủ tài khoản không hợp lệ");
             }
+            account.setVietQrLinkedAt(null);
             account.setAccountHolderName(cleanHolder);
         }
 
@@ -378,7 +380,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
-                .map(t -> t.getAppliedAmount() != null && t.getAppliedAmount().signum() > 0
+                .map(t -> t.getAppliedAmount() != null
                         ? t.getAppliedAmount()
                         : t.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -390,7 +392,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         BigDecimal depositPaid = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getType() == PaymentType.DEPOSIT_PAY)
-                .map(t -> t.getAppliedAmount() != null && t.getAppliedAmount().signum() > 0
+                .map(t -> t.getAppliedAmount() != null
                         ? t.getAppliedAmount()
                         : t.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -686,63 +688,9 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         );
     }
 
-    private PaymentRequestResponse toPaymentRequestResponse(PaymentRequest pr) {
-        BigDecimal remaining = pr.getAmount().subtract(pr.getPaidAmount()).max(BigDecimal.ZERO);
-        String masked = maskAccountNumber(pr.getAccountNumberSnapshot());
-        String qrUrl = null;
-        try {
-            String cleanAccount = pr.getAccountNumberSnapshot().trim().replace(" ", "");
-            String cleanAmount = remaining.setScale(0, RoundingMode.HALF_UP).toPlainString();
-            String encodedRef = URLEncoder.encode(pr.getTransferReference().trim(), StandardCharsets.UTF_8);
-            String encodedHolder = URLEncoder.encode(pr.getAccountHolderSnapshot().trim().toUpperCase(Locale.ROOT), StandardCharsets.UTF_8);
-            qrUrl = String.format("https://img.vietqr.io/image/%s-%s-compact2.png?amount=%s&addInfo=%s&accountName=%s",
-                    pr.getBankCodeSnapshot().trim(), cleanAccount, cleanAmount, encodedRef, encodedHolder);
-        } catch (Exception ignored) {
-        }
-
-        List<PaymentEvidenceResponse> evidenceResponses = pr.getEvidences().stream()
-                .map(e -> new PaymentEvidenceResponse(
-                        e.getId(),
-                        pr.getId(),
-                        e.getProofImageUrl(),
-                        e.getTransferredAmount(),
-                        e.getTransactionReference(),
-                        e.getTransferredAt(),
-                        e.getNote(),
-                        e.getSubmittedBy() != null ? e.getSubmittedBy().getId() : null,
-                        e.getSubmittedBy() != null ? e.getSubmittedBy().getFullName() : "",
-                        e.getStatus(),
-                        e.getCreatedAt(),
-                        e.getReviewedAt()
-                ))
-                .toList();
-
-        return new PaymentRequestResponse(
-                pr.getId(),
-                pr.getBooking().getId(),
-                pr.getBooking().getBookingCode(),
-                pr.getPaymentType(),
-                pr.getAmount(),
-                pr.getPaidAmount(),
-                remaining,
-                pr.getCurrency(),
-                pr.getTransferReference(),
-                pr.getBankCodeSnapshot(),
-                pr.getBankNameSnapshot(),
-                pr.getAccountNumberSnapshot(),
-                masked,
-                pr.getAccountHolderSnapshot(),
-                pr.getStatus(),
-                qrUrl,
-                pr.getExpiresAt(),
-                pr.getFirstProofAt(),
-                pr.getReconciliationDeadline(),
-                pr.getCreatedAt(),
-                pr.getConfirmedAt(),
-                pr.getRejectionReason(),
-                pr.getIssueNote(),
-                evidenceResponses
-        );
+    private PaymentRequestResponse toPaymentRequestResponse(PaymentRequest request) {
+        return paymentRequestService.getPaymentRequestDetail(request.getId(),
+                request.getBooking().getVehicle().getProvider().getUser().getId());
     }
 
     private BookingChargeResponse toChargeResponse(BookingCharge charge) {

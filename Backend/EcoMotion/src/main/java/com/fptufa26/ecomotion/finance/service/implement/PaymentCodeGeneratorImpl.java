@@ -26,6 +26,9 @@ public class PaymentCodeGeneratorImpl implements PaymentCodeGenerator {
                 .orElseGet(() -> sequenceRepository.saveAndFlush(new PaymentCodeSequence(cleanPrefix, 1L)));
 
         long currentVal = sequence.getNextVal() != null ? sequence.getNextVal() : 1L;
+        if ("VQ".equals(cleanPrefix) && currentVal >= 1_000_000L) {
+            throw new com.fptufa26.ecomotion.finance.exception.InvalidPaymentOperationException("VietQR payment code space exhausted");
+        }
         sequence.setNextVal(currentVal + 1);
         sequenceRepository.saveAndFlush(sequence);
 

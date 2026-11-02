@@ -6,12 +6,10 @@ import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.ReportIssueRequest;
-import com.fptufa26.ecomotion.finance.dto.request.SimulatePaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
-import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,7 +37,7 @@ import org.springframework.http.HttpStatus;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Direct Payment & VietQR", description = "Direct bank transfer payment requests, customer proof uploads, provider confirmation, and sandbox simulation")
+@Tag(name = "Direct Payment & VietQR", description = "Payment requests, legacy evidence and authenticated automatic payment")
 public class PaymentRequestController {
 
     private final PaymentRequestService paymentRequestService;
@@ -182,26 +180,4 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.reportIssue(id, principal.getUserId(), request));
     }
 
-    // ==========================================
-    // 3. Admin Sandbox Simulation (Admin only)
-    // ==========================================
-
-    @PostMapping({"/api/v1/admin/sandbox/payment-requests/{id}/simulate", "/api/admin/sandbox/payment-requests/{id}/simulate"})
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Admin simulates various payment scenarios in Sandbox (DEV/TEST only)")
-    public ApiResponse<SimulatePaymentResponse> simulatePayment(
-            @AuthenticationPrincipal SecurityUser principal,
-            @PathVariable Long id,
-            @Valid @RequestBody SimulatePaymentRequest request) {
-        return ApiResponse.success(paymentRequestService.simulatePayment(id, principal.getUserId(), request));
-    }
-
-    @PostMapping({"/api/v1/admin/sandbox/seed", "/api/admin/sandbox/seed"})
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Admin seeds demo bank accounts and data idempotently for sandbox testing")
-    public ApiResponse<String> seedSandbox(
-            @AuthenticationPrincipal SecurityUser principal) {
-        paymentRequestService.seedSandboxData(principal.getUserId());
-        return ApiResponse.success("Dữ liệu thử nghiệm Sandbox đã được khởi tạo thành công");
-    }
 }

@@ -7,6 +7,7 @@ import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { providerFinanceService, SUPPORTED_BANKS } from '../services/providerFinanceService'
 import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
 import { HoldCountdown } from '../components/payments/HoldCountdown'
+import { VietQrCallbackHistory } from '../components/payments/VietQrCallbackHistory'
 
 function formatVnd(amount) {
   if (amount == null || Number.isNaN(Number(amount))) return '0 ₫'
@@ -801,6 +802,7 @@ export default function ProviderFinancePage() {
         {/* TAB 2: INCOMING PAYMENT REQUESTS */}
         {activeTab === 'incoming' && (
           <div className="rounded-lg border border-slate-200 bg-white shadow-xs overflow-hidden">
+            <VietQrCallbackHistory />
             {/* Toolbar */}
             <div className="p-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
               <div className="flex items-center gap-2">
@@ -932,7 +934,13 @@ export default function ProviderFinancePage() {
                                   Biên lai
                                 </button>
                               )}
-                              {pr.status !== 'CONFIRMED' && (
+                              {pr.gatewayManaged && (
+                                <span className="text-xs text-slate-600">VNPay tự động xác minh</span>
+                              )}
+                              {pr.vietQrManaged && (
+                                <span className="text-xs text-slate-600">VietQR tự động xác minh</span>
+                              )}
+                              {pr.status !== 'CONFIRMED' && !pr.gatewayManaged && !pr.vietQrManaged && (
                                 <>
                                   <button
                                     type="button"
@@ -950,6 +958,10 @@ export default function ProviderFinancePage() {
                                   >
                                     Từ chối
                                   </button>
+                                </>
+                              )}
+                              {pr.status !== 'CONFIRMED' && (
+                                <>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenReportIssueModal(pr)}

@@ -71,6 +71,12 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(
+            org.springframework.web.server.ResponseStatusException exception, HttpServletRequest request) {
+        return build(HttpStatus.valueOf(exception.getStatusCode().value()),
+                exception.getReason() == null ? "Yêu cầu không hợp lệ" : exception.getReason(), request);
+    }
 
     @ExceptionHandler({
             InvalidCredentialsException.class,

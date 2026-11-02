@@ -190,6 +190,7 @@ public class VnpayPaymentGatewayStrategy implements PaymentGatewayStrategy {
                             "vnp_OrderInfo", "vnp_PromotionCode", "vnp_PromotionAmount")
                     .map(key -> Objects.toString(response.get(key), "")).collect(Collectors.joining("|"));
             if (!secureHashMatches(VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData), response.get("vnp_SecureHash"))
+                    || !"querydr".equals(response.get("vnp_Command"))
                     || !vnpayConfig.getTmnCode().equals(response.get("vnp_TmnCode"))
                     || !txnRef.equals(response.get("vnp_TxnRef"))
                     || !"00".equals(response.get("vnp_ResponseCode"))

@@ -20,13 +20,11 @@ import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.ReportIssueRequest;
-import com.fptufa26.ecomotion.finance.dto.request.SimulatePaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.request.SubmitProofRequest;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
-import com.fptufa26.ecomotion.finance.dto.response.SimulatePaymentResponse;
 import com.fptufa26.ecomotion.finance.entity.PaymentEvidence;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
@@ -61,7 +59,6 @@ import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.env.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -75,13 +72,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -110,7 +104,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private final UserService userService;
     private final PaymentCodeGenerator paymentCodeGenerator;
     private final Clock clock;
-    private final Environment environment;
     private final DisputeQueryService disputeQueryService;
     private final EntityManager entityManager;
     private final VehicleService vehicleService;
@@ -178,6 +171,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
         Booking booking = pr.getBooking();
+        if (pr.isVietQrManaged()) throw new InvalidPaymentOperationException("QR đã phát hành không thể cấp lại; cần đối soát yêu cầu gốc");
         if (!booking.getRenter().getUser().getId().equals(currentUserId)) {
             throw new AccessDeniedException("Bạn không có quyền cấp lại yêu cầu thanh toán này");
         }
@@ -256,6 +250,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         pr.setBankNameSnapshot(bankAccount.getBankName());
         pr.setAccountNumberSnapshot(bankAccount.getAccountNumber());
         pr.setAccountHolderSnapshot(bankAccount.getAccountHolderName());
+        pr.setReceivingBankAccount(bankAccount);
 
         pr.setStatus(PaymentRequestStatus.PENDING);
         Instant now = clock.instant();
@@ -295,7 +290,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     public PaymentRequestResponse getPaymentRequestDetail(Long paymentRequestId, Long currentUserId) {
-        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId)
+        PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
         validateAccessToBooking(pr.getBooking(), currentUserId);
@@ -322,6 +317,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new InvalidPaymentOperationException(
                     "Yêu cầu thanh toán hiện không nhận thêm bằng chứng chuyển khoản");
         }
+        if (pr.isVietQrManaged()) throw new InvalidPaymentOperationException("VietQR tự động không yêu cầu ảnh chứng từ");
         validatePayableStage(pr);
 
         PaymentEvidence evidence = new PaymentEvidence();
@@ -382,6 +378,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new InvalidPaymentOperationException(
                     "Yêu cầu thanh toán hiện không nhận thêm bằng chứng chuyển khoản");
         }
+        if (pr.isVietQrManaged()) throw new InvalidPaymentOperationException("VietQR tự động không yêu cầu ảnh chứng từ");
         validatePayableStage(pr);
         if (file == null || file.isEmpty()) {
             throw new InvalidPaymentOperationException("Ảnh chứng từ không được để trống");
@@ -584,6 +581,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (pr.getPaymentType() != PaymentRequestType.DEPOSIT && pr.getPaymentType() != PaymentRequestType.FINAL_BALANCE) {
             throw new InvalidPaymentOperationException("Loại yêu cầu không hỗ trợ xác nhận chuyển khoản");
         }
+        if (pr.isVietQrManaged()) throw new InvalidPaymentOperationException("Thanh toán VietQR chỉ được xác nhận qua callback đã xác thực");
+        if (isGatewayManaged(pr)) {
+            throw new InvalidPaymentOperationException("VNPay đang xử lý hoặc đã thu tiền; chỉ cổng thanh toán được xác minh giao dịch này");
+        }
         if (pr.getStatus() == PaymentRequestStatus.CONFIRMED
                 || bookingPaymentLedgerService.listTransactions(booking.getId()).stream().anyMatch(t ->
                     t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(paymentRequestId)
@@ -721,6 +722,60 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         return toResponse(saved);
     }
 
+    @Override
+    public boolean hasValidVietQrHold(Long bookingId) {
+        return scheduleService.hasUnexpiredHold(bookingId, clock.instant());
+    }
+
+    @Override
+    @Transactional
+    public String applyVietQrPayment(PaymentRequest pr, com.fptufa26.ecomotion.finance.dto.request.VietQrTransactionSyncRequest input) {
+        Booking booking = pr.getBooking();
+        PaymentType type = pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT;
+        String reason = null;
+        if (input.amount().compareTo(pr.getAmount()) != 0) reason = "AMOUNT_MISMATCH";
+        else if (Instant.ofEpochMilli(input.transactiontime()).isAfter(clock.instant().plusSeconds(60))) reason = "INVALID_TRANSACTION_TIME";
+        else if (pr.getCreatedAt() != null && input.transactiontime() < pr.getCreatedAt().toEpochMilli()) reason = "TRANSACTION_BEFORE_REQUEST";
+        else if (bookingPaymentLedgerService.listTransactions(booking.getId()).stream().anyMatch(t ->
+                t.getType() == type && t.getDirection() == PaymentDirection.IN
+                && (t.getStatus() == PaymentStatus.PAID || t.getStatus() == PaymentStatus.PENDING))) reason = "OBLIGATION_ALREADY_HAS_TRANSACTION";
+        else reason = prepareManualPaymentApplication(pr, booking, true);
+        PaymentTransaction payment = new PaymentTransaction();
+        payment.setBooking(booking);
+        payment.setPaymentRequest(pr);
+        payment.setType(type);
+        payment.setDirection(PaymentDirection.IN);
+        payment.setMethod(PaymentMethod.BANK_TRANSFER);
+        payment.setVerificationMethod(PaymentVerificationMethod.VIETQR_CALLBACK);
+        payment.setStatus(PaymentStatus.PAID);
+        payment.setAmount(input.amount());
+        payment.setAppliedAmount(reason == null ? input.amount() : BigDecimal.ZERO);
+        payment.setTransactionCode(paymentCodeGenerator.generatePaymentCode("VT"));
+        payment.setGatewayRef(input.transactionid());
+        payment.setReceivingBankAccount(pr.getReceivingBankAccount());
+        payment.setPaidAt(Instant.ofEpochMilli(input.transactiontime()));
+        payment.setBankCodeSnapshot(pr.getBankCodeSnapshot());
+        payment.setBankNameSnapshot(pr.getBankNameSnapshot());
+        payment.setBankAccountNoSnapshot(maskAccountNumber(pr.getAccountNumberSnapshot()));
+        payment.setBankAccountHolderSnapshot(pr.getAccountHolderSnapshot());
+        String outcome = reason == null ? "CONFIRMED" : "RECONCILIATION_REQUIRED: " + reason;
+        payment.setProcessingNote(outcome);
+        bookingPaymentLedgerService.saveTransaction(payment);
+        if (reason == null) {
+            pr.setPaidAmount(input.amount());
+            pr.setStatus(PaymentRequestStatus.CONFIRMED);
+            pr.setConfirmedAt(clock.instant());
+            booking.setStatus(type == PaymentType.DEPOSIT_PAY ? BookingStatus.CONFIRMED : BookingStatus.COMPLETED);
+            bookingPaymentLedgerService.saveBooking(booking);
+            if (type == PaymentType.DEPOSIT_PAY) bookingNotificationService.depositPaid(booking, input.amount());
+        } else if (pr.getStatus() != PaymentRequestStatus.CONFIRMED) {
+            pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
+            pr.setIssueNote(outcome);
+        }
+        bookingNotificationService.changed(booking, reason == null ? "PAYMENT_VERIFIED" : "PAYMENT_RECONCILIATION_REQUIRED");
+        return outcome;
+    }
+
     private String prepareManualPaymentApplication(PaymentRequest request, Booking booking, boolean complete) {
         if (!Set.of(PaymentRequestStatus.PENDING, PaymentRequestStatus.PROOF_SUBMITTED,
                 PaymentRequestStatus.PARTIALLY_PAID).contains(request.getStatus())) {
@@ -763,6 +818,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
+        if (pr.isVietQrManaged()) throw new InvalidPaymentOperationException("Không thể từ chối thủ công giao dịch VietQR tự động");
         if (!pr.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
         }
@@ -811,214 +867,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         return toResponse(saved);
     }
 
-    @Override
-    @Transactional
-    public SimulatePaymentResponse simulatePayment(Long paymentRequestId, Long adminUserId, SimulatePaymentRequest request) {
-        // Enforce Sandbox restrictions
-        validateSandboxEnvironment();
-
-        User admin = userService.findById(adminUserId)
-                .orElseThrow(() -> new AccessDeniedException("Người dùng quản trị không tồn tại"));
-
-        PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
-                .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
-
-        String scenario = request.scenario() != null ? request.scenario().trim().toUpperCase(Locale.ROOT) : "SUCCESS";
-        BigDecimal amount = (request.simulatedAmount() != null && request.simulatedAmount().compareTo(BigDecimal.ZERO) > 0)
-                ? request.simulatedAmount()
-                : pr.getAmount();
-
-        String ref = (request.bankTransactionRef() != null && !request.bankTransactionRef().isBlank())
-                ? request.bankTransactionRef().trim()
-                : "MOCK-TX-" + System.currentTimeMillis();
-
-        switch (scenario) {
-            case "SUCCESS": {
-                if (pr.getStatus() == PaymentRequestStatus.CONFIRMED) {
-                    return new SimulatePaymentResponse(false, scenario, "Yêu cầu thanh toán đã được xác nhận trước đó", pr.getId(), null, pr.getStatus());
-                }
-
-                PaymentTransaction tx = new PaymentTransaction();
-                tx.setBooking(pr.getBooking());
-                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT);
-                tx.setDirection(PaymentDirection.IN);
-                tx.setMethod(PaymentMethod.BANK_TRANSFER);
-                tx.setAmount(amount);
-                tx.setStatus(PaymentStatus.PAID);
-        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
-                tx.setPaidAt(clock.instant());
-                tx.setGatewayRef(ref);
-                tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
-                tx.setConfirmedBy(admin);
-                tx.setPaymentRequest(pr);
-                tx.setBankCodeSnapshot(pr.getBankCodeSnapshot());
-                tx.setBankNameSnapshot(pr.getBankNameSnapshot());
-                tx.setBankAccountNoSnapshot(maskAccountNumber(pr.getAccountNumberSnapshot()));
-                tx.setBankAccountHolderSnapshot(pr.getAccountHolderSnapshot());
-                PaymentTransaction savedTx = bookingPaymentLedgerService.saveTransaction(tx);
-
-                pr.setPaidAmount(amount);
-                pr.setStatus(PaymentRequestStatus.CONFIRMED);
-                pr.setConfirmedAt(clock.instant());
-                pr.setConfirmedBy(admin);
-                pr.setUpdatedAt(clock.instant());
-
-                Booking booking = pr.getBooking();
-                if (pr.getPaymentType() == PaymentRequestType.DEPOSIT && amount.compareTo(pr.getAmount()) >= 0) {
-                    confirmDepositAndLockSchedule(booking, tx);
-                }
-                paymentRequestRepository.save(pr);
-
-                return new SimulatePaymentResponse(true, scenario, "Mô phỏng thanh toán thành công", pr.getId(), savedTx.getId(), pr.getStatus());
-            }
-
-            case "UNDERPAID": {
-                BigDecimal half = amount.divide(new BigDecimal("2"), 0, RoundingMode.HALF_UP);
-                PaymentTransaction tx = new PaymentTransaction();
-                tx.setBooking(pr.getBooking());
-                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT);
-                tx.setDirection(PaymentDirection.IN);
-                tx.setMethod(PaymentMethod.BANK_TRANSFER);
-                tx.setAmount(half);
-                tx.setStatus(PaymentStatus.PAID);
-        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
-                tx.setPaidAt(clock.instant());
-                tx.setGatewayRef(ref);
-                tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
-                tx.setConfirmedBy(admin);
-                tx.setPaymentRequest(pr);
-                PaymentTransaction savedTx = bookingPaymentLedgerService.saveTransaction(tx);
-
-                pr.setPaidAmount(half);
-                pr.setStatus(PaymentRequestStatus.PARTIALLY_PAID);
-                pr.setUpdatedAt(clock.instant());
-                paymentRequestRepository.save(pr);
-
-                return new SimulatePaymentResponse(true, scenario, "Mô phỏng chuyển thiếu tiền (chuyển 50%)", pr.getId(), savedTx.getId(), pr.getStatus());
-            }
-
-            case "OVERPAID": {
-                BigDecimal extra = amount.add(new BigDecimal("100000.00"));
-                PaymentTransaction tx = new PaymentTransaction();
-                tx.setBooking(pr.getBooking());
-                tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT);
-                tx.setDirection(PaymentDirection.IN);
-                tx.setMethod(PaymentMethod.BANK_TRANSFER);
-                tx.setAmount(extra);
-                tx.setStatus(PaymentStatus.PAID);
-        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
-                tx.setPaidAt(clock.instant());
-                tx.setGatewayRef(ref);
-                tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
-                tx.setConfirmedBy(admin);
-                tx.setPaymentRequest(pr);
-                PaymentTransaction savedTx = bookingPaymentLedgerService.saveTransaction(tx);
-
-                pr.setPaidAmount(extra);
-                pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
-                pr.setIssueNote("Mô phỏng khách hàng chuyển thừa +100.000 VND");
-                pr.setUpdatedAt(clock.instant());
-                paymentRequestRepository.save(pr);
-
-                return new SimulatePaymentResponse(true, scenario, "Mô phỏng chuyển thừa tiền (chuyển dư 100.000 ₫)", pr.getId(), savedTx.getId(), pr.getStatus());
-            }
-
-            case "NO_TRANSFER": {
-                pr.setStatus(PaymentRequestStatus.EXPIRED);
-                pr.setUpdatedAt(clock.instant());
-                paymentRequestRepository.save(pr);
-                return new SimulatePaymentResponse(true, scenario, "Mô phỏng khách hàng không chuyển và quá hạn thanh toán", pr.getId(), null, pr.getStatus());
-            }
-
-            case "DUPLICATE": {
-                if (bookingPaymentLedgerService.gatewayReferenceExists(ref)) {
-                    throw new BankAccountConflictException("Mã giao dịch mô phỏng đã bị trùng lặp: " + ref);
-                }
-                // Save one transaction then throw conflict
-                PaymentTransaction tx = new PaymentTransaction();
-                tx.setBooking(pr.getBooking());
-                tx.setType(PaymentType.DEPOSIT_PAY);
-                tx.setDirection(PaymentDirection.IN);
-                tx.setMethod(PaymentMethod.BANK_TRANSFER);
-                tx.setAmount(amount);
-                tx.setStatus(PaymentStatus.PAID);
-        bookingNotificationService.changed(tx.getBooking(), "PAYMENT_VERIFIED");
-                tx.setPaidAt(clock.instant());
-                tx.setGatewayRef(ref);
-                tx.setVerificationMethod(PaymentVerificationMethod.MOCK_SIMULATED);
-                bookingPaymentLedgerService.saveTransaction(tx);
-
-                throw new BankAccountConflictException("Mô phỏng phát hiện mã tham chiếu trùng lặp: " + ref);
-            }
-
-            case "WRONG_REFERENCE": {
-                pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
-                pr.setIssueNote("Mô phỏng sai nội dung chuyển khoản: " + ref);
-                pr.setUpdatedAt(clock.instant());
-                paymentRequestRepository.save(pr);
-                return new SimulatePaymentResponse(true, scenario, "Mô phỏng khách hàng chuyển sai nội dung đối chiếu", pr.getId(), null, pr.getStatus());
-            }
-
-            case "PROVIDER_REJECTED": {
-                pr.setStatus(PaymentRequestStatus.REJECTED);
-                pr.setRejectionReason("Mô phỏng nhà cung cấp từ chối bằng chứng do không thấy tiền vào tài khoản");
-                pr.setUpdatedAt(clock.instant());
-                paymentRequestRepository.save(pr);
-                return new SimulatePaymentResponse(true, scenario, "Mô phỏng nhà cung cấp từ chối bằng chứng", pr.getId(), null, pr.getStatus());
-            }
-
-            case "DISPUTED": {
-                pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
-                pr.setIssueNote("Mô phỏng khiếu nại phát sinh từ khách hàng hoặc nhà cung cấp");
-                pr.setUpdatedAt(clock.instant());
-                paymentRequestRepository.save(pr);
-                return new SimulatePaymentResponse(true, scenario, "Mô phỏng giao dịch tranh chấp cần đối soát", pr.getId(), null, pr.getStatus());
-            }
-
-            default:
-                throw new InvalidPaymentOperationException("Kịch bản mô phỏng không được hỗ trợ: " + scenario);
-        }
-    }
-
-    @Override
-    @Transactional
-    public void seedSandboxData(Long adminUserId) {
-        validateSandboxEnvironment();
-
-        List<Provider> providers = userService.listProviders(null);
-        for (Provider provider : providers) {
-            if (provider.getBankAccountNo() == null || provider.getBankAccountNo().isBlank()) {
-                provider.setBankCode("VCB");
-                provider.setBankName("Vietcombank");
-                provider.setBankAccountNo("0123456789");
-                provider.setBankAccountHolder(provider.getDisplayName() != null ? provider.getDisplayName().toUpperCase(Locale.ROOT) : "ECO PROVIDER");
-
-            }
-
-            if (!providerBankAccountRepository.existsByProvider_IdAndStatus(provider.getId(), BankAccountStatus.ACTIVE)) {
-                ProviderBankAccount pba = new ProviderBankAccount();
-                pba.setProvider(provider);
-                pba.setBankCode(provider.getBankCode());
-                pba.setBankName(provider.getBankName());
-                pba.setAccountNumber(provider.getBankAccountNo());
-                pba.setAccountHolderName(provider.getBankAccountHolder());
-                pba.setStatus(BankAccountStatus.ACTIVE);
-                pba.setCreatedAt(clock.instant());
-                pba.setUpdatedAt(clock.instant());
-                providerBankAccountRepository.save(pba);
-            }
-        }
-        log.info("Admin {} seeded sandbox bank accounts for all providers", adminUserId);
-    }
-
-    private void validateSandboxEnvironment() {
-        String[] profiles = environment.getActiveProfiles();
-        boolean isProd = Arrays.stream(profiles).anyMatch(p -> p.equalsIgnoreCase("prod") || p.equalsIgnoreCase("production"));
-        if (isProd) {
-            throw new InvalidPaymentOperationException("Tính năng Sandbox bị vô hiệu hóa trên môi trường Production vì lý do an toàn tài chính");
-        }
-    }
-
     private Provider resolveProvider(Long currentUserId) {
         return userService.findProviderByUserId(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng hiện tại không có hồ sơ nhà cung cấp"));
@@ -1049,70 +897,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
 
         throw new MissingBankAccountException("Nhà cung cấp chưa cấu hình tài khoản ngân hàng nhận tiền. Vui lòng thiết lập tài khoản ngân hàng trước khi phát hành yêu cầu thanh toán.");
-    }
-
-    private void confirmDepositAndLockSchedule(Booking booking, PaymentTransaction transaction) {
-        if (booking.getStatus() == BookingStatus.CONFIRMED
-                || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED
-                || booking.getStatus() == BookingStatus.DRIVER_CONFIRMED) {
-            return;
-        }
-        if (booking.getStatus() != BookingStatus.ACCEPTED
-                && booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
-            throw new InvalidPaymentOperationException("Đơn thuê không còn ở trạng thái chờ xác nhận cọc");
-        }
-
-        if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
-            vehicleCatalogService.requireApprovedForUpdate(booking.getVehicle().getId());
-            scheduleService.confirmHold(booking.getId());
-            booking.setStatus(BookingStatus.CONFIRMED);
-            bookingPaymentLedgerService.saveBooking(booking);
-            bookingNotificationService.depositPaid(booking, transaction.getPaymentRequest().getAmount());
-            return;
-        }
-
-        Vehicle lockedVehicle = vehicleCatalogService.requireApprovedForUpdate(booking.getVehicle().getId());
-        BookingPolicySnapshot snapshot = bookingPaymentLedgerService.findSnapshot(booking.getId())
-                .orElse(null);
-        int slotLengthMinutes = snapshot != null
-                ? snapshot.getSlotLengthMinutes()
-                : booking.getPlan().getSlotLengthMinutes();
-        int slots = bookingPaymentLedgerService.findCharge(booking.getId(), ChargeType.BASE_RENTAL)
-                .map(BookingCharge::getQuantity)
-                .orElse(1);
-        Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt() : booking.getPickupTime().plus(
-                Duration.ofMinutes((long) slotLengthMinutes * slots));
-        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
-                lockedVehicle, booking.getPickupTime(), end);
-
-        if (!scheduleService.isRangeFree(lockedVehicle.getId(), window.start(), window.end())) {
-            throw new ConflictException("Xe vừa được khóa bởi lịch khác; chưa thể xác nhận khoản cọc");
-        }
-
-        BookingCharge deposit = bookingPaymentLedgerService
-                .findCharge(booking.getId(), ChargeType.DEPOSIT)
-                .orElseGet(() -> {
-                    BookingCharge charge = new BookingCharge();
-                    charge.setBooking(booking);
-                    charge.setChargeType(ChargeType.DEPOSIT);
-                    charge.setDescription("Cọc giữ chỗ qua VietQR");
-                    charge.setUnitPrice(booking.getTotalAmount());
-                    charge.setAppliedRate(snapshot != null
-                            ? snapshot.getDepositRatio()
-                            : booking.getVehicle().getProvider().getDepositRatio());
-                    charge.setAmount(transaction.getPaymentRequest().getAmount());
-                    charge.setCreatedBy(booking.getRenter().getUser());
-                    charge.setWaived(false);
-                    return bookingPaymentLedgerService.saveCharge(charge);
-                });
-
-        transaction.setCharge(deposit);
-        scheduleService.book(lockedVehicle, booking, booking.getPickupTime(), end);
-        booking.setStatus(BookingStatus.CONFIRMED);
-        bookingPaymentLedgerService.saveBooking(booking);
-        bookingNotificationService.depositPaid(booking, transaction.getPaymentRequest().getAmount());
-        log.info("Booking {} transitioned to CONFIRMED and its schedule was locked after DEPOSIT confirmation",
-                booking.getBookingCode());
     }
 
     private void createExcessRefund(PaymentRequest request, BigDecimal excessAmount, User processor) {
@@ -1180,7 +964,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactions(booking.getId());
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
-                .map(t -> t.getAppliedAmount() != null && t.getAppliedAmount().compareTo(BigDecimal.ZERO) > 0
+                .map(t -> t.getAppliedAmount() != null
                         ? t.getAppliedAmount()
                         : t.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -1204,6 +988,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         User user = userService.findById(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng không tồn tại"));
 
+        if (user.getStatus() != com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE) throw new AccessDeniedException("Inactive account");
         if (user.getRole() == Role.ADMIN) {
             return;
         }
@@ -1248,25 +1033,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         return "*".repeat(trimmed.length() - 4) + trimmed.substring(trimmed.length() - 4);
     }
 
-    private String buildVietQrUrl(PaymentRequest pr) {
-        try {
-            String cleanAccount = pr.getAccountNumberSnapshot().trim().replace(" ", "");
-            String cleanAmount = pr.getAmount().subtract(pr.getPaidAmount()).max(BigDecimal.ZERO)
-                    .setScale(0, RoundingMode.HALF_UP).toPlainString();
-            String encodedRef = URLEncoder.encode(pr.getTransferReference().trim(), StandardCharsets.UTF_8);
-            String encodedHolder = URLEncoder.encode(pr.getAccountHolderSnapshot().trim().toUpperCase(Locale.ROOT), StandardCharsets.UTF_8);
-
-            return String.format("https://img.vietqr.io/image/%s-%s-compact2.png?amount=%s&addInfo=%s&accountName=%s",
-                    pr.getBankCodeSnapshot().trim(), cleanAccount, cleanAmount, encodedRef, encodedHolder);
-        } catch (Exception ex) {
-            return null;
-        }
-    }
-
     private PaymentRequestResponse toResponse(PaymentRequest pr) {
         BigDecimal remaining = pr.getAmount().subtract(pr.getPaidAmount()).max(BigDecimal.ZERO);
         String maskedAccount = maskAccountNumber(pr.getAccountNumberSnapshot());
-        String qrUrl = buildVietQrUrl(pr);
+        String qrUrl = null;
 
         List<PaymentEvidenceResponse> evidenceResponses = pr.getEvidences().stream()
                 .map(this::toEvidenceResponse)
@@ -1297,8 +1067,20 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 pr.getConfirmedAt(),
                 pr.getRejectionReason(),
                 pr.getIssueNote(),
-                evidenceResponses
+                evidenceResponses,
+                isGatewayManaged(pr),
+                pr.isVietQrManaged(),
+                pr.getVietQrPayload()
         );
+    }
+
+    private boolean isGatewayManaged(PaymentRequest pr) {
+        PaymentType type = pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT;
+        return bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream()
+                .anyMatch(t -> t.getMethod() == PaymentMethod.VNPAY && t.getDirection() == PaymentDirection.IN
+                        && t.getType() == type
+                        && (t.getStatus() == PaymentStatus.PENDING || t.getStatus() == PaymentStatus.PAID));
     }
 
     private PaymentEvidenceResponse toEvidenceResponse(PaymentEvidence e) {

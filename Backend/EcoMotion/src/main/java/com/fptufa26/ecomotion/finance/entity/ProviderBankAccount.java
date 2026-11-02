@@ -56,6 +56,9 @@ public class ProviderBankAccount {
     @Column(nullable = false, length = 20)
     private BankAccountStatus status = BankAccountStatus.ACTIVE;
 
+    @Column(name = "vietqr_linked_at")
+    private Instant vietQrLinkedAt;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version = 0L;

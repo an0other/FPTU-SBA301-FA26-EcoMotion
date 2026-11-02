@@ -32,8 +32,35 @@ public record PaymentRequestResponse(
         Instant confirmedAt,
         String rejectionReason,
         String issueNote,
-        List<PaymentEvidenceResponse> evidences
+        List<PaymentEvidenceResponse> evidences,
+        boolean gatewayManaged,
+        boolean vietQrManaged,
+        String qrCodePayload
 ) {
+    public PaymentRequestResponse(Long id, String paymentCode, Long bookingId, String bookingCode,
+            PaymentRequestType paymentType, BigDecimal amount, BigDecimal paidAmount, BigDecimal remainingAmount,
+            String currency, String transferReference, String bankCodeSnapshot, String bankNameSnapshot,
+            String accountNumberSnapshot, String accountNumberMasked, String accountHolderSnapshot,
+            PaymentRequestStatus status, String qrCodeUrl, Instant expiresAt, Instant firstProofAt,
+            Instant reconciliationDeadline, Instant createdAt, Instant confirmedAt, String rejectionReason,
+            String issueNote, List<PaymentEvidenceResponse> evidences, boolean gatewayManaged) {
+        this(id, paymentCode, bookingId, bookingCode, paymentType, amount, paidAmount, remainingAmount, currency,
+                transferReference, bankCodeSnapshot, bankNameSnapshot, accountNumberSnapshot, accountNumberMasked,
+                accountHolderSnapshot, status, qrCodeUrl, expiresAt, firstProofAt, reconciliationDeadline,
+                createdAt, confirmedAt, rejectionReason, issueNote, evidences, gatewayManaged, false, null);
+    }
+    public PaymentRequestResponse(Long id, String paymentCode, Long bookingId, String bookingCode,
+            PaymentRequestType paymentType, BigDecimal amount, BigDecimal paidAmount, BigDecimal remainingAmount,
+            String currency, String transferReference, String bankCodeSnapshot, String bankNameSnapshot,
+            String accountNumberSnapshot, String accountNumberMasked, String accountHolderSnapshot,
+            PaymentRequestStatus status, String qrCodeUrl, Instant expiresAt, Instant firstProofAt,
+            Instant reconciliationDeadline, Instant createdAt, Instant confirmedAt, String rejectionReason,
+            String issueNote, List<PaymentEvidenceResponse> evidences) {
+        this(id, paymentCode, bookingId, bookingCode, paymentType, amount, paidAmount, remainingAmount, currency,
+                transferReference, bankCodeSnapshot, bankNameSnapshot, accountNumberSnapshot, accountNumberMasked,
+                accountHolderSnapshot, status, qrCodeUrl, expiresAt, firstProofAt, reconciliationDeadline,
+                createdAt, confirmedAt, rejectionReason, issueNote, evidences, false);
+    }
     public PaymentRequestResponse(
             Long id,
             Long bookingId,
