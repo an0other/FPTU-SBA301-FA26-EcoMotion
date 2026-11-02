@@ -123,7 +123,7 @@ public class AdminUserController {
     }
 
     private AdminUserDto mapUserDto(User user) {
-        return AdminUserDto.builder()
+        AdminUserDto.AdminUserDtoBuilder builder = AdminUserDto.builder()
                 .id(user.getId())
                 .email(user.getEmail())
                 .phone(user.getPhone())
@@ -132,8 +132,28 @@ public class AdminUserController {
                 .role(user.getRole())
                 .status(user.getStatus())
                 .ekycStatus(user.getEkycStatus())
-                .createdAt(user.getCreatedAt())
-                .build();
+                .createdAt(user.getCreatedAt());
+
+        if (user.getRole() == Role.DRIVER) {
+            userService.findDriverProfile(user.getId()).ifPresent(d -> {
+                builder.driverId(d.getId())
+                        .portraitUrl(d.getPortraitUrl())
+                        .licenseImageUrl(d.getLicenseImageUrl())
+                        .licenseNo(d.getLicenseNo())
+                        .licenseClass(d.getLicenseClass())
+                        .licenseExpiry(d.getLicenseExpiry())
+                        .driverStatus(d.getStatus());
+                if (d.getProvider() != null) {
+                    builder.providerId(d.getProvider().getId())
+                            .providerDisplayName(d.getProvider().getDisplayName());
+                }
+                if (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()) {
+                    builder.avatarUrl(d.getPortraitUrl());
+                }
+            });
+        }
+
+        return builder.build();
     }
 
     private AdminProviderDto mapProviderDto(Provider p) {
