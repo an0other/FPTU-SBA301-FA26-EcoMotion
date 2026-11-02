@@ -72,7 +72,10 @@ class AdminApiIntegrationTest {
                 .andExpect(jsonPath("$.data.selectedMonth").value(10))
                 .andExpect(jsonPath("$.data.monthlySummaries").isArray())
                 .andExpect(jsonPath("$.data.platformCommission").isNumber())
-                .andExpect(jsonPath("$.data.escrowDeposits").isNumber());
+                .andExpect(jsonPath("$.data.escrowDeposits").isNumber())
+                .andExpect(jsonPath("$.data.comparedToLabel").value("Tháng 09/2026"))
+                .andExpect(jsonPath("$.data.commissionGrowthRate").isNumber())
+                .andExpect(jsonPath("$.data.gmvGrowthRate").isNumber());
 
         // 2. Past month (Aug 2026) -> No active deposits exist, escrowDeposits must be 0
         mockMvc.perform(get("/api/admin/dashboard/stats?year=2026&month=8")
