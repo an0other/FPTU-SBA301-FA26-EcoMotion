@@ -166,8 +166,12 @@ public class DriverAvailabilityServiceImpl implements DriverAvailabilityService 
     }
 
     private Instant estimatedEnd(Booking booking, Integer slotLength, int quantity) {
-        if (booking.getPickupTime() == null || slotLength == null || slotLength <= 0 || quantity <= 0) return null;
-        Instant planned = booking.getPickupTime().plus(Duration.ofMinutes((long) slotLength * quantity));
+        if (booking.getPickupTime() == null) return null;
+        Instant planned = booking.getPlannedEndAt();
+        if (planned == null) {
+            if (slotLength == null || slotLength <= 0 || quantity <= 0) return null;
+            planned = booking.getPickupTime().plus(Duration.ofMinutes((long) slotLength * quantity));
+        }
         if (unfinishedTrip(booking) && booking.getActualStartAt() != null
                 && booking.getActualStartAt().isAfter(booking.getPickupTime())) {
             planned = planned.plus(Duration.between(booking.getPickupTime(), booking.getActualStartAt()));

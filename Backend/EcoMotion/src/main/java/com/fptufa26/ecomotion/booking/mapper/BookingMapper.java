@@ -31,6 +31,7 @@ import org.mapstruct.Named;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
 
 @Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
 public interface BookingMapper {
@@ -231,7 +232,11 @@ public interface BookingMapper {
                 disputeCategories,
                 providerName,
                 holdExpiresAt,
-                booking.getStatus() == BookingStatus.REJECTED ? booking.getOperationalResolutionReason() : null);
+                booking.getStatus() == BookingStatus.REJECTED ? booking.getOperationalResolutionReason() : null,
+                booking.getPricingItems().stream().map(item ->
+                        new RentalQuoteResponse.Item(
+                                item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
+                                item.getUnitPrice(), item.getQuantity())).toList());
     }
 
     @Mapping(target = "bookingCode", source = "booking.bookingCode")

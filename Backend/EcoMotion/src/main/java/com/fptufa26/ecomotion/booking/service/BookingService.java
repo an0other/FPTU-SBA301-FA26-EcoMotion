@@ -29,8 +29,14 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import com.fptufa26.ecomotion.booking.dto.request.RentalQuoteRequest;
+import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface BookingService {
+
+    RentalQuoteResponse quoteRental(
+            Long userId, RentalQuoteRequest request);
 
     PickupQuoteResponse quotePickup(PickupQuoteRequest request);
 
@@ -60,7 +66,7 @@ public interface BookingService {
 
     DisputeOpenedResponse openDispute(Long userId, String bookingCode, OpenDisputeRequest request);
 
-    String uploadDisputeEvidence(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file);
+    String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file);
 
     // Admin methods
     List<Booking> listAdminBookings(BookingStatus status, String keyword);

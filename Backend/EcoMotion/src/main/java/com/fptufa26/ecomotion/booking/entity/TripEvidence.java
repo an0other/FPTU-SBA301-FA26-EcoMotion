@@ -20,6 +20,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import com.fptufa26.ecomotion.user.entity.User;
 
 @Entity
 @Table(name = "trip_evidence")

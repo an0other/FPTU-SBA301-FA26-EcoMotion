@@ -1,3 +1,4 @@
+import { pricingDescription } from '../utils/rentalPricing'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import DriverLayout from '../components/driver/DriverLayout'
@@ -297,6 +298,8 @@ export default function DriverTripDetailPage() {
                   {formatTripTime(trip.scheduledPickupAt)}
                 </div>
                 <div className="text-slate-500 text-[11px]">{formatTripDate(trip.scheduledPickupAt)}</div>
+                  {trip.plannedEndAt ? <p className="text-xs">Trả xe: {formatTripDate(trip.plannedEndAt)} · {formatTripTime(trip.plannedEndAt)}</p> : null}
+                  {trip.pricingItems?.length > 0 ? <p className="text-xs">{pricingDescription(trip.pricingItems)}</p> : null}
               </div>
 
               <div className="rounded-xl bg-slate-50 p-3 space-y-1">

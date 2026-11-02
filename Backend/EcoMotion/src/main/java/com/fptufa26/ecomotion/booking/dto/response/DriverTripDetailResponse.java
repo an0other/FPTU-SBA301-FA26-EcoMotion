@@ -6,6 +6,7 @@ import com.fptufa26.ecomotion.booking.enums.CancelReason;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record DriverTripDetailResponse(
@@ -41,7 +42,9 @@ public record DriverTripDetailResponse(
         Instant actualArrivedAt,
         String executionStatus,
         TripLocationResponse latestLocation,
-        Instant assignmentExpiresAt
+        Instant assignmentExpiresAt,
+        Instant plannedEndAt,
+        List<RentalQuoteResponse.Item> pricingItems
 ) {
     public DriverTripDetailResponse(
             Long tripId,
@@ -99,7 +102,9 @@ public record DriverTripDetailResponse(
                 null,
                 status != null ? status.name() : null,
                 null,
-                null
+                null,
+                null,
+                List.of()
         );
     }
 

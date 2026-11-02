@@ -609,6 +609,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     }
 
     private Instant calculateBookingEndTime(Booking booking) {
+        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
                 .orElseThrow(() -> new ConflictException("Thiếu chính sách thời lượng đã chốt; chưa thể phân công"));
         Integer slotMinutes = snapshot.getSlotLengthMinutes();
