@@ -85,6 +85,10 @@ public class DevDataSeeder implements ApplicationRunner {
 
     public static final String DEFAULT_PASSWORD = "EcoMotion@123";
 
+    private final RenterPaymentDataSeeder renterPaymentDataSeeder;
+    private final RenterReviewDataSeeder renterReviewDataSeeder;
+    private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
+
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
 
@@ -129,8 +133,6 @@ public class DevDataSeeder implements ApplicationRunner {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final DisputeRepository disputeRepository;
     private final ScheduleService scheduleService;
-    private final RenterPaymentDataSeeder renterPaymentDataSeeder;
-    private final RenterReviewDataSeeder renterReviewDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
 
     private record PlanPrices(String hourly, String daily, String monthly) {
@@ -278,6 +280,7 @@ public class DevDataSeeder implements ApplicationRunner {
         realignPinnedIdentitySequences();
         renterReviewDataSeeder.seed();
         realignPinnedIdentitySequences();
+        renterYearlyBookingDataSeeder.seed();
     }
 
     private void seedBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
