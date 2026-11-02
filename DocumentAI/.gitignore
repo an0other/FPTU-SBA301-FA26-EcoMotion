@@ -22,6 +22,7 @@ storage/
 *.log
 /training/
 /evaluation/*.local.json
+/evaluation/local.json
 *.pt
 *.pth
 *.ckpt
