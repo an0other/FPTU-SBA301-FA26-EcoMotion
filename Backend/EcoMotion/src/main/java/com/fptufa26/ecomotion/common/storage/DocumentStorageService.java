@@ -10,4 +10,6 @@ public interface DocumentStorageService {
             String contentType);
 
     byte[] read(String storedPath);
+
+    void delete(String storedPath);
 }

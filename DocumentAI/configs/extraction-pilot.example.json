@@ -1,0 +1,121 @@
+{
+  "id": "vn-gplx-pet-extraction-pilot",
+  "version": "0.4.0-draft",
+  "document_type": "VN_DRIVING_LICENSE",
+  "validated": false,
+  "required_sides": [
+    "FRONT",
+    "BACK"
+  ],
+  "limits": {
+    "max_bytes": 8388608,
+    "max_pixels": 20000000
+  },
+  "quality": {
+    "min_short_side": 400,
+    "min_laplacian_variance": 60,
+    "max_dark_fraction": 0.65,
+    "max_bright_fraction": 0.8,
+    "calibrated": false
+  },
+  "templates": {
+    "FRONT": {
+      "reference": null,
+      "min_inlier_ratio": 0.6
+    },
+    "BACK": {
+      "reference": null,
+      "min_inlier_ratio": 0.6
+    }
+  },
+  "forensics": {
+    "mode": "disabled",
+    "thresholds_validated": false
+  },
+  "diagnostic_metrics": false,
+  "ocr": {
+    "engine": "paddle",
+    "version": "PP-OCRv5",
+    "lang": "vi",
+    "device": "cpu"
+  },
+  "fields": [
+    {
+      "name": "licenseNo",
+      "side": "FRONT",
+      "roi": [
+        0.5,
+        0.2,
+        0.95,
+        0.34
+      ],
+      "kind": "identifier",
+      "pattern": "\\b[0-9]{12}\\b",
+      "validation_pattern": "[0-9]{12}",
+      "required": true,
+      "require_agreement": true
+    },
+    {
+      "name": "fullName",
+      "side": "FRONT",
+      "roi": [
+        0.6,
+        0.32,
+        0.95,
+        0.41
+      ],
+      "kind": "text",
+      "required": true,
+      "require_agreement": true
+    },
+    {
+      "name": "dateOfBirth",
+      "side": "FRONT",
+      "roi": [
+        0.6,
+        0.4,
+        0.95,
+        0.49
+      ],
+      "kind": "date",
+      "pattern": "\\d{2}/\\d{2}/\\d{4}",
+      "required": true,
+      "require_agreement": true
+    },
+    {
+      "name": "licenseClass",
+      "side": "FRONT",
+      "roi": [
+        0,
+        0.76,
+        0.4,
+        0.87
+      ],
+      "kind": "text",
+      "pattern": "\\b(?:A1|A2|B1|B2|B|C|D|E|F)\\b",
+      "required": true,
+      "require_agreement": true
+    },
+    {
+      "name": "expiry",
+      "side": "FRONT",
+      "roi": [
+        0.24,
+        0.87,
+        0.65,
+        0.98
+      ],
+      "kind": "expiry",
+      "required": true,
+      "require_agreement": true
+    }
+  ],
+  "qr": {
+    "BACK": {
+      "enabled": true,
+      "required": true
+    }
+  },
+  "comparisons": [],
+  "rules": []
+}

@@ -76,6 +76,14 @@ export default function App() {
         }
       />
       <Route
+        path="/payment/vnpay/return"
+        element={
+          <BookingShell>
+            <VnpayCallbackPage />
+          </BookingShell>
+        }
+      />
+      <Route
         path="/payment/success"
         element={
           <BookingShell>

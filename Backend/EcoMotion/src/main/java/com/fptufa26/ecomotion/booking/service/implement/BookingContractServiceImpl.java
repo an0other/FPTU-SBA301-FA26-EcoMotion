@@ -10,22 +10,32 @@ import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.service.BookingContractService;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.common.storage.FileStorageException;
+import com.fptufa26.ecomotion.common.storage.DocumentStorageService;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
+import com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
-import com.fptufa26.ecomotion.common.storage.DocumentStorageService;
 import com.fptufa26.ecomotion.booking.dto.response.BookingContractStatusResponse;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.Arrays;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class BookingContractServiceImpl implements BookingContractService {
 
     private static final String STORAGE_ENTITY = "booking";
@@ -35,16 +45,28 @@ public class BookingContractServiceImpl implements BookingContractService {
     private final BookingRepository bookingRepository;
     private final BookingPolicySnapshotRepository snapshotRepository;
     private final DocumentStorageService documentStorageService;
+    private final PaymentRequestService paymentRequestService;
+    private final ScheduleService scheduleService;
+    private final BookingNotificationService bookingNotificationService;
+    private final Clock clock;
     private final long maxBytes;
 
     public BookingContractServiceImpl(
             BookingRepository bookingRepository,
             BookingPolicySnapshotRepository snapshotRepository,
             DocumentStorageService documentStorageService,
+            PaymentRequestService paymentRequestService,
+            ScheduleService scheduleService,
+            BookingNotificationService bookingNotificationService,
+            Clock clock,
             @Value("${app.upload.max-file-size-bytes:8388608}") long maxBytes) {
         this.bookingRepository = bookingRepository;
         this.snapshotRepository = snapshotRepository;
         this.documentStorageService = documentStorageService;
+        this.paymentRequestService = paymentRequestService;
+        this.scheduleService = scheduleService;
+        this.bookingNotificationService = bookingNotificationService;
+        this.clock = clock;
         this.maxBytes = maxBytes;
     }
 
@@ -70,12 +92,12 @@ public class BookingContractServiceImpl implements BookingContractService {
                 && storedPath.startsWith(STORAGE_ENTITY + "/" + userId + "/")
                 && storedPath.endsWith(".pdf");
 
-        boolean canUpload =
-                booking.getStatus() == BookingStatus.ACCEPTED;
+        boolean canUpload = booking.getStatus() == BookingStatus.ACCEPTED
+                && scheduleService.hasUnexpiredHold(booking.getId(), clock.instant());
 
         String restrictionReason = canUpload
                 ? null
-                : "Chỉ được upload hoặc thay hợp đồng khi đơn đã được chấp nhận và chưa xác nhận thanh toán.";
+                : "Chỉ upload hợp đồng sau khi nhà cung cấp chấp nhận và trong thời gian giữ lịch.";
 
         return new BookingContractStatusResponse(
                 booking.getBookingCode(),
@@ -109,6 +131,12 @@ public class BookingContractServiceImpl implements BookingContractService {
             throw new BookingContractNotAllowedException(
                     "Contract upload requires an accepted booking");
         }
+        if (!scheduleService.hasUnexpiredHold(booking.getId(), clock.instant())) {
+            throw new BookingContractNotAllowedException(
+                    "Thời hạn giữ xe đã hết. Vui lòng gửi yêu cầu thuê năm mới.");
+        }
+        DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
+                booking.getRenter(), booking.getVehicle(), booking.getPickupTime(), booking.getPlannedEndAt());
 
         byte[] content = readPdf(file);
         String filename = "contract-" + UUID.randomUUID() + ".pdf";
@@ -120,8 +148,13 @@ public class BookingContractServiceImpl implements BookingContractService {
                 content,
                 MediaType.APPLICATION_PDF_VALUE);
 
+        registerRollbackCleanup(storedPath);
         booking.setContractUrl(storedPath);
+        booking.setStatus(BookingStatus.AWAITING_DEPOSIT);
         bookingRepository.flush();
+        PaymentRequest paymentRequest = paymentRequestService.createDepositPaymentRequest(booking);
+        scheduleService.renewHold(booking.getId(), paymentRequest.getExpiresAt());
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
         return new BookingContractResponse(
                 booking.getBookingCode(),
@@ -169,6 +202,21 @@ public class BookingContractServiceImpl implements BookingContractService {
             throw new BookingContractNotAllowedException(
                     "This endpoint only supports yearly bookings");
         }
+    }
+
+    private void registerRollbackCleanup(String storedPath) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    try {
+                        documentStorageService.delete(storedPath);
+                    } catch (RuntimeException ex) {
+                        log.error("Could not clean up a contract after transaction rollback", ex);
+                    }
+                }
+            }
+        });
     }
 
     private byte[] readPdf(MultipartFile file) {

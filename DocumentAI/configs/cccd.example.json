@@ -1,0 +1,43 @@
+{
+  "id": "vn-cccd-single-template-draft",
+  "version": "0.1-draft",
+  "document_type": "VN_ID_CARD",
+  "validated": false,
+  "required_sides": [
+    "FRONT",
+    "BACK"
+  ],
+  "limits": {
+    "max_bytes": 8388608,
+    "max_pixels": 20000000
+  },
+  "quality": {
+    "min_short_side": 400,
+    "min_laplacian_variance": 60,
+    "max_dark_fraction": 0.65,
+    "max_bright_fraction": 0.8,
+    "calibrated": false
+  },
+  "templates": {
+    "FRONT": {
+      "reference": null,
+      "min_inlier_ratio": 0.6
+    },
+    "BACK": {
+      "reference": null,
+      "min_inlier_ratio": 0.6
+    }
+  },
+  "forensics": {
+    "mode": "disabled",
+    "thresholds_validated": false
+  },
+  "diagnostic_metrics": true,
+  "ocr": {
+    "device": "cpu"
+  },
+  "fields": [],
+  "qr": {},
+  "comparisons": [],
+  "rules": []
+}

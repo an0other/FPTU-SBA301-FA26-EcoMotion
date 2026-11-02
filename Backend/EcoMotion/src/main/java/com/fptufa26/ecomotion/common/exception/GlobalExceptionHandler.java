@@ -48,6 +48,8 @@ import com.fptufa26.ecomotion.user.exception.RenterProfileNotFoundException;
 import com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException;
 import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
 import com.fptufa26.ecomotion.verification.ekyc.exception.EkycFailedException;
+import com.fptufa26.ecomotion.verification.documentai.DocumentAiReadRejectedException;
+import com.fptufa26.ecomotion.verification.documentai.DocumentAiUnavailableException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -282,6 +284,24 @@ public class GlobalExceptionHandler {
                 request.getMethod(), request.getRequestURI(), ex.getMessage());
 
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(DocumentAiReadRejectedException.class)
+    public ResponseEntity<ErrorResponse> handleDocumentAiReadRejected(
+            DocumentAiReadRejectedException ex,
+            HttpServletRequest request) {
+        log.warn("DocumentAI rejected a driving-license read on {} {}: {}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(DocumentAiUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleDocumentAiUnavailable(
+            DocumentAiUnavailableException ex,
+            HttpServletRequest request) {
+        log.error("DocumentAI is unavailable on {} {}",
+                request.getMethod(), request.getRequestURI(), ex);
+        return build(HttpStatus.BAD_GATEWAY, ex.getMessage(), request);
     }
 
     @ExceptionHandler(NotificationDeliveryException.class)

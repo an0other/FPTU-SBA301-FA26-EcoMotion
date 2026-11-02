@@ -57,17 +57,36 @@ public class Renter {
     @Column(name = "portrait_url", length = 500)
     private String portraitUrl;
 
-    @Column(name = "license_no", length = 20)
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "license_no", length = 255)
     private String licenseNo;
+
+    @Column(name = "license_full_name", length = 255)
+    private String licenseFullName;
+
+    @Column(name = "license_date_of_birth")
+    private LocalDate licenseDateOfBirth;
 
     @Column(name = "license_class", length = 10)
     private String licenseClass;
 
+    @Column(name = "license_issue_date")
+    private LocalDate licenseIssueDate;
+
     @Column(name = "license_expiry")
     private LocalDate licenseExpiry;
 
+    @Column(name = "license_expiry_unlimited", nullable = false)
+    private boolean licenseExpiryUnlimited;
+
     @Column(name = "license_verified", nullable = false)
     private boolean licenseVerified;
+
+    @Column(name = "license_front_image_path", length = 500)
+    private String licenseFrontImagePath;
+
+    @Column(name = "license_back_image_path", length = 500)
+    private String licenseBackImagePath;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

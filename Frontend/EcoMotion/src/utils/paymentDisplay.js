@@ -1,24 +1,25 @@
 export const PAYMENT_TYPE_LABELS = {
   DEPOSIT_PAY: 'Thanh toán cọc',
   UPFRONT_PAY: 'Trả trước gói năm',
-  SETTLEMENT: 'Thanh toán còn lại',
+  SETTLEMENT: 'Thanh toán tiền thuê / quyết toán',
   REFUND: 'Hoàn tiền',
 }
 
 export const PAYMENT_METHOD_LABELS = {
   CASH: 'Tiền mặt',
-  BANK_TRANSFER: 'Chuyển khoản',
+  BANK_TRANSFER: 'Chuyển khoản ngân hàng',
   E_WALLET: 'Ví điện tử',
   CARD: 'Thẻ',
+  VNPAY: 'VNPAY',
 }
 
 export const CHARGE_TYPE_LABELS = {
   BASE_RENTAL: 'Tiền thuê',
-  DEPOSIT: 'Cọc giữ chỗ',
+  DEPOSIT: 'Tiền đặt cọc',
   OVERTIME: 'Phụ phí quá giờ',
-  WAITING: 'Phụ phí chờ',
-  WEEKEND: 'Phụ phí cuối tuần / lễ',
-  OUT_OF_RADIUS: 'Phụ phí đón ngoài bán kính',
+  WAITING: 'Phụ phí thời gian chờ',
+  WEEKEND: 'Phụ phí cuối tuần / ngày lễ',
+  OUT_OF_RADIUS: 'Phụ phí giao xe ngoài khu vực miễn phí',
 }
 
 export const BOOKING_STATUS_LABELS = {
@@ -77,14 +78,30 @@ export function formatAppliedRate(value) {
 export function formatChargeQuantity(charge) {
   if (charge.quantity == null) return '—'
 
-  const units = {
-    BASE_RENTAL: 'slot',
-    OVERTIME: 'slot',
-    WAITING: 'phút',
-    OUT_OF_RADIUS: 'km',
+  if (charge.chargeType === 'BASE_RENTAL' && charge.planType === 'YEARLY') {
+    return `${charge.quantity} kỳ (tháng)`
   }
 
+  if (charge.chargeType === 'BASE_RENTAL') {
+    return `${charge.quantity} lượt thuê`
+  }
+
+  const units = { OVERTIME: 'lượt', WAITING: 'phút', OUT_OF_RADIUS: 'km' }
+
   return `${charge.quantity} ${units[charge.chargeType] ?? ''}`.trim()
+}
+
+export function formatChargeDescription(charge, planType) {
+  const description = charge.description?.trim()
+  if (
+    planType === 'YEARLY'
+    && description === 'Yearly rental fee, paid in 12 monthly installments (demo seed)'
+  ) {
+    return 'Tiền thuê gói năm, chia thành 12 kỳ hằng tháng. Kỳ cuối được điều chỉnh để khớp tổng tiền theo hợp đồng.'
+  }
+  const rentalSlots = /^Thuê (\d+) slot$/i.exec(description || '')
+  if (rentalSlots) return `Tiền thuê cho ${rentalSlots[1]} lượt đã chọn.`
+  return description || 'Khoản phí theo đơn thuê.'
 }
 
 export function isPaymentRequestExpired(request, now = Date.now()) {

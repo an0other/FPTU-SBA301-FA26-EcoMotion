@@ -1,0 +1,4 @@
+{
+  "VN_DRIVING_LICENSE": {"documentNumber": null, "fullName": null, "dateOfBirth": null, "licenseClass": null, "issueDate": null, "expiryDate": null},
+  "VN_CITIZEN_ID": {"documentNumber": null, "fullName": null, "dateOfBirth": null, "sex": null, "issueDate": null, "expiryDate": null}
+}

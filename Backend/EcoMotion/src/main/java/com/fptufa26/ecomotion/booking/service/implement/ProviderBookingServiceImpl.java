@@ -54,6 +54,7 @@ import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import com.fptufa26.ecomotion.user.service.DriverAssignmentService;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy;
 import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleDetailResponse;
@@ -420,6 +421,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
         BookingPolicySnapshot snapshot = bookingPolicySnapshotRepository.findByBooking_Id(booking.getId())
                 .orElse(null);
+        boolean yearly = booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY;
         int slots = bookingChargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
                 .map(BookingCharge::getQuantity)
                 .orElse(1);
@@ -428,18 +430,28 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 : booking.getPlan().getSlotLengthMinutes();
         Instant end = booking.getPlannedEndAt() != null ? booking.getPlannedEndAt() : booking.getPickupTime().plus(
                 Duration.ofMinutes((long) slotLengthMinutes * Math.max(1, slots)));
+        if (yearly) {
+            if (!scheduleService.hasUnexpiredHold(booking.getId(), clock.instant())) {
+                throw new ConflictException("Thời hạn yêu cầu thuê năm đã hết. Người thuê cần gửi yêu cầu mới.");
+            }
+            DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
+                    booking.getRenter(), booking.getVehicle(), booking.getPickupTime(), end);
+            scheduleService.release(booking.getId());
+        }
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
                 booking.getVehicle(), booking.getPickupTime(), end);
         if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
             throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn");
         }
 
-        booking.setStatus(BookingStatus.AWAITING_DEPOSIT);
+        booking.setStatus(yearly ? BookingStatus.ACCEPTED : BookingStatus.AWAITING_DEPOSIT);
         Booking saved = bookingRepository.save(booking);
         scheduleService.hold(booking.getVehicle(), booking, booking.getPickupTime(), end,
-                clock.instant().plus(Duration.ofMinutes(15)));
+                clock.instant().plus(yearly ? Duration.ofHours(24) : Duration.ofMinutes(15)));
 
-        paymentRequestService.createDepositPaymentRequest(saved);
+        if (!yearly) {
+            paymentRequestService.createDepositPaymentRequest(saved);
+        }
         bookingNotificationService.changed(saved, "BOOKING_CHANGED");
 
         Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(saved.getVehicle().getId()));
@@ -1453,6 +1465,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 case PROVIDER_NO_DRIVER -> "Nhà cung cấp không thể bố trí tài xế";
                 case PREVIOUS_RENTER_OVERDUE -> "Xe của chuyến trước chưa về kịp";
                 case DEPOSIT_TIMEOUT -> "Quá hạn đặt cọc";
+                case YEARLY_REQUEST_TIMEOUT -> "Hết thời gian chờ nhà cung cấp duyệt yêu cầu thuê năm";
+                case YEARLY_CONTRACT_TIMEOUT -> "Hết thời gian tải hợp đồng thuê năm";
                 case FORCE_MAJEURE -> "Sự kiện bất khả kháng";
                 case SYSTEM -> "Hệ thống hủy để bảo đảm an toàn dữ liệu";
             };

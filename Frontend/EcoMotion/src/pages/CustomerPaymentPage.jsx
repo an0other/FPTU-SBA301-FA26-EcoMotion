@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import Toast from '../components/Toast'
 import { BookingErrorDialog } from '../components/booking/BookingErrorDialog'
 import { HoldCountdown } from '../components/payments/HoldCountdown'
@@ -24,6 +24,8 @@ const STATUS_BADGES = {
 
 export default function CustomerPaymentPage() {
   const { bookingCode } = useParams()
+  const location = useLocation()
+  const yearlyUpfront = new URLSearchParams(location.search).get('yearly') === 'true'
   const bookingIdentifier = String(bookingCode ?? '').trim().toUpperCase()
   const navigate = useNavigate()
 
@@ -47,11 +49,15 @@ export default function CustomerPaymentPage() {
       const data = await providerFinanceService.getPaymentRequestsByBooking(bookingIdentifier)
       setRequests(data || [])
       if (data && data.length > 0) {
+        const payableStatuses = ['PENDING', 'REJECTED', 'PARTIALLY_PAID']
+        const activeMonthly = data.find((request) => request.paymentType === 'MONTHLY_INSTALLMENT'
+          && payableStatuses.includes(request.status))
         const activeFinal = data.find((request) => request.paymentType === 'FINAL_BALANCE'
-          && request.status !== 'VOIDED')
+          && payableStatuses.includes(request.status))
         const activeDeposit = data.find((request) => request.paymentType === 'DEPOSIT'
-          && request.status !== 'VOIDED')
-        const current = activeFinal || activeDeposit || data[0]
+          && payableStatuses.includes(request.status))
+        const current = activeMonthly || activeFinal || activeDeposit
+          || data.find((request) => request.status !== 'VOIDED') || data[0]
         setSelectedRequest(current)
       }
     } catch (err) {
@@ -126,9 +132,12 @@ export default function CustomerPaymentPage() {
     setInlineError(null)
     try {
       const isFinal = selectedRequest?.paymentType === 'FINAL_BALANCE'
+      const isMonthlyInstallment = selectedRequest?.paymentType === 'MONTHLY_INSTALLMENT'
       const res = await paymentService.createVnpayPaymentUrl({
         bookingCode: bookingIdentifier,
-        paymentType: isFinal ? 'FINAL_PAYMENT' : 'DEPOSIT',
+        paymentType: isMonthlyInstallment
+          ? 'MONTHLY_INSTALLMENT'
+          : isFinal ? 'FINAL_PAYMENT' : 'DEPOSIT',
         language: 'vn',
       })
       if (res?.paymentUrl) {
@@ -152,7 +161,12 @@ export default function CustomerPaymentPage() {
       await providerFinanceService.reissueDepositPayment(bookingIdentifier)
       await fetchPaymentRequests()
       setCurrentTime(Date.now())
-      setToast({ message: 'Đã cấp lại yêu cầu thanh toán cọc', type: 'success' })
+      setToast({
+        message: yearlyUpfront
+          ? 'Đã cấp lại yêu cầu thanh toán khoản trả trước'
+          : 'Đã cấp lại yêu cầu thanh toán cọc',
+        type: 'success',
+      })
     } catch (err) {
       setToast({ message: err.message || 'Không thể cấp lại yêu cầu thanh toán', type: 'error' })
     }
@@ -205,8 +219,17 @@ export default function CustomerPaymentPage() {
   const requestExpired = isPaymentRequestExpired(selectedRequest)
   const isDeposit = selectedRequest.paymentType === 'DEPOSIT'
   const isFinalBalance = selectedRequest.paymentType === 'FINAL_BALANCE'
-  const paymentTitle = isDeposit ? 'Thanh toán tiền đặt cọc' : isFinalBalance ? 'Thanh toán quyết toán' : 'Thanh toán đơn thuê'
-  const currentBadge = STATUS_BADGES[selectedRequest.status]
+  const isMonthlyInstallment = selectedRequest.paymentType === 'MONTHLY_INSTALLMENT'
+  const paymentTitle = isMonthlyInstallment
+    ? 'Thanh toán kỳ thuê tháng'
+    : isDeposit
+      ? yearlyUpfront ? 'Thanh toán khoản trả trước gói năm' : 'Thanh toán tiền đặt cọc'
+      : isFinalBalance ? 'Thanh toán quyết toán' : 'Thanh toán đơn thuê'
+  const currentBadge = isMonthlyInstallment && selectedRequest.status === 'PENDING'
+    ? { label: 'Chờ thanh toán kỳ tháng', bg: STATUS_BADGES.PENDING.bg }
+    : yearlyUpfront && selectedRequest.status === 'PENDING'
+      ? { label: 'Chờ thanh toán trả trước', bg: STATUS_BADGES.PENDING.bg }
+    : STATUS_BADGES[selectedRequest.status]
     || { label: selectedRequest.status, bg: 'bg-slate-100 text-slate-700 border-slate-300' }
 
   return (
@@ -250,7 +273,10 @@ export default function CustomerPaymentPage() {
               </div>
             )}
             {selectedRequest.expiresAt && !['CONFIRMED', 'VOIDED'].includes(selectedRequest.status) && (
-              <HoldCountdown expiresAt={selectedRequest.expiresAt} label="Thời hạn giữ chỗ" />
+              <HoldCountdown
+                expiresAt={selectedRequest.expiresAt}
+                label={isMonthlyInstallment ? 'Hạn thanh toán kỳ này' : 'Thời hạn giữ chỗ'}
+              />
             )}
           </div>
         </header>
@@ -268,7 +294,11 @@ export default function CustomerPaymentPage() {
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {req.paymentType === 'DEPOSIT' ? 'Tiền cọc' : 'Quyết toán'} · {formatPaymentMoney(req.amount)}
+                {req.paymentType === 'MONTHLY_INSTALLMENT'
+                  ? 'Kỳ thuê tháng'
+                  : req.paymentType === 'DEPOSIT'
+                    ? yearlyUpfront ? 'Trả trước gói năm' : 'Tiền cọc'
+                    : 'Quyết toán'} · {formatPaymentMoney(req.amount)}
               </button>
             ))}
           </div>
@@ -410,7 +440,9 @@ export default function CustomerPaymentPage() {
               <div>
                 <strong className="block font-bold">Xác nhận thanh toán tự động</strong>
                 <p className="mt-0.5 text-emerald-800">
-                  Sau khi bạn chuyển khoản thành công với đúng nội dung trên, hệ thống sẽ tự động đối soát và cập nhật đơn thuê sang trạng thái <strong>ĐÃ XÁC NHẬN</strong>. Bạn không cần chụp ảnh màn hình hay tải biên lai thủ công.
+                  {isMonthlyInstallment
+                    ? 'Sau khi nhà cung cấp xác nhận giao dịch, hệ thống sẽ cập nhật kỳ thanh toán này; trạng thái hợp đồng thuê đang diễn ra không thay đổi.'
+                    : 'Sau khi bạn chuyển khoản thành công với đúng nội dung trên, hệ thống sẽ tự động đối soát và cập nhật đơn thuê sang trạng thái ĐÃ XÁC NHẬN. Bạn không cần chụp ảnh màn hình hay tải biên lai thủ công.'}
                 </p>
               </div>
             </div>
@@ -439,7 +471,7 @@ export default function CustomerPaymentPage() {
           <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row sm:justify-end">
             {requestExpired && selectedRequest.paymentType === 'DEPOSIT' ? (
               <button type="button" onClick={handleReissue} className="rounded-xl border border-brand-600 px-5 py-2.5 text-sm font-semibold text-brand-800 hover:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-500/40">
-                Cấp lại yêu cầu thanh toán
+                {yearlyUpfront ? 'Cấp lại yêu cầu trả trước' : 'Cấp lại yêu cầu thanh toán'}
               </button>
             ) : null}
 
