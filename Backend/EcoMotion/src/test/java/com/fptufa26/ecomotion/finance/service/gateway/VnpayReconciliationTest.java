@@ -93,4 +93,30 @@ class VnpayReconciliationTest {
         config.setQueryTimeout(Duration.ofMillis(100));
         assertThat(new VnpayPaymentGatewayStrategy(config).queryTransaction("ref", Instant.now(), Instant.now())).isEmpty();
     }
+
+    @Test
+    void gatewayReadTimeoutNeverManufacturesSuccess() throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/timeout", exchange -> {
+            try {
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        try {
+            var config = new VnpayConfig();
+            config.setHashSecret(secret); config.setTmnCode("TEST"); config.setReconciliationEnabled(true);
+            config.setApiUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/timeout");
+            config.setQueryTimeout(Duration.ofMillis(100));
+            assertThat(new VnpayPaymentGatewayStrategy(config).queryTransaction("ref", Instant.now(), Instant.now())).isEmpty();
+        } finally {
+            release.countDown();
+            server.stop(0);
+        }
+    }
 }

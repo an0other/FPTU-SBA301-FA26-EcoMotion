@@ -462,6 +462,7 @@ class EndUserWorkflowIntegrationTest {
         params.put("vnp_TmnCode", config.getTmnCode()); params.put("vnp_TxnRef", session.vnpTxnRef());
         params.put("vnp_Amount", session.amount().movePointRight(2).toBigIntegerExact().toString());
         params.put("vnp_ResponseCode", "00"); params.put("vnp_TransactionStatus", "00");
+        params.put("vnp_TransactionNo", "123456789");
         params.put("vnp_SecureHash", com.fptufa26.ecomotion.finance.config.VnpayUtils.hmacSHA512(config.getHashSecret(),
                 com.fptufa26.ecomotion.finance.config.VnpayUtils.buildHashData(params)));
         return params;

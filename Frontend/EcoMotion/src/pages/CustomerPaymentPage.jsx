@@ -33,7 +33,7 @@ export default function CustomerPaymentPage() {
   const [error, setError] = useState(null)
   const [toast, setToast] = useState({ message: '', type: 'success' })
   const [currentTime, setCurrentTime] = useState(() => Date.now())
-  const [payMethod, setPayMethod] = useState('vietqr')
+  const [payMethod, setPayMethod] = useState('vnpay')
   const [paymentCreating, setPaymentCreating] = useState(false)
   const [checkingStatus, setCheckingStatus] = useState(false)
   const [inlineError, setInlineError] = useState(null)
@@ -280,6 +280,7 @@ export default function CustomerPaymentPage() {
             <button
               type="button"
               onClick={() => setPayMethod('vietqr')}
+              disabled={selectedRequest.gatewayManaged}
               className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
                 payMethod === 'vietqr'
                   ? 'border-brand-600 bg-brand-50/50 shadow-xs ring-1 ring-brand-600'
@@ -291,7 +292,7 @@ export default function CustomerPaymentPage() {
               </div>
               <div>
                 <strong className="block text-sm text-[#14221A]">Chuyển khoản VietQR</strong>
-                <span className="mt-0.5 block text-xs text-slate-500">Quét mã QR qua ứng dụng ngân hàng, tự động đối soát</span>
+                <span className="mt-0.5 block text-xs text-slate-500">Chuyển khoản trực tiếp, nhà cung cấp đối soát</span>
               </div>
             </button>
 
@@ -315,7 +316,7 @@ export default function CustomerPaymentPage() {
           </div>
         </div>
 
-        {payMethod === 'vietqr' ? (
+        {payMethod === 'vietqr' && !selectedRequest.gatewayManaged ? (
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
               {/* QR Code */}
@@ -443,7 +444,7 @@ export default function CustomerPaymentPage() {
               </button>
             ) : null}
 
-            {payMethod === 'vnpay' ? (
+            {payMethod === 'vnpay' || selectedRequest.gatewayManaged ? (
               <button
                 type="button"
                 onClick={handlePayWithVnpay}

@@ -719,6 +719,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
 
         return new PaymentRequestResponse(
                 pr.getId(),
+                pr.getPaymentCode(),
                 pr.getBooking().getId(),
                 pr.getBooking().getBookingCode(),
                 pr.getPaymentType(),
@@ -741,7 +742,13 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 pr.getConfirmedAt(),
                 pr.getRejectionReason(),
                 pr.getIssueNote(),
-                evidenceResponses
+                evidenceResponses,
+                bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream()
+                        .anyMatch(t -> t.getMethod() == PaymentMethod.VNPAY
+                                && t.getType() == (pr.getPaymentType() == com.fptufa26.ecomotion.finance.enums.PaymentRequestType.DEPOSIT
+                                    ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT)
+                                && t.getDirection() == PaymentDirection.IN
+                                && (t.getStatus() == PaymentStatus.PENDING || t.getStatus() == PaymentStatus.PAID))
         );
     }
 

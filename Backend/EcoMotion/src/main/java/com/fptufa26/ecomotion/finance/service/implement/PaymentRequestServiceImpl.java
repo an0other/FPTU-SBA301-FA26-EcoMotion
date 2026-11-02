@@ -295,7 +295,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     public PaymentRequestResponse getPaymentRequestDetail(Long paymentRequestId, Long currentUserId) {
-        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId)
+        PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
         validateAccessToBooking(pr.getBooking(), currentUserId);
@@ -583,6 +583,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
         if (pr.getPaymentType() != PaymentRequestType.DEPOSIT && pr.getPaymentType() != PaymentRequestType.FINAL_BALANCE) {
             throw new InvalidPaymentOperationException("Loại yêu cầu không hỗ trợ xác nhận chuyển khoản");
+        }
+        if (isGatewayManaged(pr)) {
+            throw new InvalidPaymentOperationException("VNPay đang xử lý hoặc đã thu tiền; chỉ cổng thanh toán được xác minh giao dịch này");
         }
         if (pr.getStatus() == PaymentRequestStatus.CONFIRMED
                 || bookingPaymentLedgerService.listTransactions(booking.getId()).stream().anyMatch(t ->
@@ -1297,8 +1300,18 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 pr.getConfirmedAt(),
                 pr.getRejectionReason(),
                 pr.getIssueNote(),
-                evidenceResponses
+                evidenceResponses,
+                isGatewayManaged(pr)
         );
+    }
+
+    private boolean isGatewayManaged(PaymentRequest pr) {
+        PaymentType type = pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT;
+        return bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream()
+                .anyMatch(t -> t.getMethod() == PaymentMethod.VNPAY && t.getDirection() == PaymentDirection.IN
+                        && t.getType() == type
+                        && (t.getStatus() == PaymentStatus.PENDING || t.getStatus() == PaymentStatus.PAID));
     }
 
     private PaymentEvidenceResponse toEvidenceResponse(PaymentEvidence e) {

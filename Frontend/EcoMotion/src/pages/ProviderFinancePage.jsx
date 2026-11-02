@@ -932,7 +932,10 @@ export default function ProviderFinancePage() {
                                   Biên lai
                                 </button>
                               )}
-                              {pr.status !== 'CONFIRMED' && (
+                              {pr.gatewayManaged && (
+                                <span className="text-xs text-slate-600">VNPay tự động xác minh</span>
+                              )}
+                              {pr.status !== 'CONFIRMED' && !pr.gatewayManaged && (
                                 <>
                                   <button
                                     type="button"
@@ -950,6 +953,10 @@ export default function ProviderFinancePage() {
                                   >
                                     Từ chối
                                   </button>
+                                </>
+                              )}
+                              {pr.status !== 'CONFIRMED' && (
+                                <>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenReportIssueModal(pr)}
