@@ -50,7 +50,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/vehicles", "/api/vehicles/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/location/map", "/api/location/map/reverse",
                                 "/api/location/map/search").permitAll()
-                        .requestMatchers("/api/v1/payment/vnpay/**", "/api/payment/vnpay/**", "/v1/payment/vnpay/**", "/payment/vnpay/**").permitAll()
+                        .requestMatchers("/api/v1/payment/vnpay/ipn", "/api/payment/vnpay/ipn", "/v1/payment/vnpay/ipn", "/payment/vnpay/ipn",
+                                "/api/v1/payment/vnpay/callback", "/api/payment/vnpay/callback", "/v1/payment/vnpay/callback", "/payment/vnpay/callback").permitAll()
                         .requestMatchers("/api/admin/**", "/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/provider/**", "/api/v1/provider/**").hasAnyRole("PROVIDER", "ADMIN")
                         .requestMatchers("/api/driver/**", "/api/v1/driver/**").hasRole("DRIVER")

@@ -16,7 +16,6 @@ const DISPUTE_LABELS = {
 
 export const BookingDetail = ({
   booking,
-  operationalRisk,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
@@ -159,13 +158,7 @@ export const BookingDetail = ({
           </div>
         </div>
         {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
-        {operationalRisk?.atRisk && (
-          <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            <p className="font-bold">Nguy cơ xe về trễ</p>
-            <p className="mt-1">{operationalRisk.message}</p>
-            <p className="mt-1 text-xs">Nhà xe cần xử lý. Đổi xe hoặc giờ đón chỉ áp dụng khi bạn đồng ý phương án; khoản tiền đã nhận vẫn được theo dõi và hoàn theo chính sách nếu đơn không thực hiện được.</p>
-          </div>
-        )}
+
       </div>
 
       {/* Main 2-Column Grid */}
@@ -340,7 +333,7 @@ export const BookingDetail = ({
           )}
 
           {/* CONFIRMED HERO BANNER WITH CANCEL BUTTON */}
-          {booking.status === 'CONFIRMED' && (
+          {booking.status === 'CONFIRMED' && (booking.driver || booking.upfront) && (
             <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-[#14221A]">

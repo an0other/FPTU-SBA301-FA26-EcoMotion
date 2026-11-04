@@ -523,8 +523,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
         var availability = context.availability().get(driverId);
         if (availability.reason() != null) {
-            return buildIneligible(driver, fullName, phone, availability.reason()
-                    + (availability.conflictingBookingCode() == null ? "" : ": " + availability.conflictingBookingCode()));
+            return buildIneligible(driver, fullName, phone, availability.reason());
         }
         long activeTripsToday = context.workloads().getOrDefault(driverId, 0L);
 

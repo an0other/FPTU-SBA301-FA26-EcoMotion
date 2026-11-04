@@ -1297,7 +1297,12 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 pr.getConfirmedAt(),
                 pr.getRejectionReason(),
                 pr.getIssueNote(),
-                evidenceResponses
+                evidenceResponses,
+                pr.getStatus() != PaymentRequestStatus.CONFIRMED
+                        && bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream().anyMatch(t ->
+                            t.getMethod() == PaymentMethod.VNPAY && t.getStatus() == PaymentStatus.PENDING
+                            && t.getType() == (pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                                ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT))
         );
     }
 

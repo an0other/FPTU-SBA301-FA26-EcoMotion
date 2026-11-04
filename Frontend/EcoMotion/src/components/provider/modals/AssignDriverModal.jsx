@@ -618,7 +618,6 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                               </div>
                               <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                                 <span>{driver.phone || 'Chưa cập nhật SĐT'}</span>
-                                {driver.licenseNo && <span>• GPLX: {driver.licenseNo}</span>}
                               </div>
                               <AssignmentDriverStatus driver={driver} />
                             </div>

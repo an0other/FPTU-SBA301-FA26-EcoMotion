@@ -2,6 +2,7 @@ export const WORKFLOW_LABELS = {
   UNPAID: 'Chưa ghi nhận thanh toán', VERIFYING: 'Đang xác minh thanh toán',
   RECONCILIATION_REQUIRED: 'Đã nhận tiền, cần đối soát', REFUND_PENDING: 'Đang xử lý hoàn tiền',
   REFUNDED: 'Đã ghi nhận hoàn tiền', PARTIALLY_PAID: 'Đã thanh toán một phần', COVERED: 'Đã ghi nhận đủ chi phí hiện tại',
+  DEPOSIT_PAID: 'Đã đặt cọc', FULLY_PAID: 'Đã tất toán', FAILED: 'Thanh toán chưa thành công',
   NOT_ASSIGNED: 'Chưa có tài xế', PENDING_RESPONSE: 'Đã gửi yêu cầu, chờ tài xế', ACCEPTED: 'Tài xế đã chấp nhận',
   RESPONSE_EXPIRED: 'Quá hạn phản hồi, cần phân công lại', REPLACEMENT_REQUIRED: 'Cần tài xế thay thế', NOT_REQUIRED: 'Không tiếp tục phân công',
   NOT_STARTED: 'Chưa bắt đầu', IN_PROGRESS: 'Đang diễn ra', ENDED: 'Hai bên đã xác nhận kết thúc',

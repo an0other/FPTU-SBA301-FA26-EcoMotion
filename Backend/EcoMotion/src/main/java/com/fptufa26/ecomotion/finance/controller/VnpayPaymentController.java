@@ -80,9 +80,10 @@ public class VnpayPaymentController {
     @GetMapping("/query")
     @Operation(summary = "Query status of VNPAY transaction")
     public ApiResponse<VnpayCallbackResultResponse> queryTransaction(
+            @AuthenticationPrincipal SecurityUser principal,
             @RequestParam String bookingCode,
             @RequestParam String vnpTxnRef) {
-        VnpayCallbackResultResponse response = vnpayService.queryTransaction(bookingCode, vnpTxnRef);
+        VnpayCallbackResultResponse response = vnpayService.queryTransactionForUser(principal == null ? null : principal.getUserId(), bookingCode, vnpTxnRef);
         return ApiResponse.success(response);
     }
 

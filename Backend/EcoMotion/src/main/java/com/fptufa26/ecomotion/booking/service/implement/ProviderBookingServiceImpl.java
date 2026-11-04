@@ -105,6 +105,7 @@ import java.util.Comparator;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProviderBookingServiceImpl implements ProviderBookingService {
+    private final com.fptufa26.ecomotion.booking.service.BookingPaymentStateService paymentStates;
 
     private static final Logger log = LoggerFactory.getLogger(ProviderBookingServiceImpl.class);
 
@@ -1061,46 +1062,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     private String resolvePaymentStatus(Booking booking, List<PaymentTransaction> transactions) {
-        if (transactions != null && transactions.stream().anyMatch(t -> t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))) return "RECONCILIATION_REQUIRED";
-        if (transactions != null && transactions.stream().anyMatch(t -> t.getMethod() == PaymentMethod.VNPAY && t.getStatus() == PaymentStatus.PENDING)) return "VERIFYING";
-        if (transactions != null && !transactions.isEmpty()) {
-            Optional<PaymentTransaction> refundTx = transactions.stream()
-                    .filter(t -> t.getType() == PaymentType.REFUND)
-                    .findFirst();
-            if (refundTx.isPresent()) {
-                if (refundTx.get().getStatus() == PaymentStatus.PAID) {
-                    return "REFUNDED";
-                } else if (refundTx.get().getStatus() == PaymentStatus.PENDING) {
-                    return "REFUND_PENDING";
-                } else if (refundTx.get().getStatus() == PaymentStatus.FAILED) {
-                    return "FAILED";
-                }
-            }
-
-            boolean hasPaidSettlement = transactions.stream()
-                    .anyMatch(t -> t.getType() == PaymentType.SETTLEMENT && t.getStatus() == PaymentStatus.PAID);
-            if (hasPaidSettlement) {
-                return "FULLY_PAID";
-            }
-
-            boolean hasPaidDeposit = transactions.stream()
-                    .anyMatch(t -> (t.getType() == PaymentType.DEPOSIT_PAY || t.getType() == PaymentType.UPFRONT_PAY)
-                            && t.getStatus() == PaymentStatus.PAID);
-            if (hasPaidDeposit) {
-                if (booking.getStatus() == BookingStatus.COMPLETED) {
-                    return "FULLY_PAID";
-                }
-                return "DEPOSIT_PAID";
-            }
-
-            boolean hasFailed = transactions.stream()
-                    .anyMatch(t -> t.getStatus() == PaymentStatus.FAILED);
-            if (hasFailed) {
-                return "FAILED";
-            }
-        }
-
-        return "UNPAID";
+        return paymentStates.evaluate(booking, transactions == null ? List.of() : transactions).status().name();
     }
 
     @Override

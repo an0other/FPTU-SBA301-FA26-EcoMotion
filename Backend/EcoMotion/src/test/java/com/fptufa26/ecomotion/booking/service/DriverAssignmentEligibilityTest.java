@@ -66,7 +66,7 @@ class DriverAssignmentEligibilityTest {
     @Test void overlappingScheduleIsRejectedByBothPaths() {
         Booking conflict = new Booking(); conflict.setPickupTime(booking.getPickupTime()); conflict.setBookingCode("conflict"); conflict.setId(5L); conflict.setDriver(driver); conflict.setVehicle(booking.getVehicle()); conflict.setPlan(new com.fptufa26.ecomotion.vehicle.entity.RentalPlan()); conflict.getPlan().setSlotLengthMinutes(60);
         when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(conflict));
-        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class).hasMessageContaining("conflict");
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class).hasMessageContaining("DRIVER_RETURN_UNCERTAIN");
         assertThat(service.autoAssign(4L)).isNull();
     }
     @ParameterizedTest

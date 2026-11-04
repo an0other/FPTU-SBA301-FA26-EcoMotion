@@ -202,7 +202,8 @@ class EndUserWorkflowIntegrationTest {
         assertThat(vnpay.processIpn(signed(session)).rspCode()).isEqualTo("00");
         vnpay.processIpn(signed(session));
         assertThat(workflow.getWorkflow(renterId, code()).paymentStatus()).isEqualTo("RECONCILIATION_REQUIRED");
-        assertThat(workflow.getWorkflow(renterId, code()).confirmedPaid()).isEqualByComparingTo(session.amount());
+        assertThat(workflow.getWorkflow(renterId, code()).confirmedPaid()).isZero();
+        assertThat(ledger.findByBooking_Id(bookingId).stream().filter(t -> t.getStatus() == PaymentStatus.PAID).findFirst().orElseThrow().getAmount()).isEqualByComparingTo(session.amount());
         assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
         assertThatThrownBy(() -> vnpay.createPaymentUrl(renterId, new CreateVnpayPaymentUrlRequest(code(), "DEPOSIT", null, "vn"), "127.0.0.1"))
                 .isInstanceOf(RuntimeException.class);
@@ -435,7 +436,7 @@ class EndUserWorkflowIntegrationTest {
 
     PaymentTransaction incoming(Booking b, PaymentMethod method, BigDecimal amount) {
         PaymentTransaction t = new PaymentTransaction(); t.setBooking(b); t.setType(PaymentType.DEPOSIT_PAY);
-        t.setDirection(PaymentDirection.IN); t.setMethod(method); t.setAmount(amount); t.setStatus(PaymentStatus.PAID);
+        t.setDirection(PaymentDirection.IN); t.setMethod(method); t.setAmount(amount); t.setAppliedAmount(amount); t.setStatus(PaymentStatus.PAID);
         t.setVerificationMethod(method == PaymentMethod.VNPAY ? PaymentVerificationMethod.GATEWAY_VERIFIED : PaymentVerificationMethod.PROVIDER_CONFIRMED);
         em.persist(t); return t;
     }
@@ -462,6 +463,7 @@ class EndUserWorkflowIntegrationTest {
         params.put("vnp_TmnCode", config.getTmnCode()); params.put("vnp_TxnRef", session.vnpTxnRef());
         params.put("vnp_Amount", session.amount().movePointRight(2).toBigIntegerExact().toString());
         params.put("vnp_ResponseCode", "00"); params.put("vnp_TransactionStatus", "00");
+        params.put("vnp_TransactionNo", "123456789");
         params.put("vnp_SecureHash", com.fptufa26.ecomotion.finance.config.VnpayUtils.hmacSHA512(config.getHashSecret(),
                 com.fptufa26.ecomotion.finance.config.VnpayUtils.buildHashData(params)));
         return params;

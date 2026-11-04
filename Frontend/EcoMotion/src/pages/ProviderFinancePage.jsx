@@ -917,7 +917,7 @@ export default function ProviderFinancePage() {
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusMeta.bg}`}>
                               <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
-                              {statusMeta.label}
+                              {pr.vnpayVerifying ? 'Đang xác minh thanh toán VNPAY' : pr.status === 'CONFIRMED' && pr.paymentType === 'DEPOSIT' ? 'Đã thanh toán cọc' : statusMeta.label}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -934,13 +934,18 @@ export default function ProviderFinancePage() {
                               )}
                               {pr.status !== 'CONFIRMED' && (
                                 <>
+                                  {pr.vnpayVerifying && <span className="text-[11px] text-slate-600">VNPAY xác minh tự động</span>}
+                                </>
+                              )}
+                              {pr.status !== 'CONFIRMED' && (
+                                <>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenConfirmModal(pr)}
                                     className="rounded-lg bg-brand-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-500/40"
-                                    title="Xác nhận đã nhận tiền"
+                                    title="Xác nhận chuyển khoản trực tiếp"
                                   >
-                                    Xác nhận
+                                    Xác nhận chuyển khoản
                                   </button>
                                   <button
                                     type="button"

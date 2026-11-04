@@ -76,7 +76,7 @@ export function getActiveFinancialMetrics(workflow) {
   if (paid > 0) {
     metrics.push({
       id: 'confirmedPaid',
-      label: 'Đã nhận xác nhận',
+      label: 'Đã ghi nhận thanh toán',
       amount: paid,
       badgeClass: 'text-emerald-700 bg-emerald-50 border-emerald-200',
     })
@@ -100,7 +100,8 @@ export function getActiveFinancialMetrics(workflow) {
   if (remaining > 0 && !isClosed) {
     metrics.push({
       id: 'remainingAmount',
-      label: 'Cần quyết toán thêm',
+      label: ['AWAITING_FINAL_PAYMENT', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(workflow.bookingStatus)
+        ? 'Cần quyết toán thêm' : 'Còn lại theo chi phí hiện tại',
       amount: remaining,
       badgeClass: 'text-purple-800 bg-purple-50 border-purple-200 font-bold',
     })
@@ -133,7 +134,7 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   let depositState = STEP_STATUS.PENDING
   let depositDescription = 'Chờ duyệt đơn'
 
-  const hasPaidDeposit = confirmedPaid > 0 || [
+  const hasPaidDeposit = confirmedPaid > 0 && !['RECONCILIATION_REQUIRED', 'REFUNDED'].includes(paymentStatus) && [
     'CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED',
     'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION',
     'AWAITING_EXTRA_CHARGE_CONFIRMATION', 'AWAITING_FINAL_PAYMENT', 'COMPLETED',
@@ -142,12 +143,12 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   if (hasPaidDeposit) {
     depositState = STEP_STATUS.COMPLETED
     depositDescription = 'Đã thanh toán cọc'
+  } else if (paymentStatus === 'VERIFYING') {
+    depositState = STEP_STATUS.CURRENT
+    depositDescription = 'Đang xác minh thanh toán'
   } else if (status === 'AWAITING_DEPOSIT' || status === 'ACCEPTED' || paymentStatus === 'AWAITING_DEPOSIT') {
     depositState = STEP_STATUS.CURRENT
     depositDescription = 'Chờ khách cọc'
-  } else if (paymentStatus === 'VERIFYING') {
-    depositState = STEP_STATUS.CURRENT
-    depositDescription = 'Đang xác minh giao dịch'
   }
 
   // 3. DRIVER DISPATCH STEP (Depends on Deposit confirmation)
