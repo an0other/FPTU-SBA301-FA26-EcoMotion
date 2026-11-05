@@ -5,12 +5,12 @@ import java.time.LocalDate;
 
 public record DriverCandidateResponse(
         Long driverId,
-        Long userId,
+        @com.fasterxml.jackson.annotation.JsonIgnore Long userId,
         String fullName,
-        String phone,
-        String licenseNo,
-        String licenseClass,
-        LocalDate licenseExpiry,
+        @com.fasterxml.jackson.annotation.JsonIgnore String phone,
+        @com.fasterxml.jackson.annotation.JsonIgnore String licenseNo,
+        @com.fasterxml.jackson.annotation.JsonIgnore String licenseClass,
+        @com.fasterxml.jackson.annotation.JsonIgnore LocalDate licenseExpiry,
         String portraitUrl,
         BigDecimal ratingAvg,
         Integer ratingCount,
@@ -19,7 +19,7 @@ public record DriverCandidateResponse(
         Long activeTripsCount,
         Double suitabilityScore,
         boolean eligible,
-        String ineligibilityReason,
+        @com.fasterxml.jackson.annotation.JsonIgnore String ineligibilityReason,
         String recommendationReason,
         boolean isBestMatch,
         AssignmentAvailabilityResponse availability
@@ -34,9 +34,14 @@ public record DriverCandidateResponse(
                 eligible, ineligibilityReason, recommendationReason, isBestMatch, null);
     }
 
+    @Override
+    public String toString() {
+        return "DriverCandidateResponse[driverId=" + driverId + ", eligible=" + eligible + "]";
+    }
+
     public DriverCandidateResponse withAvailability(AssignmentAvailabilityResponse state) {
         if (!eligible && state.reason() == null) {
-            state = new AssignmentAvailabilityResponse(state.workStatus(), "UNAVAILABLE", ineligibilityReason,
+            state = new AssignmentAvailabilityResponse(state.workStatus(), "UNAVAILABLE", "INELIGIBLE",
                     state.currentBookingCode(), state.currentTripStartedAt(), state.conflictingBookingCode(),
                     state.conflictStart(), state.conflictEnd(), state.nextBookingCode(), state.nextPickupAt(),
                     state.nextAvailableAt(), state.lastUpdatedAt(), state.currentOperationalStatus());

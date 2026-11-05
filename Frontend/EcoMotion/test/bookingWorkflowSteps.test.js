@@ -10,6 +10,29 @@ import {
   evaluateRefundWorkflow,
 } from '../src/utils/bookingWorkflowSteps.js'
 
+test('VNPay pending displays verification before the ordinary awaiting-deposit message', () => {
+  const steps = evaluateActiveWorkflowSteps({ bookingStatus: 'AWAITING_DEPOSIT', paymentStatus: 'VERIFYING', confirmedPaid: 0 })
+  assert.equal(steps[1].state, STEP_STATUS.CURRENT)
+  assert.match(steps[1].description, /Đang xác minh thanh toán/)
+  assert.equal(steps[2].state, STEP_STATUS.PENDING)
+})
+
+test('verified deposit completes only the deposit step and leaves final settlement pending', () => {
+  const workflow = { bookingStatus: 'CONFIRMED', paymentStatus: 'DEPOSIT_PAID', confirmedPaid: 960000,
+    remainingAmount: 2240000, needsDriver: true, driverStatus: 'NOT_ASSIGNED', settlementStatus: 'NOT_READY' }
+  const steps = evaluateActiveWorkflowSteps(workflow)
+  assert.equal(steps[1].state, STEP_STATUS.COMPLETED)
+  assert.equal(steps[2].state, STEP_STATUS.CURRENT)
+  assert.notEqual(steps.at(-1).state, STEP_STATUS.COMPLETED)
+  assert.equal(getActiveFinancialMetrics(workflow).find(item => item.id === 'remainingAmount').amount, 2240000)
+})
+
+test('money received without booking confirmation never completes the deposit step', () => {
+  const steps = evaluateActiveWorkflowSteps({ bookingStatus: 'AWAITING_DEPOSIT', paymentStatus: 'PARTIALLY_PAID', confirmedPaid: 100000 })
+  assert.notEqual(steps[1].state, STEP_STATUS.COMPLETED)
+  assert.equal(steps[2].state, STEP_STATUS.PENDING)
+})
+
 test('1. Chờ xác nhận: approval is current, subsequent steps are pending', () => {
   const steps = evaluateActiveWorkflowSteps(
     { bookingStatus: 'PENDING', paymentStatus: 'UNPAID', confirmedPaid: 0 },
@@ -188,4 +211,26 @@ test('13. Non-zero financial metrics avoids redundant 0đ', () => {
   assert.equal(metrics.length, 2)
   assert.equal(metrics[0].id, 'confirmedPaid')
   assert.equal(metrics[1].id, 'pendingRefundAmount')
+})
+
+
+test('policy refund completes at 50 percent while a separate review stays open', () => {
+  const workflow = { bookingStatus: 'CANCELLED', confirmedPaid: 540000, refundedAmount: 270000,
+    pendingRefundAmount: 0, paymentStatus: 'COVERED', settlementStatus: 'DISPUTED',
+    refunds: [{ status: 'REFUNDED', amount: 270000 }] }
+  assert.equal(evaluateRefundWorkflow(workflow).isFullyRefunded, true)
+  assert.equal(evaluateRefundWorkflow({ ...workflow, refunds: [...workflow.refunds,
+    { status: 'UNDER_REVIEW', amount: 10000 }] }).isFullyRefunded, false)
+  assert.equal(evaluateRefundWorkflow({ ...workflow, paymentStatus: 'RECONCILIATION_REQUIRED' }).isFullyRefunded, false)
+})
+
+
+test('receipt acknowledgement is required after the provider transfers a policy refund', () => {
+  const workflow = { paymentStatus: 'REFUNDED', confirmedPaid: 540000, refundedAmount: 270000,
+    refunds: [{ status: 'REFUNDED', amount: 270000, receiptStatus: 'WAITING' }] }
+  assert.equal(evaluateRefundWorkflow(workflow).isFullyRefunded, false)
+  for (const receiptStatus of ['CONFIRMED', 'AUTO_CONFIRMED']) {
+    assert.equal(evaluateRefundWorkflow({ ...workflow, refunds: [{ ...workflow.refunds[0], receiptStatus }] }).isFullyRefunded, true)
+  }
+  assert.equal(evaluateRefundWorkflow({ ...workflow, refunds: [{ ...workflow.refunds[0], receiptStatus: 'REPORTED_NOT_RECEIVED' }] }).isFullyRefunded, false)
 })

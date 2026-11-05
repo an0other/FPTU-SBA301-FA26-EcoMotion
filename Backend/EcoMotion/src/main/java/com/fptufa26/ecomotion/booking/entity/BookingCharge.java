@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.entity;
 
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.user.entity.User;
 import jakarta.persistence.Column;
@@ -36,8 +37,15 @@ public class BookingCharge {
     private Booking booking;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "charge_type", nullable = false, length = 20)
+    @Column(name = "charge_type", nullable = false, length = 30)
     private ChargeType chargeType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "confirmation_status", nullable = false, length = 20)
+    private ChargeConfirmationStatus confirmationStatus = ChargeConfirmationStatus.ACCEPTED;
+
+    @Column(name = "client_request_id", length = 64)
+    private String clientRequestId;
 
     @Column(nullable = false, length = 500)
     private String description;
@@ -70,6 +78,9 @@ public class BookingCharge {
     void onCreate() {
         if (createdAt == null) {
             createdAt = Instant.now();
+        }
+        if (confirmationStatus == null) {
+            confirmationStatus = ChargeConfirmationStatus.ACCEPTED;
         }
     }
 }

@@ -142,7 +142,7 @@ export default function BookingProgressStepper({
               <span className="text-[11px] font-normal text-slate-500">
                 {refundData.isFullyRefunded
                   ? 'Đã hoàn tất toàn bộ'
-                  : 'Nghĩa vụ hoàn tiền còn tồn tại'}
+                  : refundData.receiptPending ? 'Chờ xác nhận nhận tiền' : 'Nghĩa vụ hoàn tiền còn tồn tại'}
               </span>
             </div>
 
@@ -197,7 +197,7 @@ export default function BookingProgressStepper({
   const steps = evaluateActiveWorkflowSteps(workflow, booking)
   const currentStep = steps.find((s) => s.state === STEP_STATUS.CURRENT || s.state === STEP_STATUS.WARNING) || steps[0]
 
-  const isDriverPhase = currentStep?.id === 'DRIVER' ||
+  const isDriverPhase = currentStep?.id === 'DISPATCH' ||
     Boolean(workflow?.needsDriver) ||
     ['CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED'].includes(status)
 
@@ -264,7 +264,7 @@ export default function BookingProgressStepper({
           </div>
 
           {/* Timing indicators if applicable */}
-          {workflow?.assignmentExpiresAt && workflow?.driverStatus === 'PENDING_RESPONSE' && (
+          {provider && workflow?.assignmentExpiresAt && workflow?.driverStatus === 'PENDING_RESPONSE' && (
             <span className="text-[11px] font-medium text-slate-600 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
               Tài xế cần phản hồi trước: <strong>{formatBookingWhen(workflow.assignmentExpiresAt)}</strong>
             </span>
@@ -277,7 +277,7 @@ export default function BookingProgressStepper({
         </p>
 
         {/* Anomaly / Overdue Warnings */}
-        {pickupAnomaly && (
+        {provider && pickupAnomaly && (
           <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800 flex items-start gap-2">
             <Icon name="error_outline" className="text-base shrink-0 mt-0.5 text-rose-600" />
             <div>
@@ -289,7 +289,7 @@ export default function BookingProgressStepper({
           </div>
         )}
 
-        {isOverdue && !pickupAnomaly && (
+        {provider && isOverdue && !pickupAnomaly && (
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-900 flex items-start gap-2">
             <Icon name="schedule" className="text-base shrink-0 mt-0.5 text-amber-600" />
             <div>
@@ -302,7 +302,7 @@ export default function BookingProgressStepper({
         )}
 
         {/* Driver Phase Operational Details: Trạng thái phân công, Cảnh báo chưa có tài xế, Hướng dẫn xử lý khi hết tài xế */}
-        {isDriverPhase && (
+        {provider && isDriverPhase && (
           <div className="space-y-2.5 pt-2.5 border-t border-brand-200/60 text-xs">
             {/* Trạng thái phân công */}
             <div className="flex flex-wrap items-center gap-2">

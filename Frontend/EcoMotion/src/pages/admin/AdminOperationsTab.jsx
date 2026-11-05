@@ -232,7 +232,7 @@ export default function AdminOperationsTab({
     setActionLoading(true)
     try {
       await adminService.refundBooking(refundForm.bookingId, amountNum, refundForm.reason.trim())
-      setMessage({ type: 'success', text: `Đã thực hiện hoàn tiền ${formatVND(amountNum)} cho đơn #${refundForm.bookingId}` })
+      setMessage({ type: 'success', text: `Đã tạo yêu cầu hoàn ${formatVND(amountNum)} cho đơn #${refundForm.bookingId}. Trạng thái hoàn tiền cập nhật riêng và chưa có nghĩa là tiền đã về.` })
       setShowRefundModal(false)
       setRefundForm({ bookingId: '', amount: '', reason: '' })
       loadData()

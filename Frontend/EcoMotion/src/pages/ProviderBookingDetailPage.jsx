@@ -18,6 +18,7 @@ import { providerBookingService } from '../services/providerBookingService'
 import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
 import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
+import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 
 function Icon({ name, className = '' }) {
   return (
@@ -36,9 +37,11 @@ function formatVnd(amount) {
 }
 
 const PAYMENT_STATUS_LABELS = {
+  VERIFYING: 'Đang xác minh thanh toán',
+  RECONCILIATION_REQUIRED: 'Đã nhận tiền, cần đối soát',
   UNPAID: 'Chưa thanh toán',
   AWAITING_DEPOSIT: 'Chờ đặt cọc',
-  DEPOSIT_PAID: 'Đã đặt cọc',
+  DEPOSIT_PAID: 'Đã thanh toán cọc',
   PARTIALLY_PAID: 'Thanh toán một phần',
   FULLY_PAID: 'Đã tất toán',
   PAID: 'Đã thanh toán',
@@ -199,6 +202,9 @@ export default function ProviderBookingDetailPage() {
   // Realtime Sync Hook
   useRealtimeSync({
     handlers: {
+      [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
+        setToast({ message: 'Thanh toán đã được máy chủ xác minh. Đang cập nhật đơn thuê.', type: 'success' })
+      },
       [TV5_REALTIME_EVENTS.DRIVER_ASSIGNED]: () => {
         setToast({ message: 'Tài xế đã được phân công cho chuyến xe.', type: 'info' })
       },
@@ -369,7 +375,7 @@ export default function ProviderBookingDetailPage() {
               <BookingStatusBadge status={booking.status} />
               {booking.paymentStatus && (
                 <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
-                  Thanh toán: {PAYMENT_STATUS_LABELS[booking.paymentStatus] || booking.paymentStatus}
+                  Thanh toán: {PAYMENT_STATUS_LABELS[booking.paymentStatus] || 'Chưa xác định trạng thái thanh toán'}
                 </span>
               )}
               {booking.driverName && (
@@ -553,7 +559,11 @@ export default function ProviderBookingDetailPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Thời gian thuê:</span>
-                    <strong className="text-slate-800">{pricingDescription(booking.pricingItems) || booking.rentalDuration || '1 ngày'}</strong>
+                    <strong className="text-slate-800">
+                      {booking.pricingItems?.length
+                        ? pricingDescription(booking.pricingItems)
+                        : (booking.rentalDuration || '1 ngày')}
+                    </strong>
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-1">
                     <span className="text-slate-500">Giờ đón khách:</span>
@@ -570,6 +580,20 @@ export default function ProviderBookingDetailPage() {
                   <span className="text-slate-900 font-medium">{booking.pickupAddress}</span>
                 </div>
               </div>
+              {(booking.dispatchOriginLatitude != null || booking.distanceKm != null || booking.pickupFee != null) && (
+                <PickupDistanceProof
+                  pickupAddress={booking.pickupAddress}
+                  pickupLatitude={booking.pickupLatitude}
+                  pickupLongitude={booking.pickupLongitude}
+                  originLatitude={booking.dispatchOriginLatitude}
+                  originLongitude={booking.dispatchOriginLongitude}
+                  distanceKm={booking.distanceKm}
+                  freeRadiusKm={booking.freeRadiusKm}
+                  chargeableKm={booking.chargeableKm}
+                  outOfRadiusRate={booking.outOfRadiusRate}
+                  pickupFee={booking.pickupFee}
+                />
+              )}
             </div>
           </div>
 
@@ -865,6 +889,7 @@ export default function ProviderBookingDetailPage() {
                         <th className="px-3.5 py-2.5">Số lượng</th>
                         <th className="px-3.5 py-2.5 text-right">Đơn giá</th>
                         <th className="px-3.5 py-2.5 text-right">Thành tiền</th>
+                        <th className="px-3.5 py-2.5">Thao tác</th>
                         <th className="px-3.5 py-2.5">Minh chứng</th>
                       </tr>
                     </thead>
@@ -880,6 +905,14 @@ export default function ProviderBookingDetailPage() {
                           <td className="px-3.5 py-2.5 text-slate-600">{c.quantity ?? '1'}</td>
                           <td className="px-3.5 py-2.5 text-right font-mono text-slate-600">{formatVnd(c.unitPrice)}</td>
                           <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">{formatVnd(c.amount)}</td>
+                          <td className="px-3.5 py-2.5">
+                            {c.confirmationStatus === 'PENDING' && (
+                              <button type="button" className="text-[11px] font-semibold text-slate-700 underline" onClick={async () => {
+                                await providerBookingService.withdrawCharge(booking.bookingCode, c.id)
+                                window.location.reload()
+                              }}>Rút phụ phí</button>
+                            )}
+                          </td>
                           <td className="px-3.5 py-2.5 text-slate-500">
                             {c.evidenceUrl ? (
                               <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline">

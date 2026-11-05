@@ -1,14 +1,15 @@
-import { useRealtimeSync } from '../../hooks/useRealtimeSync'
+﻿import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
+import { acceptCharge, cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
 import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSummary'
+import { RefundAccountPanel } from '../../components/booking/RefundAccountPanel'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 
 const CHARGE_LABELS = {
@@ -17,7 +18,10 @@ const CHARGE_LABELS = {
   OVERTIME: 'Quá giờ',
   WAITING: 'Chờ',
   WEEKEND: 'Cuối tuần',
-  OUT_OF_RADIUS: 'Ngoài bán kính',
+  OUT_OF_RADIUS: 'Phí đón ngoài phạm vi',
+  TOLL: 'Phí cầu đường',
+  PARKING: 'Phí gửi xe',
+  OTHER: 'Phụ phí khác',
 }
 
 function formatWhen(value) {
@@ -60,6 +64,8 @@ function toCard(detail) {
     holdExpiresAt: detail.holdExpiresAt,
     depositAmount: Number(detail.depositAmount ?? 0),
     refundExplanation: detail.refundPreview?.explanation ?? '',
+    refundAmount: Number(detail.refundPreview?.amount ?? 0),
+    refundRequiresBankAccount: detail.refundPreview?.requiresBankAccount ?? Number(detail.refundPreview?.amount ?? 0) > 0,
     disputeCategories: detail.disputeCategories ?? [],
     charges: (detail.charges ?? []).map((charge) => ({
       chargeId: charge.chargeId,
@@ -69,6 +75,7 @@ function toCard(detail) {
       formula: formula(charge),
       amount: Number(charge.effectiveAmount ?? charge.amount),
       isWaived: Boolean(charge.isWaived),
+      confirmationStatus: charge.confirmationStatus,
     })),
     driver: detail.driver
       ? {
@@ -92,6 +99,13 @@ function toCard(detail) {
     pickupAddress: detail.pickupAddress,
     pickupLatitude: detail.pickupLatitude,
     pickupLongitude: detail.pickupLongitude,
+    dispatchOriginLatitude: detail.dispatchOriginLatitude,
+    dispatchOriginLongitude: detail.dispatchOriginLongitude,
+    distanceKm: detail.distanceKm,
+    freeRadiusKm: detail.freeRadiusKm,
+    chargeableKm: detail.chargeableKm,
+    outOfRadiusRate: detail.outOfRadiusRate,
+    pickupFee: detail.pickupFee,
     driverNote: detail.driverNote,
     driverReplacementRequired: Boolean(detail.driverReplacementRequired),
     pickupTime: detail.pickupTime,
@@ -114,7 +128,6 @@ export function BookingDetailPage() {
   const navigate = useNavigate()
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
-  const [operationalRisk, setOperationalRisk] = useState(null)
   const [workflow, setWorkflow] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
@@ -127,10 +140,10 @@ export function BookingDetailPage() {
   const refreshDetail = useCallback(async () => {
     const id = ++sequence.current
     try {
-      const [row, risk, progress] = await Promise.allSettled([getMyBooking(bookingCode), getMyBookingOperationalRisk(bookingCode), bookingWorkflowService.get(bookingCode)])
+      const [row, progress] = await Promise.allSettled([getMyBooking(bookingCode), bookingWorkflowService.get(bookingCode)])
       if (id !== sequence.current) return
       if (row.status === 'rejected') throw row.reason
-      setDetail(row.value); setOperationalRisk(risk.status === 'fulfilled' ? risk.value : null); setError('')
+      setDetail(row.value); setError('')
       setWorkflow(progress.status === 'fulfilled' ? progress.value : null)
       setWorkflowError(progress.status === 'rejected' ? progress.reason.message : null)
     } catch (err) {
@@ -148,20 +161,22 @@ export function BookingDetailPage() {
   }
 
   const booking = toCard(detail)
+  const manualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
+    && !['REFUNDED', 'REJECTED'].includes(refund.status))
 
   return (
     <>
       {error && <p role="alert" className="mx-auto max-w-5xl p-4 text-sm text-red-800">Không thể cập nhật trạng thái: {error}. Dữ liệu đang hiển thị có thể đã cũ.</p>}
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
-      <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} error={workflowError} onRefresh={refreshDetail} /></div>
+      <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>
       <BookingDetail
-        booking={booking}
+        booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
         operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
-        onCancelBooking={async () => {
-          const updated = await cancelMyBooking(booking.id)
+        onCancelBooking={async (_code, account) => {
+          const updated = await cancelMyBooking(booking.id, account)
           navigate(`/renter/bookings/${updated.bookingCode}`, { replace: true })
           await refreshDetail()
         }}
@@ -171,6 +186,10 @@ export function BookingDetailPage() {
         }}
         onConfirmStart={async () => {
           await confirmTripStart(booking.id)
+          await refreshDetail()
+        }}
+        onAcceptCharge={async (chargeId) => {
+          await acceptCharge(booking.id, chargeId)
           await refreshDetail()
         }}
         onOpenDispute={async body => { const result = await openDispute(booking.id, body); await refreshDetail(); return result }}
@@ -184,6 +203,9 @@ export function BookingDetailPage() {
         trackingError={trackingError}
         onRefreshTracking={refetchTracking}
       />
+      {['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail.status) && manualRefunds.length > 0 &&
+        <RefundAccountPanel key={`${booking.id}:${manualRefunds[0].id}`} bookingCode={booking.id} refunds={manualRefunds} onSaved={refreshDetail} />}
     </>
   )
 }
+

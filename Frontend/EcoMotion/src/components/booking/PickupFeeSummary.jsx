@@ -15,7 +15,7 @@ export function PickupFeeSummary({ quote }) {
           : 'Điểm đón trong bán kính miễn phí: '}
         <strong>{formatCurrency(quote.pickupFee)}</strong>
       </p>
-      <p className="mt-1 text-xs text-[#3D4A42]">Khoảng cách tính theo đường chim bay, phí tính một lần cho đơn thuê.</p>
+      <p className="mt-1 text-xs text-[#3D4A42]">Khoảng cách là đường chim bay. Mỗi km vượt được làm tròn lên, phí tính một lần cho đơn thuê.</p>
     </div>
   )
 }

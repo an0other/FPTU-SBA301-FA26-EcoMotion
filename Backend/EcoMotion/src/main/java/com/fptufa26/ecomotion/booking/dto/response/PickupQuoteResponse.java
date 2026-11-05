@@ -7,6 +7,12 @@ public record PickupQuoteResponse(
         int freeRadiusKm,
         int chargeableKm,
         BigDecimal outOfRadiusRate,
-        BigDecimal pickupFee
+        BigDecimal pickupFee,
+        BigDecimal originLatitude,
+        BigDecimal originLongitude
 ) {
+    public PickupQuoteResponse(double distanceKm, int freeRadiusKm, int chargeableKm,
+                               BigDecimal outOfRadiusRate, BigDecimal pickupFee) {
+        this(distanceKm, freeRadiusKm, chargeableKm, outOfRadiusRate, pickupFee, null, null);
+    }
 }

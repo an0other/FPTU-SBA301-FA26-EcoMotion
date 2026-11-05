@@ -21,4 +21,6 @@ public interface VnpayService {
     VnpayCallbackResultResponse processCallback(Map<String, String> params);
 
     VnpayCallbackResultResponse queryTransaction(String bookingCode, String vnpTxnRef);
+
+    VnpayCallbackResultResponse queryTransactionForUser(Long userId, String bookingCode, String vnpTxnRef);
 }

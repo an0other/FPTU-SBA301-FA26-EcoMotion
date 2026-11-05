@@ -40,7 +40,7 @@ import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
-import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 import com.fptufa26.ecomotion.user.service.DriverStatusService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -238,7 +238,6 @@ public class DriverTripServiceImpl implements DriverTripService {
         current.setRespondedAt(now);
         driverAssignmentRepository.save(current);
 
-
         driverStatusService.updateStatusTimestamp(driver.getId());
 
         Long providerId = (saved.getVehicle() != null && saved.getVehicle().getProvider() != null)
@@ -418,14 +417,16 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getDriverEndConfirmedAt() != null) {
             return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
         }
-        if (booking.getStatus() != BookingStatus.IN_PROGRESS || booking.getActualStartAt() == null) {
+        if ((booking.getStatus() != BookingStatus.IN_PROGRESS && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION)
+                || booking.getActualStartAt() == null) {
             throw new InvalidTripTransitionException("Chỉ có thể kết thúc chuyến đi đang thực hiện (IN_PROGRESS)");
         }
 
         Instant now = clock.instant();
         booking.setDriverEndConfirmedAt(now);
-        if (booking.getRenterEndConfirmedAt() != null) booking.setActualEndAt(now);
-        booking.setStatus(booking.getRenterEndConfirmedAt() != null
+        boolean renterEnded = booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null;
+        if (renterEnded && booking.getActualEndAt() == null) booking.setActualEndAt(now);
+        booking.setStatus(renterEnded
                 ? BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
                 : BookingStatus.AWAITING_END_CONFIRMATION);
         if (booking.getProviderConfirmedAt() == null) {

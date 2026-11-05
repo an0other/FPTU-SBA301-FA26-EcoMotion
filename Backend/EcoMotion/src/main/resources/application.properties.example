@@ -26,7 +26,7 @@ spring.profiles.active=${SPRING_PROFILES_ACTIVE:dev}
 # ===============================
 # Database configuration
 # ===============================
-spring.datasource.url=jdbc:postgresql://localhost:5432/ecomotion
+spring.datasource.url=jdbc:postgresql://localhost:5433/ecomotion
 spring.datasource.username=${DB_USERNAME:postgres}
 spring.datasource.password=${DB_PASSWORD:your_password}
 spring.datasource.driver-class-name=org.postgresql.Driver
@@ -56,7 +56,7 @@ spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.show-sql=true
 # Schema is created by src/main/resources/db/schema.sql. Do not let Hibernate alter it.
 # Dev may use `create-drop`; production MUST stay `none`.
-spring.jpa.hibernate.ddl-auto=none
+spring.jpa.hibernate.ddl-auto=${DB_DDL_AUTO:update}
 spring.data.jpa.repositories.enabled=true
 
 

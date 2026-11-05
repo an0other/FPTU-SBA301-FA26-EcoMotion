@@ -138,10 +138,9 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 charge.getAmount(),
                 charge.isWaived(),
                 charge.getEvidenceUrl(),
-                charge.getCreatedBy() == null
-                        ? null
-                        : charge.getCreatedBy().getFullName(),
-                charge.getCreatedAt());
+                charge.getCreatedBy() != null ? charge.getCreatedBy().getFullName() : null,
+                charge.getCreatedAt(),
+                charge.getConfirmationStatus());
     }
 
     private BookingPaymentSummaryResponse buildPaymentSummary(

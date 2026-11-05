@@ -175,6 +175,7 @@ public class VnpayPaymentGatewayStrategy implements PaymentGatewayStrategy {
         request.put("vnp_OrderInfo", "Query payment " + txnRef);
         request.put("vnp_SecureHash", VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(),
                 String.join("|", request.values())));
+        log.info("VNPay QueryDR issued: txnRef={}, transactionDate={}", txnRef, request.get("vnp_TransactionDate"));
         try {
             var factory = new SimpleClientHttpRequestFactory();
             factory.setConnectTimeout(vnpayConfig.getQueryTimeout());
@@ -189,18 +190,83 @@ public class VnpayPaymentGatewayStrategy implements PaymentGatewayStrategy {
                             "vnp_PayDate", "vnp_TransactionNo", "vnp_TransactionType", "vnp_TransactionStatus",
                             "vnp_OrderInfo", "vnp_PromotionCode", "vnp_PromotionAmount")
                     .map(key -> Objects.toString(response.get(key), "")).collect(Collectors.joining("|"));
-            if (!secureHashMatches(VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData), response.get("vnp_SecureHash"))
+            boolean validSignature = secureHashMatches(VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData), response.get("vnp_SecureHash"));
+            if (!validSignature
+                    || !"querydr".equals(response.get("vnp_Command"))
                     || !vnpayConfig.getTmnCode().equals(response.get("vnp_TmnCode"))
                     || !txnRef.equals(response.get("vnp_TxnRef"))
                     || !"00".equals(response.get("vnp_ResponseCode"))
                     || !"01".equals(response.get("vnp_TransactionType"))
                     || !Set.of("00", "02").contains(Objects.toString(response.get("vnp_TransactionStatus"), ""))) {
+                log.warn("VNPay QueryDR rejected: txnRef={}, responseCode={}, transactionStatus={}, signatureValid={}, merchantMatch={}, referenceMatch={}",
+                        txnRef, response.get("vnp_ResponseCode"), response.get("vnp_TransactionStatus"), validSignature,
+                        vnpayConfig.getTmnCode().equals(response.get("vnp_TmnCode")), txnRef.equals(response.get("vnp_TxnRef")));
                 return Optional.empty();
             }
             return Optional.of(response);
         } catch (RestClientException | IllegalArgumentException ex) {
             log.warn("VNPAY query unavailable for {}: {}", txnRef, ex.getClass().getSimpleName());
             return Optional.empty();
+        }
+    }
+
+    public VnpayRefundCallResult refund(String requestId, String txnRef, String originalTransactionNo,
+                                        String transactionDate, String transactionType, long amountTimes100,
+                                        String createBy, String orderInfo) {
+        if (vnpayConfig.getTmnCode().isBlank() || vnpayConfig.getHashSecret().isBlank() || vnpayConfig.getApiUrl().isBlank()) {
+            return VnpayRefundCallResult.failed("97");
+        }
+        String createDate = VNP_DATE_FORMATTER.format(Instant.now());
+        String data = VnpayUtils.refundRequestData(requestId, vnpayConfig.getVersion(), vnpayConfig.getTmnCode(),
+                transactionType, txnRef, String.valueOf(amountTimes100),
+                originalTransactionNo == null ? "" : originalTransactionNo,
+                transactionDate, createBy, createDate, vnpayConfig.getServerIp(), orderInfo);
+        java.util.Map<String, String> body = new LinkedHashMap<>();
+        body.put("vnp_RequestId", requestId);
+        body.put("vnp_Version", vnpayConfig.getVersion());
+        body.put("vnp_Command", "refund");
+        body.put("vnp_TmnCode", vnpayConfig.getTmnCode());
+        body.put("vnp_TransactionType", transactionType);
+        body.put("vnp_TxnRef", txnRef);
+        body.put("vnp_Amount", String.valueOf(amountTimes100));
+        body.put("vnp_TransactionNo", originalTransactionNo == null ? "" : originalTransactionNo);
+        body.put("vnp_TransactionDate", transactionDate);
+        body.put("vnp_CreateBy", createBy);
+        body.put("vnp_CreateDate", createDate);
+        body.put("vnp_IpAddr", vnpayConfig.getServerIp());
+        body.put("vnp_OrderInfo", orderInfo);
+        body.put("vnp_SecureHash", VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), data));
+        try {
+            var factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(vnpayConfig.getQueryTimeout());
+            factory.setReadTimeout(vnpayConfig.getQueryTimeout());
+            Map<String, String> response = RestClient.builder().requestFactory(factory).build()
+                    .post().uri(vnpayConfig.getApiUrl()).contentType(MediaType.APPLICATION_JSON).body(body)
+                    .retrieve().body(new ParameterizedTypeReference<Map<String, String>>() {});
+            if (response == null) {
+                return VnpayRefundCallResult.timeoutResult();
+            }
+            boolean checksum = secureHashMatches(
+                    VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), VnpayUtils.refundResponseData(response)),
+                    response.get("vnp_SecureHash"));
+            return new VnpayRefundCallResult(false, checksum, response.get("vnp_ResponseCode"),
+                    response.get("vnp_TransactionStatus"), response.get("vnp_TransactionNo"),
+                    response.get("vnp_TransactionType"), response.get("vnp_TxnRef"), response.get("vnp_Amount"));
+        } catch (RestClientException | IllegalArgumentException ex) {
+            log.warn("VNPAY refund unavailable for {}: {}", txnRef, ex.getClass().getSimpleName());
+            return VnpayRefundCallResult.timeoutResult();
+        }
+    }
+
+    public record VnpayRefundCallResult(boolean timedOut, boolean checksumValid, String responseCode,
+                                        String transactionStatus, String refundTransactionNo, String transactionType,
+                                        String txnRef, String amount) {
+        static VnpayRefundCallResult timeoutResult() {
+            return new VnpayRefundCallResult(true, false, "98", null, null, null, null, null);
+        }
+
+        public static VnpayRefundCallResult failed(String code) {
+            return new VnpayRefundCallResult(false, true, code, null, null, null, null, null);
         }
     }
 

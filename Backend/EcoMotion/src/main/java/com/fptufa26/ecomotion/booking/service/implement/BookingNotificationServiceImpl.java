@@ -19,7 +19,7 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class BookingNotificationServiceImpl implements BookingNotificationService {
     private final ExternalNotificationDispatcherService dispatcher;
-    private final com.fptufa26.ecomotion.common.service.NotificationStreamService stream;
+    private final com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService stream;
 
     @Override
     public void bookingPlaced(Booking booking, BigDecimal depositAmount) {

@@ -22,6 +22,8 @@ public interface RefundRequestRepository extends JpaRepository<RefundRequest, Lo
 
     List<RefundRequest> findByBooking_Vehicle_Provider_IdOrderByCreatedAtDesc(Long providerId);
 
+    List<RefundRequest> findByReceiptStatusAndReceiptDeadlineLessThanEqual(String status, java.time.Instant deadline);
+
     List<RefundRequest> findByStatus(RefundStatus status);
 
     @Query("SELECT COALESCE(SUM(r.amount), 0) FROM RefundRequest r WHERE r.booking.id = :bookingId AND r.status IN ('REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'PROCESSING', 'PENDING_RECONCILIATION', 'REFUNDED')")
@@ -31,4 +33,6 @@ public interface RefundRequestRepository extends JpaRepository<RefundRequest, Lo
     BigDecimal sumCompletedRefundsForProvider(@Param("providerId") Long providerId);
 
     boolean existsByBooking_IdAndStatusIn(Long bookingId, List<RefundStatus> statuses);
+
+    Optional<RefundRequest> findBySourceEventId(String sourceEventId);
 }

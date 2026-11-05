@@ -34,6 +34,9 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
 
     @Override
     public OperationalRiskResponse assess(Booking booking) {
+        if (booking != null && (booking.getCancelledAt() != null || EnumSet.of(BookingStatus.CANCELLED,
+                BookingStatus.CANCELLATION_REVIEW, BookingStatus.REJECTED, BookingStatus.COMPLETED).contains(booking.getStatus())))
+            return OperationalRiskResponse.safe();
         if (booking == null || booking.getId() == null || booking.getVehicle() == null
                 || booking.getVehicle().getId() == null || booking.getPickupTime() == null) {
             return OperationalRiskResponse.safe();

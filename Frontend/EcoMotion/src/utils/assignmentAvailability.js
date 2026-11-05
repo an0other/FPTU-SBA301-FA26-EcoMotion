@@ -32,7 +32,7 @@ export function filterAssignmentDrivers(drivers, query, status) {
   return drivers.filter(d => {
     const matchesStatus = status === 'ALL' || (status === 'ELIGIBLE'
       ? d.eligible : d.availability?.availabilityStatus === status)
-    return matchesStatus && [d.fullName, d.phone, d.licenseNo]
+    return matchesStatus && [d.fullName]
       .some(value => (value || '').toLocaleLowerCase('vi').includes(q))
   }).sort((a, b) => Number(b.eligible) - Number(a.eligible))
 }

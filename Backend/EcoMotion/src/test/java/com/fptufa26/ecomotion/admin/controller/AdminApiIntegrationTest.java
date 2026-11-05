@@ -59,7 +59,7 @@ class AdminApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("A01: Dashboard stats supports filtering by year and month")
+    @DisplayName("A01b: Dashboard stats supports filtering by year and month")
     void testA01DashboardStatsMonthlyFilter() throws Exception {
         String token = "Bearer " + getAdminToken();
 

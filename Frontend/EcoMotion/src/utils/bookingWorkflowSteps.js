@@ -76,7 +76,7 @@ export function getActiveFinancialMetrics(workflow) {
   if (paid > 0) {
     metrics.push({
       id: 'confirmedPaid',
-      label: 'Đã nhận xác nhận',
+      label: 'Đã ghi nhận thanh toán',
       amount: paid,
       badgeClass: 'text-emerald-700 bg-emerald-50 border-emerald-200',
     })
@@ -100,7 +100,8 @@ export function getActiveFinancialMetrics(workflow) {
   if (remaining > 0 && !isClosed) {
     metrics.push({
       id: 'remainingAmount',
-      label: 'Cần quyết toán thêm',
+      label: ['AWAITING_FINAL_PAYMENT', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(workflow.bookingStatus)
+        ? 'Cần quyết toán thêm' : 'Còn lại theo chi phí hiện tại',
       amount: remaining,
       badgeClass: 'text-purple-800 bg-purple-50 border-purple-200 font-bold',
     })
@@ -133,7 +134,7 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   let depositState = STEP_STATUS.PENDING
   let depositDescription = 'Chờ duyệt đơn'
 
-  const hasPaidDeposit = confirmedPaid > 0 || [
+  const hasPaidDeposit = confirmedPaid > 0 && !['RECONCILIATION_REQUIRED', 'REFUNDED'].includes(paymentStatus) && [
     'CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED',
     'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION',
     'AWAITING_EXTRA_CHARGE_CONFIRMATION', 'AWAITING_FINAL_PAYMENT', 'COMPLETED',
@@ -142,12 +143,12 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   if (hasPaidDeposit) {
     depositState = STEP_STATUS.COMPLETED
     depositDescription = 'Đã thanh toán cọc'
+  } else if (paymentStatus === 'VERIFYING') {
+    depositState = STEP_STATUS.CURRENT
+    depositDescription = 'Đang xác minh thanh toán'
   } else if (status === 'AWAITING_DEPOSIT' || status === 'ACCEPTED' || paymentStatus === 'AWAITING_DEPOSIT') {
     depositState = STEP_STATUS.CURRENT
     depositDescription = 'Chờ khách cọc'
-  } else if (paymentStatus === 'VERIFYING') {
-    depositState = STEP_STATUS.CURRENT
-    depositDescription = 'Đang xác minh giao dịch'
   }
 
   // 3. DRIVER DISPATCH STEP (Depends on Deposit confirmation)
@@ -299,8 +300,14 @@ export function evaluateRefundWorkflow(workflow = {}, booking = {}) {
   const hasFailedRefund = paymentStatus === 'FAILED'
     || refunds.some((r) => r.status === 'FAILED')
 
-  const isFullyRefunded = paymentStatus === 'REFUNDED'
-    || (refundedAmount > 0 && pendingRefundAmount === 0 && refundedAmount >= confirmedPaid)
+  const hasOpenRefund = refunds.some(r => !['REFUNDED', 'REJECTED'].includes(r.status))
+  const completedPolicyRefund = refunds.some(r => r.status === 'REFUNDED')
+    && refunds.filter(r => r.status === 'REFUNDED').reduce((total, r) => total + Number(r.amount || 0), 0) <= refundedAmount
+  const receiptPending = refunds.some(r => ['WAITING', 'REPORTED_NOT_RECEIVED'].includes(r.receiptStatus))
+  const isFullyRefunded = !receiptPending && pendingRefundAmount === 0 && !hasOpenRefund
+    && paymentStatus !== 'RECONCILIATION_REQUIRED'
+    && (paymentStatus === 'REFUNDED' || completedPolicyRefund
+      || (refundedAmount > 0 && refundedAmount >= confirmedPaid))
 
   // Refund stepper: 3 steps
   // 1. Ghi nhận hủy / yêu cầu hoàn
@@ -323,7 +330,7 @@ export function evaluateRefundWorkflow(workflow = {}, booking = {}) {
     step3Desc = 'Đã ghi nhận hoàn tiền'
   } else if (pendingRefundAmount > 0 || paymentStatus === 'REFUND_PENDING' || paymentStatus === 'RECONCILIATION_REQUIRED' || refunds.length > 0) {
     step2State = STEP_STATUS.CURRENT
-    step2Desc = paymentStatus === 'RECONCILIATION_REQUIRED'
+    step2Desc = receiptPending ? 'Chờ người thuê xác nhận nhận tiền' : paymentStatus === 'RECONCILIATION_REQUIRED'
       ? 'Đang đối soát giao dịch'
       : 'Đang xử lý chuyển khoản'
   }
@@ -355,6 +362,7 @@ export function evaluateRefundWorkflow(workflow = {}, booking = {}) {
   return {
     hasFinancialObligation: true,
     hasFailedRefund,
+    receiptPending,
     isFullyRefunded,
     steps,
   }

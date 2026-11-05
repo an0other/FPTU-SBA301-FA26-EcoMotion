@@ -9,12 +9,12 @@ import java.time.LocalDate;
 
 public record AvailableDriverResponse(
         Long id,
-        Long userId,
+        @com.fasterxml.jackson.annotation.JsonIgnore Long userId,
         String fullName,
-        String phone,
-        String licenseNo,
-        String licenseClass,
-        LocalDate licenseExpiry,
+        @com.fasterxml.jackson.annotation.JsonIgnore String phone,
+        @com.fasterxml.jackson.annotation.JsonIgnore String licenseNo,
+        @com.fasterxml.jackson.annotation.JsonIgnore String licenseClass,
+        @com.fasterxml.jackson.annotation.JsonIgnore LocalDate licenseExpiry,
         String portraitUrl,
         DriverStatus status,
         DriverActivityStatus activityStatus,

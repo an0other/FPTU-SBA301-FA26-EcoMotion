@@ -17,6 +17,11 @@ public record UpdateBookingRequestDetails(
         @NotNull @DecimalMin("-90.0") @DecimalMax("90.0") BigDecimal pickupLatitude,
         @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") BigDecimal pickupLongitude,
         @NotNull @Min(1) @Max(100) Integer passengerCount,
-        String driverNote
+        String driverNote,
+        Boolean confirmPickupFeeChange
 ) {
+    public UpdateBookingRequestDetails(Instant pickupTime, String pickupAddress, BigDecimal pickupLatitude,
+                                       BigDecimal pickupLongitude, Integer passengerCount, String driverNote) {
+        this(pickupTime, pickupAddress, pickupLatitude, pickupLongitude, passengerCount, driverNote, null);
+    }
 }
