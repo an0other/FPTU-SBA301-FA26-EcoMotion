@@ -140,7 +140,13 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
     'AWAITING_EXTRA_CHARGE_CONFIRMATION', 'AWAITING_FINAL_PAYMENT', 'COMPLETED',
   ].includes(status)
 
-  if (hasPaidDeposit) {
+  if (paymentStatus === 'RECONCILIATION_REQUIRED' && [
+    'PENDING', 'ACCEPTED', 'AWAITING_DEPOSIT', 'CONFIRMED', 'DRIVER_ASSIGNED',
+    'DRIVER_CONFIRMED', 'DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION',
+  ].includes(status)) {
+    depositState = STEP_STATUS.WARNING
+    depositDescription = 'Cọc cần đối soát'
+  } else if (hasPaidDeposit) {
     depositState = STEP_STATUS.COMPLETED
     depositDescription = 'Đã thanh toán cọc'
   } else if (paymentStatus === 'VERIFYING') {

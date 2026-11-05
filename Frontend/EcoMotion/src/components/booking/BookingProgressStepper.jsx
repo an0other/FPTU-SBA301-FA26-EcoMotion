@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
+import { renterCanSeeDriver } from '../../utils/bookingStatus'
 import {
   STEP_STATUS,
   isTerminalBooking,
@@ -275,6 +276,27 @@ export default function BookingProgressStepper({
         <p className="text-xs text-slate-800 leading-relaxed font-medium">
           {workflow?.nextAction || 'Theo dõi tiến độ từ nhà xe và tài xế.'}
         </p>
+
+        {!provider && renterCanSeeDriver(status) && (booking.driverName || booking.driver?.fullName) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+            <div className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">Tài xế đã nhận chuyến</span>
+              <strong className="block text-sm text-slate-900">{booking.driverName || booking.driver?.fullName}</strong>
+              {(booking.driverPhone || booking.driver?.phone) && (
+                <span className="block font-mono text-xs text-slate-600">{booking.driverPhone || booking.driver?.phone}</span>
+              )}
+            </div>
+            {(booking.driverPhone || booking.driver?.phone) && (
+              <a
+                href={`tel:${booking.driverPhone || booking.driver?.phone}`}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white"
+              >
+                <Icon name="call" className="text-[14px]" />
+                Gọi tài xế
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Anomaly / Overdue Warnings */}
         {provider && pickupAnomaly && (

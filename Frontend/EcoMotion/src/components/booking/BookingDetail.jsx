@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
-import { bookingStatusMeta, renterCanSeeDriver } from '../../utils/bookingStatus';
+import { bookingStatusMeta, canShowOperationalRisk, renterCanSeeDriver } from '../../utils/bookingStatus';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
@@ -160,7 +160,7 @@ export const BookingDetail = ({
           </div>
         </div>
         {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
-        {operationalRisk?.atRisk && !['CANCELLED', 'CANCELLATION_REVIEW', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
+        {canShowOperationalRisk(booking.status, operationalRisk?.atRisk, operationalRisk?.message) && (
           <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">Nguy cơ xe về trễ</p>
             <p className="mt-1">{operationalRisk.message}</p>
@@ -354,7 +354,7 @@ export const BookingDetail = ({
           )}
 
           {/* CONFIRMED HERO BANNER WITH CANCEL BUTTON */}
-          {booking.status === 'CONFIRMED' && (booking.driver || booking.upfront) && (
+          {booking.status === 'CONFIRMED' && (
             <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-[#14221A]">
@@ -417,6 +417,35 @@ export const BookingDetail = ({
               >
                 Huỷ đơn
               </button> : null}
+            </div>
+          )}
+
+          {booking.driver && renterCanSeeDriver(booking.status) && (
+            <div className="bg-white p-5 flex flex-col gap-3 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
+              <h3 className="text-sm font-bold text-[#14221A]">Tài xế chuyên trách</h3>
+              <div className="flex items-center gap-4">
+                <img
+                  className="w-12 h-12 rounded-full object-cover shrink-0 ring-1 ring-[#E6EBE8]"
+                  alt={booking.driver.name}
+                  src={booking.driver.avatar}
+                />
+                <div className="flex flex-col">
+                  <span className="text-base font-bold text-[#14221A]">{booking.driver.name}</span>
+                  <span className="text-xs font-mono text-[#6D7A72] mt-0.5">{booking.driver.phone}</span>
+                  <span className="text-xs text-[#6D7A72] mt-0.5">
+                    {Number(booking.driver.ratingAvg).toFixed(1)} / 5 ({booking.driver.ratingCount} đánh giá)
+                  </span>
+                </div>
+                <div className="ml-auto">
+                  <a
+                    href={`tel:${booking.driver.phone}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E8F6EE] text-[#15803D] text-xs font-semibold hover:bg-[#15803D] hover:text-white transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">call</span>
+                    Gọi tài xế
+                  </a>
+                </div>
+              </div>
             </div>
           )}
 
@@ -543,35 +572,6 @@ export const BookingDetail = ({
               outOfRadiusRate={booking.outOfRadiusRate}
               pickupFee={booking.pickupFee} />
           </div>
-
-          {booking.driver && renterCanSeeDriver(booking.status) && (
-            <div className="bg-white p-5 flex flex-col gap-3 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
-              <h3 className="text-sm font-bold text-[#14221A]">Tài xế chuyên trách</h3>
-              <div className="flex items-center gap-4">
-                <img
-                  className="w-12 h-12 rounded-full object-cover shrink-0 ring-1 ring-[#E6EBE8]"
-                  alt={booking.driver.name}
-                  src={booking.driver.avatar}
-                />
-                <div className="flex flex-col">
-                  <span className="text-base font-bold text-[#14221A]">{booking.driver.name}</span>
-                  <span className="text-xs font-mono text-[#6D7A72] mt-0.5">{booking.driver.phone}</span>
-                  <span className="text-xs text-[#6D7A72] mt-0.5">
-                    {Number(booking.driver.ratingAvg).toFixed(1)} / 5 ({booking.driver.ratingCount} đánh giá)
-                  </span>
-                </div>
-                <div className="ml-auto">
-                  <a
-                    href={`tel:${booking.driver.phone}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E8F6EE] text-[#15803D] text-xs font-semibold hover:bg-[#15803D] hover:text-white transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">call</span>
-                    Gọi tài xế
-                  </a>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* CARD: FEES TABLE */}
           <div className="bg-white p-5 flex flex-col gap-3 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
