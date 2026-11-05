@@ -4,6 +4,7 @@ import {
   BOOKING_FILTERS,
   BOOKING_SORTS,
   bookingStatusMeta,
+  renterCanSeeDriver,
   canShowOperationalRisk,
   cardAction,
   isWaitingDeposit,
@@ -301,7 +302,7 @@ export const MyBookingsList = ({
                       <p className="truncate text-sm text-[#14221A]/65" title={booking.pickupAddress}>
                         {booking.pickupAddress}
                       </p>
-                      {booking.driverName ? (
+                      {booking.driverName && renterCanSeeDriver(booking.status) ? (
                         <p className="truncate text-sm text-[#14221A]/80">
                           Tài xế: {booking.driverName}
                         </p>

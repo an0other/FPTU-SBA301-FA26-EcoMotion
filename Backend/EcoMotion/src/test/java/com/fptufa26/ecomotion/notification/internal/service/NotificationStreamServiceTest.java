@@ -51,7 +51,6 @@ class NotificationStreamServiceTest {
         service.sendEventToUser(1L, "UPDATE", "{}");
         service.sendEventToUser(1L, "UPDATE", "{}");
         verify(failed, times(1)).send(any(SseEmitter.SseEventBuilder.class));
-        verify(failed).complete();
         verifyNoInteractions(other);
         service.sendEventToUser(2L, "UPDATE", "{}");
         verify(other).send(any(SseEmitter.SseEventBuilder.class));

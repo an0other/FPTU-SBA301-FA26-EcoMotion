@@ -4,11 +4,12 @@ import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPrici
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
+import { acceptCharge, cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
 import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSummary'
+import { RefundAccountPanel } from '../../components/booking/RefundAccountPanel'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 
 const CHARGE_LABELS = {
@@ -17,7 +18,10 @@ const CHARGE_LABELS = {
   OVERTIME: 'Quá giờ',
   WAITING: 'Chờ',
   WEEKEND: 'Cuối tuần',
-  OUT_OF_RADIUS: 'Ngoài bán kính',
+  OUT_OF_RADIUS: 'Phí đón ngoài phạm vi',
+  TOLL: 'Phí cầu đường',
+  PARKING: 'Phí gửi xe',
+  OTHER: 'Phụ phí khác',
 }
 
 function formatWhen(value) {
@@ -60,6 +64,8 @@ function toCard(detail) {
     holdExpiresAt: detail.holdExpiresAt,
     depositAmount: Number(detail.depositAmount ?? 0),
     refundExplanation: detail.refundPreview?.explanation ?? '',
+    refundAmount: Number(detail.refundPreview?.amount ?? 0),
+    refundRequiresBankAccount: detail.refundPreview?.requiresBankAccount ?? Number(detail.refundPreview?.amount ?? 0) > 0,
     disputeCategories: detail.disputeCategories ?? [],
     charges: (detail.charges ?? []).map((charge) => ({
       chargeId: charge.chargeId,
@@ -69,6 +75,7 @@ function toCard(detail) {
       formula: formula(charge),
       amount: Number(charge.effectiveAmount ?? charge.amount),
       isWaived: Boolean(charge.isWaived),
+      confirmationStatus: charge.confirmationStatus,
     })),
     driver: detail.driver
       ? {
@@ -92,6 +99,13 @@ function toCard(detail) {
     pickupAddress: detail.pickupAddress,
     pickupLatitude: detail.pickupLatitude,
     pickupLongitude: detail.pickupLongitude,
+    dispatchOriginLatitude: detail.dispatchOriginLatitude,
+    dispatchOriginLongitude: detail.dispatchOriginLongitude,
+    distanceKm: detail.distanceKm,
+    freeRadiusKm: detail.freeRadiusKm,
+    chargeableKm: detail.chargeableKm,
+    outOfRadiusRate: detail.outOfRadiusRate,
+    pickupFee: detail.pickupFee,
     driverNote: detail.driverNote,
     driverReplacementRequired: Boolean(detail.driverReplacementRequired),
     pickupTime: detail.pickupTime,
@@ -147,6 +161,8 @@ export function BookingDetailPage() {
   }
 
   const booking = toCard(detail)
+  const manualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
+    && !['REFUNDED', 'REJECTED'].includes(refund.status))
 
   return (
     <>
@@ -154,12 +170,13 @@ export function BookingDetailPage() {
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
       <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>
       <BookingDetail
-        booking={booking}
+        booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
+        operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
-        onCancelBooking={async () => {
-          const updated = await cancelMyBooking(booking.id)
+        onCancelBooking={async (_code, account) => {
+          const updated = await cancelMyBooking(booking.id, account)
           navigate(`/renter/bookings/${updated.bookingCode}`, { replace: true })
           await refreshDetail()
         }}
@@ -169,6 +186,10 @@ export function BookingDetailPage() {
         }}
         onConfirmStart={async () => {
           await confirmTripStart(booking.id)
+          await refreshDetail()
+        }}
+        onAcceptCharge={async (chargeId) => {
+          await acceptCharge(booking.id, chargeId)
           await refreshDetail()
         }}
         onOpenDispute={async body => { const result = await openDispute(booking.id, body); await refreshDetail(); return result }}
@@ -182,6 +203,8 @@ export function BookingDetailPage() {
         trackingError={trackingError}
         onRefreshTracking={refetchTracking}
       />
+      {['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail.status) && manualRefunds.length > 0 &&
+        <RefundAccountPanel key={`${booking.id}:${manualRefunds[0].id}`} bookingCode={booking.id} refunds={manualRefunds} onSaved={refreshDetail} />}
     </>
   )
 }

@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.dto.response;
 
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 
 import java.math.BigDecimal;
@@ -16,12 +17,20 @@ public record BookingChargeResponse(
         boolean waived,
         String evidenceUrl,
         String createdByName,
-        Instant createdAt
+        Instant createdAt,
+        ChargeConfirmationStatus confirmationStatus
 ) {
+    public BookingChargeResponse(Long id, ChargeType chargeType, String description, Integer quantity,
+                                 BigDecimal unitPrice, BigDecimal appliedRate, BigDecimal amount, boolean waived,
+                                 String evidenceUrl, String createdByName, Instant createdAt) {
+        this(id, chargeType, description, quantity, unitPrice, appliedRate, amount, waived, evidenceUrl,
+                createdByName, createdAt, ChargeConfirmationStatus.ACCEPTED);
+    }
+
     /** Keeps the original renter booking response constructor available. */
     public BookingChargeResponse(ChargeType chargeType, String description, Integer quantity,
                                  BigDecimal unitPrice, BigDecimal amount) {
         this(null, chargeType, description, quantity, unitPrice, null, amount,
-                false, null, null, null);
+                false, null, null, null, ChargeConfirmationStatus.ACCEPTED);
     }
 }

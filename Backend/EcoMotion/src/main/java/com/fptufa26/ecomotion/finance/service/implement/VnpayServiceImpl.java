@@ -85,6 +85,7 @@ public class VnpayServiceImpl implements VnpayService {
     private final Clock clock;
     private final VnpayConfig vnpayConfig;
     private final PlatformTransactionManager transactionManager;
+    private final RefundEventService refundEventService;
 
     @Override
     @Transactional
@@ -334,14 +335,17 @@ public class VnpayServiceImpl implements VnpayService {
                         c.getAppliedRate(),
                         c.getAmount(),
                         c.isWaived(),
-                        c.isWaived() ? BigDecimal.ZERO : c.getAmount()
+                        c.isWaived() ? BigDecimal.ZERO : c.getAmount(),
+                        c.getConfirmationStatus()
                 ))
                 .toList();
 
         BigDecimal extraCharges = charges.stream()
                 .filter(c -> !c.isWaived()
+                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
-                        && c.getChargeType() != ChargeType.BASE_RENTAL)
+                        && c.getChargeType() != ChargeType.BASE_RENTAL
+                        && c.getChargeType() != ChargeType.WEEKEND)
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -679,6 +683,13 @@ public class VnpayServiceImpl implements VnpayService {
                     paymentRequestRepository.save(pr);
                 });
         bookingNotificationService.changed(transaction.getBooking(), "PAYMENT_RECONCILIATION_REQUIRED");
+        if (transaction.getVnpTxnRef() != null && transaction.getAmount() != null && transaction.getAmount().signum() > 0) {
+            User actor = transaction.getBooking().getRenter().getUser();
+            refundEventService.reserveOnTransaction(transaction.getBooking().getId(),
+                    "LATE_IPN:" + transaction.getVnpTxnRef(), transaction.getAmount(),
+                    "LATE_IPN hoàn giao dịch không giữ được lịch " + transaction.getVnpTxnRef(),
+                    actor, transaction.getId());
+        }
         return new VnpayIpnResponse("00", "Payment recorded, reconciliation required");
     }
 
@@ -897,8 +908,10 @@ public class VnpayServiceImpl implements VnpayService {
         List<BookingCharge> charges = bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(booking.getId());
         BigDecimal extraCharges = charges.stream()
                 .filter(c -> !c.isWaived()
+                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
-                        && c.getChargeType() != ChargeType.BASE_RENTAL)
+                        && c.getChargeType() != ChargeType.BASE_RENTAL
+                        && c.getChargeType() != ChargeType.WEEKEND)
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 

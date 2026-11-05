@@ -300,8 +300,14 @@ export function evaluateRefundWorkflow(workflow = {}, booking = {}) {
   const hasFailedRefund = paymentStatus === 'FAILED'
     || refunds.some((r) => r.status === 'FAILED')
 
-  const isFullyRefunded = paymentStatus === 'REFUNDED'
-    || (refundedAmount > 0 && pendingRefundAmount === 0 && refundedAmount >= confirmedPaid)
+  const hasOpenRefund = refunds.some(r => !['REFUNDED', 'REJECTED'].includes(r.status))
+  const completedPolicyRefund = refunds.some(r => r.status === 'REFUNDED')
+    && refunds.filter(r => r.status === 'REFUNDED').reduce((total, r) => total + Number(r.amount || 0), 0) <= refundedAmount
+  const receiptPending = refunds.some(r => ['WAITING', 'REPORTED_NOT_RECEIVED'].includes(r.receiptStatus))
+  const isFullyRefunded = !receiptPending && pendingRefundAmount === 0 && !hasOpenRefund
+    && paymentStatus !== 'RECONCILIATION_REQUIRED'
+    && (paymentStatus === 'REFUNDED' || completedPolicyRefund
+      || (refundedAmount > 0 && refundedAmount >= confirmedPaid))
 
   // Refund stepper: 3 steps
   // 1. Ghi nhận hủy / yêu cầu hoàn
@@ -324,7 +330,7 @@ export function evaluateRefundWorkflow(workflow = {}, booking = {}) {
     step3Desc = 'Đã ghi nhận hoàn tiền'
   } else if (pendingRefundAmount > 0 || paymentStatus === 'REFUND_PENDING' || paymentStatus === 'RECONCILIATION_REQUIRED' || refunds.length > 0) {
     step2State = STEP_STATUS.CURRENT
-    step2Desc = paymentStatus === 'RECONCILIATION_REQUIRED'
+    step2Desc = receiptPending ? 'Chờ người thuê xác nhận nhận tiền' : paymentStatus === 'RECONCILIATION_REQUIRED'
       ? 'Đang đối soát giao dịch'
       : 'Đang xử lý chuyển khoản'
   }
@@ -356,6 +362,7 @@ export function evaluateRefundWorkflow(workflow = {}, booking = {}) {
   return {
     hasFinancialObligation: true,
     hasFailedRefund,
+    receiptPending,
     isFullyRefunded,
     steps,
   }

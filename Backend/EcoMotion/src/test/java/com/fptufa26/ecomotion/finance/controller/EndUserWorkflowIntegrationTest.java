@@ -1,5 +1,8 @@
 package com.fptufa26.ecomotion.finance.controller;
 
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import com.fptufa26.ecomotion.booking.entity.*;
 import com.fptufa26.ecomotion.booking.enums.*;
 import com.fptufa26.ecomotion.booking.repository.*;
@@ -30,16 +33,16 @@ import java.util.concurrent.*;
 import static org.assertj.core.api.Assertions.*;
 
 @SpringBootTest(properties = {"app.finance.sandbox-payout-enabled=true", "logging.level.org.hibernate.SQL=WARN"})
-@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 class EndUserWorkflowIntegrationTest {
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    @MockitoBean
     com.fptufa26.ecomotion.booking.service.MapGeocodingService geocoding;
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    @MockitoBean
     com.fptufa26.ecomotion.notification.external.service.ExternalNotificationDispatcherService external;
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    @MockitoBean
     com.fptufa26.ecomotion.common.storage.FileStorageService storage;
-    @org.springframework.test.context.DynamicPropertySource
+    @DynamicPropertySource
     static void database(org.springframework.test.context.DynamicPropertyRegistry registry) {
         if (!Boolean.getBoolean("tv5.workflow.postgres")) return;
         String url = System.getProperty("tv5.postgres.url");
@@ -74,11 +77,11 @@ class EndUserWorkflowIntegrationTest {
         trips.confirmTrip(driver[1], code()); trips.arriveAtPickup(driver[1], code());
         trips.startTrip(driver[1], code()); renterBookings.confirmStart(renterId, code());
         trips.finishTrip(driver[1], code()); renterBookings.confirmEnd(renterId, code());
-        tx.executeWithoutResult(s -> snapshots.findByBooking_Id(bookingId).orElseThrow().setWaitingRate(new BigDecimal("10000")));
         var charge = providerBookings.addCharge(providerId, code(), new com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest(
-                ChargeType.WAITING, "Waiting at pickup", 2, new BigDecimal("99999"), BigDecimal.ONE,
-                new BigDecimal("99999"), "https://example.test/waiting.jpg"));
+                ChargeType.PARKING, "Parking at the return point for this trip", 1, new BigDecimal("20000"), BigDecimal.ONE,
+                new BigDecimal("20000"), "https://example.test/waiting.jpg", "park-dispute-1"));
         assertThat(charge.amount()).isEqualByComparingTo("20000");
+        assertThat(charge.confirmationStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING);
         var dispute = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
                 com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE, charge.id(), null,
                 "Passenger disputes the recorded waiting time", List.of("https://example.test/passenger.jpg"), null));
@@ -348,6 +351,59 @@ class EndUserWorkflowIntegrationTest {
                 .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
     }
 
+    @Test void halfDepositRefundCompletesIndependentlyOfOpenCancellationReview() throws Exception {
+        org.mockito.Mockito.when(storage.store(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(byte[].class), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("refund-proof/test.pdf");
+        org.mockito.Mockito.when(storage.read("refund-proof/test.pdf")).thenReturn("%PDF-1.4 evidence".getBytes());
+        ready();
+        tx.executeWithoutResult(s -> {
+            em.find(Booking.class, bookingId).setPickupTime(Instant.now().plusSeconds(3600));
+            ledger.findByBooking_Id(bookingId).stream().filter(t -> t.getDirection() == PaymentDirection.IN)
+                    .forEach(t -> t.setMethod(PaymentMethod.BANK_TRANSFER));
+        });
+        renterBookings.cancel(renterId, code());
+        var pending = workflow.getWorkflow(renterId, code());
+        assertThat(pending.paymentStatus()).isEqualTo("REFUND_PENDING");
+        refunds.completeRefund(providerId, pending.refunds().getFirst().paymentTransactionId(),
+                new MockMultipartFile("file", "refund.pdf", "application/pdf", "%PDF-1.4 evidence".getBytes()), null, null);
+        var completed = workflow.getWorkflow(renterId, code());
+        var receipt = completed.refunds().getFirst();
+        assertThat(receipt.receiptStatus()).isEqualTo("WAITING");
+        assertThat(java.time.Duration.between(receipt.receiptWaitingAt(), receipt.receiptDeadline()).toHours()).isEqualTo(72);
+        assertThatThrownBy(() -> receipts.respond(providerId, receipt.id(), true)).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        receipts.confirmExpired();
+        assertThat(workflow.getWorkflow(renterId, code()).refunds().getFirst().receiptStatus()).isEqualTo("WAITING");
+        receipts.respond(renterId, receipt.id(), false);
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.finance.entity.RefundRequest.class, receipt.id()).setReceiptDeadline(Instant.now().minusSeconds(1)));
+        receipts.confirmExpired();
+        assertThat(workflow.getWorkflow(renterId, code()).refunds().getFirst().receiptStatus()).isEqualTo("REPORTED_NOT_RECEIVED");
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.finance.entity.RefundRequest.class, receipt.id()).setReceiptStatus("WAITING"));
+        receipts.confirmExpired();
+        var automatic = workflow.getWorkflow(renterId, code()).refunds().getFirst();
+        assertThat(automatic.receiptStatus()).isEqualTo("AUTO_CONFIRMED");
+        assertThat(automatic.receiptConfirmedBy()).isNull();
+        assertThat(automatic.receiptAutoConfirmedAt()).isNotNull();
+        receipts.confirmExpired();
+        assertThat(workflow.getWorkflow(renterId, code()).refunds().getFirst().receiptAutoConfirmedAt()).isEqualTo(automatic.receiptAutoConfirmedAt());
+        assertThatThrownBy(() -> receipts.respond(renterId, receipt.id(), true)).isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThatThrownBy(() -> receipts.respond(renterId, receipt.id(), false)).isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThat(automatic.proofAvailable()).isTrue();
+        var storedProof = refunds.getProof(renterId, automatic.paymentTransactionId());
+        assertThat(storedProof.contentType()).isEqualTo("application/pdf");
+        assertThat(storedProof.content()).containsExactly("%PDF-1.4 evidence".getBytes());
+        assertThatThrownBy(() -> refunds.getProof(adminId + 999999, automatic.paymentTransactionId())).isInstanceOf(RuntimeException.class);
+        assertThat(completed.refundedAmount()).isEqualByComparingTo(completed.confirmedPaid().multiply(new BigDecimal("0.5")));
+        assertThat(completed.paymentStatus()).isEqualTo("REFUNDED");
+        tx.executeWithoutResult(s -> disputes.open(em.find(Booking.class, bookingId), em.find(User.class, renterId),
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, null,
+                "Please review the cancellation refund policy", List.of()));
+        var reviewed = workflow.getWorkflow(renterId, code());
+        assertThat(reviewed.paymentStatus()).isEqualTo("REFUNDED");
+        assertThat(reviewed.settlementStatus()).isEqualTo("DISPUTED");
+        assertThat(reviewed.nextAction()).contains("xử lý riêng").doesNotContain("quyết toán");
+    }
+
     @Test void noDriverRenterRejectsAlternativeThenCancellationReservesFullRefundWithoutClaimingPaid() {
         long[] driver = ready();
         tx.executeWithoutResult(s -> em.find(Driver.class, driver[0]).setActivityStatus(DriverActivityStatus.OFFLINE));
@@ -366,16 +422,15 @@ class EndUserWorkflowIntegrationTest {
         assertThat(result.refundedAmount()).isZero();
         assertThat(result.refundableAmount()).isZero();
         assertThatThrownBy(() -> refunds.createRefundRequest(renterId, request("100000", "duplicate"))).isInstanceOf(RuntimeException.class);
-        org.mockito.Mockito.when(storage.store(org.mockito.ArgumentMatchers.eq("refund-proof"), org.mockito.ArgumentMatchers.anyLong(),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(byte[].class), org.mockito.ArgumentMatchers.anyString()))
-                .thenReturn("/test-only/refund-proof.pdf");
         long refundId = ledger.findByBooking_Id(bookingId).stream().filter(t -> t.getType() == PaymentType.REFUND).findFirst().orElseThrow().getId();
         var proof = new MockMultipartFile("file", "refund.pdf", "application/pdf", "%PDF-1.4 test evidence".getBytes());
-        refunds.completeRefund(providerId, refundId, proof, "JOURNEY-" + UUID.randomUUID(), "Bank transfer confirmed");
+        // ready() collected via VNPay: a bank-transfer image cannot settle a gateway refund.
+        assertThatThrownBy(() -> refunds.completeRefund(providerId, refundId, proof, "JOURNEY-" + UUID.randomUUID(), "Bank transfer confirmed"))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
         var completed = workflow.getWorkflow(renterId, code());
-        assertThat(completed.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
-        assertThat(completed.refundedAmount()).isEqualByComparingTo("100000");
-        assertThat(completed.pendingRefundAmount()).isZero();
+        assertThat(completed.bookingStatus()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(completed.refundedAmount()).isZero();
+        assertThat(completed.pendingRefundAmount()).isEqualByComparingTo("100000");
     }
 
     @Test void changedTermsRequireNewDriverConsentAndRejectOldTabSnapshot() {
@@ -448,6 +503,7 @@ class EndUserWorkflowIntegrationTest {
     @Autowired PaymentTransactionRepository ledger;
     @Autowired BookingRepository bookings;
     @Autowired RefundRequestRepository requests;
+    @Autowired com.fptufa26.ecomotion.finance.service.implement.RefundReceiptService receipts;
     @Autowired BookingPolicySnapshotRepository snapshots;
     @Autowired com.fptufa26.ecomotion.finance.config.VnpayConfig config;
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;

@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { IconWallet, IconPlus } from '../icons/Icons'
 
 const CHARGE_TYPES = [
-  { value: 'OVERTIME', label: 'Phí quá giờ (Overtime Fee)' },
-  { value: 'WAITING', label: 'Phí chờ đợi (Waiting Fee)' },
-  { value: 'WEEKEND', label: 'Phụ phí cuối tuần (Weekend Surcharge)' },
-  { value: 'OUT_OF_RADIUS', label: 'Phí ngoài bán kính / Giao xe xa (Out of Radius)' },
-  { value: 'DEPOSIT', label: 'Tiền đặt cọc bổ sung (Additional Deposit)' },
+  { value: 'OVERTIME', label: 'Phí quá giờ' },
+  { value: 'TOLL', label: 'Phí cầu đường' },
+  { value: 'PARKING', label: 'Phí gửi xe' },
+  { value: 'OTHER', label: 'Phụ phí khác' },
 ]
 
 export default function AddChargeModal({

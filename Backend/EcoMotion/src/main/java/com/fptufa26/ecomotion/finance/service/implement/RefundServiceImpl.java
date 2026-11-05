@@ -52,7 +52,6 @@ public class RefundServiceImpl implements RefundService {
         Booking booking = resolveBooking(bookingCode);
         requireParticipantOrAdmin(requireUser(currentUserId), booking);
         var transactions = bookingPaymentLedgerService.listTransactions(booking.getId());
-        if (transactions.stream().anyMatch(t -> t.getType() == PaymentType.PAYOUT && t.getStatus() != PaymentStatus.FAILED)) return BigDecimal.ZERO;
         BigDecimal received = transactions.stream().filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         return received.subtract(reservedRefundAmount(booking.getId())).max(BigDecimal.ZERO);
@@ -70,6 +69,7 @@ public class RefundServiceImpl implements RefundService {
     private final Clock clock;
     private final jakarta.persistence.EntityManager entityManager;
     private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+    private final RefundEventService refundEventService;
 
     @Override
     @Transactional
@@ -83,49 +83,15 @@ public class RefundServiceImpl implements RefundService {
         booking = bookingPaymentLedgerService.requireBookingForUpdate(booking.getId());
         requireParticipantOrAdmin(user, booking);
 
-        var repeated = refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId()).stream()
-                .filter(r -> (r.getStatus() != RefundStatus.REJECTED && r.getStatus() != RefundStatus.FAILED)
-                        && r.getAmount().compareTo(request.amount()) == 0 && r.getReason().equals(request.reason().trim())
-                        && java.util.Objects.equals(r.getEvidenceUrl(), request.evidenceUrl()))
-                .findFirst();
-        if (repeated.isPresent()) return toRefundResponse(repeated.get());
-        List<PaymentTransaction> incomingPaid = bookingPaymentLedgerService.listTransactions(booking.getId()).stream()
-                .filter(tx -> tx.getStatus() == PaymentStatus.PAID && tx.getDirection() == PaymentDirection.IN)
-                .toList();
-        if (bookingPaymentLedgerService.listTransactions(booking.getId()).stream()
-                .anyMatch(t -> t.getType() == PaymentType.PAYOUT && t.getStatus() != PaymentStatus.FAILED)) {
-            throw new ConflictException("Đơn thuê đã có lệnh chi trả; cần Admin đối soát trước khi hoàn tiền");
-        }
-
-        BigDecimal totalPaid = incomingPaid.stream()
-                .map(PaymentTransaction::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal committedRefunds = reservedRefundAmount(booking.getId());
-        BigDecimal maxRefundable = totalPaid.subtract(committedRefunds);
-
-        if (maxRefundable.compareTo(BigDecimal.ZERO) <= 0) {
+        String eventId = "MANUAL:" + booking.getId() + ":"
+                + request.amount().stripTrailingZeros().toPlainString().replace(".", "p") + ":"
+                + Integer.toHexString((request.reason().trim() + "|" + java.util.Objects.toString(request.evidenceUrl(), "")).hashCode());
+        List<RefundRequest> created = refundEventService.reserve(booking.getId(), eventId, request.amount(), request.reason().trim(), user);
+        if (created.isEmpty()) {
             throw new InvalidPaymentOperationException("Đơn thuê không còn khoản tiền hợp lệ để hoàn trả");
         }
-        if (request.amount().compareTo(maxRefundable) > 0) {
-            throw new InvalidPaymentOperationException("Số tiền yêu cầu hoàn (" + request.amount()
-                    + ") vượt quá số tiền tối đa có thể hoàn (" + maxRefundable + ")");
-        }
-
-        PaymentTransaction originalTx = incomingPaid.isEmpty() ? null : incomingPaid.get(0);
-        Instant now = clock.instant();
-
-        RefundRequest refund = new RefundRequest();
-        refund.setBooking(booking);
-        refund.setPaymentTransaction(originalTx);
-        refund.setAmount(request.amount());
-        refund.setReason(request.reason().trim());
-        refund.setEvidenceUrl(request.evidenceUrl());
-        refund.setStatus(RefundStatus.REQUESTED);
-        refund.setRequestedBy(user);
-        refund.setCreatedAt(now);
-        refund.setUpdatedAt(now);
-        bookingNotificationService.changed(refund.getBooking(), "REFUND_UPDATED");
-        return toRefundResponse(refundRequestRepository.save(refund));
+        created.forEach(refund -> refund.setEvidenceUrl(request.evidenceUrl()));
+        return toRefundResponse(created.get(0));
     }
 
     @Override
@@ -142,14 +108,29 @@ public class RefundServiceImpl implements RefundService {
         entityManager.refresh(refund, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         requireProviderOrAdmin(reviewer, refund.getBooking());
 
-        if (refund.getStatus() != RefundStatus.REQUESTED && refund.getStatus() != RefundStatus.UNDER_REVIEW) {
+        if ("APPROVE".equals(request.action() != null ? request.action().trim().toUpperCase(Locale.ROOT) : "")
+                && refund.getStatus() == RefundStatus.PROCESSING
+                && refund.getPaymentTransaction() != null
+                && refund.getPaymentTransaction().getType() == PaymentType.REFUND) {
+            return toRefundResponse(refund);
+        }
+        if (refund.getStatus() != RefundStatus.REQUESTED && refund.getStatus() != RefundStatus.UNDER_REVIEW
+                && refund.getStatus() != RefundStatus.FAILED) {
             throw new InvalidPaymentOperationException("Yêu cầu hoàn tiền không còn ở trạng thái chờ xét duyệt");
         }
 
         String action = request.action() != null ? request.action().trim().toUpperCase(Locale.ROOT) : "";
         Instant now = clock.instant();
 
-        if ("APPROVE".equals(action)) {
+        if ("APPROVE".equals(action) || "CONTINUE".equals(action) || "MANUAL".equals(action)) {
+            if ("CONTINUE".equals(action) || "MANUAL".equals(action)) {
+                return toRefundResponse(refundEventService.releaseForFollowUp(refund.getId(), reviewer, "MANUAL".equals(action)));
+            }
+            if (refund.getPaymentTransaction() != null && refund.getPaymentTransaction().getType() == PaymentType.REFUND) {
+                refund.setApprovedBy(reviewer);
+                refund.setStatus(RefundStatus.PROCESSING);
+                refund.setUpdatedAt(now);
+            } else {
             BigDecimal paid = bookingPaymentLedgerService.listTransactions(refund.getBooking().getId()).stream()
                     .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                     .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -171,6 +152,7 @@ public class RefundServiceImpl implements RefundService {
             refund.setApprovedBy(reviewer);
             refund.setStatus(RefundStatus.PROCESSING);
             refund.setUpdatedAt(now);
+            }
         } else if ("REJECT".equals(action)) {
             if (request.rejectionReason() == null || request.rejectionReason().isBlank()
                     || request.rejectionReason().trim().length() > 500) {
@@ -221,6 +203,9 @@ public class RefundServiceImpl implements RefundService {
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy giao dịch"));
         requireProviderOrAdmin(user, transaction.getBooking());
         requirePendingRefund(transaction);
+        if (transaction.getMethod() == PaymentMethod.VNPAY) {
+            throw new ConflictException("Hoàn qua VNPay không dùng minh chứng chuyển khoản");
+        }
         BigDecimal received = bookingPaymentLedgerService.listTransactions(transaction.getBooking().getId()).stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -230,7 +215,7 @@ public class RefundServiceImpl implements RefundService {
         validateProof(proof);
 
         String reference = normalizeReference(bankReference);
-        if (bookingPaymentLedgerService.gatewayReferenceExists(reference)) {
+        if (reference != null && bookingPaymentLedgerService.gatewayReferenceExists(reference)) {
             throw new ConflictException("Mã giao dịch ngân hàng đã được sử dụng");
         }
         String normalizedNote = normalizeNote(note);
@@ -265,6 +250,11 @@ public class RefundServiceImpl implements RefundService {
 
         refundRequestRepository.findByPaymentTransaction_Id(transaction.getId()).ifPresent(refund -> {
             refund.setStatus(RefundStatus.REFUNDED);
+            if (refund.getReceiptStatus() == null) {
+                refund.setReceiptStatus("WAITING");
+                refund.setReceiptWaitingAt(now);
+                refund.setReceiptDeadline(now.plus(java.time.Duration.ofHours(72)));
+            }
             refund.setGatewayRefundRef(transaction.getGatewayRef());
             refund.setUpdatedAt(now);
             refundRequestRepository.save(refund);
@@ -362,7 +352,7 @@ public class RefundServiceImpl implements RefundService {
 
     private String normalizeReference(String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Mã giao dịch hoàn tiền là bắt buộc");
+            return null;
         }
         String normalized = value.trim().toUpperCase(Locale.ROOT);
         if (normalized.length() > 100) throw new IllegalArgumentException("Mã giao dịch tối đa 100 ký tự");
@@ -417,7 +407,13 @@ public class RefundServiceImpl implements RefundService {
                 r.getRejectionReason(),
                 r.getGatewayRefundRef(),
                 r.getCreatedAt(),
-                r.getUpdatedAt()
+                r.getUpdatedAt(),
+                r.getPaymentTransaction() != null ? r.getPaymentTransaction().getMethod() : null,
+                r.getRecipientBankName(), r.getRecipientAccountHolder(), r.getRecipientAccountNumber(),
+                r.getReceiptStatus(), r.getReceiptWaitingAt(), r.getReceiptDeadline(),
+                r.getReceiptConfirmedAt(), r.getReceiptConfirmedBy(), r.getReceiptReportedAt(), r.getReceiptAutoConfirmedAt(),
+                r.getPaymentTransaction() != null && r.getPaymentTransaction().getReceiptUrl() != null
+                        && !r.getPaymentTransaction().getReceiptUrl().isBlank()
         );
     }
 

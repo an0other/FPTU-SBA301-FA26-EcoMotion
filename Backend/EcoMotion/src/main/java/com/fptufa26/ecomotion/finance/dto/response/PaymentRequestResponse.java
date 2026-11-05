@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.finance.dto.response;
 
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 
@@ -33,7 +34,8 @@ public record PaymentRequestResponse(
         String rejectionReason,
         String issueNote,
         List<PaymentEvidenceResponse> evidences,
-        boolean vnpayVerifying
+        boolean vnpayVerifying,
+        BookingStatus bookingStatus
 ) {
     public PaymentRequestResponse(
             Long id,
@@ -59,11 +61,12 @@ public record PaymentRequestResponse(
             Instant confirmedAt,
             String rejectionReason,
             String issueNote,
-            List<PaymentEvidenceResponse> evidences
+            List<PaymentEvidenceResponse> evidences,
+            BookingStatus bookingStatus
     ) {
         this(id, null, bookingId, bookingCode, paymentType, amount, paidAmount, remainingAmount, currency,
                 transferReference, bankCodeSnapshot, bankNameSnapshot, accountNumberSnapshot, accountNumberMasked,
                 accountHolderSnapshot, status, qrCodeUrl, expiresAt, firstProofAt, reconciliationDeadline,
-                createdAt, confirmedAt, rejectionReason, issueNote, evidences, false);
+                createdAt, confirmedAt, rejectionReason, issueNote, evidences, false, bookingStatus);
     }
 }

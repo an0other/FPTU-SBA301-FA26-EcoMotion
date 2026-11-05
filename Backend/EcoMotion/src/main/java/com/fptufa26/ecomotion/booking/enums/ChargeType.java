@@ -6,5 +6,8 @@ public enum ChargeType {
     OVERTIME,
     WAITING,
     WEEKEND,
-    OUT_OF_RADIUS
+    OUT_OF_RADIUS,
+    TOLL,
+    PARKING,
+    OTHER
 }

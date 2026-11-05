@@ -142,7 +142,7 @@ export default function BookingProgressStepper({
               <span className="text-[11px] font-normal text-slate-500">
                 {refundData.isFullyRefunded
                   ? 'Đã hoàn tất toàn bộ'
-                  : 'Nghĩa vụ hoàn tiền còn tồn tại'}
+                  : refundData.receiptPending ? 'Chờ xác nhận nhận tiền' : 'Nghĩa vụ hoàn tiền còn tồn tại'}
               </span>
             </div>
 

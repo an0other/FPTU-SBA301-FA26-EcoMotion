@@ -127,6 +127,21 @@ const RISK_VISIBLE_STATUSES = new Set([
 
 const WAITING_DEPOSIT_STATUSES = new Set(['AWAITING_DEPOSIT', 'ACCEPTED'])
 
+const RENTER_DRIVER_VISIBLE_STATUSES = new Set([
+  'DRIVER_CONFIRMED',
+  'DRIVER_ARRIVED',
+  'AWAITING_START_CONFIRMATION',
+  'IN_PROGRESS',
+  'AWAITING_END_CONFIRMATION',
+  'AWAITING_EXTRA_CHARGE_CONFIRMATION',
+  'AWAITING_FINAL_PAYMENT',
+  'COMPLETED',
+])
+
+export function renterCanSeeDriver(status) {
+  return RENTER_DRIVER_VISIBLE_STATUSES.has(status)
+}
+
 export function bookingStatusMeta(status) {
   return BOOKING_STATUS_META[status] ?? {
     label: 'Trạng thái chưa xác định',

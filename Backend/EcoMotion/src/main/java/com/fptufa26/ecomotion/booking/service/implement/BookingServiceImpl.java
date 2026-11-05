@@ -1,5 +1,9 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import java.time.format.DateTimeFormatter;
+import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
+import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
+import com.fptufa26.ecomotion.finance.service.RefundMath;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
@@ -148,6 +152,7 @@ public class BookingServiceImpl implements BookingService {
     private final Clock clock;
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
+    private final RefundEventService refundEventService;
 
     @Override
     @Transactional(readOnly = true)
@@ -204,14 +209,22 @@ public class BookingServiceImpl implements BookingService {
     public PickupQuoteResponse quotePickup(PickupQuoteRequest request) {
         Vehicle vehicle = vehicleCatalogService.requireApproved(request.vehicleId());
         RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(), request.planId());
-        return calculatePickupQuote(vehicle.getProvider(), plan.getFreeRadiusKm(), plan.getOutOfRadiusRate(),
+        if (plan.getPlanType() == PlanType.YEARLY) {
+            throw new ConflictException("Yearly plans must use the dedicated contract flow");
+        }
+        return calculatePickupQuote(vehicle, plan.getFreeRadiusKm(), plan.getOutOfRadiusRate(),
                 request.pickupLatitude(), request.pickupLongitude());
     }
 
-    private PickupQuoteResponse calculatePickupQuote(Provider provider, Integer freeRadiusKm,
+    private PickupQuoteResponse calculatePickupQuote(Vehicle vehicle, Integer freeRadiusKm,
                                                       BigDecimal rate, BigDecimal latitude, BigDecimal longitude) {
-        if (provider == null || provider.getDepotLatitude() == null || provider.getDepotLongitude() == null) {
-            throw new ConflictException("Nhà cung cấp chưa cấu hình vị trí bãi xe để tính phí đón");
+        Provider provider = vehicle == null ? null : vehicle.getProvider();
+        BigDecimal originLat = vehicle != null && vehicle.getDispatchLatitude() != null && vehicle.getDispatchLongitude() != null
+                ? vehicle.getDispatchLatitude() : provider == null ? null : provider.getDepotLatitude();
+        BigDecimal originLng = vehicle != null && vehicle.getDispatchLatitude() != null && vehicle.getDispatchLongitude() != null
+                ? vehicle.getDispatchLongitude() : provider == null ? null : provider.getDepotLongitude();
+        if (originLat == null || originLng == null) {
+            throw new ConflictException("Nhà cung cấp chưa cấu hình vị trí xuất phát của xe để tính phí đón");
         }
         if (freeRadiusKm == null || freeRadiusKm < 0 || rate == null || rate.signum() < 0) {
             throw new ConflictException("Gói thuê chưa cấu hình hợp lệ bán kính miễn phí và đơn giá vượt bán kính");
@@ -219,28 +232,55 @@ public class BookingServiceImpl implements BookingService {
         if (latitude == null || longitude == null) {
             throw new BadRequestException("Vui lòng chọn tọa độ điểm đón hợp lệ");
         }
-        double distance = mapLocationService.distanceKm(provider.getDepotLatitude().doubleValue(),
-                provider.getDepotLongitude().doubleValue(), latitude.doubleValue(), longitude.doubleValue());
+        double distance = mapLocationService.distanceKm(originLat.doubleValue(), originLng.doubleValue(),
+                latitude.doubleValue(), longitude.doubleValue());
         int chargeableKm = (int) Math.ceil(Math.max(0, distance - freeRadiusKm));
         return new PickupQuoteResponse(distance, freeRadiusKm, chargeableKm, rate,
-                rate.multiply(BigDecimal.valueOf(chargeableKm)));
+                rate.multiply(BigDecimal.valueOf(chargeableKm)), originLat, originLng);
     }
 
     private void savePickupCharge(Booking booking, PickupQuoteResponse quote, User actor) {
-        BookingCharge charge = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.OUT_OF_RADIUS)
-                .orElseGet(BookingCharge::new);
+        List<BookingCharge> rows = chargeRepository.findAllByBooking_IdAndChargeType(booking.getId(), ChargeType.OUT_OF_RADIUS);
+        BookingCharge charge = rows.isEmpty() ? null : rows.get(0);
+        if (rows.size() > 1) {
+            rows.stream().skip(1).forEach(extra -> {
+                extra.setWaived(true);
+                chargeRepository.save(extra);
+            });
+        }
+        snapshotRepository.findByBooking_Id(booking.getId()).ifPresent(snapshot -> {
+            snapshot.setDispatchOriginLatitude(quote.originLatitude());
+            snapshot.setDispatchOriginLongitude(quote.originLongitude());
+            snapshot.setDistanceKm(BigDecimal.valueOf(quote.distanceKm()).setScale(3, java.math.RoundingMode.HALF_UP));
+            snapshot.setDistanceSource("HAVERSINE");
+            snapshot.setPickupFee(quote.pickupFee());
+            snapshotRepository.save(snapshot);
+        });
         if (quote.pickupFee().signum() == 0) {
-            if (charge.getId() != null) chargeRepository.delete(charge);
+            if (charge != null && charge.getId() != null) {
+                charge.setWaived(true);
+                charge.setAmount(BigDecimal.ZERO);
+                charge.setQuantity(1);
+                charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+                chargeRepository.save(charge);
+            }
             return;
         }
-        charge.setBooking(booking);
+        if (charge == null) {
+            charge = new BookingCharge();
+            charge.setBooking(booking);
+            charge.setCreatedBy(actor);
+        }
         charge.setChargeType(ChargeType.OUT_OF_RADIUS);
         charge.setDescription("Phí đón vượt bán kính miễn phí " + quote.freeRadiusKm() + " km");
-        charge.setQuantity(quote.chargeableKm());
+        charge.setQuantity(Math.max(quote.chargeableKm(), 1));
         charge.setUnitPrice(quote.outOfRadiusRate());
         charge.setAmount(quote.pickupFee());
-        charge.setCreatedBy(actor);
         charge.setWaived(false);
+        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        if (charge.getCreatedBy() == null) {
+            charge.setCreatedBy(actor);
+        }
         chargeRepository.save(charge);
     }
 
@@ -300,7 +340,7 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Bạn đã có đơn thuê trùng khoảng thời gian này");
         }
 
-        PickupQuoteResponse pickupQuote = calculatePickupQuote(vehicle.getProvider(), plan.getFreeRadiusKm(),
+        PickupQuoteResponse pickupQuote = calculatePickupQuote(vehicle, plan.getFreeRadiusKm(),
                 plan.getOutOfRadiusRate(), request.pickupLatitude(), request.pickupLongitude());
         BigDecimal total = mixed ? selection.rentalAmount() : plan.getSlotPrice().multiply(BigDecimal.valueOf(request.slotCount()));
         User actor = renter.getUser();
@@ -685,6 +725,19 @@ public class BookingServiceImpl implements BookingService {
 
         vehicleCatalogService.requireApprovedForUpdate(booking.getVehicle().getId());
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
+        boolean pinChanged = booking.getPickupLatitude() == null || booking.getPickupLongitude() == null
+                || booking.getPickupLatitude().compareTo(request.pickupLatitude()) != 0
+                || booking.getPickupLongitude().compareTo(request.pickupLongitude()) != 0;
+        if (pinChanged) {
+            PickupQuoteResponse preview = calculatePickupQuote(booking.getVehicle(),
+                    snapshot.getFreeRadiusKm(), snapshot.getOutOfRadiusRate(),
+                    request.pickupLatitude(), request.pickupLongitude());
+            BigDecimal currentFee = snapshot.getPickupFee() == null ? BigDecimal.ZERO : snapshot.getPickupFee();
+            if (currentFee.compareTo(preview.pickupFee()) != 0 && !Boolean.TRUE.equals(request.confirmPickupFeeChange())) {
+                throw new ConflictException("Phí đón thay đổi thành " + preview.pickupFee()
+                        + "đ. Xác nhận chênh lệch trước khi lưu điểm đón mới.");
+            }
+        }
         int slots = baseSlots(booking);
         if (!booking.getPricingItems().isEmpty())
             RentalPricingServiceImpl.validateHours(request.pickupTime(), request.pickupTime().plus(Duration.ofHours(1)));
@@ -704,7 +757,7 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getPickupLatitude() == null || booking.getPickupLongitude() == null
                 || booking.getPickupLatitude().compareTo(request.pickupLatitude()) != 0
                 || booking.getPickupLongitude().compareTo(request.pickupLongitude()) != 0) {
-            PickupQuoteResponse quote = calculatePickupQuote(booking.getVehicle().getProvider(),
+            PickupQuoteResponse quote = calculatePickupQuote(booking.getVehicle(),
                     snapshot.getFreeRadiusKm(), snapshot.getOutOfRadiusRate(),
                     request.pickupLatitude(), request.pickupLongitude());
             savePickupCharge(booking, quote, booking.getRenter().getUser());
@@ -727,25 +780,60 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
+    public CancelBookingResponse cancel(Long userId, String bookingCode, RefundAccountRequest account) {
+        CancelBookingResponse response = cancel(userId, bookingCode);
+        if (account != null) {
+            Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId).orElseThrow();
+            refundEventService.updateRecipientAccount(booking.getId(), account);
+        }
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public void updateRefundAccount(Long userId, String bookingCode, RefundAccountRequest account) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
+        if (refundEventService.updateRecipientAccount(booking.getId(), account) == 0)
+            throw new ConflictException("Không còn khoản hoàn chuyển khoản có thể cập nhật");
+    }
+
+    @Override
+    @Transactional
     public CancelBookingResponse cancel(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, bookingCode);
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (booking.getCancelReason() == CancelReason.RENTER_REQUEST && booking.getCancelledAt() != null
+                && (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)) {
+            return bookingMapper.toCancel(booking, refundEventService.reservedForEvent(booking.getId(), "CANCEL:" + booking.getId()));
+        }
         if (!CANCELLABLE.contains(booking.getStatus())) {
             throw new ConflictException("Booking cannot be cancelled");
         }
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
-        Instant cancelledAt = Instant.now();
+        Instant cancelledAt = clock.instant();
         PaymentRequest depositRequest = paymentRequestService
                 .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
                 .orElse(null);
-        boolean hasVerifiedDeposit = depositRequest != null && depositRequest.getPaidAmount().signum() > 0;
-        boolean needsReview = depositRequest != null
-                && (hasVerifiedDeposit
-                    || depositRequest.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
+        List<PaymentTransaction> recordedPayments = paymentTransactionRepository.findByBooking_Id(booking.getId());
+        BigDecimal recordedDeposit = paidDeposit(recordedPayments);
+        boolean hasVerifiedDeposit = recordedDeposit != null;
+        boolean moneyRecorded = recordedPayments.stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
+                && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0)
+                || depositRequest != null
+                && (depositRequest.getStatus() == PaymentRequestStatus.CONFIRMED || depositRequest.getPaidAmount().signum() > 0);
+        boolean proofStillOpen = depositRequest != null
+                && !moneyRecorded
+                && (depositRequest.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
                     || depositRequest.getStatus() == PaymentRequestStatus.PARTIALLY_PAID
                     || depositRequest.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED);
+        BigDecimal remainingReceived = refundEventService.remainingReceived(booking.getId());
+        boolean needsReview = proofStillOpen || refundEventService.hasOpenRefunds(booking.getId())
+                || moneyRecorded && (!hasVerifiedDeposit || remainingReceived.signum() > 0);
         BigDecimal refundAmount = hasVerifiedDeposit
                 ? refundAmount(booking, snapshot, cancelledAt)
                 : BigDecimal.ZERO;
+        refundAmount = refundAmount.min(remainingReceived);
         if (refundAmount.signum() > 0) {
             saveRefund(booking, refundAmount);
         }
@@ -753,8 +841,8 @@ public class BookingServiceImpl implements BookingService {
         booking.setCancelReason(CancelReason.RENTER_REQUEST);
         booking.setCancelledAt(cancelledAt);
         booking.setStatus(needsReview ? BookingStatus.CANCELLATION_REVIEW : BookingStatus.CANCELLED);
-        if (depositRequest != null) {
-            depositRequest.setStatus(needsReview ? PaymentRequestStatus.REVIEW_REQUIRED : PaymentRequestStatus.VOIDED);
+        if (depositRequest != null && !moneyRecorded) {
+            depositRequest.setStatus(proofStillOpen ? PaymentRequestStatus.REVIEW_REQUIRED : PaymentRequestStatus.VOIDED);
         }
         scheduleService.release(booking.getId());
         if (booking.getDriver() != null) {
@@ -796,6 +884,10 @@ public class BookingServiceImpl implements BookingService {
     public ConfirmEndResponse confirmEnd(Long userId, String bookingCode) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
+        if ((booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null)
+                && (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT || booking.getStatus() == BookingStatus.COMPLETED)) {
+            return bookingMapper.toConfirmEnd(booking);
+        }
         if (booking.getStatus() != BookingStatus.IN_PROGRESS
                 && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION
                 && booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
@@ -811,7 +903,7 @@ public class BookingServiceImpl implements BookingService {
             booking.setActualEndAt(now);
             booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         } else {
-            booking.setStatus(BookingStatus.IN_PROGRESS);
+            booking.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);
         }
         bookingRepository.saveAndFlush(booking);
         bookingNotificationService.changed(booking, "BOOKING_CHANGED");
@@ -849,6 +941,8 @@ public class BookingServiceImpl implements BookingService {
             if (charge.isWaived()) {
                 throw new ConflictException("Khoản phí này đã được miễn");
             }
+            charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.DISPUTED);
+            chargeRepository.save(charge);
         } else if (request.category() == DisputeCategory.DEPOSIT_REFUND
                 && chargeRepository.findAllByBooking_IdAndChargeType(booking.getId(), ChargeType.DEPOSIT).isEmpty()) {
             throw new ConflictException("No deposit to dispute");
@@ -877,6 +971,24 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
+    public com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        BookingCharge charge = chargeRepository.findByIdAndBooking_Id(chargeId, booking.getId())
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy khoản phí"));
+        if (charge.getConfirmationStatus() != com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING) {
+            throw new ConflictException("Khoản phí không còn chờ xác nhận");
+        }
+        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        chargeRepository.save(charge);
+        return new com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse(
+                charge.getId(), charge.getChargeType(), charge.getDescription(), charge.getQuantity(),
+                charge.getUnitPrice(), charge.getAppliedRate(), charge.getAmount(), charge.isWaived(),
+                charge.getEvidenceUrl(), null, charge.getCreatedAt(), charge.getConfirmationStatus());
+    }
+
+    @Override
+    @Transactional
     public String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
@@ -888,7 +1000,8 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private BookingDetailResponse toDetail(Booking booking) {
-        BookingPolicySnapshot snapshot = requireSnapshot(booking);
+        BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId())
+                .orElseGet(() -> unsavedFallbackSnapshot(booking));
         int slots = baseSlots(booking);
         List<BookingCharge> chargeRows = chargeRepository.findByBooking_IdOrderByIdAsc(booking.getId());
         List<BookingChargeLineResponse> charges = chargeRows.stream().map(bookingMapper::toChargeLine).toList();
@@ -952,21 +1065,27 @@ public class BookingServiceImpl implements BookingService {
                                                 List<PaymentTransaction> payments,
                                                 Instant at) {
         if (!CANCELLABLE.contains(booking.getStatus())) {
-            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "Đơn này không huỷ được");
+            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "Đơn này không huỷ được", false);
         }
         if (snapshot.getPlanType() == PlanType.YEARLY) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Trả trước không hoàn theo chính sách gói năm");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Trả trước không hoàn theo chính sách gói năm", false);
         }
         BigDecimal paidDeposit = paidDeposit(payments);
         if (paidDeposit == null) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Chưa thu cọc, số hoàn là 0");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Chưa thu cọc, số hoàn là 0", false);
         }
         BigDecimal ratio = DepositRefundRules.ratio(snapshot.getPlanType(), at, booking.getPickupTime());
         BigDecimal amount = paidDeposit.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-        String explanation = ratio.compareTo(DepositRefundRules.FULL) == 0
-                ? "Huỷ trước mốc, hoàn 100% cọc"
-                : "Huỷ sau mốc, hoàn 50% cọc. Phần còn lại thuộc nhà cung cấp";
-        return new RefundPreviewResponse(true, ratio, amount, explanation);
+        boolean monthly = snapshot.getPlanType() == PlanType.MONTHLY;
+        Instant deadline = booking.getPickupTime().minus(monthly ? Duration.ofDays(30) : Duration.ofHours(24));
+        String cutoff = DateTimeFormatter.ofPattern("HH:mm 'ngày' dd/MM/yyyy")
+                .withZone(ZoneId.of("Asia/Ho_Chi_Minh")).format(deadline);
+        String explanation = "Mốc hoàn 100% cọc: " + cutoff + " (ít nhất " + (monthly ? "30 ngày" : "24 giờ")
+                + " trước giờ nhận xe). Nếu hủy sau thời điểm này, bạn được hoàn 50% cọc.";
+        amount = amount.min(refundEventService.remainingReceived(booking.getId()));
+        boolean manualRefund = amount.signum() > 0 && payments.stream().anyMatch(p -> p.getType() == PaymentType.DEPOSIT_PAY
+                && p.getDirection() == PaymentDirection.IN && p.getStatus() == PaymentStatus.PAID && p.getMethod() != PaymentMethod.VNPAY);
+        return new RefundPreviewResponse(true, ratio, amount, explanation, manualRefund);
     }
 
     private BigDecimal refundAmount(Booking booking, BookingPolicySnapshot snapshot, Instant cancelledAt) {
@@ -987,27 +1106,15 @@ public class BookingServiceImpl implements BookingService {
                 .filter(payment -> payment.getType() == PaymentType.DEPOSIT_PAY
                         && payment.getDirection() == PaymentDirection.IN
                         && payment.getStatus() == PaymentStatus.PAID)
-                .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
-                        ? payment.getAppliedAmount()
-                        : payment.getAmount())
+                .map(payment -> RefundMath.appliedPortion(
+                        payment.getAmount(), payment.getAppliedAmount(), payment.getProcessingNote()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return total.signum() > 0 ? total : null;
     }
 
     private void saveRefund(Booking booking, BigDecimal amount) {
-        PaymentTransaction depositPayment = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
-                .filter(payment -> payment.getType() == PaymentType.DEPOSIT_PAY && payment.getStatus() == PaymentStatus.PAID)
-                .findFirst()
-                .orElseThrow(() -> new ConflictException("Paid deposit not found"));
-        PaymentTransaction refund = new PaymentTransaction();
-        refund.setBooking(booking);
-        refund.setType(PaymentType.REFUND);
-        refund.setAmount(amount);
-        refund.setDirection(PaymentDirection.OUT);
-        refund.setMethod(depositPayment.getMethod());
-        refund.setStatus(PaymentStatus.PENDING);
-        refund.setProcessingNote("Chờ nhà cung cấp hoàn tiền và tải minh chứng");
-        paymentTransactionRepository.save(refund);
+        refundEventService.reserve(booking.getId(), "CANCEL:" + booking.getId(), amount,
+                "Hoàn cọc theo chính sách hủy", booking.getRenter().getUser());
     }
 
     private List<TimelineStepResponse> timeline(Booking booking, List<PaymentTransaction> payments) {
@@ -1239,10 +1346,10 @@ public class BookingServiceImpl implements BookingService {
 
     private BookingPolicySnapshot requireSnapshot(Booking booking) {
         return snapshotRepository.findByBooking_Id(booking.getId())
-                .orElseGet(() -> createFallbackSnapshot(booking));
+                .orElseGet(() -> snapshotRepository.save(unsavedFallbackSnapshot(booking)));
     }
 
-    private BookingPolicySnapshot createFallbackSnapshot(Booking booking) {
+    private BookingPolicySnapshot unsavedFallbackSnapshot(Booking booking) {
         RentalPlan plan = booking.getPlan();
         Provider provider = (booking.getVehicle() != null) ? booking.getVehicle().getProvider() : null;
         BigDecimal depositRatio = (provider != null && provider.getDepositRatio() != null)
@@ -1272,7 +1379,7 @@ public class BookingServiceImpl implements BookingService {
             snapshot.setPlanType(PlanType.DAILY);
             snapshot.setDepositRatio(depositRatio);
         }
-        return snapshotRepository.save(snapshot);
+        return snapshot;
     }
 
     private int baseSlots(Booking booking) {

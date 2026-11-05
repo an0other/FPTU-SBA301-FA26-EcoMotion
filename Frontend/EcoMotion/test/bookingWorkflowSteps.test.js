@@ -212,3 +212,25 @@ test('13. Non-zero financial metrics avoids redundant 0đ', () => {
   assert.equal(metrics[0].id, 'confirmedPaid')
   assert.equal(metrics[1].id, 'pendingRefundAmount')
 })
+
+
+test('policy refund completes at 50 percent while a separate review stays open', () => {
+  const workflow = { bookingStatus: 'CANCELLED', confirmedPaid: 540000, refundedAmount: 270000,
+    pendingRefundAmount: 0, paymentStatus: 'COVERED', settlementStatus: 'DISPUTED',
+    refunds: [{ status: 'REFUNDED', amount: 270000 }] }
+  assert.equal(evaluateRefundWorkflow(workflow).isFullyRefunded, true)
+  assert.equal(evaluateRefundWorkflow({ ...workflow, refunds: [...workflow.refunds,
+    { status: 'UNDER_REVIEW', amount: 10000 }] }).isFullyRefunded, false)
+  assert.equal(evaluateRefundWorkflow({ ...workflow, paymentStatus: 'RECONCILIATION_REQUIRED' }).isFullyRefunded, false)
+})
+
+
+test('receipt acknowledgement is required after the provider transfers a policy refund', () => {
+  const workflow = { paymentStatus: 'REFUNDED', confirmedPaid: 540000, refundedAmount: 270000,
+    refunds: [{ status: 'REFUNDED', amount: 270000, receiptStatus: 'WAITING' }] }
+  assert.equal(evaluateRefundWorkflow(workflow).isFullyRefunded, false)
+  for (const receiptStatus of ['CONFIRMED', 'AUTO_CONFIRMED']) {
+    assert.equal(evaluateRefundWorkflow({ ...workflow, refunds: [{ ...workflow.refunds[0], receiptStatus }] }).isFullyRefunded, true)
+  }
+  assert.equal(evaluateRefundWorkflow({ ...workflow, refunds: [{ ...workflow.refunds[0], receiptStatus: 'REPORTED_NOT_RECEIVED' }] }).isFullyRefunded, false)
+})

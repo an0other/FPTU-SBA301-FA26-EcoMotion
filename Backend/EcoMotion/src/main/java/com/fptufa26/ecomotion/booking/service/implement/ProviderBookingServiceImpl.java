@@ -121,6 +121,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
     private final BookingRepository bookingRepository;
     private final BookingChargeRepository bookingChargeRepository;
+    private final com.fptufa26.ecomotion.finance.service.implement.RefundEventService refundEventService;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final DriverAssignmentService driverAssignmentService;
@@ -132,10 +133,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final PaymentRequestService paymentRequestService;
     private final DisputeService disputeService;
     private final ScheduleService scheduleService;
-    private final com.fptufa26.ecomotion.booking.service.DriverOptimizationService driverOptimizationService;
-    private final com.fptufa26.ecomotion.booking.repository.TripIncidentRepository tripIncidentRepository;
-    private final com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository tripEvidenceRepository;
-    private final com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository driverAssignmentRepository;
+    private final DriverOptimizationService driverOptimizationService;
+    private final TripIncidentRepository tripIncidentRepository;
+    private final TripEvidenceRepository tripEvidenceRepository;
+    private final DriverAssignmentRepository driverAssignmentRepository;
     private final TripIncidentService tripIncidentService;
     private final DriverStatusService driverStatusService;
     private final Clock clock;
@@ -402,7 +403,12 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getPricingItems().stream().map(item ->
                         new RentalQuoteResponse.Item(
                                 item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
-                                item.getUnitPrice(), item.getQuantity())).toList()
+                                item.getUnitPrice(), item.getQuantity())).toList(),
+                snapshot != null ? snapshot.getDispatchOriginLatitude() : null,
+                snapshot != null ? snapshot.getDispatchOriginLongitude() : null,
+                snapshot != null ? snapshot.getDistanceKm() : null,
+                chargeableKm(snapshot),
+                snapshot != null ? snapshot.getPickupFee() : null
         );
     }
 
@@ -637,8 +643,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 || booking.getActualEndAt() == null) {
             throw new ConflictException("Chỉ có thể thêm phụ phí sau khi tài xế kết thúc chuyến đi");
         }
-        if (request.chargeType() == ChargeType.BASE_RENTAL || request.chargeType() == ChargeType.DEPOSIT) {
-            throw new ConflictException("Không thể thêm thủ công tiền thuê gốc hoặc tiền cọc");
+        if (request.chargeType() == ChargeType.BASE_RENTAL || request.chargeType() == ChargeType.DEPOSIT
+                || request.chargeType() == ChargeType.OUT_OF_RADIUS || request.chargeType() == ChargeType.WEEKEND
+                || request.chargeType() == ChargeType.WAITING) {
+            throw new ConflictException("Loại phụ phí này không được thêm sau chuyến");
         }
 
         if (request.evidenceUrl() == null || request.evidenceUrl().isBlank())
@@ -659,40 +667,81 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 .orElseThrow(() -> new ConflictException("Thiếu bản chốt chính sách giá của đơn thuê"));
         if (policy.getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY)
             throw new ConflictException("Gói năm không có phụ phí");
-        if (request.description() == null || request.description().isBlank() || request.quantity() == null
-                || request.quantity() < 1 || request.quantity() > 1000000)
-            throw new ConflictException("Cần lý do và số lượng phụ phí hợp lệ");
+        if (request.description() == null || request.description().isBlank())
+            throw new ConflictException("Cần lý do phụ phí");
+        if (request.chargeType() == ChargeType.OTHER && request.description().trim().length() < 20)
+            throw new ConflictException("Phụ phí khác cần mô tả cụ thể ít nhất 20 ký tự");
+        String clientRequestId = request.clientRequestId() == null || request.clientRequestId().isBlank()
+                ? null : request.clientRequestId().trim();
         BigDecimal price;
         BigDecimal rate;
-        switch (request.chargeType()) {
-            case OVERTIME -> { price = policy.getSlotPrice(); rate = BigDecimal.ONE.add(java.util.Objects.requireNonNullElse(policy.getOvertimeSurchargeRatio(), BigDecimal.ZERO)); }
-            case WAITING -> { price = policy.getWaitingRate(); rate = BigDecimal.ONE; }
-            case WEEKEND -> { price = policy.getSlotPrice(); rate = policy.getWeekendSurchargeRatio(); }
-            case OUT_OF_RADIUS -> { price = policy.getOutOfRadiusRate(); rate = BigDecimal.ONE; }
-            default -> throw new ConflictException("Loại phụ phí không được hỗ trợ");
+        Integer quantity;
+        BigDecimal amount;
+        if (request.chargeType() == ChargeType.OVERTIME) {
+            if (request.quantity() == null || request.quantity() < 1 || request.quantity() > 1000000)
+                throw new ConflictException("Cần số slot quá giờ hợp lệ");
+            price = policy.getSlotPrice();
+            rate = BigDecimal.ONE.add(java.util.Objects.requireNonNullElse(policy.getOvertimeSurchargeRatio(), BigDecimal.ZERO));
+            if (price == null || price.signum() < 0) throw new ConflictException("Thiếu chính sách phụ phí hợp lệ");
+            quantity = request.quantity();
+            amount = price.multiply(rate).multiply(BigDecimal.valueOf(quantity)).setScale(2, java.math.RoundingMode.HALF_UP);
+        } else {
+            if (request.amount() == null || request.amount().signum() <= 0)
+                throw new ConflictException("Số tiền phụ phí phải lớn hơn 0");
+            price = request.amount().setScale(2, java.math.RoundingMode.HALF_UP);
+            rate = BigDecimal.ONE;
+            quantity = 1;
+            amount = price;
         }
-        if (price == null || rate == null || price.signum() < 0 || rate.signum() < 0)
-            throw new ConflictException("Thiếu chính sách phụ phí hợp lệ");
-        BigDecimal amount = price.multiply(rate).multiply(BigDecimal.valueOf(request.quantity()))
-                .setScale(2, java.math.RoundingMode.HALF_UP);
         if (amount.precision() > 14) throw new ConflictException("Số tiền phụ phí vượt giới hạn");
+        if (clientRequestId != null) {
+            var sameAmount = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
+                    .filter(existing -> clientRequestId.equals(existing.getClientRequestId()))
+                    .findFirst();
+            if (sameAmount.isPresent()) {
+                BookingCharge prior = sameAmount.get();
+                boolean samePayload = prior.getChargeType() == request.chargeType()
+                        && request.description().trim().equals(prior.getDescription())
+                        && prior.getAmount().compareTo(amount) == 0;
+                if (!samePayload) {
+                    throw new ConflictException("Mã yêu cầu phụ phí đã dùng cho nội dung khác");
+                }
+                return toChargeResponse(prior);
+            }
+        }
         charge.setUnitPrice(price);
         charge.setAppliedRate(rate);
+        charge.setQuantity(quantity);
         charge.setAmount(amount);
-        var duplicate = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
-                .filter(c -> c.getChargeType() == request.chargeType() && java.util.Objects.equals(c.getQuantity(), request.quantity())
-                        && request.description().trim().equals(c.getDescription()) && amount.compareTo(c.getAmount()) == 0)
-                .findFirst();
-        if (duplicate.isPresent()) return toChargeResponse(duplicate.get());
         charge.setDescription(request.description().trim());
         charge.setCreatedBy(provider.getUser());
         charge.setWaived(false);
+        charge.setClientRequestId(clientRequestId);
+        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING);
         charge.setEvidenceUrl(request.evidenceUrl());
 
         BookingCharge saved = bookingChargeRepository.save(charge);
         bookingNotificationService.changed(booking, "CHARGES_CHANGED");
 
         return toChargeResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public BookingChargeResponse withdrawCharge(Long currentUserId, String bookingCodeOrId, Long chargeId) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
+        BookingCharge charge = bookingChargeRepository.findByIdAndBooking_Id(chargeId, booking.getId())
+                .orElseThrow(() -> new com.fptufa26.ecomotion.common.exception.NotFoundException("Không tìm thấy phụ phí"));
+        if (charge.getConfirmationStatus() != com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING || charge.isWaived()) {
+            throw new ConflictException("Chỉ rút được phụ phí đang chờ xác nhận");
+        }
+        if (disputeService.hasOpenDispute(booking.getId())) {
+            throw new ConflictException("Không rút phụ phí khi đơn đang có tranh chấp");
+        }
+        charge.setWaived(true);
+        bookingNotificationService.changed(booking, "CHARGES_CHANGED");
+        return toChargeResponse(bookingChargeRepository.save(charge));
     }
 
     @Override
@@ -718,8 +767,28 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         if (disputeService.hasOpenDispute(booking.getId())) {
             throw new ConflictException("Không thể chốt quyết toán khi đơn thuê đang có tranh chấp");
         }
+        boolean unresolvedCharge = bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
+                .anyMatch(charge -> !charge.isWaived() && charge.getConfirmationStatus()
+                        != com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        if (unresolvedCharge) {
+            throw new ConflictException("Còn phụ phí chưa được người thuê xác nhận hoặc đang tranh chấp");
+        }
 
         BigDecimal remaining = paymentRequestService.calculateRemainingAmount(booking.getId());
+        BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
+        obligation = obligation.add(bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
+                .filter(charge -> !charge.isWaived()
+                        && charge.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
+                        && charge.getChargeType() != ChargeType.BASE_RENTAL
+                        && charge.getChargeType() != ChargeType.DEPOSIT
+                        && charge.getChargeType() != ChargeType.WEEKEND)
+                .map(BookingCharge::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        BigDecimal openRefund = refundEventService.openAllocated(booking.getId(), obligation);
+        if (openRefund.signum() > 0) {
+            refundEventService.reserve(booking.getId(), "SETTLE:" + booking.getId(), openRefund,
+                    "Hoàn phần đã thu vượt nghĩa vụ quyết toán", provider.getUser());
+        }
         if (remaining.signum() <= 0) {
             booking.setStatus(BookingStatus.COMPLETED);
             bookingRepository.save(booking);
@@ -930,8 +999,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
     private void recordDriverAssignment(Booking booking, Driver driver, Instant now) {
         driverOptimizationService.recallActiveAssignments(booking.getId());
-        com.fptufa26.ecomotion.booking.entity.DriverAssignment assignment =
-                new com.fptufa26.ecomotion.booking.entity.DriverAssignment();
+        DriverAssignment assignment = new DriverAssignment();
         assignment.setBooking(booking);
         assignment.setDriver(driver);
         assignment.setStatus(AssignmentStatus.PENDING_RESPONSE);
@@ -1184,6 +1252,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         }
     }
 
+    private Integer chargeableKm(BookingPolicySnapshot snapshot) {
+        if (snapshot == null || snapshot.getDistanceKm() == null || snapshot.getFreeRadiusKm() == null) {
+            return null;
+        }
+        return (int) Math.ceil(Math.max(0d, snapshot.getDistanceKm().doubleValue() - snapshot.getFreeRadiusKm()));
+    }
+
     private Instant plannedEnd(Booking booking, Instant start) {
         if (booking.getPlannedEndAt() != null)
             return start.plus(Duration.between(booking.getPickupTime(), booking.getPlannedEndAt()));
@@ -1200,35 +1275,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     private BigDecimal createFullProviderCancellationRefund(Booking booking, User providerUser) {
-        List<PaymentTransaction> transactions = paymentTransactionRepository.findByBooking_Id(booking.getId());
-        BigDecimal paidIn = transactions.stream()
-                .filter(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID)
-                .map(PaymentTransaction::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal completedOut = transactions.stream()
-                .filter(t -> t.getDirection() == PaymentDirection.OUT && t.getStatus() == PaymentStatus.PAID)
-                .map(PaymentTransaction::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal refundable = paidIn.subtract(completedOut).max(BigDecimal.ZERO);
-        BigDecimal pendingRefund = transactions.stream().filter(t ->
-                t.getType() == PaymentType.REFUND && t.getDirection() == PaymentDirection.OUT
-                        && t.getStatus() == PaymentStatus.PENDING)
-                .map(PaymentTransaction::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal refundToCreate = refundable.subtract(pendingRefund).max(BigDecimal.ZERO);
-        if (refundToCreate.signum() > 0) {
-            PaymentTransaction refund = new PaymentTransaction();
-            refund.setBooking(booking);
-            refund.setType(PaymentType.REFUND);
-            refund.setAmount(refundToCreate);
-            refund.setAppliedAmount(refundToCreate);
-            refund.setDirection(PaymentDirection.OUT);
-            refund.setMethod(PaymentMethod.BANK_TRANSFER);
-            refund.setStatus(PaymentStatus.PENDING);
-            refund.setProcessingNote("Hoàn 100% do xe của chuyến trước chưa về kịp: "
-                    + booking.getBookingCode());
-            refund.setConfirmedBy(providerUser);
-            paymentTransactionRepository.save(refund);
+        BigDecimal refundable = refundEventService.remainingReceived(booking.getId());
+        if (refundable.signum() > 0) {
+            refundEventService.reserve(booking.getId(), "PROVIDER_CANCEL:" + booking.getId(), refundable,
+                    "Hoàn 100% do không thể cung cấp xe: " + booking.getBookingCode(), providerUser);
         }
         return refundable;
     }
@@ -1290,7 +1340,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 c.isWaived(),
                 c.getEvidenceUrl(),
                 createdByName,
-                c.getCreatedAt()
+                c.getCreatedAt(),
+                c.getConfirmationStatus()
         );
     }
 

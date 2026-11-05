@@ -158,6 +158,15 @@ public class ProviderBookingController {
         return ApiResponse.success(providerBookingService.addCharge(principal.getUserId(), bookingCodeOrId, request));
     }
 
+    @PostMapping("/{bookingCodeOrId}/charges/{chargeId}/withdraw")
+    @Operation(summary = "Withdraw a pending extra charge")
+    public ApiResponse<BookingChargeResponse> withdrawCharge(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCodeOrId,
+            @PathVariable Long chargeId) {
+        return ApiResponse.success(providerBookingService.withdrawCharge(principal.getUserId(), bookingCodeOrId, chargeId));
+    }
+
     @PostMapping({ "/{bookingCodeOrId}/settle", "/{bookingCodeOrId}/settlement/finalize" })
     @Operation(summary = "Finalize post-trip settlement and generate final balance request if needed")
     public ApiResponse<SettlementResultResponse> finalizeSettlement(

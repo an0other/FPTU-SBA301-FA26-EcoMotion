@@ -59,7 +59,8 @@ public interface BookingMapper {
                 charge.getAppliedRate(),
                 charge.getAmount(),
                 charge.isWaived(),
-                charge.isWaived() ? BigDecimal.ZERO : charge.getAmount());
+                charge.isWaived() ? BigDecimal.ZERO : charge.getAmount(),
+                charge.getConfirmationStatus());
     }
 
     @Mapping(target = "fullName", source = "user.fullName")
@@ -70,6 +71,17 @@ public interface BookingMapper {
     @Named("nullToZero")
     default int nullToZero(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    default List<RentalQuoteResponse.Item> toPricingItems(Booking booking) {
+        if (booking.getPricingItems() == null || booking.getPricingItems().isEmpty()) {
+            return List.of();
+        }
+        return booking.getPricingItems().stream()
+                .map(item -> new RentalQuoteResponse.Item(
+                        item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
+                        item.getUnitPrice(), item.getQuantity()))
+                .toList();
     }
 
     default CheckoutPreviewResponse toCheckoutPreview(Booking booking,
@@ -233,10 +245,21 @@ public interface BookingMapper {
                 providerName,
                 holdExpiresAt,
                 booking.getStatus() == BookingStatus.REJECTED ? booking.getOperationalResolutionReason() : null,
-                booking.getPricingItems().stream().map(item ->
-                        new RentalQuoteResponse.Item(
-                                item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
-                                item.getUnitPrice(), item.getQuantity())).toList());
+                toPricingItems(booking),
+                snapshot.getDispatchOriginLatitude(),
+                snapshot.getDispatchOriginLongitude(),
+                snapshot.getDistanceKm(),
+                snapshot.getFreeRadiusKm(),
+                snapshot.getOutOfRadiusRate(),
+                chargeableKm(snapshot.getDistanceKm(), snapshot.getFreeRadiusKm()),
+                snapshot.getPickupFee());
+    }
+
+    private static Integer chargeableKm(BigDecimal distanceKm, Integer freeRadiusKm) {
+        if (distanceKm == null || freeRadiusKm == null) {
+            return null;
+        }
+        return (int) Math.ceil(Math.max(0d, distanceKm.doubleValue() - freeRadiusKm));
     }
 
     @Mapping(target = "bookingCode", source = "booking.bookingCode")

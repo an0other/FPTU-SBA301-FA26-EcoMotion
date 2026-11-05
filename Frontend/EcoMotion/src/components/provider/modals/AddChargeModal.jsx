@@ -4,9 +4,9 @@ import { chargeQuote } from '../../../utils/tv5Contracts'
 
 const labels = {
   OVERTIME: 'Quá giờ (số slot vượt)',
-  WAITING: 'Chờ (số phút tính phí)',
-  OUT_OF_RADIUS: 'Ngoài bán kính (số km vượt)',
-  WEEKEND: 'Cuối tuần (số slot)',
+  TOLL: 'Phí cầu đường',
+  PARKING: 'Phí gửi xe',
+  OTHER: 'Phụ phí khác',
 }
 
 export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) {
@@ -14,13 +14,15 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
   const [quantity, setQuantity] = useState(1)
   const [description, setDescription] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
+  const [enteredAmount, setEnteredAmount] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   if (!isOpen || !booking) return null
 
-  const quote = chargeQuote(booking, chargeType, quantity)
+  const moneyCharge = chargeType !== 'OVERTIME'
+  const quote = chargeQuote(booking, chargeType, quantity, enteredAmount)
 
   const submit = async (event) => {
     event.preventDefault()
@@ -28,13 +30,14 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
     if (
       !description.trim() ||
       !evidenceUrl.trim() ||
-      !Number.isInteger(Number(quantity)) ||
-      Number(quantity) < 1 ||
-      Number(quantity) > 1000000 ||
+      (chargeType === 'OVERTIME' && (!Number.isInteger(Number(quantity)) || Number(quantity) < 1 || Number(quantity) > 1000000)) ||
+      (chargeType === 'OTHER' && description.trim().length < 20) ||
       !Number.isFinite(quote.amount) ||
       quote.amount <= 0
     ) {
-      setError('Cần lý do, bằng chứng và số lượng hợp lệ theo chính sách đơn thuê.')
+      setError(chargeType === 'OTHER'
+        ? 'Phụ phí khác cần mô tả ít nhất 20 ký tự, bằng chứng và số tiền lớn hơn 0.'
+        : 'Cần lý do, bằng chứng và số tiền hợp lệ.')
       return
     }
     if (!confirming) {
@@ -50,6 +53,7 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
         quantity: Number(quantity),
         description: description.trim(),
         evidenceUrl: evidenceUrl.trim(),
+        clientRequestId: crypto.randomUUID(),
         ...quote,
       })
       onSuccess?.(created, 'Đã ghi nhận phụ phí theo chính sách chốt của đơn.')
@@ -116,6 +120,20 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
               </div>
             </label>
 
+            {moneyCharge ? (
+              <label className="block text-xs font-semibold text-slate-700">
+                Số tiền
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={enteredAmount}
+                  onChange={(e) => setEnteredAmount(e.target.value)}
+                  className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
+                />
+              </label>
+            ) : (
             <label className="block text-xs font-semibold text-slate-700">
               Số lượng tính phí
               <input
@@ -129,6 +147,7 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
                 className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
               />
             </label>
+            )}
 
             <label className="block text-xs font-semibold text-slate-700">
               Lý do
