@@ -6,6 +6,7 @@ import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
 import { HoldCountdown } from '../payments/HoldCountdown';
+import YearlyInstallmentOverview from './YearlyInstallmentOverview';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
@@ -168,6 +169,13 @@ export const BookingDetail = ({
           </div>
         )}
       </div>
+
+      {booking.planType === 'YEARLY' && (
+        <YearlyInstallmentOverview
+          bookingCode={booking.id}
+          onPay={() => onPayDeposit(booking)}
+        />
+      )}
 
       {/* Main 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BookingChargeBreakdown from '../components/payments/BookingChargeBreakdown'
 import PaymentHistoryTable from '../components/payments/PaymentHistoryTable'
@@ -14,10 +14,14 @@ export default function PaymentHistoryPage() {
   const { items, total, hasMore, loading, error, retry } =
     usePaymentHistory(page, PAGE_SIZE)
 
-  function handlePageChange(nextPage) {
+  const handlePageChange = useCallback((nextPage) => {
     setSelectedBookingCode(null)
     setPage(nextPage)
-  }
+  }, [])
+
+  const closeBreakdown = useCallback(() => {
+    setSelectedBookingCode(null)
+  }, [])
 
   return (
     <div className="bg-surface">
@@ -61,7 +65,7 @@ export default function PaymentHistoryPage() {
               to="/me"
               className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
-              Tài khoản của tôi
+              Hồ sơ của tôi
             </Link>
           </div>
         </div>
@@ -134,7 +138,6 @@ export default function PaymentHistoryPage() {
           {!loading && !error && items.length > 0 && (
             <PaymentHistoryTable
               items={items}
-              selectedBookingCode={selectedBookingCode}
               onSelectBooking={setSelectedBookingCode}
             />
           )}
@@ -155,7 +158,7 @@ export default function PaymentHistoryPage() {
           <BookingChargeBreakdown
             key={selectedBookingCode}
             bookingCode={selectedBookingCode}
-            onClose={() => setSelectedBookingCode(null)}
+            onClose={closeBreakdown}
           />
         )}
       </div>

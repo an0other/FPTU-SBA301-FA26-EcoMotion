@@ -203,8 +203,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
         BigDecimal netPaidAmount = paidAmount.subtract(refundedAmount).max(BigDecimal.ZERO);
 
         boolean canCalculateBalance =
-                !yearly
-                        && !closedWithoutCompletion
+                !closedWithoutCompletion
                         && recordedCost != null;
 
         BigDecimal remainingAmount = canCalculateBalance
@@ -225,7 +224,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                     "Đơn đã hủy hoặc bị từ chối. Các giao dịch hoàn tiền được hiển thị riêng; không suy ra dư nợ tiền thuê.";
         } else if (yearly) {
             balanceNote =
-                    "Gói năm có khoản trả trước và nghĩa vụ trả góp theo hợp đồng; chưa tổng hợp dư nợ trả góp tại đây.";
+                    "Số còn lại được tính từ tổng chi phí trong đơn trừ các khoản đã thanh toán thành công. Khoản trả trước (nếu có) đã nằm trong tổng tiền thuê, không cộng thêm lần nữa.";
         } else if (!hasBaseRental) {
             balanceNote =
                     "Chưa ghi nhận khoản tiền thuê gốc nên chưa xác định số tiền còn lại.";

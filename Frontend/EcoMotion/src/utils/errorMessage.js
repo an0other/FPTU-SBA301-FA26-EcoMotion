@@ -49,6 +49,9 @@ const VIETNAMESE = /[ăâđêôơưáàảãạấầẩẫậắằẳẵặé�
 
 export function toVietnameseError(error) {
   if (error?.code === 'ERR_NETWORK') return NETWORK_MESSAGE
+  if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT') {
+    return 'Đọc GPLX mất quá nhiều thời gian. Vui lòng kiểm tra DocumentAI và thử lại.'
+  }
 
   const status = error?.response?.status
   const raw = error?.response?.data?.message
@@ -73,4 +76,3 @@ export function getErrorMessage(error, fallback = FALLBACK_MESSAGE) {
   if (error?.message) return error.message
   return fallback
 }
-

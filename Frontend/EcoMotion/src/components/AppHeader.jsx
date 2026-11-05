@@ -10,6 +10,7 @@ import {
   IconMapPin,
   IconSearch,
   IconUser,
+  IconWallet,
   IconX,
   IconZap,
 } from './icons/Icons'
@@ -42,28 +43,32 @@ const panelItemClass = ({ isActive }) =>
   }`
 
 function AccountDisclosure({ user, onLogout }) {
-  const [open, setOpen] = useState(false)
+  const location = useLocation()
+  const [disclosure, setDisclosure] = useState({
+    pathname: location.pathname,
+    open: false,
+  })
   const wrapRef = useRef(null)
   const buttonRef = useRef(null)
-  const location = useLocation()
   const panelId = useId()
+  const open = disclosure.pathname === location.pathname && disclosure.open
 
-  useEffect(() => {
-    setOpen(false)
-  }, [location.pathname])
+  function closeDisclosure() {
+    setDisclosure({ pathname: location.pathname, open: false })
+  }
 
   useEffect(() => {
     if (!open) return undefined
 
     function onPointerDown(event) {
       if (wrapRef.current && !wrapRef.current.contains(event.target)) {
-        setOpen(false)
+        setDisclosure({ pathname: location.pathname, open: false })
       }
     }
 
     function onKeyDown(event) {
       if (event.key !== 'Escape') return
-      setOpen(false)
+      setDisclosure({ pathname: location.pathname, open: false })
       buttonRef.current?.focus()
     }
 
@@ -73,7 +78,7 @@ function AccountDisclosure({ user, onLogout }) {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open])
+  }, [location.pathname, open])
 
   return (
     <div ref={wrapRef} className="relative">
@@ -84,7 +89,7 @@ function AccountDisclosure({ user, onLogout }) {
         aria-haspopup="true"
         aria-controls={panelId}
         aria-label="Tài khoản"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setDisclosure({ pathname: location.pathname, open: !open })}
         className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
           open
             ? 'border-slate-200 bg-slate-50'
@@ -124,20 +129,26 @@ function AccountDisclosure({ user, onLogout }) {
           </div>
           <div className="p-1.5">
             {user.role === 'ADMIN' ? (
-              <NavLink to="/admin" end className={panelItemClass} onClick={() => setOpen(false)}>
+              <NavLink to="/admin" end className={panelItemClass} onClick={closeDisclosure}>
                 <IconLayoutDashboard className="h-4 w-4 shrink-0 text-brand-600" />
                 Dashboard
               </NavLink>
             ) : null}
             {user.role === 'RENTER' ? (
-              <NavLink to="/renter/bookings" end className={panelItemClass} onClick={() => setOpen(false)}>
-                <IconList className="h-4 w-4 shrink-0 text-brand-600" />
-                Đơn của tôi
-              </NavLink>
+              <>
+                <NavLink to="/renter/bookings" end className={panelItemClass} onClick={closeDisclosure}>
+                  <IconList className="h-4 w-4 shrink-0 text-brand-600" />
+                  Đơn thuê của tôi
+                </NavLink>
+                <NavLink to="/renter/payments" className={panelItemClass} onClick={closeDisclosure}>
+                  <IconWallet className="h-4 w-4 shrink-0 text-brand-600" />
+                  Lịch sử giao dịch
+                </NavLink>
+              </>
             ) : null}
-            <NavLink to="/me" className={panelItemClass} onClick={() => setOpen(false)}>
+            <NavLink to="/me" className={panelItemClass} onClick={closeDisclosure}>
               <IconUser className="h-4 w-4 shrink-0 text-brand-600" />
-              Trang của tôi
+              Hồ sơ của tôi
             </NavLink>
             <div className="my-1 h-px bg-slate-100" />
             <button
@@ -336,6 +347,36 @@ export default function AppHeader({ filters, onSearchSubmit, showViewSwitch = fa
           )}
         </div>
       </div>
+      {user?.role === 'RENTER' && (
+        <nav
+          aria-label="Điều hướng khách thuê"
+          className="border-t border-slate-100 bg-white"
+        >
+          <div className="mx-auto flex max-w-[1400px] gap-1 overflow-x-auto px-4 py-2 sm:px-6">
+            {[
+              ['/', 'Tìm xe', IconSearch, true],
+              ['/renter/bookings', 'Đơn thuê của tôi', IconList, false],
+              ['/renter/payments', 'Lịch sử giao dịch', IconWallet, false],
+            ].map(([to, label, Icon, exact]) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={exact}
+                className={({ isActive }) =>
+                  `inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                    isActive
+                      ? 'bg-brand-50 text-brand-800'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-brand-700'
+                  }`
+                }
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        </nav>
+      )}
       {showViewSwitch && (
         <div className="flex justify-center border-t border-slate-100 py-2 xl:hidden">
           <ViewSwitch view={view} onViewChange={onViewChange} />

@@ -389,7 +389,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal depositPaid = transactions.stream()
-                .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getType() == PaymentType.DEPOSIT_PAY)
+                .filter(t -> t.getStatus() == PaymentStatus.PAID
+                        && (t.getType() == PaymentType.DEPOSIT_PAY || t.getType() == PaymentType.UPFRONT_PAY))
                 .map(t -> t.getAppliedAmount() != null && t.getAppliedAmount().signum() > 0
                         ? t.getAppliedAmount()
                         : t.getAmount())

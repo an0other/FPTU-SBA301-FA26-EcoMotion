@@ -64,6 +64,7 @@ import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.user.service.DriverStatusService;
+import com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
@@ -114,6 +115,7 @@ public class BookingServiceImpl implements BookingService {
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final Duration MINIMUM_BOOKING_LEAD_TIME = Duration.ofHours(3);
     private static final Duration INITIAL_HOLD_DURATION = Duration.ofMinutes(15);
+    private static final Duration YEARLY_REQUEST_HOLD_DURATION = Duration.ofHours(24);
 
     /** Buffer time (minutes) before/after each booking for vehicle preparation */
     private static final Set<BookingStatus> BLOCKING = EnumSet.of(
@@ -291,15 +293,14 @@ public class BookingServiceImpl implements BookingService {
         RentalPlan plan = vehicleCatalogService.requireActivePlan(request.vehicleId(),
                 mixed ? selection.policyPlanId() : request.planId());
 
-        if (plan.getPlanType() == PlanType.YEARLY) {
-            throw new ConflictException("Yearly plans must use the dedicated contract flow");
+        boolean yearly = plan.getPlanType() == PlanType.YEARLY;
+        if (yearly && mixed) {
+            throw new ConflictException("Gói năm phải được đặt đúng một kỳ 365 ngày.");
         }
 
         String driverNote = normalizeDriverNote(request.driverNote());
 
-        int passengerLimit = plan.getPlanType() == PlanType.YEARLY
-                ? vehicle.getSeatCount()
-                : vehicle.getSeatCount() - 1;
+        int passengerLimit = Math.max(0, vehicle.getSeatCount() - 1);
         if (passengerLimit < 1 || request.passengerCount() > passengerLimit) {
             throw new ConflictException("Số lượng hành khách vượt quá số chỗ ngồi khả dụng của xe (tối đa " + passengerLimit + " khách)");
         }
@@ -313,7 +314,17 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Khoảng thời gian thuê không hợp lệ");
         }
         if (!mixed) validateDuration(plan, request.slotCount(), Duration.between(start, end));
-        if (driverAvailabilityService.findAvailable(
+        if (yearly) {
+            if (plan.getSlotLengthMinutes() != 525600 || request.slotCount() != 1) {
+                throw new ConflictException("Gói năm hiện chỉ hỗ trợ một kỳ thuê 365 ngày.");
+            }
+            if (plan.getUpfrontAmount() == null || plan.getUpfrontAmount().signum() <= 0
+                    || plan.getUpfrontAmount().compareTo(plan.getSlotPrice()) > 0) {
+                throw new ConflictException("Nhà cung cấp chưa cấu hình số tiền trả trước hợp lệ cho gói năm.");
+            }
+            DrivingLicenseEligibilityPolicy.requireEligibleForBooking(renter, vehicle, start, end);
+        }
+        if (!yearly && driverAvailabilityService.findAvailable(
                 vehicle.getProvider().getId(), vehicle, start, end, null).isEmpty()) {
             throw new ConflictException("Không có tài xế phù hợp và còn trống trong thời gian đã chọn");
         }
@@ -335,7 +346,7 @@ public class BookingServiceImpl implements BookingService {
         booking.setRenter(renter);
         booking.setVehicle(vehicle);
         booking.setPlan(plan);
-        booking.setStatus(BookingStatus.AWAITING_DEPOSIT);
+        booking.setStatus(yearly ? BookingStatus.PENDING : BookingStatus.AWAITING_DEPOSIT);
         booking.setPickupAddress(request.pickupAddress().trim());
         booking.setPickupLatitude(request.pickupLatitude());
         booking.setPickupLongitude(request.pickupLongitude());
@@ -357,7 +368,7 @@ public class BookingServiceImpl implements BookingService {
         booking.setBookingCode(nextBookingCode(booking.getId()));
         bookingRepository.save(booking);
 
-        var depositQuote = vehicleDepositPolicyService.resolve(vehicle, total);
+        var depositQuote = yearly ? null : vehicleDepositPolicyService.resolve(vehicle, total);
         String imageUrl = vehicleCatalogService.coverImageUrl(vehicle.getId());
 
         BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
@@ -365,9 +376,9 @@ public class BookingServiceImpl implements BookingService {
         snapshot.setSlotPrice(plan.getSlotPrice());
         snapshot.setSlotLengthMinutes(plan.getSlotLengthMinutes());
         snapshot.setPlanType(plan.getPlanType());
-        snapshot.setDepositRatio(depositQuote.ratio());
-        snapshot.setMinimumDepositAmount(depositQuote.minimumAmount());
-        snapshot.setDepositAmount(depositQuote.amount());
+        snapshot.setDepositRatio(yearly ? null : depositQuote.ratio());
+        snapshot.setMinimumDepositAmount(yearly ? BigDecimal.ZERO : depositQuote.minimumAmount());
+        snapshot.setDepositAmount(yearly ? plan.getUpfrontAmount() : depositQuote.amount());
         snapshot.setVehicleName(vehicle.getBrand() + " " + vehicle.getModel());
         snapshot.setVehicleManufactureYear(vehicle.getManufactureYear());
         snapshot.setVehicleLicensePlate(vehicle.getLicensePlate());
@@ -398,10 +409,16 @@ public class BookingServiceImpl implements BookingService {
 
         savePickupCharge(booking, pickupQuote, actor);
 
-        Instant holdExpiresAt = clock.instant().plus(INITIAL_HOLD_DURATION);
+        Instant holdExpiresAt = clock.instant().plus(yearly
+                ? YEARLY_REQUEST_HOLD_DURATION
+                : INITIAL_HOLD_DURATION);
         scheduleService.hold(vehicle, booking, start, end, holdExpiresAt);
-        paymentRequestService.createDepositPaymentRequest(booking);
-        bookingNotificationService.bookingPlaced(booking, snapshot.getDepositAmount());
+        if (yearly) {
+            bookingNotificationService.changed(booking, "BOOKING_CHANGED");
+        } else {
+            paymentRequestService.createDepositPaymentRequest(booking);
+            bookingNotificationService.bookingPlaced(booking, snapshot.getDepositAmount());
+        }
 
         return bookingMapper.toCreateBookingResponse(booking, end, charge, snapshot.getDepositAmount());
     }
@@ -411,7 +428,9 @@ public class BookingServiceImpl implements BookingService {
             case HOURLY -> duration.compareTo(Duration.ofHours(24)) <= 0;
             case DAILY -> duration.compareTo(Duration.ofDays(30)) <= 0;
             case MONTHLY -> slotCount <= 12;
-            case YEARLY -> false;
+            case YEARLY -> plan.getSlotLengthMinutes() == 525600
+                    && slotCount == 1
+                    && duration.equals(Duration.ofDays(365));
         };
         if (!valid) {
             throw new ConflictException("Thời lượng thuê vượt quá giới hạn của gói đã chọn");
@@ -1138,6 +1157,8 @@ public class BookingServiceImpl implements BookingService {
             case PROVIDER_NO_DRIVER -> "Nhà cung cấp hết tài xế";
             case PREVIOUS_RENTER_OVERDUE -> "Khách của chuyến trước chưa trả xe";
             case DEPOSIT_TIMEOUT -> "Hết thời gian giữ lịch do chưa gửi chứng từ đặt cọc";
+            case YEARLY_REQUEST_TIMEOUT -> "Hết thời gian chờ nhà cung cấp duyệt yêu cầu thuê năm";
+            case YEARLY_CONTRACT_TIMEOUT -> "Hết thời gian upload hợp đồng thuê năm";
             case FORCE_MAJEURE -> "Bất khả kháng";
             case SYSTEM -> "Hệ thống huỷ";
         };
@@ -1394,8 +1415,15 @@ public class BookingServiceImpl implements BookingService {
         Instant now = clock.instant();
         if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT
                 || booking.getStatus() == BookingStatus.ACCEPTED) {
+            BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
+            if (snapshot != null && snapshot.getPlanType() == PlanType.YEARLY
+                    && !hasUploadedYearlyContract(booking)) {
+                return false;
+            }
             boolean alreadyPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
-                    .anyMatch(tx -> tx.getType() == PaymentType.DEPOSIT_PAY && tx.getStatus() == PaymentStatus.PAID);
+                    .anyMatch(tx -> (tx.getType() == PaymentType.DEPOSIT_PAY
+                            || tx.getType() == PaymentType.UPFRONT_PAY)
+                            && tx.getStatus() == PaymentStatus.PAID);
             if (alreadyPaid) {
                 return false;
             }
@@ -1424,6 +1452,13 @@ public class BookingServiceImpl implements BookingService {
                         && (request.getStatus() == PaymentRequestStatus.PENDING
                         || request.getStatus() == PaymentRequestStatus.REJECTED))
                 .orElse(true);
+    }
+
+    private boolean hasUploadedYearlyContract(Booking booking) {
+        String path = booking.getContractUrl();
+        return path != null
+                && path.startsWith("booking/" + booking.getRenter().getUser().getId() + "/")
+                && path.endsWith(".pdf");
     }
 
     private Instant endOf(Booking booking) {

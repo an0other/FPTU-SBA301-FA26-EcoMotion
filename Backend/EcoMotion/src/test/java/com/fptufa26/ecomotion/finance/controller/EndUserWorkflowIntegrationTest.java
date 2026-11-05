@@ -4,6 +4,7 @@ import com.fptufa26.ecomotion.booking.entity.*;
 import com.fptufa26.ecomotion.booking.enums.*;
 import com.fptufa26.ecomotion.booking.repository.*;
 import com.fptufa26.ecomotion.finance.dto.request.*;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
 import com.fptufa26.ecomotion.finance.enums.*;
 import com.fptufa26.ecomotion.finance.repository.RefundRequestRepository;
@@ -105,6 +106,70 @@ class EndUserWorkflowIntegrationTest {
         assertThat(vnpay.processIpn(signed(deposit)).rspCode()).isEqualTo("00");
         assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(workflow.getWorkflow(renterId, code()).driverStatus()).isEqualTo("NOT_ASSIGNED");
+    }
+
+    @Test void yearlyMonthlyInstallmentCanBePaidWithoutCompletingTheBooking() {
+        Long[] requestId = new Long[1];
+        tx.executeWithoutResult(status -> {
+            Booking booking = em.find(Booking.class, bookingId);
+            Instant startAt = Instant.now().minusSeconds(30L * 24 * 60 * 60);
+            booking.getPlan().setPlanType(PlanType.YEARLY);
+            booking.getPlan().setSlotLengthMinutes(525600);
+            booking.setStatus(BookingStatus.IN_PROGRESS);
+            booking.setPickupTime(startAt);
+            booking.setActualStartAt(startAt);
+            booking.setPlannedEndAt(startAt.plusSeconds(365L * 24 * 60 * 60));
+            booking.setTotalAmount(new BigDecimal("1200000"));
+
+            BookingPolicySnapshot snapshot = snapshots.findByBooking_Id(bookingId).orElseThrow();
+            snapshot.setPlanType(PlanType.YEARLY);
+            snapshot.setSlotLengthMinutes(525600);
+            snapshot.setDepositRatio(null);
+
+            PaymentTransaction previousInstallment = new PaymentTransaction();
+            previousInstallment.setBooking(booking);
+            previousInstallment.setType(PaymentType.SETTLEMENT);
+            previousInstallment.setDirection(PaymentDirection.IN);
+            previousInstallment.setMethod(PaymentMethod.BANK_TRANSFER);
+            previousInstallment.setAmount(new BigDecimal("100000"));
+            previousInstallment.setStatus(PaymentStatus.PAID);
+            previousInstallment.setPaidAt(startAt.plusSeconds(1));
+            em.persist(previousInstallment);
+
+            PaymentRequest request = new PaymentRequest();
+            request.setBooking(booking);
+            request.setPaymentType(PaymentRequestType.MONTHLY_INSTALLMENT);
+            request.setAmount(new BigDecimal("100000"));
+            request.setPaidAmount(BigDecimal.ZERO);
+            request.setCurrency("VND");
+            request.setTransferReference("YEARLY-" + UUID.randomUUID());
+            request.setBankCodeSnapshot("VCB");
+            request.setBankNameSnapshot("Test bank");
+            request.setAccountNumberSnapshot("0123456789");
+            request.setAccountHolderSnapshot("TEST OWNER");
+            request.setStatus(PaymentRequestStatus.PENDING);
+            request.setExpiresAt(Instant.now().plusSeconds(86400));
+            em.persist(request);
+            em.flush();
+            requestId[0] = request.getId();
+        });
+
+        var payment = vnpay.createPaymentUrl(
+                renterId,
+                new CreateVnpayPaymentUrlRequest(code(), "MONTHLY_INSTALLMENT", null, "vn"),
+                "127.0.0.1");
+        assertThat(vnpay.processIpn(signed(payment)).rspCode()).isEqualTo("00");
+
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus())
+                .isEqualTo(BookingStatus.IN_PROGRESS);
+        PaymentRequestStatus requestStatus = tx.execute(
+                status -> em.find(PaymentRequest.class, requestId[0]).getStatus());
+        assertThat(requestStatus).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        assertThat(ledger.findByBooking_Id(bookingId).stream()
+                .filter(row -> row.getPaymentRequest() != null
+                        && requestId[0].equals(row.getPaymentRequest().getId()))
+                .map(PaymentTransaction::getStatus))
+                .containsExactly(PaymentStatus.PAID);
     }
 
     @Test void acceptedReplacementRemainsVisibleAfterAnotherAcceptedTimeChange() {

@@ -201,17 +201,27 @@ CREATE TABLE renter (
     cccd_image_url        varchar(500),
     cccd_image_back_url   varchar(500),
     portrait_url          varchar(500),
-    license_no            varchar(20),
+    -- Driving-license numbers are encrypted by the application, like renter.cccd_no.
+    license_no            varchar(255),
+    license_full_name     varchar(255),
+    license_date_of_birth date,
     license_class     varchar(10),
+    license_issue_date date,
     license_expiry    date,
+    license_expiry_unlimited boolean NOT NULL DEFAULT false,
     license_verified  boolean      NOT NULL DEFAULT false,
+    license_front_image_path varchar(500),
+    license_back_image_path varchar(500),
     created_at        timestamptz  NOT NULL DEFAULT now(),
     updated_at        timestamptz  NOT NULL DEFAULT now(),
     CONSTRAINT uk_renter_user_id UNIQUE (user_id),
     CONSTRAINT fk_renter_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT ck_renter_license_verified CHECK (
         license_verified = false
-        OR (license_no IS NOT NULL AND license_class IS NOT NULL AND license_expiry IS NOT NULL)
+        OR (license_no IS NOT NULL AND license_class IS NOT NULL AND license_issue_date IS NOT NULL
+            AND license_front_image_path IS NOT NULL AND license_back_image_path IS NOT NULL
+            AND ((license_expiry_unlimited = true AND license_expiry IS NULL)
+                OR (license_expiry_unlimited = false AND license_expiry IS NOT NULL)))
     )
 );
 
@@ -493,7 +503,8 @@ CREATE TABLE booking (
     )),
     CONSTRAINT ck_booking_cancel_reason CHECK (cancel_reason IS NULL OR cancel_reason IN (
         'RENTER_REQUEST', 'PROVIDER_NO_VEHICLE', 'PROVIDER_NO_DRIVER',
-        'PREVIOUS_RENTER_OVERDUE', 'DEPOSIT_TIMEOUT', 'FORCE_MAJEURE', 'SYSTEM'
+        'PREVIOUS_RENTER_OVERDUE', 'DEPOSIT_TIMEOUT', 'YEARLY_REQUEST_TIMEOUT',
+        'YEARLY_CONTRACT_TIMEOUT', 'FORCE_MAJEURE', 'SYSTEM'
     )),
     CONSTRAINT ck_booking_cancel_fields CHECK (
         status <> 'CANCELLED'
@@ -908,7 +919,7 @@ INSERT INTO renter (
     license_verified, created_at, updated_at
 ) VALUES (
     1, 3, NULL, 'https://cdn.ecomotion.test/kyc/renter-cccd.jpg',
-    '790123456789', 'B', '2030-06-30', true,
+    NULL, NULL, NULL, false,
     '2026-09-03 09:00:00+07', '2026-09-03 09:00:00+07'
 );
 
