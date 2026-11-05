@@ -143,9 +143,6 @@ export default function DriverTripDetailPage() {
     }
   }
 
-  const googleMapsUrl = trip?.pickupAddress
-    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trip.pickupAddress)}`
-    : null
 
   return (
     <DriverLayout activeTab="schedule">
@@ -243,17 +240,7 @@ export default function DriverTripDetailPage() {
               <span>Tải ảnh minh chứng</span>
             </button>
 
-            {googleMapsUrl && (
-              <a
-                href={googleMapsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 p-2.5 text-xs font-bold text-blue-800 hover:bg-blue-100 shadow-2xs transition"
-              >
-                <Icon name="navigation" className="text-blue-700 text-[18px]" />
-                <span>Chỉ đường đón khách</span>
-              </a>
-            )}
+
           </div>
 
           {/* Live Map Box */}

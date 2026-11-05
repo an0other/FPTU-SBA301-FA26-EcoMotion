@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
+import { renterCanSeeDriver } from '../../utils/bookingStatus'
 import {
   STEP_STATUS,
   isTerminalBooking,
@@ -276,6 +277,27 @@ export default function BookingProgressStepper({
           {workflow?.nextAction || 'Theo dõi tiến độ từ nhà xe và tài xế.'}
         </p>
 
+        {!provider && renterCanSeeDriver(status) && (booking.driverName || booking.driver?.fullName) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+            <div className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">Tài xế đã nhận chuyến</span>
+              <strong className="block text-sm text-slate-900">{booking.driverName || booking.driver?.fullName}</strong>
+              {(booking.driverPhone || booking.driver?.phone) && (
+                <span className="block font-mono text-xs text-slate-600">{booking.driverPhone || booking.driver?.phone}</span>
+              )}
+            </div>
+            {(booking.driverPhone || booking.driver?.phone) && (
+              <a
+                href={`tel:${booking.driverPhone || booking.driver?.phone}`}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white"
+              >
+                <Icon name="call" className="text-[14px]" />
+                Gọi tài xế
+              </a>
+            )}
+          </div>
+        )}
+
         {/* Anomaly / Overdue Warnings */}
         {provider && pickupAnomaly && (
           <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800 flex items-start gap-2">
@@ -332,8 +354,9 @@ export default function BookingProgressStepper({
               )}
             </div>
 
+            {!provider && !booking.driverName && <p className="text-sm text-slate-700">Nhà xe đang bố trí tài xế cho chuyến của bạn. Thông tin tài xế sẽ được cập nhật tại đây khi có phân công.</p>}
             {/* Cảnh báo nếu chưa có tài xế */}
-            {!booking.driverName && (
+            {provider && !booking.driverName && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-amber-900 flex items-start gap-2.5">
                 <Icon name="warning" className="text-[18px] text-amber-600 shrink-0 mt-0.5" />
                 <div>
@@ -346,7 +369,7 @@ export default function BookingProgressStepper({
             )}
 
             {/* Hướng dẫn xử lý nếu hết tài xế phù hợp */}
-            {!booking.driverName && (
+            {provider && !booking.driverName && (
               <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-slate-700 flex items-start gap-2.5">
                 <Icon name="help_outline" className="text-[18px] text-slate-500 shrink-0 mt-0.5" />
                 <div>
@@ -362,7 +385,7 @@ export default function BookingProgressStepper({
             )}
 
             {/* Thông tin thời gian phản hồi khi đang chờ tài xế */}
-            {booking.driverName && !isDriverConfirmed && !isDriverRejected && (
+            {provider && booking.driverName && !isDriverConfirmed && !isDriverRejected && (
               <p className="text-[11px] text-slate-600 pt-0.5">
                 Yêu cầu đã được gửi tới tài xế. Tài xế có 15 phút để phản hồi nhận chuyến. Nhà xe có thể sử dụng nút <strong>&quot;Điều phối lại tài xế&quot;</strong> ở góc trên nếu tài xế không phản hồi kịp thời.
               </p>
@@ -403,7 +426,7 @@ export default function BookingProgressStepper({
                   <Icon name="add_card" className="text-[16px]" />
                   <span>Thêm phụ phí</span>
                 </button>
-                {booking.providerConfirmedAt && booking.renterConfirmedAt && (
+                {booking.providerConfirmedAt && (booking.renterConfirmedAt || workflow?.endConfirmations?.[0]?.confirmationMethod === 'AUTO') && (
                   <button
                     type="button"
                     onClick={() => onAction('FINALIZE_SETTLEMENT')}

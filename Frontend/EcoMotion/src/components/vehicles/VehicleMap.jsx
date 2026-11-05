@@ -1,19 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { attachVietmap } from '../map/vietmapBase'
 import { formatSlotPrice } from '../../utils/planLabels'
 
 const DEFAULT_CENTER = [10.7769, 106.7009]
-const BASEMAPS = [
-  {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-  {
-    url: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-]
 
 function carPopup(items, selectedPlanType, cancelClose, scheduleClose) {
   const container = document.createElement('div')
@@ -96,7 +87,6 @@ export default function VehicleMap({ draftOrigin, selectedOrigin, vehicles, sele
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const markersRef = useRef(null)
-  const tileLayerRef = useRef(null)
   const retryBasemapRef = useRef(null)
   const [tileError, setTileError] = useState(false)
   const [tileLoading, setTileLoading] = useState(true)
@@ -105,48 +95,15 @@ export default function VehicleMap({ draftOrigin, selectedOrigin, vehicles, sele
     const map = L.map(containerRef.current, { scrollWheelZoom: true, touchZoom: true, zoomControl: false })
       .setView(DEFAULT_CENTER, 13)
     L.control.zoom({ position: 'bottomright' }).addTo(map)
-    let sourceIndex = 0
-    let tileTimeout
+    let detach = () => {}
     const addBasemap = () => {
-      const source = BASEMAPS[sourceIndex]
-      let hasLoadedTile = false
-      const layer = L.tileLayer(source.url, {
-        maxZoom: 19,
-        attribution: source.attribution,
-      })
-      const handleFailure = () => {
-        window.clearTimeout(tileTimeout)
-        if (tileLayerRef.current !== layer || hasLoadedTile) return
-        if (sourceIndex < BASEMAPS.length - 1) {
-          map.removeLayer(layer)
-          sourceIndex += 1
-          addBasemap()
-        } else {
-          setTileLoading(false)
-          setTileError(true)
-        }
-      }
-      layer.on('tileload', () => {
-        hasLoadedTile = true
-        window.clearTimeout(tileTimeout)
-        setTileLoading(false)
-        setTileError(false)
-      })
-      layer.once('tileerror', handleFailure)
-      tileLayerRef.current = layer
-      tileTimeout = window.setTimeout(handleFailure, 8000)
-      layer.addTo(map)
+      detach()
+      setTileLoading(true); setTileError(false)
+      detach = attachVietmap(map, { onLoad: () => { setTileLoading(false); setTileError(false) }, onError: () => { setTileLoading(false); setTileError(true) } })
     }
-    retryBasemapRef.current = () => {
-      window.clearTimeout(tileTimeout)
-      if (tileLayerRef.current) map.removeLayer(tileLayerRef.current)
-      sourceIndex = 0
-      setTileError(false)
-      setTileLoading(true)
-      addBasemap()
-    }
+    retryBasemapRef.current = addBasemap
     addBasemap()
-    map.on('click', (event) => onPick({ latitude: event.latlng.lat, longitude: event.latlng.lng }))
+    map.on('click', (event) => { if (map.__vietmapReady) onPick({ latitude: event.latlng.lat, longitude: event.latlng.lng }) })
     mapRef.current = map
     markersRef.current = L.layerGroup().addTo(map)
 
@@ -159,8 +116,7 @@ export default function VehicleMap({ draftOrigin, selectedOrigin, vehicles, sele
 
     return () => {
       resizeObserver.disconnect()
-      window.clearTimeout(tileTimeout)
-      tileLayerRef.current = null
+      detach()
       retryBasemapRef.current = null
       map.remove()
       mapRef.current = null
@@ -292,7 +248,7 @@ export default function VehicleMap({ draftOrigin, selectedOrigin, vehicles, sele
         )}
         {tileError && (
           <div role="alert" className="w-full rounded-lg border border-amber-200 bg-white p-3 text-sm text-slate-700 shadow-lg">
-            <span>Không tải được nền bản đồ. Kiểm tra kết nối mạng rồi </span>
+            <span>VIETMAP chưa khả dụng. Kiểm tra tilemap key, hạn mức và WebGL rồi </span>
             <button type="button" onClick={() => retryBasemapRef.current?.()}
               className="font-semibold text-brand-700 underline hover:text-brand-800">
               thử lại

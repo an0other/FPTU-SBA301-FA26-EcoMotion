@@ -10,6 +10,7 @@ import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import com.fptufa26.ecomotion.user.entity.User;
 
 import java.util.List;
+import java.math.BigDecimal;
 import java.util.Optional;
 
 public interface DisputeService {
@@ -25,6 +26,12 @@ public interface DisputeService {
 
     Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
                            DisputeResolutionDecision decision, String resolution);
+
+    Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
+                           DisputeResolutionDecision decision, String resolution, BigDecimal refundAwardTotal);
+
+    Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
+                           DisputeResolutionDecision decision, String resolution, BigDecimal refundAwardTotal, String tripEndAction);
 
     long countOpenOrInReview();
 

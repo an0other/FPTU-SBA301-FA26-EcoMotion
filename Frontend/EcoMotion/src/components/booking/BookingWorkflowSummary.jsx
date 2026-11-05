@@ -5,6 +5,8 @@ import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { REFUND_WORKFLOW_LABELS } from '../../utils/bookingWorkflow'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import BookingProgressStepper from './BookingProgressStepper'
+import DisputeHistory from './DisputeHistory'
+import TripEndPanel from './TripEndPanel'
 import RefundReceiptTimeline from './RefundReceiptTimeline'
 
 function Icon({ name, className = '' }) {
@@ -28,8 +30,6 @@ export default function BookingWorkflowSummary({
 }) {
   const [decision, setDecision] = useState(null)
   const [responseReason, setResponseReason] = useState('')
-  const [refundAmount, setRefundAmount] = useState('')
-  const [refundReason, setRefundReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
   const [message, setMessage] = useState('')
@@ -45,7 +45,6 @@ export default function BookingWorkflowSummary({
     ) : null
   }
 
-  const hasTransferredRefund = (workflow?.refunds || []).some(refund => refund.status === 'REFUNDED' || refund.receiptStatus)
   const proposal = workflow?.proposal
   const pendingProposal = proposal?.status === 'PENDING'
   const when = (value) => formatBookingWhen(value) || 'Chưa xác định'
@@ -72,35 +71,6 @@ export default function BookingWorkflowSummary({
     }
   }
 
-  async function requestRefund(event) {
-    event.preventDefault()
-    if (busy) return
-    const amount = Number(refundAmount)
-    if (
-      !Number.isSafeInteger(amount) ||
-      amount < 1000 ||
-      amount > Number(workflow?.refundableAmount || 0) ||
-      !refundReason.trim()
-    ) {
-      setActionError('Nhập số tiền hợp lệ trong hạn mức và lý do hoàn tiền.')
-      return
-    }
-    setBusy(true)
-    setActionError('')
-    setMessage('')
-    try {
-      await bookingWorkflowService.requestRefund(workflow.bookingCode, amount, refundReason.trim())
-      await onRefresh()
-      setRefundAmount('')
-      setRefundReason('')
-      setMessage('Đã gửi yêu cầu hoàn tiền, đang chờ xem xét. Chưa có giao dịch hoàn tiền thành công ở bước này.')
-    } catch (err) {
-      setActionError(err.message || 'Không thể gửi yêu cầu hoàn tiền.')
-      await onRefresh()
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <section aria-label="Tiến trình đơn thuê" className="space-y-3">
@@ -111,6 +81,9 @@ export default function BookingWorkflowSummary({
         provider={provider}
         onAction={onAction}
       />
+
+      <TripEndPanel workflow={workflow} provider={provider} onRefresh={onRefresh} />
+      <DisputeHistory disputes={workflow?.disputes} />
 
       {/* Operational Proposal Card if pending / accepted / rejected */}
       {proposal && (
@@ -261,58 +234,6 @@ export default function BookingWorkflowSummary({
             ))}
           </div>
         </div>
-      )}
-
-      {/* Renter Request Refund Section */}
-      {!provider && !hasTransferredRefund && Number(workflow?.refundableAmount || 0) >= 1000 && (
-        <details className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-2xs">
-          <summary className="cursor-pointer font-bold text-slate-800 flex items-center gap-1.5">
-            <Icon name="request_quote" className="text-base text-brand-700" />
-            <span>Yêu cầu xem xét hoàn tiền</span>
-          </summary>
-          <div className="mt-3 border-t border-slate-100 pt-3 space-y-3">
-            <p className="text-slate-600">
-              Hạn mức tiền còn có thể yêu cầu hoàn: <strong>{formatCurrency(workflow.refundableAmount)}</strong>. Việc hoàn tiền thực tế phụ thuộc chính sách và kết quả xem xét.
-            </p>
-            <form onSubmit={requestRefund} className="flex flex-wrap items-end gap-3">
-              <label className="text-xs font-semibold text-slate-700">
-                Số tiền yêu cầu
-                <input
-                  aria-label="Số tiền yêu cầu hoàn"
-                  type="number"
-                  min="1000"
-                  max={workflow.refundableAmount}
-                  step="1"
-                  required
-                  value={refundAmount}
-                  onChange={(e) => setRefundAmount(e.target.value)}
-                  disabled={busy}
-                  className="mt-1 block h-9 w-40 rounded-lg border border-slate-300 px-2.5 text-xs"
-                />
-              </label>
-              <label className="grow text-xs font-semibold text-slate-700">
-                Lý do hoàn tiền
-                <input
-                  aria-label="Lý do yêu cầu hoàn"
-                  required
-                  maxLength={500}
-                  value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
-                  disabled={busy}
-                  placeholder="Nhập lý do chi tiết..."
-                  className="mt-1 block h-9 w-full rounded-lg border border-slate-300 px-2.5 text-xs"
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={busy}
-                className="h-9 rounded-lg bg-brand-700 px-4 text-xs font-bold text-white shadow-2xs hover:bg-brand-800 disabled:opacity-50"
-              >
-                {busy ? 'Đang gửi...' : 'Gửi yêu cầu hoàn tiền'}
-              </button>
-            </form>
-          </div>
-        </details>
       )}
 
       {/* Status Messages */}

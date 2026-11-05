@@ -3,7 +3,10 @@ package com.fptufa26.ecomotion.seed;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
+import com.fptufa26.ecomotion.booking.entity.DriverAssignment;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
+import com.fptufa26.ecomotion.booking.enums.AssignmentStatus;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
@@ -14,14 +17,12 @@ import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
 import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.common.crypto.DeterministicCipher;
-import com.fptufa26.ecomotion.dispute.entity.Dispute;
-import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
-import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
-import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
 import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.entity.Driver;
@@ -127,13 +128,13 @@ public class DevDataSeeder implements ApplicationRunner {
     private final VehicleDocumentRepository vehicleDocumentRepository;
     private final RentalPlanRepository rentalPlanRepository;
     private final BookingRepository bookingRepository;
+    private final DriverAssignmentRepository driverAssignmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final DeterministicCipher cipher;
     private final EntityManager entityManager;
     private final BookingPolicySnapshotRepository snapshotRepository;
     private final BookingChargeRepository chargeRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
-    private final DisputeRepository disputeRepository;
     private final ScheduleService scheduleService;
     private final YearlyRentalDataSeeder yearlyRentalDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
@@ -279,7 +280,7 @@ public class DevDataSeeder implements ApplicationRunner {
         User renterUser = userRepository.findById(1L).orElseThrow();
         Renter renter = renterRepository.findByUser_Id(renterUser.getId()).orElseThrow();
         Vehicle bookingVehicle = vehicleRepository.findByLicensePlate(VEHICLE_PLATE).orElseThrow();
-        seedInProgressBooking(renter, renterUser, providerA, bookingVehicle);
+        seedInProgressBooking(renter, renterUser, providerA, bookingVehicle, driverCuong);
         seedBookings(driverNam, driverCuong, driverKiet);
 
         seedAdminDemonstrationData(providerA, providerB);
@@ -681,6 +682,24 @@ public class DevDataSeeder implements ApplicationRunner {
             b1.setTotalAmount(new BigDecimal("1800000.00"));
             Booking savedBooking1 = bookingRepository.save(b1);
 
+            BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
+            snapshot.setBooking(savedBooking1);
+            snapshot.setPlanType(plan1.getPlanType());
+            snapshot.setSlotPrice(plan1.getSlotPrice());
+            snapshot.setSlotLengthMinutes(plan1.getSlotLengthMinutes());
+            snapshot.setDepositRatio(new BigDecimal("0.30"));
+            snapshot.setDepositAmount(new BigDecimal("540000.00"));
+            snapshot.setAllowedOvertimeMinutes(plan1.getAllowedOvertimeMinutes());
+            snapshot.setOvertimeSurchargeRatio(plan1.getOvertimeSurchargeRatio());
+            snapshot.setWaitingFreeMinutes(plan1.getWaitingFreeMinutes());
+            snapshot.setWaitingRate(plan1.getWaitingRate());
+            snapshot.setWeekendSurchargeRatio(plan1.getWeekendSurchargeRatio());
+            snapshot.setFreeRadiusKm(plan1.getFreeRadiusKm());
+            snapshot.setOutOfRadiusRate(plan1.getOutOfRadiusRate());
+            snapshot.setHourlyToDailyThresholdMinutes(plan1.getHourlyToDailyThresholdMinutes());
+            snapshotRepository.save(snapshot);
+
+
             BookingCharge charge1 = new BookingCharge();
             charge1.setBooking(savedBooking1);
             charge1.setChargeType(ChargeType.BASE_RENTAL);
@@ -708,26 +727,14 @@ public class DevDataSeeder implements ApplicationRunner {
             tx1.setCharge(savedCharge2);
             tx1.setType(PaymentType.DEPOSIT_PAY);
             tx1.setAmount(new BigDecimal("540000.00"));
+            tx1.setAppliedAmount(new BigDecimal("540000.00"));
+            tx1.setVerificationMethod(PaymentVerificationMethod.PROVIDER_CONFIRMED);
             tx1.setDirection(PaymentDirection.IN);
             tx1.setMethod(PaymentMethod.BANK_TRANSFER);
             tx1.setStatus(PaymentStatus.PAID);
             tx1.setGatewayRef("VNPAY-20261016-001");
             tx1.setPaidAt(Instant.now().minus(Duration.ofHours(5)));
             paymentTransactionRepository.save(tx1);
-
-            Dispute dispute = new Dispute();
-            dispute.setBooking(savedBooking1);
-            dispute.setCharge(savedCharge2);
-            dispute.setRaisedBy(userRepository.findById(1L).orElseThrow());
-            dispute.setCategory(DisputeCategory.CHARGE);
-            dispute.setStatus(DisputeStatus.OPEN);
-            dispute.setDescription("Khách khiếu nại phụ phí vệ sinh: Khách ói ra sàn xe nhưng đã tự lau dọn kỹ và khử mùi bằng tinh dầu, đề nghị giảm phí vệ sinh chuyên sâu.");
-            dispute.setEvidenceUrlList(List.of(
-                    "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80",
-                    "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80"
-            ));
-            dispute.setResolution(null);
-            disputeRepository.save(dispute);
         }
     }
 
@@ -1001,8 +1008,10 @@ public class DevDataSeeder implements ApplicationRunner {
         return segment.replace(" ", "%20");
     }
 
-    private void seedInProgressBooking(Renter renter, User renterUser, Provider provider, Vehicle vehicle) {
+    private void seedInProgressBooking(Renter renter, User renterUser, Provider provider, Vehicle vehicle, Driver driver) {
         if (bookingRepository.existsByBookingCode(IN_PROGRESS_BOOKING_CODE)) {
+            bookingRepository.findByBookingCode(IN_PROGRESS_BOOKING_CODE)
+                    .ifPresent(existing -> attachAcceptedDriver(existing, driver));
             return;
         }
         RentalPlan daily = rentalPlanRepository
@@ -1028,7 +1037,8 @@ public class DevDataSeeder implements ApplicationRunner {
         booking.setPassengerCount(2);
         booking.setTotalAmount(daily.getSlotPrice());
         booking.setActualStartAt(pickup.plus(Duration.ofMinutes(5)));
-        bookingRepository.save(booking);
+        Booking savedBooking = bookingRepository.save(booking);
+        attachAcceptedDriver(savedBooking, driver);
 
         BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
         snapshot.setBooking(booking);
@@ -1083,8 +1093,40 @@ public class DevDataSeeder implements ApplicationRunner {
 
         scheduleService.book(
                 vehicle,
-                booking,
+                savedBooking,
                 pickup,
                 pickup.plus(Duration.ofMinutes(daily.getSlotLengthMinutes())));
+    }
+
+    private void attachAcceptedDriver(Booking booking, Driver driver) {
+        if (driver == null || booking.getDriver() != null || booking.getId() == null) {
+            return;
+        }
+        if (booking.getStatus() != BookingStatus.IN_PROGRESS) {
+            return;
+        }
+        Instant start = booking.getActualStartAt() != null ? booking.getActualStartAt() : booking.getPickupTime();
+        booking.setDriver(driver);
+        if (booking.getAssignedAt() == null) {
+            booking.setAssignedAt(start.minus(Duration.ofMinutes(45)));
+        }
+        if (booking.getDriverConfirmedAt() == null) {
+            booking.setDriverConfirmedAt(start.minus(Duration.ofMinutes(30)));
+        }
+        if (booking.getAssignmentMode() == null) {
+            booking.setAssignmentMode(AssignmentMode.MANUAL);
+        }
+        bookingRepository.save(booking);
+        if (driverAssignmentRepository.findFirstByBooking_IdOrderByCreatedAtDesc(booking.getId()).isPresent()) {
+            return;
+        }
+        DriverAssignment assignment = new DriverAssignment();
+        assignment.setBooking(booking);
+        assignment.setDriver(driver);
+        assignment.setStatus(AssignmentStatus.ACCEPTED);
+        assignment.setRoundNumber(1);
+        assignment.setAssignedAt(booking.getAssignedAt());
+        assignment.setRespondedAt(booking.getDriverConfirmedAt());
+        driverAssignmentRepository.save(assignment);
     }
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
-import { bookingStatusMeta, renterCanSeeDriver } from '../../utils/bookingStatus';
+import { bookingStatusMeta, canShowOperationalRisk, renterCanSeeDriver } from '../../utils/bookingStatus';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
@@ -60,7 +60,7 @@ function getDriverStatusLabel(booking) {
 
 export const BookingDetail = ({
   booking,
-  operationalRisk,
+  operationalRisk = null,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
@@ -194,7 +194,6 @@ export const BookingDetail = ({
       await onOpenDispute({
         category: complaintCategory,
         chargeId: complaintCategory === 'CHARGE' ? Number(complaintCharge) : undefined,
-        chargeType: complaintCategory === 'CHARGE' ? complaintCharge : undefined,
         description: complaintDescription.trim(),
         evidenceUrls,
       });
@@ -236,17 +235,16 @@ export const BookingDetail = ({
             Thời gian tạo đơn: <span className="font-medium text-[#14221A]">{booking.createdAt}</span>
           </div>
         </div>
-
         {actionError && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
             {actionError}
           </div>
         )}
 
-        {operationalRisk?.atRisk && !['CANCELLED', 'CANCELLATION_REVIEW', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
+        {canShowOperationalRisk(booking.status, operationalRisk?.atRisk, operationalRisk?.userMessage || operationalRisk?.message) && (
           <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">Nguy cơ xe về trễ</p>
-            <p className="mt-1">{operationalRisk.userMessage}</p>
+            <p className="mt-1">{operationalRisk.userMessage || operationalRisk.message}</p>
             <p className="mt-1 text-xs">
               Nhà xe đang xử lý điều phối. Khoản tiền cọc đã nhận được bảo lưu và giải quyết theo chính sách.
             </p>
@@ -316,6 +314,122 @@ export const BookingDetail = ({
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ACCEPTED CALL TO ACTION BANNER */}
+        {booking.status === 'ACCEPTED' && (
+          <div className="p-5 bg-emerald-50 border border-emerald-300 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-emerald-950">Chủ xe đã chấp nhận đơn!</h2>
+              <p className="text-xs text-emerald-800 mt-1">
+                {booking.upfront
+                  ? 'Vui lòng thanh toán khoản trả trước để khóa lịch xe.'
+                  : 'Vui lòng hoàn tất thanh toán cọc giữ chỗ để khóa lịch xe.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {booking.canCancel && (
+                <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  type="button"
+                  className="px-4 py-2 bg-white text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl transition cursor-pointer whitespace-nowrap"
+                >
+                  Huỷ đơn
+                </button>
+              )}
+              {booking.canEditRequest && (
+                <button
+                  onClick={() => setEditing(true)}
+                  type="button"
+                  className="px-4 py-2 bg-white text-brand-700 border border-brand-600 hover:bg-brand-50 text-xs font-semibold rounded-xl transition"
+                >
+                  Chỉnh sửa
+                </button>
+              )}
+              {booking.canPay && (
+                <button
+                  onClick={() => onPayDeposit(booking)}
+                  type="button"
+                  className="px-6 py-2.5 bg-brand-700 hover:bg-brand-800 text-white font-bold text-sm rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                >
+                  {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán cọc'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CONFIRMED HERO BANNER */}
+        {booking.status === 'CONFIRMED' && (
+          <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                {booking.driverReplacementRequired
+                  ? 'Đang phân công lại tài xế'
+                  : 'Đang tìm tài xế'}
+              </h2>
+              <p className="text-xs text-slate-600 mt-1">
+                {booking.driverReplacementRequired
+                  ? 'Hệ thống hoặc nhà xe đang sắp xếp tài xế thay thế phù hợp cho chuyến đi.'
+                  : booking.upfront
+                    ? 'Lịch xe đã khóa. Bạn tự lái theo hợp đồng.'
+                    : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
+              </p>
+            </div>
+            {booking.canCancel && (
+              <button
+                onClick={() => setIsCancelModalOpen(true)}
+                type="button"
+                className="px-4 py-2 bg-white text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl transition cursor-pointer whitespace-nowrap"
+              >
+                Huỷ đơn
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* DRIVER_ASSIGNED HERO BANNER */}
+        {booking.status === 'DRIVER_ASSIGNED' && (
+          <div className="p-5 bg-blue-50 border border-blue-200 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-blue-900">Đã phân công tài xế — Chờ xác nhận</h2>
+              <p className="text-xs text-blue-700 mt-1">
+                Nhà xe đã gửi yêu cầu cho tài xế. Tên và số điện thoại chỉ hiện sau khi tài xế nhận chuyến.
+              </p>
+            </div>
+            {booking.canCancel && (
+              <button
+                onClick={() => setIsCancelModalOpen(true)}
+                type="button"
+                className="px-4 py-2 bg-white text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl transition cursor-pointer whitespace-nowrap"
+              >
+                Huỷ đơn
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* DRIVER_CONFIRMED HERO BANNER */}
+        {booking.status === 'DRIVER_CONFIRMED' && (
+          <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-emerald-900">Tài xế đã xác nhận chuyến</h2>
+              <p className="text-xs text-emerald-700 mt-1">
+                {booking.driver?.name
+                  ? `Tài xế ${booking.driver.name} đã sẵn sàng và sẽ đón bạn đúng lịch hẹn.`
+                  : 'Tài xế đã xác nhận sẵn sàng đón bạn theo lịch hẹn.'}
+              </p>
+            </div>
+            {booking.canCancel && (
+              <button
+                onClick={() => setIsCancelModalOpen(true)}
+                type="button"
+                className="px-4 py-2 bg-white text-red-600 border border-red-200 hover:bg-red-50 text-xs font-semibold rounded-xl transition cursor-pointer whitespace-nowrap"
+              >
+                Huỷ đơn
+              </button>
+            )}
           </div>
         )}
 
@@ -865,7 +979,7 @@ export const BookingDetail = ({
                   className="w-full h-10 px-3 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200 outline-none cursor-pointer"
                 >
                   <option value="" disabled>-- Chọn khoản phí --</option>
-                  {booking.charges.filter((charge) => !charge.isWaived && !['BASE_RENTAL', 'DEPOSIT'].includes(charge.chargeType)).map((charge) => (
+                  {booking.charges.filter((charge) => !charge.isWaived && charge.confirmationStatus !== 'DISPUTED' && !['BASE_RENTAL', 'DEPOSIT'].includes(charge.chargeType)).map((charge) => (
                     <option key={charge.chargeId} value={charge.chargeId}>{charge.label}</option>
                   ))}
                 </select>

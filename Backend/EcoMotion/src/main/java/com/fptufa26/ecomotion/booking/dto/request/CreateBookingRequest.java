@@ -24,8 +24,14 @@ public record CreateBookingRequest(
         @NotNull @Min(1) Integer passengerCount,
         Instant plannedEndAt,
         @Valid List<PricingItemRequest> pricingItems,
-        BigDecimal expectedRentalAmount
+        BigDecimal expectedRentalAmount,
+        BigDecimal expectedPickupFee
 ) {
+    public CreateBookingRequest(Long vehicleId, Long planId, Integer slotCount, Instant pickupTime,
+            String pickupAddress, BigDecimal pickupLatitude, BigDecimal pickupLongitude, String driverNote,
+            Integer passengerCount, Instant plannedEndAt, List<PricingItemRequest> pricingItems, BigDecimal expectedRentalAmount) {
+        this(vehicleId,planId,slotCount,pickupTime,pickupAddress,pickupLatitude,pickupLongitude,driverNote,passengerCount,plannedEndAt,pricingItems,expectedRentalAmount,null);
+    }
     public CreateBookingRequest(Long vehicleId, Long planId, Integer slotCount, Instant pickupTime,
             String pickupAddress, BigDecimal pickupLatitude, BigDecimal pickupLongitude,
             String driverNote, Integer passengerCount) {

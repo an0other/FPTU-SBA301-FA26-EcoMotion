@@ -100,6 +100,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     private final MapGeocodingService mapGeocodingService;
     private final DriverStatusService driverStatusService;
     private final NotificationStreamService notificationStreamService;
+    private final TripEndConfirmationService endConfirmations;
     private final Clock clock;
     private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
 
@@ -427,6 +428,7 @@ public class DriverTripServiceImpl implements DriverTripService {
             throw new InvalidTripTransitionException(ex.getMessage());
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
+        endConfirmations.reported(saved, currentUserId);
         bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
         driverStatusService.updateStatusTimestamp(driver.getId());
