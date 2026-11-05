@@ -960,7 +960,8 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private BookingDetailResponse toDetail(Booking booking) {
-        BookingPolicySnapshot snapshot = requireSnapshot(booking);
+        BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId())
+                .orElseGet(() -> unsavedFallbackSnapshot(booking));
         int slots = baseSlots(booking);
         List<BookingCharge> chargeRows = chargeRepository.findByBooking_IdOrderByIdAsc(booking.getId());
         List<BookingChargeLineResponse> charges = chargeRows.stream().map(bookingMapper::toChargeLine).toList();
@@ -1300,10 +1301,10 @@ public class BookingServiceImpl implements BookingService {
 
     private BookingPolicySnapshot requireSnapshot(Booking booking) {
         return snapshotRepository.findByBooking_Id(booking.getId())
-                .orElseGet(() -> createFallbackSnapshot(booking));
+                .orElseGet(() -> snapshotRepository.save(unsavedFallbackSnapshot(booking)));
     }
 
-    private BookingPolicySnapshot createFallbackSnapshot(Booking booking) {
+    private BookingPolicySnapshot unsavedFallbackSnapshot(Booking booking) {
         RentalPlan plan = booking.getPlan();
         Provider provider = (booking.getVehicle() != null) ? booking.getVehicle().getProvider() : null;
         BigDecimal depositRatio = (provider != null && provider.getDepositRatio() != null)
@@ -1333,7 +1334,7 @@ public class BookingServiceImpl implements BookingService {
             snapshot.setPlanType(PlanType.DAILY);
             snapshot.setDepositRatio(depositRatio);
         }
-        return snapshotRepository.save(snapshot);
+        return snapshot;
     }
 
     private int baseSlots(Booking booking) {

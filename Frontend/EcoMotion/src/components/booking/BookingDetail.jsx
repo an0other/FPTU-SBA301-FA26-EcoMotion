@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
-import { bookingStatusMeta } from '../../utils/bookingStatus';
+import { bookingStatusMeta, renterCanSeeDriver } from '../../utils/bookingStatus';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
@@ -361,18 +361,14 @@ export const BookingDetail = ({
                 <h2 className="text-base font-bold text-[#14221A]">
                   {booking.driverReplacementRequired
                     ? 'Đang phân công lại tài xế'
-                    : booking.driver?.name
-                      ? 'Chuyến xe đã được xác nhận'
-                      : 'Đang tìm tài xế'}
+                    : 'Đang tìm tài xế'}
                 </h2>
                 <p className="text-xs text-gray-600 mt-1">
                   {booking.driverReplacementRequired
                     ? 'Hệ thống hoặc nhà xe đang sắp xếp tài xế thay thế phù hợp cho chuyến đi.'
                     : booking.upfront
                       ? 'Lịch xe đã khóa. Bạn tự lái theo hợp đồng.'
-                      : booking.driver?.name
-                        ? `Lịch xe đã khóa thành công. Tài xế ${booking.driver.name} sẽ đón bạn đúng giờ.`
-                        : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
+                      : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
                 </p>
               </div>
               {booking.canCancel ? <button
@@ -391,9 +387,7 @@ export const BookingDetail = ({
               <div>
                 <h2 className="text-base font-bold text-blue-900">Đã phân công tài xế - Chờ xác nhận</h2>
                 <p className="text-xs text-blue-700 mt-1">
-                  {booking.driver?.name
-                    ? `Tài xế ${booking.driver.name} đã được phân công và đang xác nhận nhận chuyến.`
-                    : 'Tài xế đã được phân công và đang kiểm tra chuyến đi.'}
+                  Nhà xe đã gửi yêu cầu cho tài xế. Tên và số điện thoại chỉ hiện sau khi tài xế nhận chuyến.
                 </p>
               </div>
               {booking.canCancel ? <button
@@ -551,8 +545,7 @@ export const BookingDetail = ({
               pickupFee={booking.pickupFee} />
           </div>
 
-          {/* CARD: DRIVER (if assigned) */}
-          {booking.driver && (
+          {booking.driver && renterCanSeeDriver(booking.status) && (
             <div className="bg-white p-5 flex flex-col gap-3 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
               <h3 className="text-sm font-bold text-[#14221A]">Tài xế chuyên trách</h3>
               <div className="flex items-center gap-4">
