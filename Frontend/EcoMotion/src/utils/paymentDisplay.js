@@ -107,13 +107,21 @@ export function formatChargeDescription(charge, planType) {
   return description || 'Khoản phí theo đơn thuê.'
 }
 
+export const DEPOSIT_AWAITING_PROVIDER_STATUSES = ['PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REVIEW_REQUIRED']
+
+export function isDepositAwaitingProvider(status) {
+  return DEPOSIT_AWAITING_PROVIDER_STATUSES.includes(status)
+}
+
 export function isPaymentRequestExpired(request, now = Date.now()) {
   if (!request?.expiresAt) return false
+  if (isDepositAwaitingProvider(request.status)) return false
   const expiresAt = new Date(request.expiresAt).getTime()
   return Number.isFinite(expiresAt) && expiresAt <= now
 }
 
 export const HOLD_DURATION_MS = 15 * 60 * 1000
+export const RECONCILIATION_DURATION_MS = 60 * 60 * 1000
 export const HOLD_URGENT_MS = 2 * 60 * 1000
 
 export function remainingMs(expiresAt, now = Date.now()) {

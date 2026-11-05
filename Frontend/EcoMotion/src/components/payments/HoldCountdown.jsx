@@ -3,6 +3,7 @@ import {
   countdownUrgency,
   formatCountdown,
   holdProgress,
+  HOLD_DURATION_MS,
   remainingMs,
 } from '../../utils/paymentDisplay'
 
@@ -10,7 +11,7 @@ function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`} aria-hidden="true">{name}</span>
 }
 
-export function HoldCountdown({ expiresAt, compact = false, className = '' }) {
+export function HoldCountdown({ expiresAt, compact = false, className = '', variant = 'hold', durationMs = HOLD_DURATION_MS, shortLabel = false }) {
   const [now, setNow] = useState(() => Date.now())
   const ms = remainingMs(expiresAt, now)
   const urgency = countdownUrgency(ms)
@@ -23,7 +24,11 @@ export function HoldCountdown({ expiresAt, compact = false, className = '' }) {
 
   if (ms == null) return null
 
-  const label = urgency === 'expired' ? 'Hết thời gian giữ chỗ' : 'Giữ chỗ còn'
+  const label = variant === 'reconciliation'
+    ? (urgency === 'expired' ? 'Hết hạn đối soát' : (shortLabel ? 'Đối soát' : 'Đối soát còn'))
+    : (urgency === 'expired'
+      ? (shortLabel ? 'Hết hạn' : 'Hết thời gian giữ chỗ')
+      : (shortLabel ? 'Còn' : 'Giữ chỗ còn'))
   const tone = {
     ok: 'border-brand-200 bg-brand-50 text-brand-900',
     urgent: 'border-amber-300 bg-amber-50 text-amber-950 motion-safe:animate-pulse motion-reduce:animate-none',
@@ -33,7 +38,7 @@ export function HoldCountdown({ expiresAt, compact = false, className = '' }) {
 
   const spoken =
     urgency === 'expired'
-      ? 'Hết thời gian giữ chỗ'
+      ? label
       : `${label} ${formatCountdown(ms)}`
 
   if (compact) {
@@ -41,7 +46,7 @@ export function HoldCountdown({ expiresAt, compact = false, className = '' }) {
       <span
         role="status"
         aria-atomic="true"
-        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold ${tone} ${className}`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 font-mono text-xs font-bold ${tone} ${className}`}
       >
         <Icon name="timer" className="text-sm" />
         {spoken}
@@ -65,7 +70,7 @@ export function HoldCountdown({ expiresAt, compact = false, className = '' }) {
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/10">
         <div
           className="h-full rounded-full bg-current transition-[width] duration-1000 ease-linear motion-reduce:transition-none"
-          style={{ width: `${holdProgress(ms)}%` }}
+          style={{ width: `${holdProgress(ms, durationMs)}%` }}
         />
       </div>
     </div>

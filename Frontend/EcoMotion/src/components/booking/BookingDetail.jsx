@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
-import { bookingStatusMeta, canShowOperationalRisk, renterCanSeeDriver } from '../../utils/bookingStatus';
+import { bookingStatusMeta, canShowOperationalRisk, paymentStatusLabel, renterCanSeeDriver } from '../../utils/bookingStatus';
+import { BookingOrderSummaryCard } from './BookingOrderSummaryCard';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
@@ -60,6 +61,7 @@ function getDriverStatusLabel(booking) {
 
 export const BookingDetail = ({
   booking,
+  workflow = null,
   operationalRisk = null,
   onGoBack,
   onGoToCarPage,
@@ -87,6 +89,7 @@ export const BookingDetail = ({
   const [editing, setEditing] = useState(false);
 
   const statusMeta = bookingStatusMeta(booking.status);
+  const paymentLabel = paymentStatusLabel(workflow?.paymentStatus);
 
   // Financial metrics
   const totalRentalPrice = Number(booking.totalAmount || 0);
@@ -226,9 +229,13 @@ export const BookingDetail = ({
             <h1 className="font-mono font-bold text-2xl sm:text-[28px] text-[#14221A] tracking-tight">
               #{booking.id}
             </h1>
-            <span className={`px-3.5 py-1 rounded-full border text-xs font-bold ${statusMeta.badgeClass}`}>
-              {statusMeta.label}
-            </span>
+
+            <span className={`px-3 py-1 rounded-full border text-xs font-semibold ${statusMeta.badgeClass}`}>{statusMeta.label}</span>
+            {paymentLabel ? (
+              <span className="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-800">
+                {paymentLabel}
+              </span>
+            ) : null}
           </div>
 
           <div className="text-xs sm:text-sm text-slate-500">
@@ -502,16 +509,78 @@ export const BookingDetail = ({
                   : 'Chuyến xe đang di chuyển cùng bạn.'}
               </p>
             </div>
-            {booking.canConfirmEnd ? (
-              <button
-                onClick={async () => {
-                  setActionError('');
-                  try {
-                    await onCompleteBooking(booking.id);
-                  } catch (err) {
-                    setActionError(readErrorMessage(err));
-                  }
-                }}
+          )}
+
+          {booking.status === 'AWAITING_FINAL_PAYMENT' && (
+            <div className="p-5 bg-purple-50 border border-purple-200 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-purple-900">Đã chốt quyết toán</h2>
+                <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư qua cổng thanh toán VNPAY để hoàn tất đơn thuê.</p>
+              </div>
+              {booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
+                Thanh toán số dư
+              </button> : null}
+            </div>
+          )}
+
+          {/* ACCEPTED CALL TO ACTION BANNER */}
+          {booking.status === 'ACCEPTED' && (
+            <div className="p-5 bg-[#E8F6EE] border border-[#15803D]/30 rounded-[16px] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-[#15803D]">Chủ xe đã chấp nhận đơn!</h2>
+                <p className="text-xs text-gray-600 mt-1">
+                  {booking.upfront
+                    ? 'Vui lòng thanh toán khoản trả trước để khóa lịch xe.'
+                    : 'Vui lòng hoàn tất thanh toán cọc giữ chỗ để khóa lịch xe.'}
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                {booking.holdExpiresAt ? (
+                  <HoldCountdown
+                    expiresAt={booking.holdExpiresAt}
+                    durationMs={booking.upfront ? 24 * 60 * 60 * 1000 : undefined}
+                  />
+                ) : null}
+                <div className="flex items-center gap-2">
+                {booking.canCancel ? <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  type="button"
+                  className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Huỷ đơn
+                </button> : null}
+                {booking.canEditRequest ? <button onClick={() => setEditing(true)} type="button" className="px-4 py-2 bg-white text-[#15803D] border border-[#15803D] text-xs font-semibold rounded-[12px]">Chỉnh sửa</button> : null}
+                {booking.canPay ? <button
+                  onClick={() => onPayDeposit(booking)}
+                  type="button"
+                  className="px-6 py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm rounded-[12px] shadow-sm transition-all cursor-pointer whitespace-nowrap"
+                >
+                  {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán cọc'}
+                </button> : null}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CONFIRMED HERO BANNER WITH CANCEL BUTTON */}
+          {booking.status === 'CONFIRMED' && (
+            <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-[#14221A]">
+                  {booking.driverReplacementRequired
+                    ? 'Đang phân công lại tài xế'
+                    : 'Đang tìm tài xế'}
+                </h2>
+                <p className="text-xs text-gray-600 mt-1">
+                  {booking.driverReplacementRequired
+                    ? 'Hệ thống hoặc nhà xe đang sắp xếp tài xế thay thế phù hợp cho chuyến đi.'
+                    : booking.upfront
+                      ? 'Lịch xe đã khóa. Bạn tự lái theo hợp đồng.'
+                      : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
+                </p>
+              </div>
+              {booking.canCancel ? <button
+                onClick={() => setIsCancelModalOpen(true)}
                 type="button"
                 className="px-5 py-2.5 bg-white text-emerald-800 font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:bg-emerald-50 transition cursor-pointer"
               >
@@ -733,14 +802,78 @@ export const BookingDetail = ({
             </dl>
           </div>
 
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Điểm đón khách:</span>
-            <p className="mt-1 font-semibold text-slate-800 leading-snug">{booking.pickupAddress}</p>
-            {booking.driverNote && (
-              <p className="mt-1 text-[11px] text-slate-500 italic">
-                Ghi chú cho tài xế: &ldquo;{booking.driverNote}&rdquo;
-              </p>
-            )}
+          {/* CARD: PICKUP DETAILS */}
+          <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
+            <h3 className="text-sm font-bold text-[#14221A] uppercase tracking-wider text-gray-500">
+              Điểm đón
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Address */}
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F7F8F6]">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-[#E8F6EE] text-[#15803D]">
+                  <span className="material-symbols-outlined text-[18px]">pin_drop</span>
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6D7A72]">
+                    Địa chỉ đón
+                  </span>
+                  <span className="text-[13px] font-medium text-[#14221A] leading-snug mt-0.5">
+                    {booking.pickupAddress}
+                  </span>
+                </div>
+              </div>
+
+              {/* Time */}
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F7F8F6]">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-[#E8F6EE] text-[#15803D]">
+                  <span className="material-symbols-outlined text-[18px]">schedule</span>
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6D7A72]">
+                    Giờ hẹn đón
+                  </span>
+                  <span className="text-[13px] font-medium text-[#14221A] leading-snug mt-0.5">
+                    {booking.formattedStart}
+                  </span>
+                </div>
+              </div>
+
+              {/* Passengers */}
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F7F8F6]">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-[#E8F6EE] text-[#15803D]">
+                  <span className="material-symbols-outlined text-[18px]">group</span>
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6D7A72]">
+                    Số lượng
+                  </span>
+                  <span className="text-[13px] font-medium text-[#14221A] leading-snug mt-0.5">
+                    {booking.passengerCount} khách
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 border-t border-[#E6EBE8] pt-3 text-xs sm:grid-cols-2">
+              <div className="rounded-lg bg-[#F7F8F6] px-3 py-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#6D7A72]">Kết thúc dự kiến</span>
+                <span className="mt-0.5 block text-sm font-semibold text-[#14221A]">{booking.formattedEnd || '—'}</span>
+              </div>
+              <div className="rounded-lg bg-[#F7F8F6] px-3 py-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#6D7A72]">Thời lượng</span>
+                <span className="mt-0.5 block text-sm font-semibold text-[#14221A]">{booking.durationLabel || `${booking.slots} slot`}</span>
+              </div>
+            </div>
+            <PickupLocationCard pickupAddress={booking.pickupAddress}
+              pickupLatitude={booking.pickupLatitude} pickupLongitude={booking.pickupLongitude}
+              driverNote={booking.driverNote}
+              originLatitude={booking.dispatchOriginLatitude}
+              originLongitude={booking.dispatchOriginLongitude}
+              distanceKm={booking.distanceKm}
+              freeRadiusKm={booking.freeRadiusKm}
+              chargeableKm={booking.chargeableKm}
+              outOfRadiusRate={booking.outOfRadiusRate}
+              pickupFee={booking.pickupFee} />
           </div>
         </section>
       </div>
@@ -945,21 +1078,69 @@ export const BookingDetail = ({
         </div>
       </section>
 
-      {/* =========================================================================
-          KHIẾU NẠI (DISPUTES)
-          ========================================================================= */}
-      {booking.disputeCategories.length > 0 && (
-        <section aria-label="Khiếu nại" className="bg-white p-5 flex flex-col gap-4 rounded-2xl border border-slate-200 shadow-xs">
-          <h3 className="text-sm font-bold text-[#14221A]">Khiếu nại dịch vụ / Phụ phí</h3>
-          <form onSubmit={handleComplaintSubmit} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="complaint-category-select" className="text-xs font-semibold text-[#14221A]">Loại khiếu nại</label>
-              <select
-                id="complaint-category-select"
-                value={complaintCategory}
-                onChange={(e) => setComplaintCategory(e.target.value)}
-                required
-                className="w-full h-10 px-3 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200 outline-none cursor-pointer"
+        {/* Right Column (5 cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
+          <BookingOrderSummaryCard
+            bookingCode={booking.id}
+            status={booking.status}
+            paymentStatus={workflow?.paymentStatus}
+            formattedStart={booking.formattedStart}
+            formattedEnd={booking.formattedEnd}
+            durationLabel={booking.durationLabel}
+            totalAmount={booking.totalAmount}
+            depositAmount={booking.depositAmount}
+            confirmedPaid={workflow?.confirmedPaid}
+            remainingAmount={workflow?.remainingAmount}
+            pickupFee={booking.pickupFee}
+            charges={booking.charges}
+            showStatusBadges={false}
+          />
+
+          {/* Timeline Card */}
+          <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
+            <h3 className="text-sm font-bold text-[#14221A]">Tiến trình đơn</h3>
+
+            <div className="flex flex-col gap-5 relative pl-6">
+              {booking.timeline.map((item, idx) => (
+                <div key={idx} className="relative flex items-start gap-3">
+                  <div
+                    className={`absolute -left-[23px] top-1.5 w-3 h-3 rounded-full shrink-0 ring-2 ${
+                      item.isFailed
+                        ? 'bg-[#B42318] ring-rose-100'
+                        : item.completed
+                        ? 'bg-[#15803D] ring-[#E8F6EE]'
+                        : 'bg-gray-300 ring-gray-100'
+                    }`}
+                  />
+                  <div className="flex flex-col">
+                    <span
+                      className={`text-xs sm:text-sm font-bold ${
+                        item.isFailed ? 'text-[#B42318]' : 'text-[#14221A]'
+                      }`}
+                    >
+                      {item.title}
+                    </span>
+                    <span className="font-mono text-[11px] text-gray-500 mt-0.5">
+                      {item.timestamp}
+                    </span>
+                    {item.description && (
+                      <p className="text-xs text-gray-600 mt-1">{item.description}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Navigation Card for Rejected/General */}
+          {booking.status === 'REJECTED' && (
+            <div className="rounded-[16px] bg-[#F7F8F6] border border-[#E6EBE8] p-5 shadow-xs flex flex-col gap-3">
+              <p className="text-xs text-gray-700 leading-relaxed">
+                Bạn có thể chọn lại xe đang mở bán.
+              </p>
+              <button
+                onClick={onGoToCarPage}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#15803D] hover:underline cursor-pointer text-left"
               >
                 <option value="" disabled>-- Chọn loại khiếu nại --</option>
                 {booking.disputeCategories.map((category) => (

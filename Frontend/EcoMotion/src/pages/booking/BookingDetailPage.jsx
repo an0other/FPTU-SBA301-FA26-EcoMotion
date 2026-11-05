@@ -185,6 +185,7 @@ export function BookingDetailPage() {
       <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>
       <BookingDetail
         booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
+        workflow={workflow}
         operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}

@@ -39,6 +39,7 @@ export default function PaymentSuccessPage() {
   const error = !reference ? 'Thiếu mã tham chiếu để kiểm tra thanh toán.' : state.key === key ? state.error : null
   const receipt = state.key === key && !error ? state.receipt : null
   const success = receipt?.status === 'SUCCESS'
+  const canRecheckReceipt = Boolean(reference) && !loading && !success
   const title = loading ? 'Đang kiểm tra thanh toán' : error ? 'Không thể xác minh thanh toán' : TITLES[receipt?.status]
   const bookingPath = receipt?.bookingCode ? `/renter/bookings/${encodeURIComponent(receipt.bookingCode)}` : null
 
@@ -76,10 +77,14 @@ export default function PaymentSuccessPage() {
           </>
         )}
         <div className="flex flex-wrap justify-center gap-3">
-          {reference && !loading && !success && <button type="button" onClick={() => setAttempt(value => value + 1)} className="rounded-lg border px-4 py-2 text-xs font-semibold hover:bg-slate-50">Kiểm tra lại</button>}
-          {bookingPath && <Link to={bookingPath} className="rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-brand-800 shadow-xs">Xem đơn đặt xe</Link>}
-          <Link to="/renter/bookings" className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Đơn của tôi</Link>
-          <Link to="/" className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Về trang chủ</Link>
+          {canRecheckReceipt && (
+            <button type="button" onClick={() => setAttempt(value => value + 1)} className="rounded-lg border px-4 py-2">
+              Kiểm tra lại
+            </button>
+          )}
+          {bookingPath && <Link to={bookingPath} className="rounded-lg bg-brand-700 px-4 py-2 text-white">Xem chi tiết đơn thuê</Link>}
+          <Link to="/renter/bookings" className="rounded-lg border px-4 py-2">Đơn của tôi</Link>
+          <Link to="/" className="rounded-lg border px-4 py-2">Về trang chủ</Link>
         </div>
       </div>
     </div>

@@ -241,12 +241,18 @@ export const MyBookingsList = ({
             const holdMs = remainingMs(booking.holdExpiresAt, now)
             const holdExpired =
               isWaitingDeposit(booking.status) && holdMs != null && holdMs <= 0
+            const depositRejected = booking.depositPaymentStatus === 'REJECTED'
             const paymentLabel = listPaymentLabel(booking.status, {
               holdExpired,
               actionKind: booking.actionKind,
+              depositPaymentStatus: booking.depositPaymentStatus,
             })
-            const action = cardAction(booking.actionKind)
-            const badgeLabel = holdExpired ? 'Hết hạn giữ chỗ' : meta.label
+            const action = cardAction(booking.actionKind, booking.depositPaymentStatus)
+            const badgeLabel = holdExpired
+              ? 'Hết hạn giữ chỗ'
+              : depositRejected
+                ? 'Cần gửi lại cọc'
+                : meta.label
             const extraPayment = paymentLabel && paymentLabel !== badgeLabel ? paymentLabel : null
             const showCountdown =
               isWaitingDeposit(booking.status)
@@ -341,7 +347,19 @@ export const MyBookingsList = ({
                         </span>
                       </p>
                     ) : null}
-                    {showCountdown ? <HoldCountdown expiresAt={booking.holdExpiresAt} compact /> : null}
+                    {showCountdown ? (
+                      <HoldCountdown expiresAt={booking.holdExpiresAt} compact />
+                    ) : null}
+                    {depositRejected && booking.depositRejectionReason ? (
+                      <p className="text-xs leading-relaxed text-rose-800">
+                        Nhà xe từ chối biên lai: {booking.depositRejectionReason}
+                      </p>
+                    ) : null}
+                    {depositRejected ? (
+                      <p className="text-xs leading-relaxed text-amber-900/90">
+                        Đơn vẫn giữ chỗ trong thời gian còn lại — hãy chuyển khoản/VNPAY lại hoặc tải biên lai mới.
+                      </p>
+                    ) : null}
                     {showRisk ? (
                       <aside className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
                         <p className="font-semibold">Xe có thể chưa sẵn sàng đúng giờ</p>

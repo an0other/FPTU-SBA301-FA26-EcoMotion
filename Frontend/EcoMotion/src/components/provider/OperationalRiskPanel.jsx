@@ -14,6 +14,13 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
   const pendingProposal = workflow?.proposal?.status === 'PENDING'
+  const awaitingDeposit = booking?.status === 'AWAITING_DEPOSIT' || booking?.status === 'ACCEPTED'
+  useEffect(() => {
+    if (awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver && !workflow?.proposal) {
+      setResolution('CANCEL_AND_REFUND')
+      setReason('Nhà xe không thể cung cấp xe cho chuyến này.')
+    }
+  }, [awaitingDeposit, risk?.atRisk, workflow?.needsDriver, workflow?.proposal])
   useEffect(() => {
     let cancelled = false
     providerService.getVehicles({ limit: 100, status: 'APPROVED' }).then(result => {
@@ -42,8 +49,16 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
 
   return (
     <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-      <h2 className="font-bold">{risk?.atRisk ? 'Nguy cơ xe về trễ' : workflow?.needsDriver ? 'Chưa có tài xế phù hợp' : 'Phương án dịch vụ'}</h2>
-      <p className="mt-1">{risk?.userMessage || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.'}</p>
+      <h2 className="font-bold">
+        {awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver
+          ? 'Không thể phục vụ chuyến này?'
+          : risk?.atRisk ? 'Nguy cơ xe về trễ' : workflow?.needsDriver ? 'Chưa có tài xế phù hợp' : 'Phương án dịch vụ'}
+      </h2>
+      <p className="mt-1">
+        {awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver
+          ? 'Khách chưa cọc hoặc chưa gửi biên lai. Nếu nhà xe không nhận chuyến, chọn Hủy và hoàn tiền — không dùng nút Từ chối ở tab Tài chính khi chưa có biên lai.'
+          : (risk?.message || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.')}
+      </p>
       {pendingProposal && <p className="mt-2 text-xs">Đang chờ khách phản hồi; không thể gửi đè một đề xuất khác. Nếu không tiếp tục cung cấp dịch vụ, nhà xe có thể hủy và bắt đầu hoàn tiền.</p>}
       <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-3">
         <label className="text-xs">Phương án

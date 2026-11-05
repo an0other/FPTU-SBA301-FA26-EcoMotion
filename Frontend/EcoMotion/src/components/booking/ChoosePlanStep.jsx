@@ -3,23 +3,25 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import ReferencePlanPrices from './ReferencePlanPrices'
 import { slotDurationLabel } from '../../utils/planLabels'
 import { formatBookingWhen, parseVietnamDateTime } from '../../utils/bookingDateTime'
-import { rentalDurationLabel } from '../../utils/rentalPricing'
+import { MIN_RENTAL_DURATION_HOURS, rentalDurationLabel, rentalEndTimeConstraints } from '../../utils/rentalPricing'
 
 export function ChoosePlanStep({ plans, start, end, onStart, onEnd, quote, pending, error,
   selected, requestedEnd, onSelect, onWindow, onNext, onYearly, timeError }) {
   const lowestPrice = Math.min(...(quote?.options ?? []).map(option => Number(option.rentalAmount)))
   const [startDate, startHour] = start.split('T')
   const pickupTime = parseVietnamDateTime(startDate, startHour)
+  const endConstraints = rentalEndTimeConstraints(start)
   const inputClass = 'mt-2 w-full rounded-xl border border-[#D9DFD9] bg-white px-4 py-3 focus-visible:outline-2 focus-visible:outline-brand-700'
   return <div className="space-y-6">
     <div><h1 className="text-2xl font-bold text-[#14221A]">1. Chọn thời gian thuê</h1>
-      <p className="mt-2 text-sm text-[#14221A]/75">Chọn giờ tròn, đặt trước ít nhất 3 giờ. Chúng tôi tìm cách ghép gói có giá tốt nhất cho bạn.</p></div>
+      <p className="mt-2 text-sm text-[#14221A]/75">Chọn giờ tròn, đặt trước ít nhất 3 giờ. Giờ trả phải sau giờ nhận tối thiểu {MIN_RENTAL_DURATION_HOURS} giờ (cùng ngày thì chỉ chọn được các giờ sau mốc đó).</p></div>
     <ReferencePlanPrices plans={plans} onYearly={onYearly} />
     <div className="grid gap-4 sm:grid-cols-2">
       <RentalTimeInput legend="Giờ nhận xe (giờ Việt Nam)" dateLabel="Ngày nhận xe" hourLabel="Giờ nhận xe"
         value={start} onChange={onStart} inputClass={inputClass} />
       <RentalTimeInput legend="Giờ trả mong muốn (giờ Việt Nam)" dateLabel="Ngày trả xe" hourLabel="Giờ trả xe"
-        value={end} onChange={onEnd} inputClass={inputClass} invalid={Boolean(timeError)} />
+        value={end} onChange={onEnd} inputClass={inputClass} invalid={Boolean(timeError)}
+        minDate={endConstraints.minDate} minHourForDate={endConstraints.minHourForDate} />
     </div>
     <div aria-live="polite" aria-busy={pending}>
       {pending ? <p role="status">Đang kiểm tra lịch xe và tìm giá tốt nhất…</p> : null}
@@ -73,22 +75,39 @@ export function ChoosePlanStep({ plans, start, end, onStart, onEnd, quote, pendi
   </div>
 }
 
-function RentalTimeInput({ legend, dateLabel, hourLabel, value, onChange, inputClass, invalid = false }) {
+function RentalTimeInput({ legend, dateLabel, hourLabel, value, onChange, inputClass, invalid = false,
+  minDate = null, minHourForDate = () => null }) {
   const id = useId()
   const date = value.slice(0, 10)
   const hour = value.slice(11, 16)
+  const minHour = date ? minHourForDate(date) : null
+
+  function applyDate(nextDate) {
+    if (!nextDate) {
+      onChange('')
+      return
+    }
+    const floorHour = minHourForDate(nextDate)
+    let nextHour = hour
+    if (!nextHour || (floorHour && nextHour < floorHour)) nextHour = floorHour || hour || ''
+    onChange(nextHour ? `${nextDate}T${nextHour}` : `${nextDate}T`)
+  }
+
   return <fieldset className="min-w-0">
     <legend className="text-sm font-semibold">{legend}</legend>
     <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
       <div className="min-w-0 text-sm"><label htmlFor={id + '-date'} className="sr-only">{dateLabel}</label>
-        <input id={id + '-date'} type="date" required value={date} onChange={e => onChange(e.target.value ? e.target.value + 'T' + hour : '')}
+        <input id={id + '-date'} type="date" required value={date} min={minDate || undefined}
+          onChange={e => applyDate(e.target.value)}
           aria-invalid={invalid} aria-describedby={invalid ? 'rental-time-error' : undefined} className={inputClass} /></div>
       <div className="text-sm"><label htmlFor={id + '-hour'} className="sr-only">{hourLabel}</label>
         <select id={id + '-hour'} required disabled={!date} value={hour} onChange={e => onChange(date + 'T' + e.target.value)}
           aria-invalid={invalid} aria-describedby={invalid ? 'rental-time-error' : undefined} className={inputClass}>
           <option value="">Chọn giờ</option>
-          {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00').map(time =>
-            <option key={time} value={time}>{time}</option>)}
+          {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00').map(time => {
+            const disabled = minHour && time < minHour
+            return <option key={time} value={time} disabled={disabled}>{time}{disabled ? ' (không hợp lệ)' : ''}</option>
+          })}
         </select></div>
     </div>
   </fieldset>

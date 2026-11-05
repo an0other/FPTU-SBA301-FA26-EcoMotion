@@ -17,6 +17,21 @@ export const REFUND_WORKFLOW_LABELS = {
   FAILED: 'Hoàn tiền chưa thành công, cần xử lý lại', PENDING_RECONCILIATION: 'Đang đối soát khoản hoàn',
 }
 
+/** Hide redundant refund list when stepper + badges already describe a single in-flight refund. */
+export function shouldShowRefundDetailsList(refunds = [], { provider = false } = {}) {
+  if (!refunds?.length) return false
+  if (refunds.length > 1) return true
+  const refund = refunds[0]
+  if (refund.rejectionReason) return true
+  if (refund.proofAvailable) return true
+  if (refund.receiptStatus) return true
+  if (provider && refund.status === 'PROCESSING') return true
+  if (['FAILED', 'REJECTED', 'PENDING_RECONCILIATION', 'UNDER_REVIEW', 'REQUESTED', 'APPROVED'].includes(refund.status)) {
+    return true
+  }
+  return false
+}
+
 export function vietnamInputToInstant(value) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error('Chọn ngày và giờ hợp lệ theo giờ Việt Nam.')
   const instant = new Date(`${value}:00+07:00`)

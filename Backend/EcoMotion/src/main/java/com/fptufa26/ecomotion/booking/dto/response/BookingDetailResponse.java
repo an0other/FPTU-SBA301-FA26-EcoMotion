@@ -56,11 +56,8 @@ public record BookingDetailResponse(
         BigDecimal outOfRadiusRate,
         Integer chargeableKm,
         BigDecimal pickupFee,
-        Instant driverStartConfirmedAt,
-        Instant renterStartConfirmedAt,
-        Instant driverEndConfirmedAt,
-        Instant renterEndConfirmedAt,
-        String renterName
+        /** Lý do chi tiết khi nhà xe hủy chuyến (operational resolution). */
+        String cancelDetailNote
 ) {
     public BookingDetailResponse(
             String bookingCode,

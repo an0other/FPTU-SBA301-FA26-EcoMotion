@@ -85,11 +85,14 @@ public class DevDataSeeder implements ApplicationRunner {
     public static final String ACCEPTED_BOOKING_CODE = "EM-2026-9001";
     public static final String PENDING_BOOKING_CODE = "EM-2026-9002";
     public static final String IN_PROGRESS_BOOKING_CODE = "EM-2026-9003";
+    public static final String COMPLETED_LIFECYCLE_BOOKING_CODE =
+            RenterCompletedLifecycleSeeder.BOOKING_CODE;
 
     public static final String DEFAULT_PASSWORD = "EcoMotion@123";
 
     private final RenterPaymentDataSeeder renterPaymentDataSeeder;
     private final RenterReviewDataSeeder renterReviewDataSeeder;
+    private final RenterCompletedLifecycleSeeder renterCompletedLifecycleSeeder;
     private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
 
     private static final long PROVIDER_A_USER_ID = 2L;
@@ -289,6 +292,7 @@ public class DevDataSeeder implements ApplicationRunner {
         renterPaymentDataSeeder.seed();
         realignPinnedIdentitySequences();
         renterReviewDataSeeder.seed();
+        renterCompletedLifecycleSeeder.seed();
         yearlyRentalDataSeeder.seed();
         realignPinnedIdentitySequences();
         renterYearlyBookingDataSeeder.seed();

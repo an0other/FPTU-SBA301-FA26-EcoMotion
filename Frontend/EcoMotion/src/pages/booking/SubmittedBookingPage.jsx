@@ -1,15 +1,20 @@
 import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { RequestSubmitted } from '../../components/booking/RequestSubmitted'
 import { readErrorMessage } from '../../services/apiClient'
 import { getMyBooking } from '../../services/bookingService'
 import { BookingErrorDialog } from '../../components/booking/BookingErrorDialog'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
+import { providerFinanceService } from '../../services/providerFinanceService'
+import Toast from '../../components/Toast'
+import { isDepositAwaitingProvider } from '../../utils/paymentDisplay'
 
 function fromDetail(detail) {
   return {
     id: detail.bookingCode,
+    status: detail.status,
+    canPay: Boolean(detail.canPay),
     vehicle: {
       name: detail.vehicleName,
       year: String(detail.manufactureYear),
@@ -29,6 +34,8 @@ function fromDetail(detail) {
   }
 }
 
+const OPEN_DEPOSIT_STATUSES = new Set(['AWAITING_DEPOSIT', 'ACCEPTED'])
+
 export function SubmittedBookingPage() {
   const { bookingCode } = useParams()
   const location = useLocation()
@@ -37,13 +44,25 @@ export function SubmittedBookingPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [retry, setRetry] = useState(0)
+  const [reissuing, setReissuing] = useState(false)
+  const [toast, setToast] = useState({ message: '', type: 'success' })
+  const [depositPaymentStatus, setDepositPaymentStatus] = useState(null)
+
+  const refreshBooking = useCallback(async () => {
+    const [detail, paymentRequests] = await Promise.all([
+      getMyBooking(bookingCode),
+      providerFinanceService.getPaymentRequestsByBooking(bookingCode).catch(() => []),
+    ])
+    const depositRequest = (paymentRequests || []).find((item) => item.paymentType === 'DEPOSIT') || null
+    setDepositPaymentStatus(depositRequest?.status ?? null)
+    const holdExpiresAt = depositRequest?.expiresAt ?? detail.holdExpiresAt
+    setBooking(fromDetail({ ...detail, holdExpiresAt }))
+    return detail
+  }, [bookingCode])
 
   useEffect(() => {
     let cancelled = false
-    getMyBooking(bookingCode)
-      .then((detail) => {
-        if (!cancelled) setBooking(fromDetail(detail))
-      })
+    refreshBooking()
       .catch((err) => {
         if (!cancelled) setError(readErrorMessage(err))
       })
@@ -51,13 +70,39 @@ export function SubmittedBookingPage() {
     return () => {
       cancelled = true
     }
-  }, [bookingCode, retry])
+  }, [bookingCode, retry, refreshBooking])
+
+  useEffect(() => {
+    if (!booking) return undefined
+    const keepPolling = OPEN_DEPOSIT_STATUSES.has(booking.status)
+      || isDepositAwaitingProvider(depositPaymentStatus)
+    if (!keepPolling) return undefined
+    const timer = window.setInterval(() => {
+      refreshBooking().catch(() => {})
+    }, 10_000)
+    return () => window.clearInterval(timer)
+  }, [booking?.status, depositPaymentStatus, refreshBooking])
 
   const retryLoading = () => {
     setError('')
     setLoading(true)
     setRetry((value) => value + 1)
   }
+
+  const handleReissueDeposit = async () => {
+    if (!booking?.id || reissuing) return
+    setReissuing(true)
+    try {
+      await providerFinanceService.reissueDepositPayment(booking.id)
+      await refreshBooking()
+      setToast({ message: 'Đã cấp lại yêu cầu thanh toán cọc. Bạn có thể thanh toán trong thời hạn mới.', type: 'success' })
+    } catch (err) {
+      setToast({ message: readErrorMessage(err) || 'Không thể cấp lại yêu cầu thanh toán', type: 'error' })
+    } finally {
+      setReissuing(false)
+    }
+  }
+
   const errorDialog = <BookingErrorDialog title="Không tải được thông tin đơn thuê"
     message={error} onClose={() => setError('')} onRetry={retryLoading} />
 
@@ -74,12 +119,17 @@ export function SubmittedBookingPage() {
 
   return (
     <>
+      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
       {errorDialog}
       <RequestSubmitted
         booking={booking}
+        depositPaymentStatus={depositPaymentStatus}
+        reissuing={reissuing}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
+        onReissueDeposit={handleReissueDeposit}
         onGoToMyBookings={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
+        onRefreshBooking={() => refreshBooking().catch(() => {})}
       />
     </>
   )

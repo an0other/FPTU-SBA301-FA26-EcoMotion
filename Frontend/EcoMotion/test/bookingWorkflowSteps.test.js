@@ -30,7 +30,23 @@ test('verified deposit completes only the deposit step and leaves final settleme
 test('money received without booking confirmation never completes the deposit step', () => {
   const steps = evaluateActiveWorkflowSteps({ bookingStatus: 'AWAITING_DEPOSIT', paymentStatus: 'PARTIALLY_PAID', confirmedPaid: 100000 })
   assert.notEqual(steps[1].state, STEP_STATUS.COMPLETED)
+  assert.equal(steps[1].state, STEP_STATUS.WARNING)
+  assert.match(steps[1].description, /đối soát/)
   assert.equal(steps[2].state, STEP_STATUS.PENDING)
+})
+
+test('recorded deposit with refund in flight does not show awaiting-deposit copy', () => {
+  const steps = evaluateActiveWorkflowSteps({
+    bookingStatus: 'AWAITING_DEPOSIT',
+    paymentStatus: 'REFUND_PENDING',
+    confirmedPaid: 546000,
+    pendingRefundAmount: 54000,
+    remainingAmount: 1274000,
+  })
+  const deposit = steps.find((step) => step.id === 'DEPOSIT')
+  assert.equal(deposit.state, STEP_STATUS.WARNING)
+  assert.match(deposit.description, /hoàn tiền/)
+  assert.notEqual(deposit.description, 'Chờ khách cọc')
 })
 
 test('1. Chờ xác nhận: approval is current, subsequent steps are pending', () => {
@@ -191,6 +207,18 @@ test('12. Overdue pickup detection during preparation', () => {
   assert.equal(isOverduePickup('2026-10-30T11:00:00Z', 'CONFIRMED', now), false)
   // When already in progress, not overdue in preparation
   assert.equal(isOverduePickup('2026-10-30T09:00:00Z', 'IN_PROGRESS', now), false)
+})
+
+test('cancelled full refund shows one pending badge instead of paid plus pending duplicates', () => {
+  const metrics = getActiveFinancialMetrics({
+    bookingStatus: 'CANCELLED',
+    confirmedPaid: 630000,
+    pendingRefundAmount: 630000,
+    refundedAmount: 0,
+  })
+  assert.equal(metrics.length, 1)
+  assert.equal(metrics[0].id, 'pendingRefundAmount')
+  assert.match(metrics[0].label, /Hoàn lại/)
 })
 
 test('13. Non-zero financial metrics avoids redundant 0đ', () => {
