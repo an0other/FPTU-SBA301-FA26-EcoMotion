@@ -14,7 +14,7 @@ public class BookingHoldExpiryJob {
     private final BookingHoldExpiryService bookingHoldExpiryService;
     private final Clock clock;
 
-    @Scheduled(fixedDelayString = "${ecomotion.booking-hold.cleanup-ms:60000}")
+    @Scheduled(fixedDelayString = "${ecomotion.booking-hold.cleanup-ms:10000}")
     public void expireDueHolds() {
         bookingHoldExpiryService.expireDueHolds(clock.instant());
     }

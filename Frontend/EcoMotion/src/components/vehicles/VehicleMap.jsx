@@ -210,7 +210,7 @@ export default function VehicleMap({ draftOrigin, selectedOrigin, vehicles, sele
 
   return (
     <div className="relative h-[480px] w-full rounded-xl bg-slate-100 sm:h-[580px]">
-      <div ref={containerRef} className="relative z-0 h-full w-full rounded-xl" aria-label="Bản đồ tìm xe" />
+      <div ref={containerRef} className="leaflet-map-shell h-full w-full rounded-xl" aria-label="Bản đồ tìm xe" />
       <div className="absolute inset-x-3 top-3 z-[1001] flex flex-wrap items-start justify-end gap-2">
         <div className="min-w-0 w-full xl:mr-auto xl:w-[min(45%,24rem)]">{children}</div>
         <div role="group" aria-label="Điều khiển tìm xe trên bản đồ"

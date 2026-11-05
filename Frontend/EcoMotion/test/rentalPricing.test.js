@@ -5,10 +5,10 @@ import { rentalSelection, rentalPayload, parseRentalTime, rentalTimeInput, renta
 test('requests whole hours in Vietnam and preserves the desired interval across midnight', () => {
   assert.equal(parseRentalTime('2030-11-01T10:30'), null)
   assert.equal(rentalSelection(3, '2030-11-01T10:00', '2030-11-01T09:00'), null)
-  const request = rentalSelection(3, '2030-11-01T23:00', '2030-11-02T01:00')
+  const request = rentalSelection(3, '2030-11-01T23:00', '2030-11-02T03:00')
   assert.equal(request.pickupTime, '2030-11-01T16:00:00.000Z')
-  assert.equal(request.requestedEndAt, '2030-11-01T18:00:00.000Z')
-  assert.equal(rentalTimeInput(request.requestedEndAt), '2030-11-02T01:00')
+  assert.equal(request.requestedEndAt, '2030-11-01T20:00:00.000Z')
+  assert.equal(rentalTimeInput(request.requestedEndAt), '2030-11-02T03:00')
 })
 test('checkout sends the chosen coverage end and strips client prices from the package selection', () => {
   const request = { pickupTime: '2030-11-01T03:00:00Z', requestedEndAt: '2030-11-04T05:00:00Z' }
@@ -24,9 +24,11 @@ test('checkout sends the chosen coverage end and strips client prices from the p
 })
 
 test('reports return-before-pickup separately and waits for complete date/hour selections', () => {
-  const message = 'Thời gian trả xe phải sau thời gian nhận xe.'
+  const message = 'Thời gian trả xe phải sau giờ nhận xe ít nhất 4 giờ.'
   assert.equal(rentalTimeError('2030-11-04T13:00', '2030-11-04T12:00'), message)
   assert.equal(rentalTimeError('2030-11-04T12:00', '2030-11-04T12:00'), message)
+  assert.equal(rentalTimeError('2030-11-04T08:00', '2030-11-04T11:00'), message)
+  assert.equal(rentalTimeError('2030-11-04T08:00', '2030-11-04T12:00'), '')
   assert.equal(rentalTimeError('2030-11-04T12:00', '2030-11-05T00:00'), '')
   assert.equal(rentalTimeError('2030-11-04T', '2030-11-05T00:00'), '')
   assert.equal(rentalTimeError('', ''), '')

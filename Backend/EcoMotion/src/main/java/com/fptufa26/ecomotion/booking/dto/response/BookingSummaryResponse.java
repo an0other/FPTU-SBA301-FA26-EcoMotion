@@ -29,6 +29,8 @@ public record BookingSummaryResponse(
         Instant endTime,
         BigDecimal depositAmount,
         String driverName,
-        BookingActionKind actionKind
+        BookingActionKind actionKind,
+        String depositPaymentStatus,
+        String depositRejectionReason
 ) {
 }

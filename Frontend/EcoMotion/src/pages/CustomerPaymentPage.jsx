@@ -3,9 +3,20 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import Toast from '../components/Toast'
 import { BookingErrorDialog } from '../components/booking/BookingErrorDialog'
 import { HoldCountdown } from '../components/payments/HoldCountdown'
+import { DepositProofForm } from '../components/payments/DepositProofForm'
 import { providerFinanceService } from '../services/providerFinanceService'
 import { paymentService } from '../services/paymentService'
-import { formatPaymentMoney, isPaymentRequestExpired } from '../utils/paymentDisplay'
+import {
+  formatPaymentMoney,
+  isDepositAwaitingProvider,
+  isPaymentRequestExpired,
+  RECONCILIATION_DURATION_MS,
+} from '../utils/paymentDisplay'
+import { getMyBooking } from '../services/bookingService'
+import { bookingWorkflowService } from '../services/bookingWorkflowService'
+import { formatBookingWhen } from '../utils/bookingDateTime'
+import { rentalDurationLabel } from '../utils/rentalPricing'
+import { BookingOrderSummaryCard } from '../components/booking/BookingOrderSummaryCard'
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`} aria-hidden="true">{name}</span>
@@ -40,6 +51,8 @@ export default function CustomerPaymentPage() {
   const [checkingStatus, setCheckingStatus] = useState(false)
   const [inlineError, setInlineError] = useState(null)
   const [dismissedLoadError, setDismissedLoadError] = useState(null)
+  const [submittingProof, setSubmittingProof] = useState(false)
+  const [bookingSummary, setBookingSummary] = useState(null)
 
   const fetchPaymentRequests = useCallback(async (silent = false) => {
     try {
@@ -74,6 +87,43 @@ export default function CustomerPaymentPage() {
     }
     return undefined
   }, [bookingIdentifier, fetchPaymentRequests])
+
+  useEffect(() => {
+    if (!bookingIdentifier) return undefined
+    let cancelled = false
+    Promise.all([
+      getMyBooking(bookingIdentifier),
+      bookingWorkflowService.get(bookingIdentifier).catch(() => null),
+    ]).then(([detail, workflow]) => {
+      if (cancelled || !detail) return
+      const hours = detail.endTime && detail.pickupTime
+        ? (new Date(detail.endTime) - new Date(detail.pickupTime)) / 3600000
+        : null
+      setBookingSummary({
+        status: detail.status,
+        paymentStatus: workflow?.paymentStatus ?? detail.paymentStatus,
+        formattedStart: formatBookingWhen(detail.pickupTime),
+        formattedEnd: formatBookingWhen(detail.endTime),
+        durationLabel: hours != null ? rentalDurationLabel(hours) : '',
+        totalAmount: detail.totalAmount,
+        depositAmount: detail.depositAmount,
+        confirmedPaid: workflow?.confirmedPaid,
+        remainingAmount: workflow?.remainingAmount,
+        pickupFee: detail.pickupFee,
+        charges: (detail.charges ?? []).map((charge) => ({
+          chargeId: charge.chargeId,
+          chargeType: charge.chargeType,
+          label: charge.chargeType === 'OUT_OF_RADIUS' ? 'Phí đón ngoài phạm vi' : charge.description,
+          description: charge.description,
+          amount: Number(charge.effectiveAmount ?? charge.amount),
+          isWaived: Boolean(charge.isWaived),
+        })),
+      })
+    }).catch(() => {
+      if (!cancelled) setBookingSummary(null)
+    })
+    return () => { cancelled = true }
+  }, [bookingIdentifier])
 
   // Auto-polling while request is pending or reviewing
   useEffect(() => {
@@ -156,6 +206,28 @@ export default function CustomerPaymentPage() {
     }
   }
 
+  const handleSubmitProof = async ({ file, transactionReference, note }) => {
+    if (!selectedRequest?.id || submittingProof) return
+    setSubmittingProof(true)
+    try {
+      await providerFinanceService.submitPaymentProof(selectedRequest.id, {
+        file,
+        transactionReference: transactionReference || undefined,
+        note: note || undefined,
+      })
+      await fetchPaymentRequests(true)
+      setCurrentTime(Date.now())
+      setToast({
+        message: 'Đã gửi biên lai. Hệ thống gia hạn giữ chỗ; nhà xe sẽ đối soát và xác nhận cọc.',
+        type: 'success',
+      })
+    } catch (err) {
+      setToast({ message: err.message || 'Không thể gửi biên lai', type: 'error' })
+    } finally {
+      setSubmittingProof(false)
+    }
+  }
+
   const handleReissue = async () => {
     try {
       await providerFinanceService.reissueDepositPayment(bookingIdentifier)
@@ -216,8 +288,13 @@ export default function CustomerPaymentPage() {
     )
   }
 
-  const requestExpired = isPaymentRequestExpired(selectedRequest)
   const isDeposit = selectedRequest.paymentType === 'DEPOSIT'
+  const awaitingProvider = isDepositAwaitingProvider(selectedRequest?.status)
+  const requestExpired = isPaymentRequestExpired(selectedRequest)
+  const countdownExpiresAt = awaitingProvider
+    ? (selectedRequest.reconciliationDeadline || selectedRequest.expiresAt)
+    : selectedRequest.expiresAt
+  const canSubmitProof = isDeposit && ['PENDING', 'REJECTED', 'PARTIALLY_PAID', 'EXPIRED'].includes(selectedRequest.status)
   const isFinalBalance = selectedRequest.paymentType === 'FINAL_BALANCE'
   const isMonthlyInstallment = selectedRequest.paymentType === 'MONTHLY_INSTALLMENT'
   const paymentTitle = isMonthlyInstallment
@@ -272,14 +349,36 @@ export default function CustomerPaymentPage() {
                 </strong>
               </div>
             )}
-            {selectedRequest.expiresAt && !['CONFIRMED', 'VOIDED'].includes(selectedRequest.status) && (
+            {countdownExpiresAt && !['CONFIRMED', 'VOIDED'].includes(selectedRequest.status) && (
               <HoldCountdown
-                expiresAt={selectedRequest.expiresAt}
-                label={isMonthlyInstallment ? 'Hạn thanh toán kỳ này' : 'Thời hạn giữ chỗ'}
+                expiresAt={countdownExpiresAt}
+                variant={awaitingProvider ? 'reconciliation' : 'hold'}
+                durationMs={awaitingProvider ? RECONCILIATION_DURATION_MS : undefined}
               />
             )}
           </div>
         </header>
+
+        {selectedRequest.status === 'REJECTED' ? (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950">
+            <p className="font-bold">Nhà xe đã từ chối biên lai chuyển khoản</p>
+            {selectedRequest.rejectionReason ? (
+              <p className="mt-1 text-xs text-rose-900/90">Lý do: {selectedRequest.rejectionReason}</p>
+            ) : null}
+            <p className="mt-2 text-xs leading-relaxed text-rose-900/85">
+              Đơn vẫn giữ chỗ trong thời gian còn lại. Bạn có thể thanh toán lại bằng VNPAY hoặc chuyển khoản và tải biên lai mới.
+            </p>
+          </div>
+        ) : null}
+
+        {bookingSummary ? (
+          <div className="mt-4">
+            <BookingOrderSummaryCard
+              bookingCode={bookingIdentifier}
+              {...bookingSummary}
+            />
+          </div>
+        ) : null}
 
         {requests.length > 1 && (
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -434,18 +533,35 @@ export default function CustomerPaymentPage() {
               </div>
             </div>
 
-            {/* Reconciliation guidance */}
-            <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-900 flex items-start gap-3">
-              <Icon name="verified_user" className="text-xl text-emerald-700 shrink-0 mt-0.5" />
-              <div>
-                <strong className="block font-bold">Xác nhận thanh toán tự động</strong>
-                <p className="mt-0.5 text-emerald-800">
-                  {isMonthlyInstallment
-                    ? 'Sau khi nhà cung cấp xác nhận giao dịch, hệ thống sẽ cập nhật kỳ thanh toán này; trạng thái hợp đồng thuê đang diễn ra không thay đổi.'
-                    : 'Sau khi bạn chuyển khoản thành công với đúng nội dung trên, hệ thống sẽ tự động đối soát và cập nhật đơn thuê sang trạng thái ĐÃ XÁC NHẬN. Bạn không cần chụp ảnh màn hình hay tải biên lai thủ công.'}
-                </p>
+            {awaitingProvider ? (
+              <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-xs text-blue-950 flex items-start gap-3">
+                <Icon name="hourglass_top" className="text-xl text-blue-700 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold">Đã gửi biên lai — chờ nhà xe xác nhận</strong>
+                  <p className="mt-0.5 text-blue-900">
+                    Lịch xe vẫn được giữ trong thời gian đối soát. Nút「Kiểm tra trạng thái」chỉ cập nhật trạng thái; không thay cho gửi biên lai.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-900 flex items-start gap-3">
+                <Icon name="verified_user" className="text-xl text-emerald-700 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold">Sau khi chuyển khoản</strong>
+                  <p className="mt-0.5 text-emerald-800">
+                    Gửi ảnh biên lai bên dưới để gia hạn giữ chỗ và chuyển sang bước nhà xe đối soát. Chỉ bấm「Kiểm tra trạng thái」nếu nhà xe đã xác nhận trên hệ thống.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {canSubmitProof && !awaitingProvider ? (
+              <DepositProofForm
+                disabled={requestExpired}
+                busy={submittingProof}
+                onSubmit={handleSubmitProof}
+              />
+            ) : null}
           </div>
         ) : (
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">

@@ -50,6 +50,13 @@ server.port=8080
 
 
 # ===============================
+# Booking hold cleanup (deposit timeout)
+# ===============================
+# Interval between runs of BookingHoldExpiryJob (release slot + cancel unpaid deposits).
+ecomotion.booking-hold.cleanup-ms=10000
+
+
+# ===============================
 # Hibernate properties
 # ===============================
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect

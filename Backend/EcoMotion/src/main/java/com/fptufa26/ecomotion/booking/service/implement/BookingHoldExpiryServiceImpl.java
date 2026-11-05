@@ -6,8 +6,14 @@ import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.service.BookingHoldExpiryService;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
+
+import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +49,14 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
                 continue;
             }
             if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+                continue;
+            }
+            Optional<PaymentRequest> depositRequest = paymentRequestService
+                    .findPaymentRequest(bookingId, PaymentRequestType.DEPOSIT);
+            if (depositRequest.isPresent() && Set.of(
+                    PaymentRequestStatus.PROOF_SUBMITTED,
+                    PaymentRequestStatus.PARTIALLY_PAID,
+                    PaymentRequestStatus.REVIEW_REQUIRED).contains(depositRequest.get().getStatus())) {
                 continue;
             }
             if (transactions.findByBooking_Id(bookingId).stream().anyMatch(t ->

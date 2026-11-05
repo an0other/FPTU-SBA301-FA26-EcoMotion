@@ -69,4 +69,7 @@ public interface PaymentRequestService {
     boolean expireDepositWithoutProof(Long bookingId);
 
     Optional<PaymentRequest> findPaymentRequest(Long bookingId, PaymentRequestType type);
+
+    /** Đóng yêu cầu cọc khi nhà xe hủy chuyến trước khi ghi nhận tiền. */
+    void voidUnpaidDepositIfProviderWithdraws(Long bookingId);
 }

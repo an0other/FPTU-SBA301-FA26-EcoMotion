@@ -1116,19 +1116,20 @@ public class BookingServiceImpl implements BookingService {
     private List<TimelineStepResponse> timeline(Booking booking, List<PaymentTransaction> payments) {
         List<TimelineStepResponse> steps = new ArrayList<>();
         steps.add(new TimelineStepResponse("Đã gửi yêu cầu", booking.getCreatedAt(), null, true, false));
+        boolean providerCancelledTrip = booking.getOperationalResolution() == OperationalResolutionType.CANCEL_AND_REFUND
+                && booking.getOperationalResolvedAt() != null;
         if (booking.getOperationalResolution() != null && booking.getOperationalResolvedAt() != null) {
             String title = switch (booking.getOperationalResolution()) {
                 case CHANGE_VEHICLE -> "Nhà cung cấp đã đổi xe";
                 case RESCHEDULE -> "Nhà cung cấp đã dời giờ nhận xe";
-                case CANCEL_AND_REFUND -> "Nhà cung cấp đã hủy và hoàn tiền";
+                case CANCEL_AND_REFUND -> providerCancelTimelineTitle(payments);
             };
             steps.add(new TimelineStepResponse(
                     title,
                     booking.getOperationalResolvedAt(),
                     booking.getOperationalResolutionReason(),
                     true,
-                    booking.getOperationalResolution()
-                            == OperationalResolutionType.CANCEL_AND_REFUND));
+                    providerCancelledTrip));
         }
         if (booking.getStatus() == BookingStatus.REJECTED) {
             steps.add(new TimelineStepResponse("Chủ xe đã từ chối", null, "Không có lý do", true, true));
@@ -1178,7 +1179,7 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getStatus() == BookingStatus.COMPLETED) {
             steps.add(new TimelineStepResponse("Hoàn thành", null, null, true, false));
         }
-        if (booking.getCancelledAt() != null) {
+        if (booking.getCancelledAt() != null && !providerCancelledTrip) {
             steps.add(new TimelineStepResponse(
                     "Đã huỷ",
                     booking.getCancelledAt(),
@@ -1187,6 +1188,16 @@ public class BookingServiceImpl implements BookingService {
                     true));
         }
         return steps;
+    }
+
+    private String providerCancelTimelineTitle(List<PaymentTransaction> payments) {
+        boolean depositRecorded = payments.stream().anyMatch(payment -> payment.getStatus() == PaymentStatus.PAID
+                && payment.getType() == PaymentType.DEPOSIT_PAY
+                && payment.getDirection() == PaymentDirection.IN
+                && payment.getAmount().signum() > 0);
+        return depositRecorded
+                ? "Nhà cung cấp đã hủy chuyến và hoàn tiền"
+                : "Nhà cung cấp đã hủy chuyến";
     }
 
     private String cancelLabel(CancelReason reason) {
@@ -1222,7 +1233,27 @@ public class BookingServiceImpl implements BookingService {
                 endTime,
                 summaryDepositAmount(booking, snapshot),
                 assignedDriverName(booking),
-                actionKind(booking));
+                actionKind(booking),
+                depositPaymentStatus(booking),
+                depositRejectionReason(booking));
+    }
+
+    private String depositPaymentStatus(Booking booking) {
+        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT
+                && booking.getStatus() != BookingStatus.ACCEPTED) {
+            return null;
+        }
+        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
+                .map(request -> request.getStatus().name())
+                .orElse(null);
+    }
+
+    private String depositRejectionReason(Booking booking) {
+        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
+                .filter(request -> request.getStatus() == PaymentRequestStatus.REJECTED)
+                .map(PaymentRequest::getRejectionReason)
+                .filter(reason -> reason != null && !reason.isBlank())
+                .orElse(null);
     }
 
     private Instant summaryEndTime(Booking booking, BookingPolicySnapshot snapshot) {
@@ -1297,15 +1328,45 @@ public class BookingServiceImpl implements BookingService {
                 && endConfirmations.history(booking.getId()).stream().findFirst().map(h -> !"PAUSED".equals(h.state())).orElse(true);
     }
 
+    private static final Set<PaymentRequestStatus> DEPOSIT_HOLD_COUNTDOWN_STATUSES = Set.of(
+            PaymentRequestStatus.PENDING,
+            PaymentRequestStatus.REJECTED,
+            PaymentRequestStatus.EXPIRED,
+            PaymentRequestStatus.PROOF_SUBMITTED,
+            PaymentRequestStatus.PARTIALLY_PAID,
+            PaymentRequestStatus.REVIEW_REQUIRED);
+
+    private static final Set<PaymentRequestStatus> DEPOSIT_RECONCILIATION_STATUSES = Set.of(
+            PaymentRequestStatus.PROOF_SUBMITTED,
+            PaymentRequestStatus.PARTIALLY_PAID,
+            PaymentRequestStatus.REVIEW_REQUIRED);
+
     private Instant holdExpiresAt(Booking booking) {
-        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT
+                && booking.getStatus() != BookingStatus.ACCEPTED) {
             return null;
         }
-        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
-                .map(PaymentRequest::getExpiresAt)
-                .orElseGet(() -> booking.getCreatedAt() == null
-                        ? null
-                        : booking.getCreatedAt().plus(INITIAL_HOLD_DURATION));
+        Optional<PaymentRequest> depositOpt = paymentRequestService.findPaymentRequest(
+                booking.getId(), PaymentRequestType.DEPOSIT);
+        if (depositOpt.isPresent()) {
+            PaymentRequest request = depositOpt.get();
+            if (!DEPOSIT_HOLD_COUNTDOWN_STATUSES.contains(request.getStatus())) {
+                return null;
+            }
+            if (DEPOSIT_RECONCILIATION_STATUSES.contains(request.getStatus())
+                    && request.getReconciliationDeadline() != null) {
+                return request.getReconciliationDeadline();
+            }
+            if (request.getExpiresAt() != null) {
+                return request.getExpiresAt();
+            }
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+            return booking.getCreatedAt() == null
+                    ? null
+                    : booking.getCreatedAt().plus(INITIAL_HOLD_DURATION);
+        }
+        return null;
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {

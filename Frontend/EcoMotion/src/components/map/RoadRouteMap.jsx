@@ -46,7 +46,7 @@ export default function RoadRouteMap({ from, to, height = '360px', interactive =
     }, Math.max(0, lastRequest.current + 30000 - Date.now()))
     return () => { active = false; clearTimeout(timer) }
   }, [fromLat, fromLon, toLat, toLon, interactive])
-  return <div className="space-y-2"><div ref={container} style={{ height }} className="w-full rounded-xl border border-slate-200" aria-label="Bản đồ tuyến ô tô VIETMAP" />
+  return <div className="space-y-2"><div ref={container} style={{ height }} className="leaflet-map-shell w-full rounded-xl border border-slate-200" aria-label="Bản đồ tuyến ô tô VIETMAP" />
     {error && <p role="status" className="text-xs text-amber-900">{error}</p>}
     {routeError && <p role="status" className="text-xs text-amber-900">{routeError}</p>}
     {routeInfo && <p className="text-xs text-slate-700">Tuyến tham khảo VIETMAP: {(routeInfo.distanceMeters / 1000).toFixed(2)} km · khoảng {Math.ceil(routeInfo.durationSeconds / 60)} phút (cập nhật {routeInfo.displayedAt}). Không thay đổi phí đã lưu của đơn.</p>}

@@ -128,7 +128,9 @@ public interface BookingMapper {
             Instant endTime,
             BigDecimal depositAmount,
             String driverName,
-            BookingActionKind actionKind
+            BookingActionKind actionKind,
+            String depositPaymentStatus,
+            String depositRejectionReason
     ) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getPreviousVehicleId() != null || booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
@@ -167,7 +169,9 @@ public interface BookingMapper {
                 endTime,
                 depositAmount,
                 driverName,
-                actionKind);
+                actionKind,
+                depositPaymentStatus,
+                depositRejectionReason);
     }
 
     default BookingDetailResponse toDetail(Booking booking,
@@ -252,7 +256,16 @@ public interface BookingMapper {
                 snapshot.getFreeRadiusKm(),
                 snapshot.getOutOfRadiusRate(),
                 chargeableKm(snapshot.getDistanceKm(), snapshot.getFreeRadiusKm()),
-                snapshot.getPickupFee());
+                snapshot.getPickupFee(),
+                cancelDetailNote(booking));
+    }
+
+    private static String cancelDetailNote(Booking booking) {
+        if (booking.getOperationalResolution() != com.fptufa26.ecomotion.booking.enums.OperationalResolutionType.CANCEL_AND_REFUND) {
+            return null;
+        }
+        String reason = booking.getOperationalResolutionReason();
+        return reason == null || reason.isBlank() ? null : reason.trim();
     }
 
     private static Integer chargeableKm(BigDecimal distanceKm, Integer freeRadiusKm) {

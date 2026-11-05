@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
-import { REFUND_WORKFLOW_LABELS } from '../../utils/bookingWorkflow'
+import { REFUND_WORKFLOW_LABELS, shouldShowRefundDetailsList } from '../../utils/bookingWorkflow'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import BookingProgressStepper from './BookingProgressStepper'
 import DisputeHistory from './DisputeHistory'
@@ -197,12 +197,16 @@ export default function BookingWorkflowSummary({
         </details>
       )}
 
-      {/* Refunds History */}
-      {workflow?.refunds?.length > 0 && (
+      {/* Refunds: only when multiple requests or renter/provider must act (receipt, proof, errors) */}
+      {shouldShowRefundDetailsList(workflow?.refunds, { provider }) && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs space-y-2 shadow-2xs">
           <h3 className="font-bold text-slate-900 flex items-center gap-1.5">
             <Icon name="receipt" className="text-base text-brand-700" />
-            <span>Danh sách yêu cầu hoàn tiền ({workflow.refunds.length})</span>
+            <span>
+              {workflow.refunds.length > 1
+                ? `Chi tiết ${workflow.refunds.length} yêu cầu hoàn`
+                : 'Chi tiết hoàn tiền'}
+            </span>
           </h3>
           <div className="space-y-1.5">
             {workflow.refunds.map((refund) => (
