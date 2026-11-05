@@ -158,6 +158,61 @@ class PaymentIntegrityIntegrationTest {
         assertThat(riskService.assessForRenter(renterId,code).atRisk()).isFalse();
     }
 
+    @Test void operationalRiskDoesNotDiscloseAnotherRentersBooking() throws Exception {
+        String code = legacyDeposit("DAILY", 48);
+        String otherCode = "PRIVATE-" + bookingId;
+        long otherRenterId = tx.execute(s -> {
+            Booking current = em.find(Booking.class, bookingId);
+            Renter otherRenter = new Renter(); otherRenter.setUser(user(Role.RENTER)); em.persist(otherRenter);
+            Booking older = new Booking(); older.setBookingCode(otherCode); older.setVehicle(current.getVehicle());
+            older.setRenter(otherRenter); older.setPlan(current.getPlan()); older.setStatus(BookingStatus.IN_PROGRESS);
+            older.setPickupTime(Instant.now().minusSeconds(3600)); older.setPickupAddress("Private pickup");
+            older.setPassengerCount(1); older.setTotalAmount(new BigDecimal("100000"));
+            older.setActualStartAt(Instant.now().minusSeconds(3600)); em.persist(older);
+            return otherRenter.getUser().getId();
+        });
+        String renterToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, renterId)));
+        String otherToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, otherRenterId)));
+        String providerToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, providerId)));
+        String outsiderToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, outsiderId)));
+
+        String risk = mvc.perform(get("/api/renter/bookings/{code}/operational-risk", code)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.atRisk").value(true))
+                .andExpect(jsonPath("$.data.riskType").value("VEHICLE_BUSY"))
+                .andExpect(jsonPath("$.data.blockingBookingCode").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(risk).doesNotContain(otherCode, "Private pickup", "customerId", "driverId", "bookingId");
+        String list = mvc.perform(get("/api/renter/bookings").header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(list).contains("riskMessage").doesNotContain(otherCode, "Private pickup");
+        String detail = mvc.perform(get("/api/renter/bookings/{code}", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(detail).doesNotContain(otherCode, "Private pickup");
+        mvc.perform(get("/api/renter/bookings/{code}", otherCode).header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/renter/bookings/{code}/operational-risk", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/provider/bookings/{code}/operational-risk", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.atRisk").value(true));
+        mvc.perform(get("/api/provider/bookings/{code}/operational-risk", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + outsiderToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/provider/bookings/{code}/assign-candidates", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + outsiderToken))
+                .andExpect(status().isNotFound());
+        long driverUserId = tx.execute(s -> {
+            var driver = new com.fptufa26.ecomotion.user.entity.Driver();
+            driver.setUser(user(Role.DRIVER)); driver.setProvider(em.find(Booking.class, bookingId).getVehicle().getProvider());
+            driver.setLicenseNo("LIC" + bookingId); driver.setLicenseClass("B2");
+            driver.setLicenseExpiry(java.time.LocalDate.of(2040, 1, 1));
+            driver.setPortraitUrl("portrait"); driver.setLicenseImageUrl("license");
+            driver.setStatus(com.fptufa26.ecomotion.user.enums.DriverStatus.APPROVED); em.persist(driver);
+            return driver.getUser().getId();
+        });
+        String driverToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, driverUserId)));
+        mvc.perform(get("/api/driver/trips/{code}", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
+                .andExpect(status().isForbidden());
+    }
+
     @Test void manualPaymentDoesNotRequireBankReferenceOrNote() {
         payments.confirmPayment(requestId, providerId, new ConfirmPaymentRequest(new BigDecimal("30000"), null, null));
         assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);

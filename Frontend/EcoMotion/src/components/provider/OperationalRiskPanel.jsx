@@ -8,7 +8,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
   const [resolution, setResolution] = useState('CHANGE_VEHICLE')
   const [vehicleId, setVehicleId] = useState('')
   const [pickup, setPickup] = useState('')
-  const [reason, setReason] = useState(risk?.message || 'Chưa có tài xế phù hợp, cần thống nhất phương án với khách thuê.')
+  const [reason, setReason] = useState(risk?.userMessage || 'Chưa có tài xế phù hợp, cần thống nhất phương án với khách thuê.')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -43,7 +43,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
   return (
     <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
       <h2 className="font-bold">{risk?.atRisk ? 'Nguy cơ xe về trễ' : workflow?.needsDriver ? 'Chưa có tài xế phù hợp' : 'Phương án dịch vụ'}</h2>
-      <p className="mt-1">{risk?.message || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.'}</p>
+      <p className="mt-1">{risk?.userMessage || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.'}</p>
       {pendingProposal && <p className="mt-2 text-xs">Đang chờ khách phản hồi; không thể gửi đè một đề xuất khác. Nếu không tiếp tục cung cấp dịch vụ, nhà xe có thể hủy và bắt đầu hoàn tiền.</p>}
       <form onSubmit={submit} className="mt-3 flex flex-wrap items-end gap-3">
         <label className="text-xs">Phương án

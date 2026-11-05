@@ -1221,7 +1221,7 @@ public class BookingServiceImpl implements BookingService {
                 imageUrl,
                 canPay(booking),
                 risk.atRisk(),
-                risk.message(),
+                risk.userMessage(),
                 holdExpiresAt(booking),
                 endTime,
                 summaryDepositAmount(booking, snapshot),

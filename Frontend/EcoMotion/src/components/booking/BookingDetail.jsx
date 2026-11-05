@@ -17,6 +17,7 @@ const DISPUTE_LABELS = {
 
 export const BookingDetail = ({
   booking,
+  operationalRisk,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
@@ -163,7 +164,7 @@ export const BookingDetail = ({
         {operationalRisk?.atRisk && !['CANCELLED', 'CANCELLATION_REVIEW', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
           <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">Nguy cơ xe về trễ</p>
-            <p className="mt-1">{operationalRisk.message}</p>
+            <p className="mt-1">{operationalRisk.userMessage}</p>
             <p className="mt-1 text-xs">Nhà xe cần xử lý. Đổi xe hoặc giờ đón chỉ áp dụng khi bạn đồng ý phương án; khoản tiền đã nhận vẫn được theo dõi và hoàn theo chính sách nếu đơn không thực hiện được.</p>
           </div>
         )}

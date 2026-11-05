@@ -1136,7 +1136,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getActualStartAt(),
                 booking.getActualEndAt(),
                 risk.atRisk() || booking.isDriverReplacementRequired(),
-                booking.isDriverReplacementRequired() ? booking.getDriverIssueReason() : risk.message(),
+                booking.isDriverReplacementRequired() ? booking.getDriverIssueReason() : risk.userMessage(),
                 paymentStatus
         );
     }

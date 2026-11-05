@@ -48,11 +48,7 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
                         && other.getPickupTime().isBefore(booking.getPickupTime()))
                 .filter(other -> other.getActualEndAt() == null)
                 .min(Comparator.comparing(Booking::getPickupTime).reversed())
-                .map(other -> new OperationalRiskResponse(
-                        true,
-                        other.getBookingCode(),
-                        "Xe đang phục vụ chuyến " + other.getBookingCode()
-                                + " và chưa kết thúc; booking kế tiếp có nguy cơ trễ."))
+                .map(other -> OperationalRiskResponse.vehicleBusy())
                 .orElseGet(OperationalRiskResponse::safe);
     }
 
