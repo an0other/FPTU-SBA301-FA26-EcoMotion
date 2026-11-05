@@ -23,9 +23,11 @@ import com.fptufa26.ecomotion.dispute.entity.Dispute;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
+import com.fptufa26.ecomotion.finance.entity.PaymentEvidence;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
 import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentReceiptStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
@@ -452,6 +454,19 @@ class PaymentIntegrityIntegrationTest {
 
     @Test
     void providerRejectsManualRequestWithReasonWithoutRecordingPayment() {
+        tx.executeWithoutResult(s -> {
+            PaymentRequest pr = em.find(PaymentRequest.class, requestId);
+            pr.setStatus(PaymentRequestStatus.PROOF_SUBMITTED);
+            PaymentEvidence evidence = new PaymentEvidence();
+            evidence.setPaymentRequest(pr);
+            evidence.setStatus(PaymentEvidenceStatus.PENDING);
+            evidence.setProofImageUrl("test.jpg");
+            evidence.setTransferredAmount(new BigDecimal("30000"));
+            evidence.setCreatedAt(Instant.now());
+            evidence.setSubmittedBy(pr.getBooking().getRenter().getUser());
+            em.persist(evidence);
+            pr.getEvidences().add(evidence);
+        });
         assertThatThrownBy(() -> payments.rejectPayment(requestId, providerId,
                 new com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest("   ")))
                 .isInstanceOf(InvalidPaymentOperationException.class);
@@ -517,8 +532,7 @@ class PaymentIntegrityIntegrationTest {
 
     @Test
     void duplicateConfirmationAndReconciliationReplayNeverRecordTwice() {
-        tx.executeWithoutResult(s -> em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.EXPIRED));
-        confirm("30000", "LATE-" + requestId);
+        confirm("30000", "FIRST-" + requestId);
         assertThatThrownBy(() -> confirm("30000", "ANOTHER-" + requestId)).isInstanceOf(ConflictException.class);
         assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
     }

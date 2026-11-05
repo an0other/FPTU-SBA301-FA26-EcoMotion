@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export function DepositProofForm({ disabled, busy, onSubmit }) {
+export function DepositProofForm({ disabled, busy, onSubmit, isFinalBalance = false }) {
   const [file, setFile] = useState(null)
   const [transactionReference, setTransactionReference] = useState('')
   const [note, setNote] = useState('')
@@ -14,9 +14,13 @@ export function DepositProofForm({ disabled, busy, onSubmit }) {
   return (
     <form onSubmit={handleSubmit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div>
-        <p className="text-sm font-bold text-[#14221A]">Gửi xác nhận đã chuyển khoản</p>
+        <p className="text-sm font-bold text-[#14221A]">
+          {isFinalBalance ? 'Gửi biên lai thanh toán quyết toán' : 'Gửi xác nhận đã chuyển khoản'}
+        </p>
         <p className="mt-1 text-xs text-slate-600">
-          Tải ảnh biên lai hoặc màn hình chuyển khoản thành công. Hệ thống gia hạn giữ chỗ và chuyển sang bước đối soát (nhà xe xác nhận), không tự huỷ đơn sau 15 phút.
+          {isFinalBalance
+            ? 'Tải ảnh biên lai hoặc màn hình chuyển khoản thành công để nhà xe đối soát và xác nhận hoàn tất đơn thuê.'
+            : 'Tải ảnh biên lai hoặc màn hình chuyển khoản thành công. Hệ thống gia hạn giữ chỗ và chuyển sang bước đối soát (nhà xe xác nhận), không tự huỷ đơn sau 15 phút.'}
         </p>
       </div>
       <div>
@@ -55,7 +59,7 @@ export function DepositProofForm({ disabled, busy, onSubmit }) {
         disabled={disabled || busy || !file}
         className="inline-flex w-full items-center justify-center rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
-        {busy ? 'Đang gửi biên lai...' : 'Gửi xác nhận đã chuyển khoản'}
+        {busy ? 'Đang gửi biên lai...' : isFinalBalance ? 'Gửi biên lai quyết toán' : 'Gửi xác nhận đã chuyển khoản'}
       </button>
     </form>
   )

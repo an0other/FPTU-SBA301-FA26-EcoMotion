@@ -523,10 +523,14 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         Instant now = clock.instant();
         if (request.getFirstProofAt() == null) {
             request.setFirstProofAt(now);
-            Instant operationalCutoff = request.getBooking().getPickupTime().minus(60, ChronoUnit.MINUTES);
             boolean submittedAfterDeadline = request.getExpiresAt() != null
                     && !request.getExpiresAt().isAfter(now);
-            Instant reconciliationDeadline = minInstant(now.plus(60, ChronoUnit.MINUTES), operationalCutoff);
+            Instant reconciliationDeadline = now.plus(60, ChronoUnit.MINUTES);
+            if (request.getPaymentType() == PaymentRequestType.DEPOSIT
+                    && request.getBooking().getPickupTime() != null) {
+                Instant operationalCutoff = request.getBooking().getPickupTime().minus(60, ChronoUnit.MINUTES);
+                reconciliationDeadline = minInstant(reconciliationDeadline, operationalCutoff);
+            }
             if (submittedAfterDeadline || !reconciliationDeadline.isAfter(now)) {
                 request.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
                 request.setIssueNote("Chứng từ được gửi sau thời hạn đối soát; cần xử lý tiền đến muộn thủ công");
