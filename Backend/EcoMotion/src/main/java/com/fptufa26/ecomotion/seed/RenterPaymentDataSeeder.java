@@ -30,6 +30,7 @@ import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +42,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.time.Duration;
 
+@Slf4j
 @Component
 @Profile("dev")
 @RequiredArgsConstructor
@@ -51,6 +53,7 @@ public class RenterPaymentDataSeeder {
     private static final String R12_GATEWAY_REF = "SEED-R12-DEPOSIT-001";
     private static final int DAILY_SLOT_MINUTES = 1440;
     private static final int BOOKING_LEAD_DAYS = 7;
+    private static final int AVAILABILITY_SEARCH_DAYS = 365;
 
     private final BookingRepository bookingRepository;
     private final VehicleScheduleRepository vehicleScheduleRepository;
@@ -59,10 +62,12 @@ public class RenterPaymentDataSeeder {
     private final VehicleRepository vehicleRepository;
     private final RentalPlanRepository rentalPlanRepository;
     private final EntityManager entityManager;
+    private final SeedDepositPaymentSynchronizer depositPayments;
 
     @Transactional
     public void seed() {
         if (bookingRepository.existsByBookingCode(R12_BOOKING_CODE)) {
+            depositPayments.synchronize(bookingRepository.findByBookingCodeForUpdate(R12_BOOKING_CODE).orElseThrow());
             return;
         }
 
@@ -81,11 +86,18 @@ public class RenterPaymentDataSeeder {
         Instant createdAt = Instant.now();
         Instant startAt = createdAt.plus(BOOKING_LEAD_DAYS, ChronoUnit.DAYS)
                 .truncatedTo(ChronoUnit.HOURS);
-        Instant endAt = startAt.plus(
-                plan.getSlotLengthMinutes(),
-                ChronoUnit.MINUTES);
-
-        validateAvailability(renter, vehicle, startAt, endAt);
+        int offset = 0;
+        while (offset < AVAILABILITY_SEARCH_DAYS && !isAvailable(renter, vehicle, startAt,
+                startAt.plus(plan.getSlotLengthMinutes(), ChronoUnit.MINUTES))) {
+            startAt = startAt.plus(1, ChronoUnit.DAYS);
+            offset++;
+        }
+        if (offset == AVAILABILITY_SEARCH_DAYS) {
+            log.warn("Skipped {}: no free vehicle and renter interval in the next {} candidate days",
+                    R12_BOOKING_CODE, AVAILABILITY_SEARCH_DAYS);
+            return;
+        }
+        Instant endAt = startAt.plus(plan.getSlotLengthMinutes(), ChronoUnit.MINUTES);
 
         Booking booking = createBooking(
                 renter,
@@ -106,6 +118,7 @@ public class RenterPaymentDataSeeder {
         BigDecimal depositAmount = baseAmount
                 .multiply(snapshot.getDepositRatio())
                 .setScale(2, RoundingMode.HALF_UP);
+        snapshot.setDepositAmount(depositAmount);
 
         if (depositAmount.signum() <= 0) {
             throw new IllegalStateException(
@@ -127,14 +140,14 @@ public class RenterPaymentDataSeeder {
                 createdAt);
         entityManager.persist(depositCharge);
 
-        booking.setStatus(BookingStatus.ACCEPTED);
-
         PaymentTransaction payment = createDepositPayment(
                 booking,
                 depositCharge,
                 depositAmount,
                 createdAt);
         entityManager.persist(payment);
+        entityManager.flush();
+        depositPayments.synchronize(booking);
 
         booking.setStatus(BookingStatus.CONFIRMED);
 
@@ -177,7 +190,7 @@ public class RenterPaymentDataSeeder {
                         "R12 seed requires an approved vehicle with an active daily plan"));
     }
 
-    private void validateAvailability(
+    private boolean isAvailable(
             Renter renter,
             Vehicle vehicle,
             Instant startAt,
@@ -203,10 +216,7 @@ public class RenterPaymentDataSeeder {
                         endAt,
                         startAt);
 
-        if (vehicleBusy || renterBusy) {
-            throw new IllegalStateException(
-                    "R12 seed interval overlaps an existing vehicle or renter schedule");
-        }
+        return !vehicleBusy && !renterBusy;
     }
 
     private Booking createBooking(
@@ -302,6 +312,7 @@ public class RenterPaymentDataSeeder {
         payment.setCharge(depositCharge);
         payment.setType(PaymentType.DEPOSIT_PAY);
         payment.setAmount(depositAmount);
+        payment.setAppliedAmount(depositAmount);
         payment.setDirection(PaymentDirection.IN);
         payment.setMethod(PaymentMethod.BANK_TRANSFER);
         payment.setStatus(PaymentStatus.PAID);

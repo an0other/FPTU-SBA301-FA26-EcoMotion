@@ -137,6 +137,7 @@ GUIDE_FOR_BEGINNERS.md
 *.rej
 docs/phat
 docs/superpowers
+docs/demo-recordings
 
 # Uploaded files
 uploads/

@@ -20,6 +20,9 @@ export const CHARGE_TYPE_LABELS = {
   WAITING: 'Phụ phí thời gian chờ',
   WEEKEND: 'Phụ phí cuối tuần / ngày lễ',
   OUT_OF_RADIUS: 'Phụ phí giao xe ngoài khu vực miễn phí',
+  TOLL: 'Phí cầu đường',
+  PARKING: 'Phí gửi xe',
+  OTHER: 'Phụ phí khác',
 }
 
 export const BOOKING_STATUS_LABELS = {

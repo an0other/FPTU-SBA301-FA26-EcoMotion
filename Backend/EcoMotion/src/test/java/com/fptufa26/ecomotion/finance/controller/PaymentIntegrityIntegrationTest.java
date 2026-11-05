@@ -1,5 +1,11 @@
 package com.fptufa26.ecomotion.finance.controller;
 
+import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.finance.entity.RefundRequest;
+import com.fptufa26.ecomotion.finance.enums.RefundStatus;
+import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
+import com.fptufa26.ecomotion.booking.service.BookingService;
+import org.junit.jupiter.params.provider.CsvSource;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
@@ -104,6 +110,145 @@ class PaymentIntegrityIntegrationTest {
     @Autowired ScheduleService schedule;
     @Autowired MockMvc mvc;
     @Autowired JwtService jwt;
+    @Autowired BookingService bookingService;
+    @Autowired RefundEventService refundEvents;
+    @Autowired com.fptufa26.ecomotion.finance.service.RefundService refundService;
+    @Autowired com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService riskService;
+
+    @Test void optionalMetadataSupportsDistinctPartialPaymentsAndIdempotentRetries() {
+        var first=new ConfirmPaymentRequest(new BigDecimal("10000"),null,null,"optional-first-"+bookingId);
+        payments.confirmPayment(requestId,providerId,first);
+        payments.confirmPayment(requestId,providerId,first);
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        payments.confirmPayment(requestId,providerId,new ConfirmPaymentRequest(new BigDecimal("10000"),null,null,"optional-second-"+bookingId));
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(2);
+        assertThat(requests.findById(requestId).orElseThrow().getPaidAmount()).isEqualByComparingTo("20000");
+    }
+
+    @Test void cancellationPersistsRecipientAndOwnerCanUpdateOnlyOpenRefunds() {
+        String code=legacyDeposit("DAILY",48);
+        var account=new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank","NGUYEN VAN TEST","0123456789");
+        bookingService.cancel(renterId,code,account);
+        var refund=refundService.listRefundsForProvider(providerId).stream().filter(r -> r.bookingCode().equals(code)).findFirst().orElseThrow();
+        assertThat(refund.recipientAccountHolder()).isEqualTo(account.accountHolder());
+        assertThat(refund.recipientAccountNumber()).isEqualTo(account.accountNumber());
+        String stored=tx.execute(s -> (String)em.createNativeQuery("select recipient_account_number from refund_request where id=?")
+                .setParameter(1,refund.id()).getSingleResult());
+        assertThat(stored).isNotEqualTo(account.accountNumber());
+        assertThatThrownBy(() -> bookingService.updateRefundAccount(outsiderId,code,account))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.NotFoundException.class);
+        var changed=new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("ACB","NGUYEN VAN TEST","9988776655");
+        bookingService.updateRefundAccount(renterId,code,changed);
+        assertThat(refundService.listRefundsForProvider(providerId).stream().filter(r -> r.id().equals(refund.id())).findFirst().orElseThrow().recipientAccountNumber()).isEqualTo("9988776655");
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.finance.entity.RefundRequest.class,refund.id()).setStatus(RefundStatus.REFUNDED));
+        assertThatThrownBy(() -> bookingService.updateRefundAccount(renterId,code,account)).isInstanceOf(ConflictException.class);
+    }
+
+    @Test void cancelledBookingHasNoOperationalRiskEvenWithOlderActiveTrip() {
+        String code=legacyDeposit("DAILY",48);
+        tx.executeWithoutResult(s -> {
+            Booking current=em.find(Booking.class,bookingId);
+            Booking older=new Booking();older.setBookingCode("OLDER-"+bookingId);older.setVehicle(current.getVehicle());
+            older.setRenter(current.getRenter());older.setPlan(current.getPlan());older.setStatus(BookingStatus.IN_PROGRESS);
+            older.setPickupTime(Instant.now().minusSeconds(3600));older.setPickupAddress("Earlier pickup");
+            older.setPassengerCount(1);older.setTotalAmount(new BigDecimal("100000"));older.setActualStartAt(Instant.now().minusSeconds(3600));em.persist(older);
+        });
+        assertThat(riskService.assessForRenter(renterId,code).atRisk()).isTrue();
+        bookingService.cancel(renterId,code);
+        assertThat(riskService.assessForRenter(renterId,code).atRisk()).isFalse();
+    }
+
+    @Test void manualPaymentDoesNotRequireBankReferenceOrNote() {
+        payments.confirmPayment(requestId, providerId, new ConfirmPaymentRequest(new BigDecimal("30000"), null, null));
+        assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        PaymentTransaction payment=ledger.findByBooking_Id(bookingId).getFirst();
+        assertThat(payment.getGatewayRef()).isNull();
+        assertThat(payment.getProcessingNote()).isNull();
+        assertThat(payment.getPaidAt()).isNotNull();
+    }
+
+    @Test void cancellationRetryReturnsThePersistedCappedRefund() {
+        String code=legacyDeposit("DAILY",48);
+        tx.executeWithoutResult(s -> refundEvents.reserve(bookingId,"EXCESS:earlier",new BigDecimal("10000"),
+                "Existing allocation",em.find(Booking.class,bookingId).getRenter().getUser()));
+        var first=bookingService.cancel(renterId,code);
+        var retry=bookingService.cancel(renterId,code);
+        assertThat(first.refundAmount()).isEqualByComparingTo("20000");
+        assertThat(retry.refundAmount()).isEqualByComparingTo(first.refundAmount());
+    }
+
+    @Test void fullyRefundedLegacyDepositDoesNotRemainInCancellationReview() {
+        String code=legacyDeposit("DAILY",48);
+        tx.executeWithoutResult(s -> {
+            var allocated=refundEvents.reserve(bookingId,"EXCESS:all",new BigDecimal("30000"),
+                    "Already returned",em.find(Booking.class,bookingId).getRenter().getUser());
+            allocated.forEach(r -> {r.setStatus(RefundStatus.REFUNDED);
+                r.getPaymentTransaction().setStatus(PaymentStatus.PAID);});
+        });
+        assertThat(bookingService.cancel(renterId,code).status()).isEqualTo(BookingStatus.CANCELLED);
+    }
+
+    @Test void unallocatedReceivedMoneyStillRequiresReconciliationWhenRequestIsMissing() {
+        String code=legacyDeposit("DAILY",48);
+        tx.executeWithoutResult(s -> ledger.findByBooking_Id(bookingId).forEach(t -> {
+            t.setAppliedAmount(BigDecimal.ZERO);t.setProcessingNote("RECONCILIATION_REQUIRED: legacy receipt");
+        }));
+        assertThat(bookingService.cancel(renterId,code).status()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+    }
+
+    private String legacyDeposit(String planType, long leadHours) {
+        return tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId);
+            b.setStatus(BookingStatus.CONFIRMED);
+            b.setPickupTime(Instant.now().plusSeconds(leadHours * 3600));
+            BookingPolicySnapshot snapshot = em.createQuery("select s from BookingPolicySnapshot s where s.booking.id=:id", BookingPolicySnapshot.class)
+                    .setParameter("id", bookingId).getSingleResult();
+            snapshot.setPlanType(PlanType.valueOf(planType));
+            em.remove(em.find(PaymentRequest.class, requestId));
+            PaymentTransaction payment = new PaymentTransaction(); payment.setBooking(b);
+            payment.setType(PaymentType.DEPOSIT_PAY); payment.setDirection(PaymentDirection.IN);
+            payment.setStatus(PaymentStatus.PAID); payment.setMethod(PaymentMethod.BANK_TRANSFER);
+            payment.setAmount(new BigDecimal("30000")); payment.setAppliedAmount(new BigDecimal("30000"));
+            payment.setPaidAt(Instant.now()); em.persist(payment);
+            return b.getBookingCode();
+        });
+    }
+
+    @ParameterizedTest
+    @CsvSource({"DAILY,48,30000", "DAILY,2,15000", "MONTHLY,744,30000", "MONTHLY,24,15000", "YEARLY,48,0"})
+    void cancellationUsesRecordedDepositWithoutPaymentRequest(String plan, long leadHours, String expected) {
+        String code = legacyDeposit(plan, leadHours);
+        bookingService.cancel(renterId, code);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        tx.executeWithoutResult(s -> {
+            var refunds = em.createQuery("select r from RefundRequest r where r.booking.id=:id", RefundRequest.class)
+                    .setParameter("id", bookingId).getResultList();
+            assertThat(refunds.stream().map(r -> r.getAmount()).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(expected);
+        });
+        bookingService.cancel(renterId, code);
+    }
+
+    @Test void renterEndingFirstWaitsAndRetryDoesNotRewriteTime() {
+        String code = tx.execute(s -> {
+            Booking b=em.find(Booking.class,bookingId); b.setStatus(BookingStatus.IN_PROGRESS);
+            b.setActualStartAt(Instant.now().minusSeconds(3600)); return b.getBookingCode();
+        });
+        bookingService.confirmEnd(renterId,code);
+        Booking first=bookings.findById(bookingId).orElseThrow();
+        assertThat(first.getStatus()).isEqualTo(BookingStatus.AWAITING_END_CONFIRMATION);
+        bookingService.confirmEnd(renterId,code);
+        assertThat(bookings.findById(bookingId).orElseThrow().getRenterEndConfirmedAt()).isEqualTo(first.getRenterEndConfirmedAt());
+    }
+
+    @Test void completionRetryAfterSettlementDoesNotRegressOrFail() {
+        String code = tx.execute(s -> {
+            Booking b=em.find(Booking.class,bookingId); b.setStatus(BookingStatus.COMPLETED);
+            b.setRenterEndConfirmedAt(Instant.now().minusSeconds(60)); b.setDriverEndConfirmedAt(Instant.now().minusSeconds(60));
+            return b.getBookingCode();
+        });
+        bookingService.confirmEnd(renterId,code);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.COMPLETED);
+    }
     TransactionTemplate tx;
     long bookingId;
     long requestId;
@@ -211,14 +356,17 @@ class PaymentIntegrityIntegrationTest {
 
     @ParameterizedTest
     @EnumSource(value = BookingStatus.class, names = {"CANCELLED", "REJECTED"})
-    void terminalBookingKeepsReceivedMoneyWithoutResurrection(BookingStatus status) {
+    void terminalBookingRejectsNewManualConfirmationWithoutResurrection(BookingStatus status) {
         tx.executeWithoutResult(s -> {
             em.find(Booking.class, bookingId).setStatus(status);
             em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.VOIDED);
             schedule.release(bookingId);
         });
-        confirm("30000", "TERMINAL-" + requestId);
-        assertReconciliation(status);
+        assertThatThrownBy(() -> confirm("30000", "TERMINAL-" + requestId))
+                .isInstanceOf(status == BookingStatus.REJECTED
+                        ? InvalidPaymentOperationException.class : ConflictException.class);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(status);
+        assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();
     }
 
     @ParameterizedTest
@@ -257,7 +405,7 @@ class PaymentIntegrityIntegrationTest {
     @Test
     void paidRequestCannotBeConfirmedAgain() {
         confirm("30000", "PAID-" + requestId);
-        assertThatThrownBy(() -> confirm("30000", "PAID-AGAIN-" + requestId)).isInstanceOf(InvalidPaymentOperationException.class);
+        assertThatThrownBy(() -> confirm("30000", "PAID-AGAIN-" + requestId)).isInstanceOf(ConflictException.class);
         assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
     }
 
@@ -301,7 +449,7 @@ class PaymentIntegrityIntegrationTest {
     void duplicateConfirmationAndReconciliationReplayNeverRecordTwice() {
         tx.executeWithoutResult(s -> em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.EXPIRED));
         confirm("30000", "LATE-" + requestId);
-        assertThatThrownBy(() -> confirm("30000", "ANOTHER-" + requestId)).isInstanceOf(InvalidPaymentOperationException.class);
+        assertThatThrownBy(() -> confirm("30000", "ANOTHER-" + requestId)).isInstanceOf(ConflictException.class);
         assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
     }
 
@@ -312,7 +460,7 @@ class PaymentIntegrityIntegrationTest {
             var tasks = List.of("ONE-", "TWO-").stream().map(prefix -> pool.submit(() -> {
                 start.await();
                 try { confirm("30000", prefix + requestId); return true; }
-                catch (InvalidPaymentOperationException exception) { return false; }
+                catch (InvalidPaymentOperationException | ConflictException exception) { return false; }
             })).toList();
             start.countDown();
             assertThat(List.of(tasks.get(0).get(20, TimeUnit.SECONDS), tasks.get(1).get(20, TimeUnit.SECONDS)))

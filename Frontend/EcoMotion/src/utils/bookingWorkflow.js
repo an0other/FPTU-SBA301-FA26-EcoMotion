@@ -12,7 +12,7 @@ export const WORKFLOW_LABELS = {
 
 export const REFUND_WORKFLOW_LABELS = {
   REQUESTED: 'Chờ xem xét', UNDER_REVIEW: 'Đang xem xét', APPROVED: 'Đã duyệt, chưa chuyển tiền',
-  PROCESSING: 'Đang xử lý chuyển khoản', REFUNDED: 'Đã xác nhận hoàn tiền', REJECTED: 'Đã từ chối',
+  PROCESSING: 'Đang chờ cổng thanh toán hoặc ngân hàng', REFUNDED: 'Đã xác nhận tiền hoàn', REJECTED: 'Đã từ chối',
   FAILED: 'Hoàn tiền chưa thành công, cần xử lý lại', PENDING_RECONCILIATION: 'Đang đối soát khoản hoàn',
 }
 

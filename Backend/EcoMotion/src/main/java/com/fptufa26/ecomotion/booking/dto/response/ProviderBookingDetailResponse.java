@@ -95,7 +95,12 @@ public record ProviderBookingDetailResponse(
         String rejectionReason,
         String paymentStatus,
         Instant plannedEndAt,
-        List<RentalQuoteResponse.Item> pricingItems
+        List<RentalQuoteResponse.Item> pricingItems,
+        BigDecimal dispatchOriginLatitude,
+        BigDecimal dispatchOriginLongitude,
+        BigDecimal distanceKm,
+        Integer chargeableKm,
+        BigDecimal pickupFee
 ) {
     public ProviderBookingDetailResponse(
             Long id,
@@ -185,7 +190,8 @@ public record ProviderBookingDetailResponse(
                 driverId, driverName, driverPhone, driverLicenseNo, driverLicenseClass,
                 driverPortraitUrl, driverRatingAvg, driver, trip, charges, paymentTransactions,
                 timeline, assignedAt, driverConfirmedAt, actualArrivedAt, executionStatus,
-                latestLocation, canAssignDriver, canAutoAssignDriver, rejectionReason, null, null, List.of()
+                latestLocation, canAssignDriver, canAutoAssignDriver, rejectionReason, null, null, List.of(),
+                null, null, null, null, null
         );
     }
 

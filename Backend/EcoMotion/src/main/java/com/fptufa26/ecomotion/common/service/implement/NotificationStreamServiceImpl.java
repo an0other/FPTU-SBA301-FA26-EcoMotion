@@ -73,14 +73,21 @@ public class NotificationStreamServiceImpl implements NotificationStreamService 
     private void deliverEvent(Long userId, String eventType, Object payload) {
         Set<SseEmitter> emitters = activeEmitters.get(userId);
         if (emitters == null) return;
-        String jsonPayload = (payload instanceof String value) ? value : objectMapper.writeValueAsString(payload);
+        String jsonPayload;
+        try {
+            jsonPayload = (payload instanceof String value) ? value : objectMapper.writeValueAsString(payload);
+        } catch (RuntimeException ex) {
+            log.warn("Cannot serialize SSE event {} for user {}", eventType, userId, ex);
+            return;
+        }
         for (SseEmitter emitter : emitters) {
             try {
                 emitter.send(SseEmitter.event().name(eventType).data(jsonPayload));
-            } catch (IOException | IllegalStateException ex) {
+            } catch (IOException | RuntimeException ex) {
                 removeEmitter(userId, emitter);
-                emitter.complete();
-                log.debug("Closed SSE connection for user {}", userId);
+                // The container owns error completion. Completing an errored AsyncContext
+                // again can throw after the booking transaction has already committed.
+                log.debug("Removed failed SSE connection for user {}", userId, ex);
             }
         }
     }

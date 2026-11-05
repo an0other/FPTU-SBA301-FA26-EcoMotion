@@ -58,6 +58,8 @@ public interface ProviderBookingService {
 
     BookingChargeResponse addCharge(Long currentUserId, String bookingCodeOrId, AddChargeRequest request);
 
+    BookingChargeResponse withdrawCharge(Long currentUserId, String bookingCodeOrId, Long chargeId);
+
     SettlementResultResponse finalizeSettlement(Long currentUserId, String bookingCodeOrId);
 
     List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId);

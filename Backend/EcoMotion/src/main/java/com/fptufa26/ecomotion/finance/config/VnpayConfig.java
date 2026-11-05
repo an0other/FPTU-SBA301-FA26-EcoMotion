@@ -27,4 +27,5 @@ public class VnpayConfig {
     private java.time.Duration queryTimeout = java.time.Duration.ofSeconds(5);
     private java.time.Duration queryInterval = java.time.Duration.ofSeconds(60);
     private String mode = "SANDBOX";
+    private boolean refundEnabled = false;
 }

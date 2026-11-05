@@ -74,6 +74,12 @@ public class Vehicle {
     @Column(nullable = false, length = 40)
     private String color;
 
+    @Column(name = "dispatch_latitude", precision = 9, scale = 6)
+    private BigDecimal dispatchLatitude;
+
+    @Column(name = "dispatch_longitude", precision = 9, scale = 6)
+    private BigDecimal dispatchLongitude;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "fuel_type", nullable = false, length = 20)
     private FuelType fuelType;

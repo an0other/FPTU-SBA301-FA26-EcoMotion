@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.dto.response;
 
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 
 import java.math.BigDecimal;
@@ -13,6 +14,7 @@ public record BookingChargeLineResponse(
         BigDecimal appliedRate,
         BigDecimal amount,
         boolean isWaived,
-        BigDecimal effectiveAmount
+        BigDecimal effectiveAmount,
+        ChargeConfirmationStatus confirmationStatus
 ) {
 }

@@ -5,6 +5,7 @@ import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { REFUND_WORKFLOW_LABELS } from '../../utils/bookingWorkflow'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import BookingProgressStepper from './BookingProgressStepper'
+import RefundReceiptTimeline from './RefundReceiptTimeline'
 
 function Icon({ name, className = '' }) {
   return (
@@ -44,6 +45,7 @@ export default function BookingWorkflowSummary({
     ) : null
   }
 
+  const hasTransferredRefund = (workflow?.refunds || []).some(refund => refund.status === 'REFUNDED' || refund.receiptStatus)
   const proposal = workflow?.proposal
   const pendingProposal = proposal?.status === 'PENDING'
   const when = (value) => formatBookingWhen(value) || 'Chưa xác định'
@@ -233,7 +235,7 @@ export default function BookingWorkflowSummary({
             {workflow.refunds.map((refund) => (
               <div
                 key={refund.id}
-                className="flex items-center justify-between rounded-lg bg-slate-50 p-2.5 border border-slate-100"
+                className="rounded-lg bg-slate-50 p-2.5 border border-slate-100"
               >
                 <div>
                   <strong className="font-mono text-slate-900">{formatCurrency(refund.amount)}</strong>
@@ -246,12 +248,13 @@ export default function BookingWorkflowSummary({
                     </span>
                   )}
                 </div>
+                <RefundReceiptTimeline refund={refund} provider={provider} onRefresh={onRefresh} />
                 {provider && refund.status === 'PROCESSING' && (
                   <Link
                     to="/provider/finance"
                     className="text-[11px] font-bold text-brand-700 underline"
                   >
-                    Nộp biên lai
+                    Xác nhận đã hoàn tiền
                   </Link>
                 )}
               </div>
@@ -261,7 +264,7 @@ export default function BookingWorkflowSummary({
       )}
 
       {/* Renter Request Refund Section */}
-      {!provider && Number(workflow?.refundableAmount || 0) >= 1000 && (
+      {!provider && !hasTransferredRefund && Number(workflow?.refundableAmount || 0) >= 1000 && (
         <details className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-2xs">
           <summary className="cursor-pointer font-bold text-slate-800 flex items-center gap-1.5">
             <Icon name="request_quote" className="text-base text-brand-700" />

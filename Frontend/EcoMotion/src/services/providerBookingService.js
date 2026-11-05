@@ -67,6 +67,11 @@ export const providerBookingService = {
     return data?.data ?? []
   },
 
+  async withdrawCharge(bookingCode, chargeId) {
+    const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/charges/${chargeId}/withdraw`)
+    return data?.data
+  },
+
   async addCharge(bookingCode, chargeData) {
     const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/charges`, chargeData)
     return data?.data
