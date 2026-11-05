@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { getAccessToken } from '../utils/tokenStore.js'
+import { getAccessToken, subscribeAccessToken } from '../utils/tokenStore.js'
 
 export const TV5_REALTIME_EVENTS = Object.fromEntries([
   'BOOKING_CONFIRMED', 'BOOKING_CHANGED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED',
@@ -15,13 +15,26 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
   const handlersRef = useRef(handlers)
   const onResyncRef = useRef(onResync)
   const pending = useRef(false)
+  const queued = useRef(false)
+  const active = useRef(enabled)
+  const [token, setToken] = useState(getAccessToken)
+  useEffect(() => subscribeAccessToken(setToken), [])
+  useEffect(() => {
+    active.current = enabled
+    return () => { active.current = false; queued.current = false }
+  }, [enabled])
   useEffect(() => { handlersRef.current = handlers; onResyncRef.current = onResync }, [handlers, onResync])
   const triggerSync = useCallback(async () => {
+    if (!active.current) return
+    queued.current = true
     if (pending.current) return
     pending.current = true
     try {
-      await onResyncRef.current?.()
-      setLastSyncedAt(new Date())
+      do {
+        queued.current = false
+        await onResyncRef.current?.()
+        if (active.current) setLastSyncedAt(new Date())
+      } while (queued.current && active.current)
     } finally {
       pending.current = false
     }
@@ -41,9 +54,9 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
     }
   }, [enabled, pollIntervalMs, triggerSync])
   useEffect(() => {
-    const token = getAccessToken()
     if (!enabled || !token || typeof EventSource === 'undefined') return
-    const source = new EventSource('/api/v1/notifications/stream?token=' + encodeURIComponent(token))
+    const baseUrl = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+    const source = new EventSource(`${baseUrl}/v1/notifications/stream?token=${encodeURIComponent(token)}`)
     source.onopen = () => { setIsConnected(true); setSseAvailable(true); triggerSync().catch(() => {}) }
     source.onerror = () => { setIsConnected(false); setSseAvailable(false) }
     const receive = event => {
@@ -55,6 +68,6 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
     Object.values(TV5_REALTIME_EVENTS).forEach(name => source.addEventListener(name, receive))
     source.onmessage = receive
     return () => { source.close() }
-  }, [enabled, triggerSync])
+  }, [enabled, triggerSync, token])
   return { isConnected, sseAvailable, lastSyncedAt, triggerSync }
 }

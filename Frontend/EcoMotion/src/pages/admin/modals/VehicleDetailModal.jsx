@@ -35,6 +35,7 @@ export default function VehicleDetailModal({
   onReject,
   actionLoading,
   onPreviewDoc,
+  onSelectProvider,
 }) {
   if (!vehicle) return null
 
@@ -75,8 +76,21 @@ export default function VehicleDetailModal({
                   {vehicle.status}
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Biển số: <strong className="font-mono text-brand-700">{vehicle.licensePlate}</strong> • Nhà cung cấp: <strong>{vehicle.providerDisplayName || `NCC #${vehicle.providerId}`}</strong>
+              <p className="mt-0.5 text-xs text-slate-500 flex flex-wrap items-center gap-1.5">
+                <span>
+                  Biển số: <strong className="font-mono text-brand-700">{vehicle.licensePlate}</strong> • Nhà cung cấp:
+                </span>
+                {vehicle.providerId && onSelectProvider ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectProvider(vehicle.providerId)}
+                    className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 font-bold text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                  >
+                    {vehicle.providerDisplayName || `NCC #${vehicle.providerId}`} →
+                  </button>
+                ) : (
+                  <strong>{vehicle.providerDisplayName || `NCC #${vehicle.providerId}`}</strong>
+                )}
               </p>
             </div>
           </div>
@@ -135,7 +149,7 @@ export default function VehicleDetailModal({
           {/* Section 2: Technical Specifications & Identity */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
             <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>⚙️</span> Thông số kỹ thuật & Định danh phương tiện
+              <span>⚙️</span> Thông số kỹ thuật &amp; Định danh phương tiện
             </h4>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
@@ -173,15 +187,31 @@ export default function VehicleDetailModal({
             </div>
           </div>
 
-          {/* Section 3: Provider & Depot Location */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-              <span>📍</span> Thông tin Nhà cung cấp & Điểm tập kết xe (Depot)
-            </h4>
+          {/* Section 3: Provider & Depot Location (Clickable to Provider Detail) */}
+          <div
+            onClick={() => vehicle.providerId && onSelectProvider && onSelectProvider(vehicle.providerId)}
+            className={`rounded-2xl border p-4 transition-all ${
+              vehicle.providerId && onSelectProvider
+                ? 'cursor-pointer border-slate-200 bg-slate-50/60 hover:border-indigo-400 hover:bg-indigo-50/40 group'
+                : 'border-slate-200 bg-slate-50/60'
+            }`}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <span>📍</span> Thông tin Nhà cung cấp &amp; Điểm tập kết xe (Depot)
+              </h4>
+              {vehicle.providerId && onSelectProvider && (
+                <span className="text-[11px] font-bold text-indigo-600 group-hover:translate-x-0.5 transition-transform">
+                  Xem chi tiết Nhà cung cấp →
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div>
                 <span className="text-slate-500 block">Đơn vị chủ xe:</span>
-                <strong className="text-slate-900">{vehicle.providerDisplayName || `NCC #${vehicle.providerId}`}</strong>
+                <strong className="text-slate-900 group-hover:text-indigo-700">
+                  {vehicle.providerDisplayName || `NCC #${vehicle.providerId}`}
+                </strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Hotline liên hệ:</span>
@@ -272,7 +302,10 @@ export default function VehicleDetailModal({
                     </span>
                     <div className="text-sm font-extrabold text-slate-900">
                       {formatVND(plan.slotPrice)}
-                      <span className="text-[10px] font-normal text-slate-500"> / {plan.slotLengthMinutes ? `${plan.slotLengthMinutes / 60}h` : 'slot'}</span>
+                      <span className="text-[10px] font-normal text-slate-500">
+                        {' '}
+                        / {plan.slotLengthMinutes ? `${plan.slotLengthMinutes / 60}h` : 'slot'}
+                      </span>
                     </div>
                     {plan.upfrontAmount != null && (
                       <div className="text-[11px] text-slate-500">
@@ -300,23 +333,23 @@ export default function VehicleDetailModal({
               <textarea
                 rows="3"
                 required
-                placeholder="Ví dụ: Giấy chứng nhận đăng kiểm đã hết hạn, ảnh xe không đúng biển số đăng ký..."
+                placeholder="Ví dụ: Giấy đăng kiểm đã hết hạn, ảnh chụp biển số xe bị mờ, thiếu bảo hiểm TNDS bắt buộc..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                className="w-full rounded-xl border border-rose-300 bg-white p-3 text-xs outline-none focus:ring-2 focus:ring-rose-500"
+                className="w-full rounded-xl border border-rose-300 bg-white p-3 text-xs outline-none focus:border-rose-500"
               />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowRejectForm(false)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-600 hover:bg-slate-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="rounded-xl bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                  className="rounded-xl bg-rose-600 px-4 py-2 font-bold text-white hover:bg-rose-700"
                 >
                   {actionLoading ? 'Đang gửi...' : 'Xác nhận từ chối'}
                 </button>
@@ -326,7 +359,7 @@ export default function VehicleDetailModal({
         </div>
 
         {/* Action Controls */}
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
           <button
             type="button"
             onClick={onClose}
@@ -343,7 +376,7 @@ export default function VehicleDetailModal({
                 onClick={() => setShowRejectForm(true)}
                 className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
               >
-                Từ chối xe
+                Từ chối duyệt xe
               </button>
             )}
 
@@ -355,7 +388,7 @@ export default function VehicleDetailModal({
                 className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
               >
                 <IconCheckCircle className="h-4 w-4" />
-                <span>Phê duyệt xe mở bán</span>
+                <span>Phê duyệt mở bán xe</span>
               </button>
             )}
           </div>

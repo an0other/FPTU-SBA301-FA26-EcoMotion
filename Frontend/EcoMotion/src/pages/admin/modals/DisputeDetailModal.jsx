@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IconX, IconAlertTriangle, IconCheckCircle, IconShield } from '../../../components/icons/Icons'
+import { IconX, IconAlertTriangle, IconCheckCircle, IconShield, IconCar, IconUsers } from '../../../components/icons/Icons'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -13,11 +13,14 @@ const DISPUTE_STATUS_BADGES = {
   REJECTED: 'bg-slate-100 text-slate-700 border-slate-200',
 }
 
-export default function DisputeDetailModal({ dispute, onClose, onResolve, actionLoading, error }) {
-  return dispute ? <DisputeDetailForm key={dispute.id} dispute={dispute} onClose={onClose} onResolve={onResolve} actionLoading={actionLoading} error={error} /> : null
+export default function DisputeDetailModal({ dispute, ...props }) {
+  return dispute ? <DisputeDetailForm key={dispute.id} dispute={dispute} {...props} /> : null
 }
 
-function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }) {
+function DisputeDetailForm({
+  dispute, onClose, onResolve, actionLoading, error,
+  onSelectBooking, onSelectUser, onSelectVehicle, onSelectProvider, onSelectDriver,
+}) {
   const isResolvedOrRejected = dispute.status === 'RESOLVED' || dispute.status === 'REJECTED'
 
   const [form, setForm] = useState({
@@ -79,8 +82,20 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
                   {dispute.status}
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Liên quan Đơn thuê: <strong>#{dispute.bookingCode || dispute.bookingId}</strong> • Phân loại: <strong>{dispute.category}</strong>
+              <p className="mt-0.5 text-xs text-slate-500 flex flex-wrap items-center gap-1">
+                <span>Liên quan Đơn thuê:</span>
+                {dispute.bookingId && onSelectBooking ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectBooking(dispute.bookingId)}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-0.5 font-mono font-bold text-brand-700 border border-brand-200 hover:bg-brand-100 transition-colors"
+                  >
+                    #{dispute.bookingCode || dispute.bookingId} →
+                  </button>
+                ) : (
+                  <strong>#{dispute.bookingCode || dispute.bookingId}</strong>
+                )}
+                <span>• Phân loại: <strong>{dispute.category}</strong></span>
               </p>
             </div>
           </div>
@@ -96,28 +111,135 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
 
         {/* Content Body */}
         <div className="mt-5 space-y-5 text-xs">
-          {/* Dispute Origin Info */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <div>
-              <span className="text-slate-500 block">Bên khiếu nại (Người gửi):</span>
-              <strong className="text-slate-900">{dispute.raisedByName || `User #${dispute.raisedById}`}</strong>
-              <div className="text-slate-500">{dispute.raisedByEmail || '—'}</div>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Quản trị viên thụ lý:</span>
-              <strong className="text-slate-900">{dispute.handledByName || 'Chưa thụ lý'}</strong>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Thời điểm phát sinh:</span>
-              <strong className="text-slate-900">
-                {dispute.createdAt ? new Date(dispute.createdAt).toLocaleString('vi-VN') : '—'}
-              </strong>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Cập nhật lần cuối:</span>
-              <strong className="text-slate-900">
-                {dispute.updatedAt ? new Date(dispute.updatedAt).toLocaleString('vi-VN') : '—'}
-              </strong>
+          {/* Interactive Related Entities Grid */}
+          <div>
+            <span className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Các bên &amp; thành phần liên quan (Bấm để xem chi tiết)
+            </span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+              {/* Raised By User */}
+              <div
+                onClick={() => dispute.raisedById && onSelectUser && onSelectUser(dispute.raisedById)}
+                className={`rounded-xl border p-2.5 transition-all ${
+                  dispute.raisedById && onSelectUser
+                    ? 'cursor-pointer border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50/40 group'
+                    : 'border-transparent'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 flex items-center gap-1">
+                    <IconUsers className="h-3.5 w-3.5 text-brand-600" /> Bên khiếu nại (Người gửi):
+                  </span>
+                  {dispute.raisedById && onSelectUser && (
+                    <span className="text-[10px] font-bold text-brand-600">Chi tiết →</span>
+                  )}
+                </div>
+                <strong className="text-slate-900 group-hover:text-brand-700 block mt-0.5">
+                  {dispute.raisedByName || `User #${dispute.raisedById}`}
+                </strong>
+                <div className="text-slate-500">{dispute.raisedByEmail || '—'}</div>
+              </div>
+
+              {/* Linked Booking */}
+              <div
+                onClick={() => dispute.bookingId && onSelectBooking && onSelectBooking(dispute.bookingId)}
+                className={`rounded-xl border p-2.5 transition-all ${
+                  dispute.bookingId && onSelectBooking
+                    ? 'cursor-pointer border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50/40 group'
+                    : 'border-transparent'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Đơn thuê liên quan:</span>
+                  {dispute.bookingId && onSelectBooking && (
+                    <span className="text-[10px] font-bold text-brand-600">Xem đơn →</span>
+                  )}
+                </div>
+                <strong className="text-slate-900 font-mono group-hover:text-brand-700 block mt-0.5">
+                  #{dispute.bookingCode || dispute.bookingId}
+                </strong>
+                <div className="text-slate-500">Mã hệ thống: #{dispute.bookingId}</div>
+              </div>
+
+              {/* Vehicle if available */}
+              {dispute.vehicleId && (
+                <div
+                  onClick={() => onSelectVehicle && onSelectVehicle(dispute.vehicleId)}
+                  className={`rounded-xl border p-2.5 transition-all ${
+                    onSelectVehicle
+                      ? 'cursor-pointer border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50/40 group'
+                      : 'border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 flex items-center gap-1">
+                      <IconCar className="h-3.5 w-3.5 text-emerald-600" /> Xe phục vụ:
+                    </span>
+                    {onSelectVehicle && (
+                      <span className="text-[10px] font-bold text-emerald-600">Chi tiết →</span>
+                    )}
+                  </div>
+                  <strong className="text-slate-900 group-hover:text-emerald-700 block mt-0.5">
+                    {dispute.vehicleModel || `Xe #${dispute.vehicleId}`}
+                  </strong>
+                  <div className="text-slate-500 font-mono">{dispute.vehicleLicensePlate || `#${dispute.vehicleId}`}</div>
+                </div>
+              )}
+
+              {/* Provider if available */}
+              {dispute.providerId && (
+                <div
+                  onClick={() => onSelectProvider && onSelectProvider(dispute.providerId)}
+                  className={`rounded-xl border p-2.5 transition-all ${
+                    onSelectProvider
+                      ? 'cursor-pointer border-slate-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/40 group'
+                      : 'border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500">🏢 Đơn vị chủ xe (NCC):</span>
+                    {onSelectProvider && (
+                      <span className="text-[10px] font-bold text-indigo-600">Chi tiết →</span>
+                    )}
+                  </div>
+                  <strong className="text-slate-900 group-hover:text-indigo-700 block mt-0.5">
+                    {dispute.providerDisplayName || `NCC #${dispute.providerId}`}
+                  </strong>
+                  <div className="text-slate-500">Mã đối tác: #{dispute.providerId}</div>
+                </div>
+              )}
+
+              {/* Driver if available */}
+              {dispute.driverId && (
+                <div
+                  onClick={() => onSelectDriver && onSelectDriver(dispute.driverId)}
+                  className={`rounded-xl border p-2.5 transition-all ${
+                    onSelectDriver
+                      ? 'cursor-pointer border-slate-200 bg-white hover:border-amber-400 hover:bg-amber-50/40 group'
+                      : 'border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500">👤 Tài xế lái xe:</span>
+                    {onSelectDriver && (
+                      <span className="text-[10px] font-bold text-amber-600">Chi tiết →</span>
+                    )}
+                  </div>
+                  <strong className="text-slate-900 group-hover:text-amber-700 block mt-0.5">
+                    {dispute.driverName || `Tài xế #${dispute.driverId}`}
+                  </strong>
+                  <div className="text-slate-500">Mã TX: #{dispute.driverId}</div>
+                </div>
+              )}
+
+              {/* Handled By Admin */}
+              <div className="p-1">
+                <span className="text-slate-500 block">Quản trị viên thụ lý:</span>
+                <strong className="text-slate-900">{dispute.handledByName || 'Chưa thụ lý'}</strong>
+                <div className="text-slate-500 mt-1">
+                  Tạo lúc: {dispute.createdAt ? new Date(dispute.createdAt).toLocaleString('vi-VN') : '—'}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -208,7 +330,7 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
             /* Resolution Form */
             <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
               <h4 className="font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                <IconShield className="h-4 w-4 text-brand-600" /> Biểu mẫu Phán quyết & Giải quyết tranh chấp
+                <IconShield className="h-4 w-4 text-brand-600" /> Biểu mẫu Phán quyết &amp; Giải quyết tranh chấp
               </h4>
 
               {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -326,20 +448,19 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
           className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setPreviewImage(null)}
         >
-          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={previewImage}
-              alt="Ảnh bằng chứng kích thước lớn"
-              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
-            />
+          <div className="relative max-w-4xl max-h-[88vh] overflow-hidden rounded-2xl bg-white p-2 shadow-2xl">
             <button
               type="button"
               onClick={() => setPreviewImage(null)}
-              className="absolute -top-3 -right-3 rounded-full bg-white p-1.5 text-slate-800 shadow-lg hover:bg-slate-100"
-              title="Đóng ảnh xem trước"
+              className="absolute right-3 top-3 rounded-full bg-black/60 p-1.5 text-white hover:bg-black"
             >
               <IconX className="h-5 w-5" />
             </button>
+            <img
+              src={previewImage}
+              alt="Xem chi tiết bằng chứng"
+              className="max-h-[82vh] w-auto object-contain rounded-xl"
+            />
           </div>
         </div>
       )}

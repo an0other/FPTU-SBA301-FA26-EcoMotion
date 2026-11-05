@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.common.service;
+package com.fptufa26.ecomotion.notification.internal.service;
 
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 

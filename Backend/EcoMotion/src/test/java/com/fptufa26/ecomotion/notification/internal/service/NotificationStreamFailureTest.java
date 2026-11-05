@@ -1,6 +1,6 @@
-package com.fptufa26.ecomotion.common.service;
+package com.fptufa26.ecomotion.notification.internal.service;
 
-import com.fptufa26.ecomotion.common.service.implement.NotificationStreamServiceImpl;
+import com.fptufa26.ecomotion.notification.internal.service.impl.NotificationStreamServiceImpl;
 import com.fptufa26.ecomotion.user.service.UserService;
 import java.io.IOException;
 import java.util.Map;

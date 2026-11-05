@@ -21,6 +21,14 @@ public class AdminPaymentDto {
     private String transactionCode;
     private Long bookingId;
     private String bookingCode;
+    private Long renterUserId;
+    private String renterName;
+    private Long providerId;
+    private String providerDisplayName;
+    private Long vehicleId;
+    private String vehicleModel;
+    private Long driverId;
+    private String driverName;
     private PaymentType type;
     private BigDecimal amount;
     private PaymentDirection direction;

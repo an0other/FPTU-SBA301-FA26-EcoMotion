@@ -20,6 +20,7 @@ public class AdminBookingDto {
     private Long id;
     private String bookingCode;
     private Long renterId;
+    private Long renterUserId;
     private String renterName;
     private String renterEmail;
     private String renterPhone;
@@ -29,6 +30,7 @@ public class AdminBookingDto {
     private Long providerId;
     private String providerDisplayName;
     private Long driverId;
+    private Long driverUserId;
     private String driverName;
     private BookingStatus status;
     private String pickupAddress;

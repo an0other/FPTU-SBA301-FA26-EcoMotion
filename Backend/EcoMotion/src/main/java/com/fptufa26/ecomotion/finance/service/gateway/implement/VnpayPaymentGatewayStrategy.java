@@ -175,6 +175,7 @@ public class VnpayPaymentGatewayStrategy implements PaymentGatewayStrategy {
         request.put("vnp_OrderInfo", "Query payment " + txnRef);
         request.put("vnp_SecureHash", VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(),
                 String.join("|", request.values())));
+        log.info("VNPay QueryDR issued: txnRef={}, transactionDate={}", txnRef, request.get("vnp_TransactionDate"));
         try {
             var factory = new SimpleClientHttpRequestFactory();
             factory.setConnectTimeout(vnpayConfig.getQueryTimeout());
@@ -189,12 +190,17 @@ public class VnpayPaymentGatewayStrategy implements PaymentGatewayStrategy {
                             "vnp_PayDate", "vnp_TransactionNo", "vnp_TransactionType", "vnp_TransactionStatus",
                             "vnp_OrderInfo", "vnp_PromotionCode", "vnp_PromotionAmount")
                     .map(key -> Objects.toString(response.get(key), "")).collect(Collectors.joining("|"));
-            if (!secureHashMatches(VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData), response.get("vnp_SecureHash"))
+            boolean validSignature = secureHashMatches(VnpayUtils.hmacSHA512(vnpayConfig.getHashSecret(), hashData), response.get("vnp_SecureHash"));
+            if (!validSignature
+                    || !"querydr".equals(response.get("vnp_Command"))
                     || !vnpayConfig.getTmnCode().equals(response.get("vnp_TmnCode"))
                     || !txnRef.equals(response.get("vnp_TxnRef"))
                     || !"00".equals(response.get("vnp_ResponseCode"))
                     || !"01".equals(response.get("vnp_TransactionType"))
                     || !Set.of("00", "02").contains(Objects.toString(response.get("vnp_TransactionStatus"), ""))) {
+                log.warn("VNPay QueryDR rejected: txnRef={}, responseCode={}, transactionStatus={}, signatureValid={}, merchantMatch={}, referenceMatch={}",
+                        txnRef, response.get("vnp_ResponseCode"), response.get("vnp_TransactionStatus"), validSignature,
+                        vnpayConfig.getTmnCode().equals(response.get("vnp_TmnCode")), txnRef.equals(response.get("vnp_TxnRef")));
                 return Optional.empty();
             }
             return Optional.of(response);

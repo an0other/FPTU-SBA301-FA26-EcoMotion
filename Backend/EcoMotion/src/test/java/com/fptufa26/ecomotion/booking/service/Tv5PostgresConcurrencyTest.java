@@ -328,6 +328,22 @@ class Tv5PostgresConcurrencyTest {
     }
 
     @Test
+    void candidateHttpResponseOmitsPrivateDriverAndOtherBookingDetails() throws Exception {
+        String bookingCode = bookings.findById(first).orElseThrow().getBookingCode();
+        for (String base : List.of("/api/provider/bookings/", "/api/v1/provider/bookings/", "/api/v1/provider/trips/")) {
+            String body = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(base + bookingCode + "/assign-candidates")
+                    .header("Authorization", bearer(providerUser)))
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            assertThat(body).contains("driverId", "eligible", "availabilityStatus")
+                    .doesNotContain("licenseNo", "licenseExpiry", "phone", "currentBookingCode", "conflictingBookingCode", "nextBookingCode", "conflictStart", "conflictEnd");
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(base + bookingCode + "/assign-candidates")
+                    .header("Authorization", bearer(renterUser)))
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden());
+        }
+    }
+
+    @Test
     void incidentContractAndProviderOwnershipAreEnforcedOverHttp() throws Exception {
         long[] incidents = tx.execute(status -> {
             Booking booking = bookings.findById(first).orElseThrow();
@@ -408,6 +424,7 @@ class Tv5PostgresConcurrencyTest {
         String ref = UUID.randomUUID().toString();
         long transaction = tx.execute(status -> {
             Booking b = bookings.findByIdForUpdate(first).orElseThrow(); b.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+            b.setActualEndAt(Instant.now()); b.setProviderConfirmedAt(Instant.now()); b.setRenterConfirmedAt(Instant.now());
             var payment = new com.fptufa26.ecomotion.booking.entity.PaymentTransaction(); payment.setBooking(b);
             payment.setAmount(new BigDecimal("100000")); payment.setVnpTxnRef(ref);
             payment.setType(com.fptufa26.ecomotion.booking.enums.PaymentType.SETTLEMENT);
@@ -418,7 +435,7 @@ class Tv5PostgresConcurrencyTest {
         var gateway = org.mockito.Mockito.mock(com.fptufa26.ecomotion.finance.service.gateway.PaymentGatewayStrategy.class);
         org.mockito.Mockito.when(gatewayResolver.resolve(com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY)).thenReturn(gateway);
         var verified = new com.fptufa26.ecomotion.finance.service.gateway.dto.PaymentVerificationResult(
-                true, true, ref, "TV5-TEST", "00", new BigDecimal("100000"), "NCB", "ATM", "20261029", "Test");
+                true, true, ref, "123456789", "00", new BigDecimal("100000"), "NCB", "ATM", "20261029", "Test");
         org.mockito.Mockito.when(gateway.verifyIpn(org.mockito.ArgumentMatchers.anyMap())).thenReturn(verified);
         org.mockito.Mockito.when(gateway.verifyCallback(org.mockito.ArgumentMatchers.anyMap())).thenReturn(verified);
         var params = java.util.Map.of("vnp_TxnRef", ref, "vnp_Amount", "10000000");

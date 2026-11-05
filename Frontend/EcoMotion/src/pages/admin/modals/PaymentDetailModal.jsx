@@ -1,4 +1,4 @@
-import { IconX, IconWallet, IconCheckCircle, IconEye } from '../../../components/icons/Icons'
+import { IconX, IconWallet, IconEye, IconUsers, IconCar } from '../../../components/icons/Icons'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -13,7 +13,15 @@ const PAYMENT_STATUS_BADGES = {
   FAILED: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
-export default function PaymentDetailModal({ payment, onClose }) {
+export default function PaymentDetailModal({
+  payment,
+  onClose,
+  onSelectBooking,
+  onSelectUser,
+  onSelectVehicle,
+  onSelectProvider,
+  onSelectDriver,
+}) {
   if (!payment) return null
 
   return (
@@ -38,8 +46,19 @@ export default function PaymentDetailModal({ payment, onClose }) {
                   {payment.status}
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Mã đơn thuê: <strong>#{payment.bookingCode || payment.bookingId}</strong>
+              <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1.5">
+                <span>Mã đơn thuê:</span>
+                {payment.bookingId && onSelectBooking ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectBooking(payment.bookingId)}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-0.5 font-mono font-bold text-brand-700 border border-brand-200 hover:bg-brand-100 transition-colors"
+                  >
+                    #{payment.bookingCode || payment.bookingId} →
+                  </button>
+                ) : (
+                  <strong>#{payment.bookingCode || payment.bookingId}</strong>
+                )}
               </p>
             </div>
           </div>
@@ -55,6 +74,105 @@ export default function PaymentDetailModal({ payment, onClose }) {
 
         {/* Content Body */}
         <div className="mt-5 space-y-4 text-xs">
+          {/* Related Entities (Cross-Navigation) */}
+          {(payment.bookingId || payment.renterUserId || payment.providerId || payment.vehicleId || payment.driverId) && (
+            <div>
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Thông tin liên kết (Bấm để xem chi tiết)
+              </span>
+              <div className="grid grid-cols-2 gap-2.5 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                {payment.bookingId && (
+                  <div
+                    onClick={() => onSelectBooking && onSelectBooking(payment.bookingId)}
+                    className={`rounded-xl border border-slate-200 bg-white p-2.5 transition-all ${
+                      onSelectBooking ? 'cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 group' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Đơn thuê</span>
+                      {onSelectBooking && <span className="font-bold text-brand-600">Xem →</span>}
+                    </div>
+                    <strong className="mt-0.5 block font-mono text-slate-900 group-hover:text-brand-700">
+                      #{payment.bookingCode || payment.bookingId}
+                    </strong>
+                  </div>
+                )}
+
+                {payment.renterUserId && (
+                  <div
+                    onClick={() => onSelectUser && onSelectUser(payment.renterUserId)}
+                    className={`rounded-xl border border-slate-200 bg-white p-2.5 transition-all ${
+                      onSelectUser ? 'cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 group' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <IconUsers className="h-3 w-3 text-brand-600" /> Khách thuê
+                      </span>
+                      {onSelectUser && <span className="font-bold text-brand-600">Xem →</span>}
+                    </div>
+                    <strong className="mt-0.5 block truncate text-slate-900 group-hover:text-brand-700">
+                      {payment.renterName || `User #${payment.renterUserId}`}
+                    </strong>
+                  </div>
+                )}
+
+                {payment.vehicleId && (
+                  <div
+                    onClick={() => onSelectVehicle && onSelectVehicle(payment.vehicleId)}
+                    className={`rounded-xl border border-slate-200 bg-white p-2.5 transition-all ${
+                      onSelectVehicle ? 'cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 group' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <IconCar className="h-3 w-3 text-emerald-600" /> Phương tiện
+                      </span>
+                      {onSelectVehicle && <span className="font-bold text-emerald-600">Xem →</span>}
+                    </div>
+                    <strong className="mt-0.5 block truncate text-slate-900 group-hover:text-emerald-700">
+                      {payment.vehicleModel || `Xe #${payment.vehicleId}`}
+                    </strong>
+                  </div>
+                )}
+
+                {payment.providerId && (
+                  <div
+                    onClick={() => onSelectProvider && onSelectProvider(payment.providerId)}
+                    className={`rounded-xl border border-slate-200 bg-white p-2.5 transition-all ${
+                      onSelectProvider ? 'cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/40 group' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>🏢 Chủ xe (NCC)</span>
+                      {onSelectProvider && <span className="font-bold text-indigo-600">Xem →</span>}
+                    </div>
+                    <strong className="mt-0.5 block truncate text-slate-900 group-hover:text-indigo-700">
+                      {payment.providerDisplayName || `NCC #${payment.providerId}`}
+                    </strong>
+                  </div>
+                )}
+
+                {payment.driverId && (
+                  <div
+                    onClick={() => onSelectDriver && onSelectDriver(payment.driverId)}
+                    className={`col-span-2 rounded-xl border border-slate-200 bg-white p-2.5 transition-all ${
+                      onSelectDriver ? 'cursor-pointer hover:border-amber-400 hover:bg-amber-50/40 group' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>👤 Tài xế phục vụ</span>
+                      {onSelectDriver && <span className="font-bold text-amber-600">Xem chi tiết tài xế →</span>}
+                    </div>
+                    <strong className="mt-0.5 block truncate text-slate-900 group-hover:text-amber-700">
+                      {payment.driverName || `Tài xế #${payment.driverId}`}
+                    </strong>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <div>
               <span className="text-slate-500 block">Số tiền giao dịch:</span>
@@ -66,12 +184,14 @@ export default function PaymentDetailModal({ payment, onClose }) {
               <span className="text-slate-500 block">Chiều giao dịch:</span>
               <span
                 className={`inline-block mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  payment.direction === 'INBOUND'
+                  payment.direction === 'INBOUND' || payment.direction === 'IN'
                     ? 'bg-blue-100 text-blue-800'
                     : 'bg-amber-100 text-amber-800'
                 }`}
               >
-                {payment.direction === 'INBOUND' ? 'Thu vào (INBOUND)' : 'Chi ra / Hoàn tiền (OUTBOUND)'}
+                {payment.direction === 'INBOUND' || payment.direction === 'IN'
+                  ? 'Thu vào (INBOUND)'
+                  : 'Chi ra / Hoàn tiền (OUTBOUND)'}
               </span>
             </div>
             <div>

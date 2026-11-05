@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useSearchParams, Link } from 'react-router-dom'
 import { paymentService } from '../services/paymentService'
 import { formatPaymentMoney, formatPaymentDate } from '../utils/paymentDisplay'
+import { useRealtimeSync } from '../hooks/useRealtimeSync'
 
 const TITLES = {
   SUCCESS: 'Thanh toán thành công!',
@@ -40,6 +41,12 @@ export default function PaymentSuccessPage() {
   const success = receipt?.status === 'SUCCESS'
   const title = loading ? 'Đang kiểm tra thanh toán' : error ? 'Không thể xác minh thanh toán' : TITLES[receipt?.status]
   const bookingPath = receipt?.bookingCode ? `/renter/bookings/${encodeURIComponent(receipt.bookingCode)}` : null
+
+  useRealtimeSync({
+    enabled: Boolean(reference) && state.receipt?.status === 'PENDING_VERIFICATION',
+    pollIntervalMs: 5000,
+    onResync: () => setAttempt(value => value + 1),
+  })
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">

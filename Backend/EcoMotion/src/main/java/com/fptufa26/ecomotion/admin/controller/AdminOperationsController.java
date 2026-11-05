@@ -40,7 +40,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 
 @RestController
 @RequestMapping("/api/admin/operations")
@@ -141,6 +140,7 @@ public class AdminOperationsController {
                 .id(b.getId())
                 .bookingCode(b.getBookingCode())
                 .renterId(r != null ? r.getId() : null)
+                .renterUserId(ru != null ? ru.getId() : null)
                 .renterName(ru != null ? ru.getFullName() : null)
                 .renterEmail(ru != null ? ru.getEmail() : null)
                 .renterPhone(ru != null ? ru.getPhone() : null)
@@ -150,6 +150,7 @@ public class AdminOperationsController {
                 .providerId(p != null ? p.getId() : null)
                 .providerDisplayName(p != null ? p.getDisplayName() : null)
                 .driverId(d != null ? d.getId() : null)
+                .driverUserId(du != null ? du.getId() : null)
                 .driverName(du != null ? du.getFullName() : null)
                 .status(b.getStatus())
                 .pickupAddress(b.getPickupAddress())
@@ -172,6 +173,10 @@ public class AdminOperationsController {
         BookingCharge c = d.getCharge();
         User raised = d.getRaisedBy();
         User handled = d.getHandledBy();
+        Vehicle v = (b != null) ? b.getVehicle() : null;
+        Provider p = (v != null) ? v.getProvider() : null;
+        Driver drv = (b != null) ? b.getDriver() : null;
+        User drvUser = (drv != null) ? drv.getUser() : null;
 
         return AdminDisputeDto.builder()
                 .id(d.getId())
@@ -185,6 +190,13 @@ public class AdminOperationsController {
                 .raisedByEmail(raised != null ? raised.getEmail() : null)
                 .handledById(handled != null ? handled.getId() : null)
                 .handledByName(handled != null ? handled.getFullName() : null)
+                .vehicleId(v != null ? v.getId() : null)
+                .vehicleModel(v != null ? (v.getBrand() + " " + v.getModel()) : null)
+                .vehicleLicensePlate(v != null ? v.getLicensePlate() : null)
+                .providerId(p != null ? p.getId() : null)
+                .providerDisplayName(p != null ? p.getDisplayName() : null)
+                .driverId(drv != null ? drv.getId() : null)
+                .driverName(drvUser != null ? drvUser.getFullName() : null)
                 .category(d.getCategory())
                 .status(d.getStatus())
                 .description(d.getDescription())
@@ -201,11 +213,26 @@ public class AdminOperationsController {
 
     private AdminPaymentDto mapPaymentDto(PaymentTransaction p) {
         Booking b = p.getBooking();
+        Renter r = (b != null) ? b.getRenter() : null;
+        User ru = (r != null) ? r.getUser() : null;
+        Vehicle v = (b != null) ? b.getVehicle() : null;
+        Provider prov = (v != null) ? v.getProvider() : null;
+        Driver drv = (b != null) ? b.getDriver() : null;
+        User drvUser = (drv != null) ? drv.getUser() : null;
+
         return AdminPaymentDto.builder()
                 .id(p.getId())
                 .transactionCode(p.getTransactionCode())
                 .bookingId(b != null ? b.getId() : null)
                 .bookingCode(b != null ? b.getBookingCode() : null)
+                .renterUserId(ru != null ? ru.getId() : null)
+                .renterName(ru != null ? ru.getFullName() : null)
+                .providerId(prov != null ? prov.getId() : null)
+                .providerDisplayName(prov != null ? prov.getDisplayName() : null)
+                .vehicleId(v != null ? v.getId() : null)
+                .vehicleModel(v != null ? (v.getBrand() + " " + v.getModel()) : null)
+                .driverId(drv != null ? drv.getId() : null)
+                .driverName(drvUser != null ? drvUser.getFullName() : null)
                 .type(p.getType())
                 .amount(p.getAmount())
                 .direction(p.getDirection())

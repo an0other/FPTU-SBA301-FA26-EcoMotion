@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.common.service;
+package com.fptufa26.ecomotion.notification.internal.service;
 
 import com.fptufa26.ecomotion.common.security.JwtService;
 import com.fptufa26.ecomotion.user.entity.User;

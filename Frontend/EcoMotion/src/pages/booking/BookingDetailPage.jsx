@@ -1,4 +1,4 @@
-import { useRealtimeSync } from '../../hooks/useRealtimeSync'
+﻿import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -128,7 +128,6 @@ export function BookingDetailPage() {
   const navigate = useNavigate()
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
-  const [operationalRisk, setOperationalRisk] = useState(null)
   const [workflow, setWorkflow] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
@@ -141,10 +140,10 @@ export function BookingDetailPage() {
   const refreshDetail = useCallback(async () => {
     const id = ++sequence.current
     try {
-      const [row, risk, progress] = await Promise.allSettled([getMyBooking(bookingCode), getMyBookingOperationalRisk(bookingCode), bookingWorkflowService.get(bookingCode)])
+      const [row, progress] = await Promise.allSettled([getMyBooking(bookingCode), bookingWorkflowService.get(bookingCode)])
       if (id !== sequence.current) return
       if (row.status === 'rejected') throw row.reason
-      setDetail(row.value); setOperationalRisk(risk.status === 'fulfilled' ? risk.value : null); setError('')
+      setDetail(row.value); setError('')
       setWorkflow(progress.status === 'fulfilled' ? progress.value : null)
       setWorkflowError(progress.status === 'rejected' ? progress.reason.message : null)
     } catch (err) {
@@ -169,7 +168,7 @@ export function BookingDetailPage() {
     <>
       {error && <p role="alert" className="mx-auto max-w-5xl p-4 text-sm text-red-800">Không thể cập nhật trạng thái: {error}. Dữ liệu đang hiển thị có thể đã cũ.</p>}
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
-      <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} error={workflowError} onRefresh={refreshDetail} /></div>
+      <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>
       <BookingDetail
         booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
         operationalRisk={operationalRisk}
@@ -209,3 +208,4 @@ export function BookingDetailPage() {
     </>
   )
 }
+

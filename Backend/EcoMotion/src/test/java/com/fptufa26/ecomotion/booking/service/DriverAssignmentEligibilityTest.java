@@ -4,7 +4,7 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.repository.*;
 import com.fptufa26.ecomotion.booking.service.implement.DriverOptimizationServiceImpl;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
-import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 import com.fptufa26.ecomotion.user.entity.*;
 import com.fptufa26.ecomotion.user.enums.*;
 import com.fptufa26.ecomotion.user.service.UserService;
@@ -66,7 +66,7 @@ class DriverAssignmentEligibilityTest {
     @Test void overlappingScheduleIsRejectedByBothPaths() {
         Booking conflict = new Booking(); conflict.setPickupTime(booking.getPickupTime()); conflict.setBookingCode("conflict"); conflict.setId(5L); conflict.setDriver(driver); conflict.setVehicle(booking.getVehicle()); conflict.setPlan(new com.fptufa26.ecomotion.vehicle.entity.RentalPlan()); conflict.getPlan().setSlotLengthMinutes(60);
         when(bookings.findDriverScheduleForProvider(eq(1L), anyList())).thenReturn(List.of(conflict));
-        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class).hasMessageContaining("conflict");
+        assertThatThrownBy(() -> service.manualAssign(4L, 3L, 1L)).isInstanceOf(ConflictException.class).hasMessageContaining("DRIVER_RETURN_UNCERTAIN");
         assertThat(service.autoAssign(4L)).isNull();
     }
     @ParameterizedTest

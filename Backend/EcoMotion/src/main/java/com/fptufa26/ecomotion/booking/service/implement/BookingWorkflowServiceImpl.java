@@ -45,6 +45,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     private final BookingRepository bookings;
     private final DriverAssignmentRepository assignments;
     private final BookingPaymentLedgerService ledger;
+    private final com.fptufa26.ecomotion.booking.service.BookingPaymentStateService paymentStates;
     private final ProviderBookingService providerBookings;
     private final BookingNotificationService notifications;
     private final RefundService refunds;
@@ -61,22 +62,19 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         User user = participant(currentUserId, booking);
         boolean provider = user.getRole() == Role.ADMIN || booking.getVehicle().getProvider().getUser().getId().equals(currentUserId);
         var payments = ledger.listTransactions(booking.getId());
-        BigDecimal paid = sum(payments, PaymentDirection.IN, PaymentStatus.PAID, null);
-        BigDecimal returned = sum(payments, PaymentDirection.OUT, PaymentStatus.PAID, PaymentType.REFUND);
-        BigDecimal pendingRefund = sum(payments, PaymentDirection.OUT, PaymentStatus.PENDING, PaymentType.REFUND);
-        boolean reconcile = payments.stream().anyMatch(t -> t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"));
-        boolean verifying = payments.stream().anyMatch(t -> t.getMethod() == PaymentMethod.VNPAY && t.getStatus() == PaymentStatus.PENDING);
-        BigDecimal extras = ledger.listCharges(booking.getId()).stream()
-                .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT)
-                .map(BookingCharge::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        var paymentState = paymentStates.evaluate(booking, payments);
+        BigDecimal paid = paymentState.appliedPaid();
+        BigDecimal returned = paymentState.refunded();
+        BigDecimal pendingRefund = paymentState.pendingRefund();
+        BigDecimal remaining = paymentState.remaining();
         boolean closed = Set.of(BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus());
-        BigDecimal remaining = closed ? BigDecimal.ZERO : booking.getTotalAmount().add(extras).subtract(paid.subtract(returned)).max(BigDecimal.ZERO);
         var refundRows = refunds.listRefundsByBooking(currentUserId, booking.getBookingCode());
         boolean completedPolicyRefund = closed && returned.signum() > 0 && !refundRows.isEmpty()
                 && refundRows.stream().allMatch(r -> Set.of("REFUNDED", "REJECTED").contains(r.status().name()));
-        String payment = reconcile ? "RECONCILIATION_REQUIRED" : pendingRefund.signum() > 0 ? "REFUND_PENDING"
-                : verifying ? "VERIFYING" : (completedPolicyRefund || returned.signum() > 0 && paid.compareTo(returned) <= 0) ? "REFUNDED"
-                : paid.signum() == 0 ? "UNPAID" : remaining.signum() > 0 ? "PARTIALLY_PAID" : "COVERED";
+        String payment = completedPolicyRefund && pendingRefund.signum() == 0
+                && !paymentState.status().name().equals("RECONCILIATION_REQUIRED")
+                && !paymentState.status().name().equals("VERIFYING")
+                ? "REFUNDED" : paymentState.status().name();
         boolean needsDriver = !closed && (booking.isDriverReplacementRequired()
                 || booking.getStatus() == BookingStatus.CONFIRMED && booking.getDriver() == null
                 || booking.getStatus() == BookingStatus.DRIVER_ASSIGNED && booking.getAssignmentExpiresAt() != null

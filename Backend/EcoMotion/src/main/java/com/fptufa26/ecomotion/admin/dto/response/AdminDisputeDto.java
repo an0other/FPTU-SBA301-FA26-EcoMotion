@@ -28,6 +28,13 @@ public class AdminDisputeDto {
     private String raisedByEmail;
     private Long handledById;
     private String handledByName;
+    private Long vehicleId;
+    private String vehicleModel;
+    private String vehicleLicensePlate;
+    private Long providerId;
+    private String providerDisplayName;
+    private Long driverId;
+    private String driverName;
     private DisputeCategory category;
     private DisputeStatus status;
     private String description;

@@ -41,6 +41,7 @@ public class BookingCharge {
     private ChargeType chargeType;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.ColumnDefault("'ACCEPTED'")
     @Column(name = "confirmation_status", nullable = false, length = 20)
     private ChargeConfirmationStatus confirmationStatus = ChargeConfirmationStatus.ACCEPTED;
 

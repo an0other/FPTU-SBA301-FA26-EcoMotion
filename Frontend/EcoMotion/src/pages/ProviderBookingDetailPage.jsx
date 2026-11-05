@@ -37,9 +37,11 @@ function formatVnd(amount) {
 }
 
 const PAYMENT_STATUS_LABELS = {
+  VERIFYING: 'Đang xác minh thanh toán',
+  RECONCILIATION_REQUIRED: 'Đã nhận tiền, cần đối soát',
   UNPAID: 'Chưa thanh toán',
   AWAITING_DEPOSIT: 'Chờ đặt cọc',
-  DEPOSIT_PAID: 'Đã đặt cọc',
+  DEPOSIT_PAID: 'Đã thanh toán cọc',
   PARTIALLY_PAID: 'Thanh toán một phần',
   FULLY_PAID: 'Đã tất toán',
   PAID: 'Đã thanh toán',
@@ -200,6 +202,9 @@ export default function ProviderBookingDetailPage() {
   // Realtime Sync Hook
   useRealtimeSync({
     handlers: {
+      [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
+        setToast({ message: 'Thanh toán đã được máy chủ xác minh. Đang cập nhật đơn thuê.', type: 'success' })
+      },
       [TV5_REALTIME_EVENTS.DRIVER_ASSIGNED]: () => {
         setToast({ message: 'Tài xế đã được phân công cho chuyến xe.', type: 'info' })
       },
@@ -370,7 +375,7 @@ export default function ProviderBookingDetailPage() {
               <BookingStatusBadge status={booking.status} />
               {booking.paymentStatus && (
                 <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
-                  Thanh toán: {PAYMENT_STATUS_LABELS[booking.paymentStatus] || booking.paymentStatus}
+                  Thanh toán: {PAYMENT_STATUS_LABELS[booking.paymentStatus] || 'Chưa xác định trạng thái thanh toán'}
                 </span>
               )}
               {booking.driverName && (

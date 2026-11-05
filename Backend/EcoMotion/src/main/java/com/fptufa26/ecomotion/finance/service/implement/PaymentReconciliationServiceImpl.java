@@ -21,7 +21,10 @@ public class PaymentReconciliationServiceImpl implements PaymentReconciliationSe
         if (!config.isReconciliationEnabled()) return;
         for (var payment : bookings.pendingGatewayPayments(config.getReconciliationBatchSize())) {
             try { vnpay.queryTransaction(payment.bookingCode(), payment.transactionReference()); }
-            catch (RuntimeException ex) { log.warn("Pending gateway reconciliation failed: {}", ex.getClass().getSimpleName()); }
+            catch (RuntimeException ex) {
+                log.warn("VNPay reconciliation failed: booking={}, txnRef={}, cause={}",
+                        payment.bookingCode(), payment.transactionReference(), ex.getClass().getSimpleName(), ex);
+            }
         }
     }
 }

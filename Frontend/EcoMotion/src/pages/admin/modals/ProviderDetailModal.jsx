@@ -1,13 +1,20 @@
-import { useState } from 'react'
-import { IconX, IconShield, IconCheckCircle, IconLock, IconAlertTriangle } from '../../../components/icons/Icons'
+import { IconX, IconShield, IconCheckCircle, IconLock } from '../../../components/icons/Icons'
 
 const STATUS_BADGES = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
   LOCKED: 'bg-rose-50 text-rose-700 border-rose-200',
+  REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
-export default function ProviderDetailModal({ provider, onClose, onStatusUpdate, actionLoading }) {
+export default function ProviderDetailModal({
+  provider,
+  onClose,
+  onStatusUpdate,
+  actionLoading,
+  onSelectUser,
+}) {
   if (!provider) return null
 
   return (
@@ -54,7 +61,7 @@ export default function ProviderDetailModal({ provider, onClose, onStatusUpdate,
           {/* Section 1: Legal & Business */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
             <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>🏛️</span> Thông tin pháp lý & Doanh nghiệp
+              <span>🏛️</span> Thông tin pháp lý &amp; Doanh nghiệp
             </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
@@ -84,15 +91,36 @@ export default function ProviderDetailModal({ provider, onClose, onStatusUpdate,
             </div>
           </div>
 
-          {/* Section 2: Contact & Depot */}
+          {/* Section 2: Contact & Depot (Clickable to Representative User Account) */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>📍</span> Người đại diện & Trụ sở Bãi xe (Depot)
-            </h4>
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <span>📍</span> Người đại diện &amp; Trụ sở Bãi xe (Depot)
+              </h4>
+              {provider.userId && onSelectUser && (
+                <button
+                  type="button"
+                  onClick={() => onSelectUser(provider.userId)}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Xem tài khoản người đại diện (User #{provider.userId}) →
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <span className="text-slate-500 block">Họ và tên người đại diện:</span>
-                <strong className="text-slate-900">{provider.userFullName || '—'}</strong>
+                {provider.userId && onSelectUser ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectUser(provider.userId)}
+                    className="font-bold text-brand-700 hover:underline text-left"
+                  >
+                    {provider.userFullName || `User #${provider.userId}`} →
+                  </button>
+                ) : (
+                  <strong className="text-slate-900">{provider.userFullName || '—'}</strong>
+                )}
               </div>
               <div>
                 <span className="text-slate-500 block">Email tài khoản:</span>
@@ -118,7 +146,7 @@ export default function ProviderDetailModal({ provider, onClose, onStatusUpdate,
           {/* Section 3: Financial & Banking */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
             <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>💳</span> Tài khoản thanh toán & Chính sách tài chính
+              <span>💳</span> Tài khoản thanh toán &amp; Chính sách tài chính
             </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
@@ -136,13 +164,13 @@ export default function ProviderDetailModal({ provider, onClose, onStatusUpdate,
               <div>
                 <span className="text-slate-500 block">Tỷ lệ hoa hồng sàn:</span>
                 <strong className="text-brand-700 font-bold">
-                  {provider.commissionRate != null ? `${provider.commissionRate}%` : 'Mặc định (10%)'}
+                  {provider.commissionRate != null ? `${Number(provider.commissionRate) * 100}%` : 'Mặc định (10%)'}
                 </strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Tỷ lệ tiền cọc tối thiểu:</span>
                 <strong className="text-slate-900 font-bold">
-                  {provider.depositRatio != null ? `${provider.depositRatio}%` : 'Mặc định (30%)'}
+                  {provider.depositRatio != null ? `${Number(provider.depositRatio) * 100}%` : 'Mặc định (30%)'}
                 </strong>
               </div>
             </div>
@@ -160,11 +188,11 @@ export default function ProviderDetailModal({ provider, onClose, onStatusUpdate,
           </button>
 
           <div className="flex items-center gap-2">
-            {provider.status !== 'ACTIVE' && (
+            {provider.status !== 'APPROVED' && provider.status !== 'ACTIVE' && (
               <button
                 type="button"
                 disabled={actionLoading}
-                onClick={() => onStatusUpdate(provider.id, 'ACTIVE')}
+                onClick={() => onStatusUpdate(provider.id, 'APPROVED')}
                 className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
               >
                 <IconCheckCircle className="h-4 w-4" />
@@ -172,11 +200,11 @@ export default function ProviderDetailModal({ provider, onClose, onStatusUpdate,
               </button>
             )}
 
-            {provider.status === 'ACTIVE' && (
+            {(provider.status === 'APPROVED' || provider.status === 'ACTIVE') && (
               <button
                 type="button"
                 disabled={actionLoading}
-                onClick={() => onStatusUpdate(provider.id, 'LOCKED')}
+                onClick={() => onStatusUpdate(provider.id, 'REJECTED')}
                 className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
               >
                 <IconLock className="h-4 w-4" />

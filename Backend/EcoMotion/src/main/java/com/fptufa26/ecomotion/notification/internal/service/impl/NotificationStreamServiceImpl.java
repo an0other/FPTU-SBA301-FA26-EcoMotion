@@ -1,7 +1,7 @@
-package com.fptufa26.ecomotion.common.service.implement;
+package com.fptufa26.ecomotion.notification.internal.service.impl;
 
 import tools.jackson.databind.ObjectMapper;
-import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 import com.fptufa26.ecomotion.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
