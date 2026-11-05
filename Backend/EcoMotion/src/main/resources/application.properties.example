@@ -56,7 +56,7 @@ spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.show-sql=true
 # Schema is created by src/main/resources/db/schema.sql. Do not let Hibernate alter it.
 # Dev may use `create-drop`; production MUST stay `none`.
-spring.jpa.hibernate.ddl-auto=none
+spring.jpa.hibernate.ddl-auto=${DB_DDL_AUTO:update}
 spring.data.jpa.repositories.enabled=true
 
 

@@ -4,7 +4,7 @@ import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
-import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.enums.*;

@@ -93,7 +93,7 @@ class Tv5FinancialSafetyIntegrationTest {
 
     PaymentTransaction incoming(Booking b, PaymentMethod method, BigDecimal amount) {
         PaymentTransaction t = new PaymentTransaction(); t.setBooking(b); t.setType(PaymentType.DEPOSIT_PAY);
-        t.setDirection(PaymentDirection.IN); t.setMethod(method); t.setAmount(amount); t.setStatus(PaymentStatus.PAID);
+        t.setDirection(PaymentDirection.IN); t.setMethod(method); t.setAmount(amount); t.setAppliedAmount(amount); t.setStatus(PaymentStatus.PAID);
         t.setVerificationMethod(method == PaymentMethod.VNPAY ? PaymentVerificationMethod.GATEWAY_VERIFIED : PaymentVerificationMethod.PROVIDER_CONFIRMED);
         em.persist(t); return t;
     }
@@ -233,6 +233,7 @@ class Tv5FinancialSafetyIntegrationTest {
         params.put("vnp_TmnCode", config.getTmnCode()); params.put("vnp_TxnRef", session.vnpTxnRef());
         params.put("vnp_Amount", session.amount().movePointRight(2).toBigIntegerExact().toString());
         params.put("vnp_ResponseCode", "00"); params.put("vnp_TransactionStatus", "00");
+        params.put("vnp_TransactionNo", "123456789");
         params.put("vnp_SecureHash", com.fptufa26.ecomotion.finance.config.VnpayUtils.hmacSHA512(config.getHashSecret(),
                 com.fptufa26.ecomotion.finance.config.VnpayUtils.buildHashData(params)));
         assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
@@ -280,6 +281,7 @@ class Tv5FinancialSafetyIntegrationTest {
         params.put("vnp_TmnCode", config.getTmnCode()); params.put("vnp_TxnRef", session.vnpTxnRef());
         params.put("vnp_Amount", session.amount().movePointRight(2).toBigIntegerExact().toString());
         params.put("vnp_ResponseCode", "00"); params.put("vnp_TransactionStatus", "00");
+        params.put("vnp_TransactionNo", "123456789");
         params.put("vnp_SecureHash", com.fptufa26.ecomotion.finance.config.VnpayUtils.hmacSHA512(config.getHashSecret(),
                 com.fptufa26.ecomotion.finance.config.VnpayUtils.buildHashData(params)));
         return params;
@@ -308,7 +310,8 @@ class Tv5FinancialSafetyIntegrationTest {
     @Test void disputeOpenedAfterCheckoutPreventsCompletionButDoesNotLoseVerifiedMoney() {
         var session = tx.execute(status -> {
             Booking b = em.find(Booking.class, bookingId); ledger.deleteAll(ledger.findByBooking_Id(bookingId));
-            b.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT); b.setActualEndAt(Instant.now()); em.flush();
+            b.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT); b.setActualEndAt(Instant.now());
+            b.setProviderConfirmedAt(Instant.now()); b.setRenterConfirmedAt(Instant.now()); em.flush();
             return vnpay.createPaymentUrl(renterId, new CreateVnpayPaymentUrlRequest(b.getBookingCode(), "FINAL_PAYMENT", null, "vn"), "127.0.0.1");
         });
         tx.executeWithoutResult(status -> {

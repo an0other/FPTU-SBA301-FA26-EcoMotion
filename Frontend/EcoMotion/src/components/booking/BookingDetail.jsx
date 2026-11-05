@@ -17,7 +17,6 @@ const DISPUTE_LABELS = {
 
 export const BookingDetail = ({
   booking,
-  operationalRisk,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
@@ -355,7 +354,7 @@ export const BookingDetail = ({
           )}
 
           {/* CONFIRMED HERO BANNER WITH CANCEL BUTTON */}
-          {booking.status === 'CONFIRMED' && (
+          {booking.status === 'CONFIRMED' && (booking.driver || booking.upfront) && (
             <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-[#14221A]">

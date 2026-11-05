@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
 
 import java.util.Map;
@@ -523,8 +523,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
 
         var availability = context.availability().get(driverId);
         if (availability.reason() != null) {
-            return buildIneligible(driver, fullName, phone, availability.reason()
-                    + (availability.conflictingBookingCode() == null ? "" : ": " + availability.conflictingBookingCode()));
+            return buildIneligible(driver, fullName, phone, availability.reason());
         }
         long activeTripsToday = context.workloads().getOrDefault(driverId, 0L);
 

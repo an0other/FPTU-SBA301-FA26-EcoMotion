@@ -5,7 +5,7 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
-import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 import com.fptufa26.ecomotion.user.dto.response.DriverStatusResponse;
 import com.fptufa26.ecomotion.user.dto.response.DriverTripSummaryResponse;
 import com.fptufa26.ecomotion.user.entity.Driver;
