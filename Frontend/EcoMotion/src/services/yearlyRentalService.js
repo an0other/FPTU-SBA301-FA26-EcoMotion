@@ -15,6 +15,29 @@ export const yearlyRentalService = {
     return data.data
   },
 
+  async getSupportedLicenseClasses() {
+    const { data } = await apiClient.get('/renter/driving-license/classes')
+    return data.data ?? []
+  },
+
+  async uploadDrivingLicense(front, back) {
+    const form = new FormData()
+    form.append('front', front)
+    form.append('back', back)
+    const { data } = await apiClient.post('/renter/driving-license/upload', form, {
+      timeout: 240000,
+    })
+    return data.data
+  },
+
+  async getDrivingLicenseImage(side) {
+    const { data } = await apiClient.get(
+      `/renter/driving-license/images/${encodeURIComponent(side)}`,
+      { responseType: 'blob' },
+    )
+    return data
+  },
+
   async getContractStatus(bookingCode) {
     const { data } = await apiClient.get(`${contractPath(bookingCode)}/status`)
     return data.data

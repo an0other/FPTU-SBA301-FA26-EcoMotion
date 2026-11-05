@@ -4,8 +4,16 @@ import java.time.LocalDate;
 
 public record DrivingLicenseResponse(
         String licenseNo,
+        String licenseFullName,
+        LocalDate licenseDateOfBirth,
         String licenseClass,
+        LocalDate licenseIssueDate,
         LocalDate licenseExpiry,
-        boolean licenseVerified
+        boolean licenseExpiryUnlimited,
+        boolean licenseVerified,
+        boolean yearlyBookingEligible,
+        String yearlyBookingIneligibleReason,
+        boolean frontImageAvailable,
+        boolean backImageAvailable
 ) {
 }

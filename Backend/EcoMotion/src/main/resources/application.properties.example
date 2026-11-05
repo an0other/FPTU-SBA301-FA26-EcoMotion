@@ -278,6 +278,13 @@ app.optimization.location-max-age-seconds=60
 
 app.optimization.unknown-eta-minutes=30
 
+app.vnpay.tmn-code=${VNPAY_TMN_CODE:}
+app.vnpay.hash-secret=${VNPAY_HASH_SECRET:}
+app.vnpay.payment-url=${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+app.vnpay.return-url=${VNPAY_RETURN_URL:http://localhost:5173/payment/vnpay/return}
+app.vnpay.ipn-url=${VNPAY_IPN_URL:http://localhost:8080/api/v1/payments/vnpay/ipn}
+app.vnpay.api-url=${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+app.vnpay.mode=${VNPAY_MODE:SANDBOX}
 app.vnpay.reconciliation-enabled=${VNPAY_RECONCILIATION_ENABLED:true}
 app.vnpay.server-ip=${VNPAY_SERVER_IP:127.0.0.1}
 app.vnpay.query-timeout=${VNPAY_QUERY_TIMEOUT:5s}

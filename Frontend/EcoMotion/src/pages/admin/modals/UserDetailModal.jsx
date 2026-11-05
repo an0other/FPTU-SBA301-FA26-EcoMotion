@@ -1,4 +1,5 @@
-import { IconX, IconLock, IconCheckCircle, IconUsers, IconShield } from '../../../components/icons/Icons'
+import { useState } from 'react'
+import { IconX, IconLock, IconCheckCircle, IconUsers, IconShield, IconEye } from '../../../components/icons/Icons'
 
 const ROLE_LABELS = {
   RENTER: 'Khách thuê (RENTER)',
@@ -13,10 +14,22 @@ const STATUS_BADGES = {
   APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
   LOCKED: 'bg-rose-50 text-rose-700 border-rose-200',
+  REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
-export default function UserDetailModal({ user, onClose, onToggleStatus, actionLoading }) {
+export default function UserDetailModal({
+  user,
+  onClose,
+  onToggleStatus,
+  actionLoading,
+  onPreviewImage,
+  onViewDriverDetail,
+}) {
+  const [avatarError, setAvatarError] = useState(false)
   if (!user) return null
+
+  const displayAvatar = !avatarError ? (user.portraitUrl || user.avatarUrl) : null
+  const isDriver = user.role === 'DRIVER' || Boolean(user.portraitUrl || user.licenseImageUrl || user.licenseNo)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -24,8 +37,25 @@ export default function UserDetailModal({ user, onClose, onToggleStatus, actionL
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-              <IconUsers className="h-6 w-6" />
+            <div
+              className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xs ${
+                displayAvatar ? 'cursor-pointer hover:ring-2 hover:ring-brand-500' : ''
+              }`}
+              onClick={() => displayAvatar && onPreviewImage && onPreviewImage(displayAvatar)}
+              title={displayAvatar ? 'Bấm để xem ảnh phóng to' : ''}
+            >
+              {displayAvatar ? (
+                <img
+                  src={displayAvatar}
+                  alt={user.fullName || 'Avatar'}
+                  className="h-full w-full object-cover transition-transform duration-200 hover:scale-105"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-slate-400">
+                  <IconUsers className="h-7 w-7" />
+                </div>
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -57,6 +87,7 @@ export default function UserDetailModal({ user, onClose, onToggleStatus, actionL
 
         {/* Content Body */}
         <div className="mt-5 space-y-4 text-xs">
+          {/* Section 1: Basic account info */}
           <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2">
             <div>
               <span className="text-slate-500 block">Địa chỉ Email:</span>
@@ -79,17 +110,122 @@ export default function UserDetailModal({ user, onClose, onToggleStatus, actionL
               </strong>
             </div>
           </div>
+
+          {/* Section 2: Driver Specific Details & Photos */}
+          {isDriver && (
+            <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/40 via-white to-slate-50 p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-indigo-100/70 pb-2.5">
+                <h4 className="font-bold uppercase tracking-wider text-indigo-950 text-[11px] flex items-center gap-1.5">
+                  <span>🪪</span> Hồ sơ &amp; Hình ảnh Tài xế
+                </h4>
+                {user.driverStatus && (
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                      STATUS_BADGES[user.driverStatus] || 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    Trạng thái duyệt: {user.driverStatus}
+                  </span>
+                )}
+              </div>
+
+              {/* Driver info fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <span className="text-slate-500 block">Số Giấy phép lái xe:</span>
+                  <strong className="text-slate-900 font-mono text-sm">{user.licenseNo || '—'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Hạng bằng lái:</span>
+                  <span className="inline-block mt-0.5 rounded-md bg-brand-50 border border-brand-200 px-2 py-0.5 text-xs font-bold text-brand-800">
+                    {user.licenseClass ? `Hạng ${user.licenseClass}` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Ngày hết hạn bằng lái:</span>
+                  <strong className="text-slate-900 mt-0.5 block">{user.licenseExpiry || 'Không thời hạn'}</strong>
+                </div>
+                {user.providerDisplayName && (
+                  <div className="sm:col-span-3">
+                    <span className="text-slate-500 block">Đơn vị / Nhà cung cấp chủ quản:</span>
+                    <strong className="text-brand-700">{user.providerDisplayName}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* Photos Gallery */}
+              <div>
+                <span className="text-slate-600 font-bold block mb-2">Hình ảnh tài xế &amp; Bằng lái xe (GPLX):</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Portrait photo */}
+                  <div
+                    onClick={() => (user.portraitUrl || user.avatarUrl) && onPreviewImage && onPreviewImage(user.portraitUrl || user.avatarUrl)}
+                    className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-brand-500 transition-all"
+                  >
+                    {user.portraitUrl || user.avatarUrl ? (
+                      <img
+                        src={user.portraitUrl || user.avatarUrl}
+                        alt="Ảnh chân dung tài xế"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-4 text-slate-400">
+                        <IconUsers className="h-8 w-8 mb-1" />
+                        <span className="text-[11px]">Chưa có ảnh chân dung</span>
+                      </div>
+                    )}
+                    <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/75 px-2 py-1 text-[10px] font-bold text-white shadow-xs">
+                      <IconEye className="h-3 w-3" /> Ảnh chân dung
+                    </span>
+                  </div>
+
+                  {/* License image */}
+                  <div
+                    onClick={() => user.licenseImageUrl && onPreviewImage && onPreviewImage(user.licenseImageUrl)}
+                    className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-brand-500 transition-all"
+                  >
+                    {user.licenseImageUrl ? (
+                      <img
+                        src={user.licenseImageUrl}
+                        alt="Ảnh GPLX"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-4 text-slate-400">
+                        <IconShield className="h-8 w-8 mb-1" />
+                        <span className="text-[11px]">Chưa có ảnh bằng lái</span>
+                      </div>
+                    )}
+                    <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/75 px-2 py-1 text-[10px] font-bold text-white shadow-xs">
+                      <IconEye className="h-3 w-3" /> Ảnh Bằng lái xe (GPLX)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Controls */}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Đóng
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Đóng
+            </button>
+            {isDriver && onViewDriverDetail && (
+              <button
+                type="button"
+                onClick={() => onViewDriverDetail(user)}
+                className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-xs font-bold text-brand-700 hover:bg-brand-100 transition-all"
+              >
+                Xem chi tiết duyệt tài xế
+              </button>
+            )}
+          </div>
 
           {user.role !== 'ADMIN' && (
             <button

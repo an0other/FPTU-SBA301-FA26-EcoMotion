@@ -239,7 +239,17 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         if ("VERIFYING".equals(payment)) return "Đang xác minh thanh toán với máy chủ. Không thanh toán lại trong lúc chờ kết quả.";
         return switch (booking.getStatus()) {
             case PENDING -> provider ? "Xem yêu cầu để chấp nhận hoặc từ chối." : "Chờ nhà xe duyệt. Bạn chưa cần thanh toán cọc.";
-            case ACCEPTED, AWAITING_DEPOSIT -> provider ? "Chờ khách thanh toán trong thời gian giữ lịch." : "Thanh toán cọc trước khi hết thời gian giữ lịch.";
+            case ACCEPTED -> booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+                    ? provider
+                        ? "Chờ người thuê tải hợp đồng đã ký lên trong thời gian giữ xe."
+                        : "Tải hợp đồng đã ký lên để tạo yêu cầu thanh toán trả trước."
+                    : provider ? "Chờ khách thanh toán trong thời gian giữ lịch."
+                        : "Thanh toán cọc trước khi hết thời gian giữ lịch.";
+            case AWAITING_DEPOSIT -> booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+                    ? provider ? "Chờ người thuê thanh toán khoản trả trước."
+                        : "Thanh toán khoản trả trước để xác nhận lịch thuê năm."
+                    : provider ? "Chờ khách thanh toán trong thời gian giữ lịch."
+                        : "Thanh toán cọc trước khi hết thời gian giữ lịch.";
             case DRIVER_ASSIGNED -> "Đã gửi yêu cầu cho tài xế, đang chờ phản hồi. Phân công chưa phải tài xế đã chấp nhận.";
             case DRIVER_CONFIRMED -> "Tài xế đã xác nhận. Theo dõi giờ đón và liên hệ khi cần.";
             case DRIVER_ARRIVED, AWAITING_START_CONFIRMATION -> "Tài xế đã đến. Hai bên cần xác nhận bắt đầu chuyến.";

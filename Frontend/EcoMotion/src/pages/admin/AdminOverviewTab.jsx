@@ -50,6 +50,72 @@ function generateFallbackMonths() {
   return list
 }
 
+function IconTrendingUp({ className = 'h-3.5 w-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  )
+}
+
+function IconTrendingDown({ className = 'h-3.5 w-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+      <polyline points="17 18 23 18 23 12" />
+    </svg>
+  )
+}
+
+function GrowthBadge({ rate, diff, isCurrency = false, label = '', size = 'sm' }) {
+  if (rate === null || rate === undefined) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 border border-slate-200/60">
+        <span>Kỳ đầu</span>
+      </span>
+    )
+  }
+
+  const numRate = Number(rate)
+  const isPositive = numRate > 0
+  const isNegative = numRate < 0
+
+  if (numRate === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-200">
+        <span>0.0%</span>
+        {label && <span className="font-normal text-slate-400">vs {label}</span>}
+      </span>
+    )
+  }
+
+  const badgeClass = isPositive
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+    : 'bg-rose-50 text-rose-700 border-rose-200/80'
+
+  const formattedDiff = diff != null
+    ? (isCurrency ? formatCompactVND(Math.abs(diff)) : `${Math.abs(diff)}`)
+    : null
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-extrabold border shadow-2xs ${badgeClass} ${size === 'xs' ? 'text-[9px]' : size === 'md' ? 'text-xs px-2 py-1' : 'text-[10px]'
+        }`}
+      title={diff != null ? `${isPositive ? '+' : '-'}${isCurrency ? formatVND(diff) : diff} so với ${label || 'kỳ trước'}` : ''}
+    >
+      {isPositive ? <IconTrendingUp className="h-3 w-3 shrink-0" /> : <IconTrendingDown className="h-3 w-3 shrink-0" />}
+      <span>{isPositive ? `+${numRate.toFixed(1)}%` : `${numRate.toFixed(1)}%`}</span>
+      {formattedDiff && (
+        <span className="font-medium opacity-85 text-[9px] hidden sm:inline">
+          ({isPositive ? '+' : '-'}{formattedDiff})
+        </span>
+      )}
+      {label && <span className="font-normal text-[9px] opacity-75">vs {label}</span>}
+    </span>
+  )
+}
+
 export default function AdminOverviewTab({
   stats,
   loading,
@@ -76,6 +142,16 @@ export default function AdminOverviewTab({
     }
     return generateFallbackMonths()
   }, [stats?.monthlySummaries])
+
+  // Chronological 6 months for trend chart (oldest to newest)
+  const chronologicalMonths = useMemo(() => {
+    return [...(stats?.monthlySummaries || [])].reverse()
+  }, [stats?.monthlySummaries])
+
+  const maxTrendGmv = useMemo(() => {
+    if (!chronologicalMonths || chronologicalMonths.length === 0) return 1
+    return Math.max(...chronologicalMonths.map((m) => Number(m.grossMerchandiseValue ?? 0)), 1)
+  }, [chronologicalMonths])
 
   const isAllTime = selectedMonthKey === 'ALL'
   const currentMonthOption = monthOptions.find((opt) => opt.key === selectedMonthKey)
@@ -141,6 +217,9 @@ export default function AdminOverviewTab({
         ? `Thu từ ${completedBookings} chuyến xong`
         : `Thu từ ${completedBookings} chuyến xong trong tháng`,
       value: commission,
+      growthRate: stats?.commissionGrowthRate,
+      growthDiff: stats?.commissionDiff,
+      isCurrency: true,
       heightPct: commission > 0 ? Math.max(Math.round((commission / maxBarValue) * 100), 6) : 0,
       color: 'emerald',
       barBg: 'bg-gradient-to-t from-emerald-600 via-emerald-500 to-teal-400',
@@ -157,6 +236,9 @@ export default function AdminOverviewTab({
         ? `Tổng giá trị ${completedBookings} chuyến`
         : `Tổng giá trị ${completedBookings} chuyến tháng này`,
       value: gmv,
+      growthRate: stats?.gmvGrowthRate,
+      growthDiff: stats?.gmvDiff,
+      isCurrency: true,
       heightPct: gmv > 0 ? Math.max(Math.round((gmv / maxBarValue) * 100), 6) : 0,
       color: 'sky',
       barBg: 'bg-gradient-to-t from-sky-600 via-sky-500 to-blue-400',
@@ -171,6 +253,9 @@ export default function AdminOverviewTab({
       shortLabel: 'Trả Chủ xe',
       sublabel: 'Nghĩa vụ chi trả NCC',
       value: payout,
+      growthRate: stats?.payoutGrowthRate,
+      growthDiff: stats?.payoutDiff,
+      isCurrency: true,
       heightPct: payout > 0 ? Math.max(Math.round((payout / maxBarValue) * 100), 6) : 0,
       color: 'indigo',
       barBg: 'bg-gradient-to-t from-indigo-600 via-indigo-500 to-indigo-400',
@@ -187,9 +272,12 @@ export default function AdminOverviewTab({
         escrow > 0
           ? 'Đơn đang chạy / chờ hoàn'
           : !isAllTime
-          ? 'Không còn cọc tạm giữ (0 ₫)'
-          : '0 đơn đang cọc',
+            ? 'Không còn cọc tạm giữ (0 ₫)'
+            : '0 đơn đang cọc',
       value: escrow,
+      growthRate: null,
+      growthDiff: null,
+      isCurrency: true,
       heightPct: escrow > 0 ? Math.max(Math.round((escrow / maxBarValue) * 100), 6) : 0,
       color: 'amber',
       barBg: 'bg-gradient-to-t from-amber-600 via-amber-500 to-orange-400',
@@ -204,40 +292,40 @@ export default function AdminOverviewTab({
     activeSegment === 'commission'
       ? 'Hoa hồng sàn'
       : activeSegment === 'payout'
-      ? 'Đối soát NCC'
-      : activeSegment === 'escrow'
-      ? 'Quỹ cọc lưu ký'
-      : activeSegment === 'gmv'
-      ? 'Tổng GMV Sàn'
-      : 'Tổng dòng tiền'
+        ? 'Đối soát NCC'
+        : activeSegment === 'escrow'
+          ? 'Quỹ cọc lưu ký'
+          : activeSegment === 'gmv'
+            ? 'Tổng GMV Sàn'
+            : 'Tổng dòng tiền'
 
   const centerValue =
     activeSegment === 'commission'
       ? formatCompactVND(commission)
       : activeSegment === 'payout'
-      ? formatCompactVND(payout)
-      : activeSegment === 'escrow'
-      ? formatCompactVND(escrow)
-      : activeSegment === 'gmv'
-      ? formatCompactVND(gmv)
-      : totalAllocated > 0
-      ? formatCompactVND(totalAllocated)
-      : '0 ₫'
+        ? formatCompactVND(payout)
+        : activeSegment === 'escrow'
+          ? formatCompactVND(escrow)
+          : activeSegment === 'gmv'
+            ? formatCompactVND(gmv)
+            : totalAllocated > 0
+              ? formatCompactVND(totalAllocated)
+              : '0 ₫'
 
   const centerSub =
     activeSegment === 'commission'
       ? `${pctCommission.toFixed(1)}% cơ cấu`
       : activeSegment === 'payout'
-      ? `${pctPayout.toFixed(1)}% cơ cấu`
-      : activeSegment === 'escrow'
-      ? escrow > 0
-        ? `${pctEscrow.toFixed(1)}% cơ cấu`
-        : '0.0% (Không còn cọc)'
-      : activeSegment === 'gmv'
-      ? `${completedBookings} chuyến xong`
-      : totalAllocated > 0
-      ? `${formatCompactVND(gmv)} GMV`
-      : 'Chưa có dòng tiền'
+        ? `${pctPayout.toFixed(1)}% cơ cấu`
+        : activeSegment === 'escrow'
+          ? escrow > 0
+            ? `${pctEscrow.toFixed(1)}% cơ cấu`
+            : '0.0% (Không còn cọc)'
+          : activeSegment === 'gmv'
+            ? `${completedBookings} chuyến xong`
+            : totalAllocated > 0
+              ? `${formatCompactVND(gmv)} GMV`
+              : 'Chưa có dòng tiền'
 
   const kpis = [
     {
@@ -402,35 +490,42 @@ export default function AdminOverviewTab({
               <button
                 type="button"
                 onClick={() => setChartView('both')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
-                  chartView === 'both'
+                className={`rounded-lg px-3 py-1.5 transition-all ${chartView === 'both'
                     ? 'bg-white font-semibold text-slate-900 shadow-xs'
                     : 'hover:text-slate-900'
-                }`}
+                  }`}
               >
                 Cả 2 biểu đồ
               </button>
               <button
                 type="button"
                 onClick={() => setChartView('donut')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
-                  chartView === 'donut'
+                className={`rounded-lg px-3 py-1.5 transition-all ${chartView === 'donut'
                     ? 'bg-white font-semibold text-slate-900 shadow-xs'
                     : 'hover:text-slate-900'
-                }`}
+                  }`}
               >
                 Cơ cấu (Tròn)
               </button>
               <button
                 type="button"
                 onClick={() => setChartView('bar')}
-                className={`rounded-lg px-3 py-1.5 transition-all ${
-                  chartView === 'bar'
+                className={`rounded-lg px-3 py-1.5 transition-all ${chartView === 'bar'
                     ? 'bg-white font-semibold text-slate-900 shadow-xs'
                     : 'hover:text-slate-900'
-                }`}
+                  }`}
               >
                 Quy mô (Cột)
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartView('trend')}
+                className={`rounded-lg px-3 py-1.5 transition-all ${chartView === 'trend'
+                    ? 'bg-white font-semibold text-slate-900 shadow-xs'
+                    : 'hover:text-slate-900'
+                  }`}
+              >
+                Xu hướng các tháng
               </button>
             </div>
 
@@ -484,11 +579,10 @@ export default function AdminOverviewTab({
                 key={item.id}
                 onMouseEnter={() => setActiveSegment(item.id)}
                 onMouseLeave={() => setActiveSegment(null)}
-                className={`group cursor-pointer rounded-xl border p-3.5 transition-all duration-200 ${
-                  isHovered
+                className={`group cursor-pointer rounded-xl border p-3.5 transition-all duration-200 ${isHovered
                     ? 'border-brand-500 bg-brand-50/30 shadow-sm ring-1 ring-brand-500/40 -translate-y-0.5'
                     : 'border-slate-200/80 bg-slate-50/40 hover:border-slate-300 hover:bg-white hover:shadow-xs'
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-slate-500 line-clamp-1">
@@ -498,25 +592,178 @@ export default function AdminOverviewTab({
                     <Icon className="h-3.5 w-3.5" />
                   </span>
                 </div>
-                <div className="mt-1.5 text-lg font-black tracking-tight text-slate-900">
-                  {formatVND(item.value)}
+                <div className="mt-1.5 flex items-baseline justify-between gap-1">
+                  <span className="text-lg font-black tracking-tight text-slate-900">
+                    {formatVND(item.value)}
+                  </span>
+                  {item.growthRate != null && !isAllTime && (
+                    <GrowthBadge
+                      rate={item.growthRate}
+                      diff={item.growthDiff}
+                      isCurrency={item.isCurrency}
+                      size="xs"
+                    />
+                  )}
                 </div>
-                <div className="mt-1 text-[11px] text-slate-500 truncate">
-                  {item.sublabel}
+                <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500 truncate">
+                  <span className="truncate">{item.sublabel}</span>
+                  {item.growthRate != null && !isAllTime && stats?.comparedToLabel && (
+                    <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1">
+                      vs {stats.comparedToLabel.replace('Tháng ', 'T')}
+                    </span>
+                  )}
                 </div>
               </div>
             )
           })}
         </div>
 
+        {/* Month-over-Month (MoM) Growth Comparison Callout */}
+        {!isAllTime && stats?.comparedToLabel && (
+          <div className="mt-4 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/70 via-sky-50/40 to-emerald-50/30 p-4 sm:p-5 shadow-xs">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-indigo-100/70 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+                  <IconTrendingUp className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 flex flex-wrap items-center gap-2">
+                    <span>So sánh quy mô tài chính: {currentPeriodLabel} vs {stats.comparedToLabel}</span>
+                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-extrabold border border-emerald-200">
+                      Tăng trưởng MoM
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Đối chiếu doanh thu hoa hồng sàn, tổng GMV và số chuyến hoàn thành giữa 2 kỳ liên tiếp
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs font-semibold text-indigo-800 bg-white/90 border border-indigo-200/80 rounded-xl px-3 py-1 shadow-2xs self-start sm:self-auto">
+                Kỳ đối chiếu: <strong>{stats.comparedToLabel}</strong>
+              </div>
+            </div>
+
+            {/* 4 MoM Growth Stat Blocks */}
+            <div className="mt-3.5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {/* Block 1: Commission */}
+              <div className="rounded-xl border border-emerald-200/80 bg-white/95 p-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-600">Hoa hồng sàn</span>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-base sm:text-lg font-black text-slate-900">{formatCompactVND(commission)}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <GrowthBadge
+                    rate={stats?.commissionGrowthRate}
+                    diff={stats?.commissionDiff}
+                    isCurrency={true}
+                    label={stats.comparedToLabel ? stats.comparedToLabel.replace('Tháng ', 'T') : ''}
+                    size="sm"
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500 truncate">
+                  {stats?.commissionDiff != null ? (
+                    Number(stats.commissionDiff) >= 0
+                      ? `Tăng +${formatVND(stats.commissionDiff)} so với kỳ trước`
+                      : `Giảm ${formatVND(stats.commissionDiff)} so với kỳ trước`
+                  ) : 'Kỳ so sánh gốc'}
+                </div>
+              </div>
+
+              {/* Block 2: GMV */}
+              <div className="rounded-xl border border-sky-200/80 bg-white/95 p-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-600">Tổng GMV</span>
+                  <span className="h-2 w-2 rounded-full bg-sky-500" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-base sm:text-lg font-black text-slate-900">{formatCompactVND(gmv)}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <GrowthBadge
+                    rate={stats?.gmvGrowthRate}
+                    diff={stats?.gmvDiff}
+                    isCurrency={true}
+                    label={stats.comparedToLabel ? stats.comparedToLabel.replace('Tháng ', 'T') : ''}
+                    size="sm"
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500 truncate">
+                  {stats?.gmvDiff != null ? (
+                    Number(stats.gmvDiff) >= 0
+                      ? `Tăng +${formatVND(stats.gmvDiff)} GMV sàn`
+                      : `Giảm ${formatVND(stats.gmvDiff)} GMV sàn`
+                  ) : 'Kỳ so sánh gốc'}
+                </div>
+              </div>
+
+              {/* Block 3: Payout */}
+              <div className="rounded-xl border border-indigo-200/80 bg-white/95 p-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-600">Trả Chủ xe</span>
+                  <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-base sm:text-lg font-black text-slate-900">{formatCompactVND(payout)}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <GrowthBadge
+                    rate={stats?.payoutGrowthRate}
+                    diff={stats?.payoutDiff}
+                    isCurrency={true}
+                    label={stats.comparedToLabel ? stats.comparedToLabel.replace('Tháng ', 'T') : ''}
+                    size="sm"
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500 truncate">
+                  {stats?.payoutDiff != null ? (
+                    Number(stats.payoutDiff) >= 0
+                      ? `Tăng +${formatVND(stats.payoutDiff)} trả NCC`
+                      : `Giảm ${formatVND(stats.payoutDiff)} trả NCC`
+                  ) : 'Kỳ so sánh gốc'}
+                </div>
+              </div>
+
+              {/* Block 4: Completed Trips */}
+              <div className="rounded-xl border border-purple-200/80 bg-white/95 p-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-600">Chuyến xong</span>
+                  <span className="h-2 w-2 rounded-full bg-purple-500" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-base sm:text-lg font-black text-slate-900">{completedBookings}</span>
+                  <span className="text-xs text-slate-500">chuyến</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <GrowthBadge
+                    rate={stats?.bookingsGrowthRate}
+                    diff={stats?.bookingsDiff}
+                    isCurrency={false}
+                    label={stats.comparedToLabel ? stats.comparedToLabel.replace('Tháng ', 'T') : ''}
+                    size="sm"
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500 truncate">
+                  {stats?.bookingsDiff != null ? (
+                    stats.bookingsDiff >= 0
+                      ? `Tăng +${stats.bookingsDiff} chuyến xong`
+                      : `Giảm ${stats.bookingsDiff} chuyến xong`
+                  ) : 'Kỳ so sánh gốc'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Financial Charts Container */}
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
           {/* Donut Chart: Cash Flow & Revenue Allocation */}
           {(chartView === 'both' || chartView === 'donut') && (
             <div
-              className={`${
-                chartView === 'both' ? 'lg:col-span-5' : 'lg:col-span-12'
-              } flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/60 via-white to-white p-5 shadow-xs`}
+              className={`${chartView === 'both' ? 'lg:col-span-5' : 'lg:col-span-12'
+                } flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/60 via-white to-white p-5 shadow-xs`}
             >
               <div>
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -635,9 +882,8 @@ export default function AdminOverviewTab({
                 <div
                   onMouseEnter={() => setActiveSegment('commission')}
                   onMouseLeave={() => setActiveSegment(null)}
-                  className={`cursor-pointer rounded-xl p-2 transition-all ${
-                    activeSegment === 'commission' ? 'bg-emerald-50/80 ring-1 ring-emerald-300' : 'hover:bg-slate-50'
-                  }`}
+                  className={`cursor-pointer rounded-xl p-2 transition-all ${activeSegment === 'commission' ? 'bg-emerald-50/80 ring-1 ring-emerald-300' : 'hover:bg-slate-50'
+                    }`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-2 font-semibold text-slate-700">
@@ -663,9 +909,8 @@ export default function AdminOverviewTab({
                 <div
                   onMouseEnter={() => setActiveSegment('payout')}
                   onMouseLeave={() => setActiveSegment(null)}
-                  className={`cursor-pointer rounded-xl p-2 transition-all ${
-                    activeSegment === 'payout' ? 'bg-indigo-50/80 ring-1 ring-indigo-300' : 'hover:bg-slate-50'
-                  }`}
+                  className={`cursor-pointer rounded-xl p-2 transition-all ${activeSegment === 'payout' ? 'bg-indigo-50/80 ring-1 ring-indigo-300' : 'hover:bg-slate-50'
+                    }`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-2 font-semibold text-slate-700">
@@ -691,9 +936,8 @@ export default function AdminOverviewTab({
                 <div
                   onMouseEnter={() => setActiveSegment('escrow')}
                   onMouseLeave={() => setActiveSegment(null)}
-                  className={`cursor-pointer rounded-xl p-2 transition-all ${
-                    activeSegment === 'escrow' ? 'bg-amber-50/80 ring-1 ring-amber-300' : 'hover:bg-slate-50'
-                  }`}
+                  className={`cursor-pointer rounded-xl p-2 transition-all ${activeSegment === 'escrow' ? 'bg-amber-50/80 ring-1 ring-amber-300' : 'hover:bg-slate-50'
+                    }`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-2 font-semibold text-slate-700">
@@ -728,9 +972,8 @@ export default function AdminOverviewTab({
           {/* Bar Chart: Scale Comparison of Financial Metrics */}
           {(chartView === 'both' || chartView === 'bar') && (
             <div
-              className={`${
-                chartView === 'both' ? 'lg:col-span-7' : 'lg:col-span-12'
-              } flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/60 via-white to-white p-5 shadow-xs`}
+              className={`${chartView === 'both' ? 'lg:col-span-7' : 'lg:col-span-12'
+                } flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/60 via-white to-white p-5 shadow-xs`}
             >
               <div>
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -779,11 +1022,10 @@ export default function AdminOverviewTab({
                         >
                           {/* Value on Top of Bar */}
                           <div
-                            className={`mb-2 rounded-md px-1.5 py-0.5 text-center text-[11px] font-extrabold shadow-2xs transition-all duration-200 ${
-                              isHovered
+                            className={`mb-2 rounded-md px-1.5 py-0.5 text-center text-[11px] font-extrabold shadow-2xs transition-all duration-200 ${isHovered
                                 ? 'scale-110 bg-slate-900 text-white'
                                 : 'bg-white/95 text-slate-800 border border-slate-200/80'
-                            }`}
+                              }`}
                           >
                             {formatCompactVND(bar.value)}
                           </div>
@@ -797,11 +1039,9 @@ export default function AdminOverviewTab({
                             }}
                           >
                             <div
-                              className={`h-full w-full ${
-                                bar.value > 0 ? bar.barBg : 'bg-slate-200'
-                              } transition-all duration-300 ${
-                                isHovered ? 'brightness-110 ring-2 ring-white/50' : 'opacity-90'
-                              }`}
+                              className={`h-full w-full ${bar.value > 0 ? bar.barBg : 'bg-slate-200'
+                                } transition-all duration-300 ${isHovered ? 'brightness-110 ring-2 ring-white/50' : 'opacity-90'
+                                }`}
                             />
                           </div>
 
@@ -827,9 +1067,8 @@ export default function AdminOverviewTab({
                         key={bar.id}
                         onMouseEnter={() => setActiveSegment(bar.id)}
                         onMouseLeave={() => setActiveSegment(null)}
-                        className={`cursor-pointer rounded-lg p-1.5 transition-all ${
-                          isHovered ? 'bg-slate-100/80 font-bold' : ''
-                        }`}
+                        className={`cursor-pointer rounded-lg p-1.5 transition-all ${isHovered ? 'bg-slate-100/80 font-bold' : ''
+                          }`}
                       >
                         <div className="flex items-center justify-center gap-1.5">
                           <span className={`h-2 w-2 rounded-full ${bar.dotColor}`} />
@@ -857,12 +1096,164 @@ export default function AdminOverviewTab({
               </div>
             </div>
           )}
+
+          {/* Multi-Month Financial Scale & Trend Comparison Chart */}
+          {chartView === 'trend' && (
+            <div className="lg:col-span-12 flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/60 via-white to-white p-5 sm:p-6 shadow-xs">
+              <div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+                        <IconTrendingUp className="h-4 w-4" />
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900">
+                        Biểu đồ so sánh quy mô tài chính theo từng tháng
+                      </h3>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      So sánh GMV &amp; Hoa hồng sàn qua các tháng gần nhất (MoM) — Bấm vào tháng để lọc chi tiết
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 border border-sky-200">
+                      <span className="h-2 w-2 rounded-full bg-sky-500" />
+                      Tổng GMV
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      Hoa hồng sàn (Doanh thu)
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 border border-indigo-200">
+                      Tăng trưởng MoM
+                    </span>
+                  </div>
+                </div>
+
+                {/* 6-Month Comparative Scale Chart */}
+                <div className="relative mt-6 pt-10 pb-4">
+                  {/* Grid Lines */}
+                  <div className="pointer-events-none absolute inset-x-0 bottom-16 top-10 flex flex-col justify-between">
+                    <div className="flex items-center border-b border-dashed border-slate-200/80">
+                      <span className="pr-1 text-[9px] font-medium text-slate-400">100% ({formatCompactVND(maxTrendGmv)})</span>
+                    </div>
+                    <div className="flex items-center border-b border-dashed border-slate-200/80">
+                      <span className="pr-1 text-[9px] font-medium text-slate-400">75%</span>
+                    </div>
+                    <div className="flex items-center border-b border-dashed border-slate-200/80">
+                      <span className="pr-1 text-[9px] font-medium text-slate-400">50%</span>
+                    </div>
+                    <div className="flex items-center border-b border-dashed border-slate-200/80">
+                      <span className="pr-1 text-[9px] font-medium text-slate-400">25%</span>
+                    </div>
+                    <div className="flex items-center border-b border-slate-200">
+                      <span className="pr-1 text-[9px] font-medium text-slate-400">0 ₫</span>
+                    </div>
+                  </div>
+
+                  {/* Columns Grid */}
+                  <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4 items-end px-2 sm:px-6">
+                    {chronologicalMonths.map((m) => {
+                      const rowKey = `${m.year}-${String(m.month).padStart(2, '0')}`
+                      const isSelected = selectedMonthKey === rowKey
+                      const gmvVal = Number(m.grossMerchandiseValue ?? 0)
+                      const commVal = Number(m.platformCommission ?? 0)
+                      const gmvHeight = maxTrendGmv > 0 ? Math.max(Math.round((gmvVal / maxTrendGmv) * 100), 8) : 8
+                      const commHeight = maxTrendGmv > 0 ? Math.max(Math.round((commVal / maxTrendGmv) * 100), 5) : 5
+
+                      return (
+                        <div
+                          key={rowKey}
+                          onClick={() => onMonthChange?.(rowKey)}
+                          className={`group relative flex flex-col items-center justify-end rounded-xl p-2 transition-all cursor-pointer ${isSelected
+                              ? 'bg-brand-50/60 ring-2 ring-brand-500 shadow-sm'
+                              : 'hover:bg-slate-50/80'
+                            }`}
+                        >
+                          {/* Top Growth Rate Tag */}
+                          <div className="mb-2 flex flex-col items-center">
+                            {m.commissionGrowthRate != null ? (
+                              <GrowthBadge
+                                rate={m.commissionGrowthRate}
+                                diff={m.commissionDiff}
+                                isCurrency={true}
+                                size="xs"
+                              />
+                            ) : (
+                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+                                Kỳ gốc
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Dual Bars: GMV & Commission */}
+                          <div className="flex h-56 items-end justify-center gap-1.5 sm:gap-2 w-full">
+                            {/* GMV Bar */}
+                            <div className="flex flex-col items-center h-full justify-end flex-1 max-w-[36px]">
+                              <span className="mb-1 text-[10px] font-bold text-sky-800 opacity-90 truncate group-hover:scale-105 transition-transform">
+                                {formatCompactVND(gmvVal)}
+                              </span>
+                              <div
+                                style={{ height: `${gmvHeight}%` }}
+                                className="w-full rounded-t-lg bg-gradient-to-t from-sky-600 via-sky-500 to-sky-400 transition-all duration-500 shadow-xs group-hover:brightness-110"
+                                title={`Tổng GMV: ${formatVND(gmvVal)}`}
+                              />
+                            </div>
+
+                            {/* Commission Bar */}
+                            <div className="flex flex-col items-center h-full justify-end flex-1 max-w-[36px]">
+                              <span className="mb-1 text-[10px] font-bold text-emerald-800 opacity-90 truncate group-hover:scale-105 transition-transform">
+                                {formatCompactVND(commVal)}
+                              </span>
+                              <div
+                                style={{ height: `${commHeight}%` }}
+                                className="w-full rounded-t-lg bg-gradient-to-t from-emerald-600 via-emerald-500 to-teal-400 transition-all duration-500 shadow-xs group-hover:brightness-110"
+                                title={`Hoa hồng sàn: ${formatVND(commVal)}`}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Month Bottom Label */}
+                          <div className="mt-3 text-center border-t border-slate-100 pt-2 w-full">
+                            <div className="text-xs font-bold text-slate-800 truncate">
+                              {m.label}
+                            </div>
+                            <div className="mt-0.5 text-[10px] font-medium text-slate-500 flex items-center justify-center gap-1">
+                              <span>{m.completedBookings} chuyến</span>
+                              {isSelected && (
+                                <span className="rounded bg-brand-600 text-white px-1 py-0.2 text-[8px] font-extrabold">
+                                  CHỌN
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Note */}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50/80 px-4 py-2.5 text-xs text-slate-600 border border-slate-100">
+                <span className="flex items-center gap-1.5">
+                  <IconSparkles className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>
+                    Ví dụ: Tháng 10/2026 có Doanh thu sàn đạt <strong>1.675.000 ₫</strong> (tăng <strong>+17.0%</strong> so với Tháng 09/2026).
+                  </span>
+                </span>
+                <span className="font-semibold text-slate-700">
+                  GMV cao nhất: {formatCompactVND(maxTrendGmv)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Monthly Breakdown History Table */}
         {stats?.monthlySummaries && stats.monthlySummaries.length > 0 && (
           <div className="mt-8 border-t border-slate-100 pt-6">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <span>Bảng đối soát tài chính theo từng tháng</span>
@@ -871,11 +1262,21 @@ export default function AdminOverviewTab({
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Chọn tháng bất kỳ để xem chi tiết cơ cấu dòng tiền và quy mô tài chính
+                  Đối chiếu quy mô và tăng trưởng theo từng tháng (MoM). Bấm "Xem biểu đồ" hoặc chọn tháng để lọc chi tiết.
                 </p>
               </div>
-              <div className="text-[11px] text-slate-500 italic">
-                * Quỹ cọc hiển thị 0 ₫ đối với các kỳ đối soát đã kết thúc hoàn toàn
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChartView(chartView === 'trend' ? 'both' : 'trend')}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all shadow-2xs ${chartView === 'trend'
+                      ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                  <IconTrendingUp className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>{chartView === 'trend' ? 'Đóng biểu đồ xu hướng' : 'Xem biểu đồ xu hướng MoM'}</span>
+                </button>
               </div>
             </div>
 
@@ -884,8 +1285,8 @@ export default function AdminOverviewTab({
                 <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3">Kỳ đối soát</th>
-                    <th className="px-4 py-3 text-right">Tổng GMV</th>
-                    <th className="px-4 py-3 text-right">Hoa hồng sàn</th>
+                    <th className="px-4 py-3 text-right">Tổng GMV (MoM)</th>
+                    <th className="px-4 py-3 text-right">Hoa hồng sàn (MoM)</th>
                     <th className="px-4 py-3 text-right">Trả Chủ xe</th>
                     <th className="px-4 py-3 text-right">Quỹ cọc lưu ký</th>
                     <th className="px-4 py-3 text-center">Chuyến xong</th>
@@ -901,9 +1302,8 @@ export default function AdminOverviewTab({
                     return (
                       <tr
                         key={rowKey}
-                        className={`transition-colors ${
-                          isSelected ? 'bg-brand-50/40 font-semibold' : 'hover:bg-slate-50/70'
-                        }`}
+                        className={`transition-colors ${isSelected ? 'bg-brand-50/40 font-semibold' : 'hover:bg-slate-50/70'
+                          }`}
                       >
                         <td className="px-4 py-3 font-bold text-slate-900 flex items-center gap-2">
                           <IconCalendar className="h-3.5 w-3.5 text-brand-600" />
@@ -915,13 +1315,43 @@ export default function AdminOverviewTab({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                          {formatVND(m.grossMerchandiseValue)}
+                          <div>{formatVND(m.grossMerchandiseValue)}</div>
+                          {m.gmvGrowthRate != null && (
+                            <div className="mt-0.5 flex justify-end">
+                              <GrowthBadge
+                                rate={m.gmvGrowthRate}
+                                diff={m.gmvDiff}
+                                isCurrency={true}
+                                size="xs"
+                              />
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold text-emerald-600">
-                          {formatVND(m.platformCommission)}
+                          <div>{formatVND(m.platformCommission)}</div>
+                          {m.commissionGrowthRate != null && (
+                            <div className="mt-0.5 flex justify-end">
+                              <GrowthBadge
+                                rate={m.commissionGrowthRate}
+                                diff={m.commissionDiff}
+                                isCurrency={true}
+                                size="xs"
+                              />
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold text-indigo-600">
-                          {formatVND(m.providerPayoutDue)}
+                          <div>{formatVND(m.providerPayoutDue)}</div>
+                          {m.payoutGrowthRate != null && (
+                            <div className="mt-0.5 flex justify-end">
+                              <GrowthBadge
+                                rate={m.payoutGrowthRate}
+                                diff={m.payoutDiff}
+                                isCurrency={true}
+                                size="xs"
+                              />
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {hasEscrow ? (
@@ -934,7 +1364,17 @@ export default function AdminOverviewTab({
                           )}
                         </td>
                         <td className="px-4 py-3 text-center font-bold text-slate-800">
-                          {m.completedBookings}
+                          <div>{m.completedBookings}</div>
+                          {m.bookingsGrowthRate != null && (
+                            <div className="mt-0.5 flex justify-center">
+                              <GrowthBadge
+                                rate={m.bookingsGrowthRate}
+                                diff={m.bookingsDiff}
+                                isCurrency={false}
+                                size="xs"
+                              />
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
                           {isSelected ? (
@@ -951,7 +1391,7 @@ export default function AdminOverviewTab({
                               onClick={() => onMonthChange?.(rowKey)}
                               className="rounded-lg bg-brand-50 border border-brand-200/80 px-2.5 py-1 text-[11px] font-bold text-brand-700 hover:bg-brand-600 hover:text-white transition-all shadow-2xs"
                             >
-                              Xem biểu đồ
+                              Xem chi tiết
                             </button>
                           )}
                         </td>

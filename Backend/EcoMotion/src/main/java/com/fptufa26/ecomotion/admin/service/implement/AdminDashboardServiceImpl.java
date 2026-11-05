@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -49,6 +50,16 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         long completedBookings;
         long totalBookings;
 
+        BigDecimal commissionGrowthRate = null;
+        BigDecimal gmvGrowthRate = null;
+        BigDecimal payoutGrowthRate = null;
+        BigDecimal bookingsGrowthRate = null;
+        BigDecimal commissionDiff = null;
+        BigDecimal gmvDiff = null;
+        BigDecimal payoutDiff = null;
+        Long bookingsDiff = null;
+        String comparedToLabel = null;
+
         if (year != null && month != null && month >= 1 && month <= 12) {
             YearMonth ym = YearMonth.of(year, month);
             Instant from = ym.atDay(1).atStartOfDay(ZONE_VN).toInstant();
@@ -61,9 +72,35 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             if (escrowDeposits == null) {
                 escrowDeposits = BigDecimal.ZERO;
             }
-            gmv = grossCompleted.compareTo(BigDecimal.ZERO) > 0 ? grossCompleted : bookingService.sumTotalRevenue(from, to);
+            gmv = grossCompleted.compareTo(BigDecimal.ZERO) > 0 ? grossCompleted
+                    : bookingService.sumTotalRevenue(from, to);
             completedBookings = bookingService.countCompletedBookings(from, to);
             totalBookings = bookingService.countTotalBookings(from, to);
+
+            // Previous month metrics for MoM comparison
+            YearMonth prevYm = ym.minusMonths(1);
+            Instant prevFrom = prevYm.atDay(1).atStartOfDay(ZONE_VN).toInstant();
+            Instant prevTo = prevYm.plusMonths(1).atDay(1).atStartOfDay(ZONE_VN).toInstant();
+
+            BigDecimal prevCommission = bookingService.sumAdminCommission(prevFrom, prevTo);
+            BigDecimal prevGross = bookingService.sumCompletedGrossRentalVolume(prevFrom, prevTo);
+            BigDecimal prevPayout = prevGross.subtract(prevCommission).max(BigDecimal.ZERO);
+            long prevCompleted = bookingService.countCompletedBookings(prevFrom, prevTo);
+
+            comparedToLabel = String.format("Tháng %02d/%d", prevYm.getMonthValue(), prevYm.getYear());
+            commissionDiff = platformCommission.subtract(prevCommission);
+            commissionGrowthRate = calculateGrowthRate(platformCommission, prevCommission);
+
+            gmvDiff = gmv.subtract(prevGross);
+            gmvGrowthRate = calculateGrowthRate(gmv, prevGross);
+
+            payoutDiff = providerPayoutDue.subtract(prevPayout);
+            payoutGrowthRate = calculateGrowthRate(providerPayoutDue, prevPayout);
+
+            bookingsDiff = completedBookings - prevCompleted;
+            bookingsGrowthRate = calculateGrowthRate(
+                    BigDecimal.valueOf(completedBookings),
+                    BigDecimal.valueOf(prevCompleted));
         } else {
             platformCommission = bookingService.sumAdminCommission();
             grossCompleted = bookingService.sumCompletedGrossRentalVolume();
@@ -85,7 +122,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .pendingEkyc(userService.countPendingEkyc())
                 .pendingVehicles(vehicleService.countVehiclesByStatus(VehicleStatus.PENDING))
                 .activeUsers(userService.countUsersByStatus(UserStatus.ACTIVE))
-                .totalUsers(userService.countUsersByStatus(UserStatus.ACTIVE) + userService.countUsersByStatus(UserStatus.PENDING) + userService.countUsersByStatus(UserStatus.LOCKED))
+                .totalUsers(userService.countUsersByStatus(UserStatus.ACTIVE)
+                        + userService.countUsersByStatus(UserStatus.PENDING)
+                        + userService.countUsersByStatus(UserStatus.LOCKED))
                 .approvedVehicles(vehicleService.countVehiclesByStatus(VehicleStatus.APPROVED))
                 .totalVehicles(vehicleService.countTotalVehicles())
                 .totalBookings(totalBookings)
@@ -99,14 +138,26 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .selectedYear(year)
                 .selectedMonth(month)
                 .monthlySummaries(monthlySummaries)
+                .commissionGrowthRate(commissionGrowthRate)
+                .gmvGrowthRate(gmvGrowthRate)
+                .payoutGrowthRate(payoutGrowthRate)
+                .bookingsGrowthRate(bookingsGrowthRate)
+                .commissionDiff(commissionDiff)
+                .gmvDiff(gmvDiff)
+                .payoutDiff(payoutDiff)
+                .bookingsDiff(bookingsDiff)
+                .comparedToLabel(comparedToLabel)
                 .build();
     }
 
     private List<MonthlyFinancialSummaryDto> buildMonthlySummaries() {
-        List<MonthlyFinancialSummaryDto> list = new ArrayList<>();
+        int count = 6;
+        List<MonthlyFinancialSummaryDto> temp = new ArrayList<>();
         YearMonth currentYm = YearMonth.now(ZONE_VN);
-        // Build last 6 months (including current month)
-        for (int i = 0; i < 6; i++) {
+
+        // Build last 6 + 1 months to allow comparing the 6th month against its prior
+        // month
+        for (int i = 0; i < count + 1; i++) {
             YearMonth ym = currentYm.minusMonths(i);
             Instant from = ym.atDay(1).atStartOfDay(ZONE_VN).toInstant();
             Instant to = ym.plusMonths(1).atDay(1).atStartOfDay(ZONE_VN).toInstant();
@@ -123,7 +174,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
 
             String label = String.format("Tháng %02d/%d", ym.getMonthValue(), ym.getYear());
 
-            list.add(MonthlyFinancialSummaryDto.builder()
+            temp.add(MonthlyFinancialSummaryDto.builder()
                     .year(ym.getYear())
                     .month(ym.getMonthValue())
                     .label(label)
@@ -135,6 +186,46 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                     .totalBookings(total)
                     .build());
         }
-        return list;
+
+        // Calculate MoM growth for each month compared to previous month (temp.get(i +
+        // 1))
+        for (int i = 0; i < count; i++) {
+            MonthlyFinancialSummaryDto curr = temp.get(i);
+            MonthlyFinancialSummaryDto prev = temp.get(i + 1);
+
+            curr.setComparedToLabel(prev.getLabel());
+            curr.setCommissionDiff(curr.getPlatformCommission().subtract(prev.getPlatformCommission()));
+            curr.setCommissionGrowthRate(
+                    calculateGrowthRate(curr.getPlatformCommission(), prev.getPlatformCommission()));
+
+            curr.setGmvDiff(curr.getGrossMerchandiseValue().subtract(prev.getGrossMerchandiseValue()));
+            curr.setGmvGrowthRate(
+                    calculateGrowthRate(curr.getGrossMerchandiseValue(), prev.getGrossMerchandiseValue()));
+
+            curr.setPayoutDiff(curr.getProviderPayoutDue().subtract(prev.getProviderPayoutDue()));
+            curr.setPayoutGrowthRate(calculateGrowthRate(curr.getProviderPayoutDue(), prev.getProviderPayoutDue()));
+
+            curr.setBookingsDiff(curr.getCompletedBookings() - prev.getCompletedBookings());
+            curr.setBookingsGrowthRate(calculateGrowthRate(
+                    BigDecimal.valueOf(curr.getCompletedBookings()),
+                    BigDecimal.valueOf(prev.getCompletedBookings())));
+        }
+
+        return new ArrayList<>(temp.subList(0, count));
+    }
+
+    private BigDecimal calculateGrowthRate(BigDecimal current, BigDecimal previous) {
+        if (previous == null || previous.compareTo(BigDecimal.ZERO) == 0) {
+            if (current == null || current.compareTo(BigDecimal.ZERO) == 0) {
+                return BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+            }
+            return null; // Baseline month with no prior comparison base
+        }
+        if (current == null) {
+            current = BigDecimal.ZERO;
+        }
+        BigDecimal diff = current.subtract(previous);
+        return diff.multiply(BigDecimal.valueOf(100))
+                .divide(previous, 1, RoundingMode.HALF_UP);
     }
 }

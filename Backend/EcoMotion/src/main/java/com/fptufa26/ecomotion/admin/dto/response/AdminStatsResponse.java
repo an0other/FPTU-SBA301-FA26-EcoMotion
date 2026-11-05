@@ -32,4 +32,15 @@ public class AdminStatsResponse {
     private Integer selectedYear;
     private Integer selectedMonth;
     private List<MonthlyFinancialSummaryDto> monthlySummaries;
+
+    // Month-over-month (MoM) growth & difference metrics for the selected period
+    private BigDecimal commissionGrowthRate;
+    private BigDecimal gmvGrowthRate;
+    private BigDecimal payoutGrowthRate;
+    private BigDecimal bookingsGrowthRate;
+    private BigDecimal commissionDiff;
+    private BigDecimal gmvDiff;
+    private BigDecimal payoutDiff;
+    private Long bookingsDiff;
+    private String comparedToLabel;
 }

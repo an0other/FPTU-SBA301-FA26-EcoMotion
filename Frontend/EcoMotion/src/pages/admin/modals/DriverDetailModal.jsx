@@ -24,19 +24,32 @@ export default function DriverDetailModal({
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+            <div
+              className={`h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xs ${
+                driver.portraitUrl ? 'cursor-pointer hover:ring-2 hover:ring-brand-500' : ''
+              }`}
+              onClick={() => driver.portraitUrl && onPreviewImage && onPreviewImage(driver.portraitUrl)}
+              title={driver.portraitUrl ? 'Bấm để phóng to ảnh' : ''}
+            >
               {driver.portraitUrl ? (
                 <img
                   src={driver.portraitUrl}
                   alt={driver.userFullName}
                   className="h-full w-full object-cover"
-                  onError={(e) => { e.target.style.display = 'none' }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                    if (e.currentTarget.nextElementSibling) {
+                      e.currentTarget.nextElementSibling.style.display = 'flex'
+                    }
+                  }}
                 />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-slate-400">
-                  <IconUsers className="h-6 w-6" />
-                </div>
-              )}
+              ) : null}
+              <div
+                className="flex h-full w-full items-center justify-center text-slate-400"
+                style={{ display: driver.portraitUrl ? 'none' : 'flex' }}
+              >
+                <IconUsers className="h-6 w-6" />
+              </div>
             </div>
 
             <div>
