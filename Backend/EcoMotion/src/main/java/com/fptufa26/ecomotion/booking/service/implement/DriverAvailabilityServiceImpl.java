@@ -157,7 +157,6 @@ public class DriverAvailabilityServiceImpl implements DriverAvailabilityService 
     }
 
     private Instant plannedEnd(Booking booking) {
-        if (booking.getPlannedEndAt() != null) return booking.getPlannedEndAt();
         BookingPolicySnapshot snapshot = snapshotRepository.findByBooking_Id(booking.getId()).orElse(null);
         Integer slotLength = snapshot == null ? null : snapshot.getSlotLengthMinutes();
         int quantity = chargeRepository.findByBooking_IdAndChargeType(booking.getId(), ChargeType.BASE_RENTAL)
@@ -167,8 +166,12 @@ public class DriverAvailabilityServiceImpl implements DriverAvailabilityService 
     }
 
     private Instant estimatedEnd(Booking booking, Integer slotLength, int quantity) {
-        if (booking.getPickupTime() == null || slotLength == null || slotLength <= 0 || quantity <= 0) return null;
-        Instant planned = booking.getPickupTime().plus(Duration.ofMinutes((long) slotLength * quantity));
+        if (booking.getPickupTime() == null) return null;
+        Instant planned = booking.getPlannedEndAt();
+        if (planned == null) {
+            if (slotLength == null || slotLength <= 0 || quantity <= 0) return null;
+            planned = booking.getPickupTime().plus(Duration.ofMinutes((long) slotLength * quantity));
+        }
         if (unfinishedTrip(booking) && booking.getActualStartAt() != null
                 && booking.getActualStartAt().isAfter(booking.getPickupTime())) {
             planned = planned.plus(Duration.between(booking.getPickupTime(), booking.getActualStartAt()));

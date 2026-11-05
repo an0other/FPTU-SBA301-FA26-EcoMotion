@@ -68,14 +68,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest;
-import com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest;
-import com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
-import com.fptufa26.ecomotion.booking.entity.DriverAssignment;
-import com.fptufa26.ecomotion.booking.entity.TripEvidence;
-import com.fptufa26.ecomotion.booking.entity.TripIncident;
-import com.fptufa26.ecomotion.booking.enums.AssignmentStatus;
 import com.fptufa26.ecomotion.booking.enums.TripIncidentStatus;
 import com.fptufa26.ecomotion.booking.enums.TripIncidentUrgency;
 

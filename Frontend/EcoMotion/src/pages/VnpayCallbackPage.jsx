@@ -14,16 +14,8 @@ export default function VnpayCallbackPage() {
   useEffect(() => {
     if (state.result?.status === 'SUCCESS' && state.result?.bookingCode) {
       const timer = window.setTimeout(() => {
-        navigate('/payment/success', {
+        navigate(`/payment/success?reference=${encodeURIComponent(state.result.vnpTxnRef || state.result.transactionCode)}`, {
           replace: true,
-          state: {
-            bookingCode: state.result.bookingCode,
-            transactionCode: state.result.transactionCode,
-            vnpTransactionNo: state.result.vnpTransactionNo,
-            amount: state.result.amount,
-            paymentMethod: 'VNPAY',
-            paidAt: state.result.payDate || new Date().toISOString(),
-          },
         })
       }, 1000)
       return () => window.clearTimeout(timer)

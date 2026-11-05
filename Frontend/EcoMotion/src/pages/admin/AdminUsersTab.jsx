@@ -330,7 +330,25 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                     users.map((u) => (
                       <tr key={u.id} className="transition-colors hover:bg-slate-50/70">
                         <td className="px-5 py-3.5 font-bold text-slate-900">#{u.id}</td>
-                        <td className="px-5 py-3.5 font-semibold text-slate-800">{u.fullName || '—'}</td>
+                        <td className="px-5 py-3.5 font-semibold text-slate-800">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-2xs">
+                              {(u.avatarUrl || u.portraitUrl) ? (
+                                <img
+                                  src={u.avatarUrl || u.portraitUrl}
+                                  alt={u.fullName}
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-slate-400">
+                                  <IconUsers className="h-4 w-4" />
+                                </div>
+                              )}
+                            </div>
+                            <span className="font-bold text-slate-900">{u.fullName || '—'}</span>
+                          </div>
+                        </td>
                         <td className="px-5 py-3.5 text-slate-600">{u.email}</td>
                         <td className="px-5 py-3.5 text-slate-600">{u.phone || '—'}</td>
                         <td className="px-5 py-3.5">
@@ -513,9 +531,10 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                         {d.portraitUrl ? (
                           <img
                             src={d.portraitUrl}
-                            alt={d.fullName}
-                            className="h-full w-full object-cover"
-                            onError={(e) => { e.target.style.display = 'none' }}
+                            alt={d.userFullName || d.fullName || 'Tài xế'}
+                            className="h-full w-full object-cover cursor-pointer hover:opacity-90"
+                            onClick={() => setPreviewImage(d.portraitUrl)}
+                            onError={(e) => { e.currentTarget.style.display = 'none' }}
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center text-slate-400">
@@ -526,7 +545,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
-                          <h4 className="truncate text-sm font-bold text-slate-900">{d.fullName || 'Tài xế'}</h4>
+                          <h4 className="truncate text-sm font-bold text-slate-900">{d.userFullName || d.fullName || 'Tài xế'}</h4>
                           <span
                             className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                               STATUS_BADGES[d.status] || 'bg-slate-100 text-slate-700'
@@ -535,13 +554,13 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                             {d.status}
                           </span>
                         </div>
-                        <div className="truncate text-xs text-slate-500">{d.email}</div>
-                        <div className="text-xs text-slate-500">SĐT: {d.phone || '—'}</div>
+                        <div className="truncate text-xs text-slate-500">{d.userEmail || d.email}</div>
+                        <div className="text-xs text-slate-500">SĐT: {d.userPhone || d.phone || '—'}</div>
                       </div>
                     </div>
 
                     <div className="space-y-1 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-xs text-slate-600">
-                      <div><strong className="text-slate-800">Số GPLX:</strong> {d.licenseNumber || '—'}</div>
+                      <div><strong className="text-slate-800">Số GPLX:</strong> {d.licenseNo || d.licenseNumber || '—'}</div>
                       <div><strong className="text-slate-800">Hạng bằng:</strong> {d.licenseClass || '—'}</div>
                       <div><strong className="text-slate-800">Hết hạn:</strong> {d.licenseExpiry || '—'}</div>
                       {d.rejectReason && (
@@ -828,6 +847,29 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
             setSelectedUser(null)
           }}
           actionLoading={actionLoading}
+          onPreviewImage={(url) => setPreviewImage(url)}
+          onViewDriverDetail={(u) => {
+            setSelectedUser(null)
+            const foundDriver = drivers.find((drv) => drv.userId === u.id || drv.id === u.driverId)
+            if (foundDriver) {
+              setSelectedDriver(foundDriver)
+            } else {
+              setSelectedDriver({
+                id: u.driverId,
+                userId: u.id,
+                userFullName: u.fullName,
+                userEmail: u.email,
+                userPhone: u.phone,
+                licenseNo: u.licenseNo,
+                licenseClass: u.licenseClass,
+                licenseExpiry: u.licenseExpiry,
+                portraitUrl: u.portraitUrl || u.avatarUrl,
+                licenseImageUrl: u.licenseImageUrl,
+                providerDisplayName: u.providerDisplayName,
+                status: u.driverStatus || 'APPROVED',
+              })
+            }
+          }}
         />
       )}
 

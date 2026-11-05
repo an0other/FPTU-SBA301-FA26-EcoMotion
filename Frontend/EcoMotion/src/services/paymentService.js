@@ -1,6 +1,11 @@
 import apiClient from './apiClient.js'
 
 export const paymentService = {
+  async getReceipt(reference, signal) {
+    const { data } = await apiClient.get('/v1/payments/receipt', { params: { reference }, signal })
+    return data?.data
+  },
+
   async getHistory({ page = 0, size = 10 } = {}) {
     const { data } = await apiClient.get('/renter/payments', {
       params: { page, size },

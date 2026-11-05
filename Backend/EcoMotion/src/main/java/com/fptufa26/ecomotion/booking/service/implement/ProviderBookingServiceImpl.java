@@ -90,21 +90,14 @@ import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
-import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
-import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse;
 import com.fptufa26.ecomotion.booking.entity.DriverAssignment;
-import com.fptufa26.ecomotion.booking.entity.TripIncident;
 import com.fptufa26.ecomotion.booking.enums.AssignmentStatus;
 import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
-import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
 import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
-import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
-import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import java.time.LocalDate;
 import java.util.Comparator;
 

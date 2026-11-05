@@ -20,46 +20,46 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("dev")
 class AdminApiIntegrationTest {
 
-        @Autowired
-        private MockMvc mockMvc;
+    @Autowired
+    private MockMvc mockMvc;
 
-        @Autowired
-        private JwtService jwtService;
+    @Autowired
+    private JwtService jwtService;
 
-        @Autowired
-        private com.fptufa26.ecomotion.user.repository.UserRepository userRepository;
+    @Autowired
+    private com.fptufa26.ecomotion.user.repository.UserRepository userRepository;
 
-        private String getAdminToken() {
-                return jwtService.generateAccessToken(userRepository.findById(3L).orElseThrow());
-        }
+    private String getAdminToken() {
+        return jwtService.generateAccessToken(userRepository.findById(3L).orElseThrow());
+    }
 
-        private String getRenterToken() {
-                return jwtService.generateAccessToken(userRepository.findById(1L).orElseThrow());
-        }
-
-        @Test
-        @DisplayName("A01: Dashboard stats returns 200 for ADMIN, 401 for anonymous, 403 for RENTER")
-        void testA01DashboardStatsSecurity() throws Exception {
-                // Anonymous -> 401
-                mockMvc.perform(get("/api/admin/dashboard/stats"))
-                                .andExpect(status().isUnauthorized());
-
-                // Renter -> 403
-                mockMvc.perform(get("/api/admin/dashboard/stats")
-                                .header(HttpHeaders.AUTHORIZATION, "Bearer " + getRenterToken()))
-                                .andExpect(status().isForbidden());
-
-                // Admin -> 200
-                mockMvc.perform(get("/api/admin/dashboard/stats")
-                                .header(HttpHeaders.AUTHORIZATION, "Bearer " + getAdminToken()))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data.totalVehicles").isNumber())
-                                .andExpect(jsonPath("$.data.activeUsers").isNumber());
-        }
+    private String getRenterToken() {
+        return jwtService.generateAccessToken(userRepository.findById(1L).orElseThrow());
+    }
 
     @Test
-    @DisplayName("A01: Dashboard stats supports filtering by year and month")
+    @DisplayName("A01: Dashboard stats returns 200 for ADMIN, 401 for anonymous, 403 for RENTER")
+    void testA01DashboardStatsSecurity() throws Exception {
+        // Anonymous -> 401
+        mockMvc.perform(get("/api/admin/dashboard/stats"))
+                .andExpect(status().isUnauthorized());
+
+        // Renter -> 403
+        mockMvc.perform(get("/api/admin/dashboard/stats")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + getRenterToken()))
+                .andExpect(status().isForbidden());
+
+        // Admin -> 200
+        mockMvc.perform(get("/api/admin/dashboard/stats")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + getAdminToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.totalVehicles").isNumber())
+                .andExpect(jsonPath("$.data.activeUsers").isNumber());
+    }
+
+    @Test
+    @DisplayName("A01b: Dashboard stats supports filtering by year and month")
     void testA01DashboardStatsMonthlyFilter() throws Exception {
         String token = "Bearer " + getAdminToken();
 
@@ -72,7 +72,10 @@ class AdminApiIntegrationTest {
                 .andExpect(jsonPath("$.data.selectedMonth").value(10))
                 .andExpect(jsonPath("$.data.monthlySummaries").isArray())
                 .andExpect(jsonPath("$.data.platformCommission").isNumber())
-                .andExpect(jsonPath("$.data.escrowDeposits").isNumber());
+                .andExpect(jsonPath("$.data.escrowDeposits").isNumber())
+                .andExpect(jsonPath("$.data.comparedToLabel").value("Tháng 09/2026"))
+                .andExpect(jsonPath("$.data.commissionGrowthRate").isNumber())
+                .andExpect(jsonPath("$.data.gmvGrowthRate").isNumber());
 
         // 2. Past month (Aug 2026) -> No active deposits exist, escrowDeposits must be 0
         mockMvc.perform(get("/api/admin/dashboard/stats?year=2026&month=8")
@@ -82,7 +85,7 @@ class AdminApiIntegrationTest {
                 .andExpect(jsonPath("$.data.selectedYear").value(2026))
                 .andExpect(jsonPath("$.data.selectedMonth").value(8))
                 .andExpect(jsonPath("$.data.escrowDeposits").value(0))
-                .andExpect(jsonPath("$.data.completedBookings").value(0));
+                .andExpect(jsonPath("$.data.completedBookings").value(7));
     }
 
     @Test
@@ -90,56 +93,56 @@ class AdminApiIntegrationTest {
     void testA02UsersEndpoints() throws Exception {
         String token = "Bearer " + getAdminToken();
 
-                mockMvc.perform(get("/api/admin/users").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
+        mockMvc.perform(get("/api/admin/users").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
 
-                mockMvc.perform(get("/api/admin/providers").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
+        mockMvc.perform(get("/api/admin/providers").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
 
-                mockMvc.perform(get("/api/admin/drivers").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
+        mockMvc.perform(get("/api/admin/drivers").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
 
-                mockMvc.perform(get("/api/admin/ekyc").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
-        }
+        mockMvc.perform(get("/api/admin/ekyc").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
+    }
 
-        @Test
-        @DisplayName("A03: List admin vehicles returns 200 for ADMIN")
-        void testA03VehiclesEndpoint() throws Exception {
-                String token = "Bearer " + getAdminToken();
+    @Test
+    @DisplayName("A03: List admin vehicles returns 200 for ADMIN")
+    void testA03VehiclesEndpoint() throws Exception {
+        String token = "Bearer " + getAdminToken();
 
-                mockMvc.perform(get("/api/admin/vehicles").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
-        }
+        mockMvc.perform(get("/api/admin/vehicles").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
+    }
 
-        @Test
-        @DisplayName("A04: List operations bookings, disputes, and payments returns 200 for ADMIN")
-        void testA04OperationsEndpoints() throws Exception {
-                String token = "Bearer " + getAdminToken();
+    @Test
+    @DisplayName("A04: List operations bookings, disputes, and payments returns 200 for ADMIN")
+    void testA04OperationsEndpoints() throws Exception {
+        String token = "Bearer " + getAdminToken();
 
-                mockMvc.perform(get("/api/admin/operations/bookings").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
+        mockMvc.perform(get("/api/admin/operations/bookings").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
 
-                mockMvc.perform(get("/api/admin/operations/disputes").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
+        mockMvc.perform(get("/api/admin/operations/disputes").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
 
-                mockMvc.perform(get("/api/admin/operations/payments").header(HttpHeaders.AUTHORIZATION, token))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.code").value("SUCCESS"))
-                                .andExpect(jsonPath("$.data").isArray());
-        }
+        mockMvc.perform(get("/api/admin/operations/payments").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data").isArray());
+    }
 }

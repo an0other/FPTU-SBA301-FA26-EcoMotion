@@ -185,8 +185,7 @@ public record ProviderBookingDetailResponse(
                 driverId, driverName, driverPhone, driverLicenseNo, driverLicenseClass,
                 driverPortraitUrl, driverRatingAvg, driver, trip, charges, paymentTransactions,
                 timeline, assignedAt, driverConfirmedAt, actualArrivedAt, executionStatus,
-                latestLocation, canAssignDriver, canAutoAssignDriver, rejectionReason, null,
-                null, List.of()
+                latestLocation, canAssignDriver, canAutoAssignDriver, rejectionReason, null, null, List.of()
         );
     }
 

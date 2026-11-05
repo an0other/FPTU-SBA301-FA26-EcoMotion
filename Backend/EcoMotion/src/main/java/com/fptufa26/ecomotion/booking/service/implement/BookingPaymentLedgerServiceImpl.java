@@ -144,6 +144,12 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
     }
 
     @Override
+    public Optional<PaymentTransaction> findTransactionByReference(String reference) {
+        return transactionRepository.findByTransactionCode(reference)
+                .or(() -> transactionRepository.findByVnpTxnRef(reference));
+    }
+
+    @Override
     public Optional<PaymentTransaction> findTransaction(Long bookingId, PaymentType type) {
         return transactionRepository.findByBooking_IdAndType(bookingId, type);
     }
