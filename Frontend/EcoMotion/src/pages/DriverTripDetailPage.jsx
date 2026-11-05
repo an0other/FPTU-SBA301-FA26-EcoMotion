@@ -126,11 +126,11 @@ export default function DriverTripDetailPage() {
         await driverTripService.arriveTrip(tripId)
         setToast({ message: 'Đã báo có mặt tại điểm đón khách!', type: 'success' })
       } else if (statusConfig.actionType === 'start') {
-        const started = await driverTripService.startTrip(tripId)
-        setToast({ message: started.status === 'AWAITING_START_CONFIRMATION' ? 'Đã xác nhận bắt đầu; đang chờ người thuê xác nhận.' : 'Chuyến đi đã bắt đầu.', type: 'success' })
+        await driverTripService.startTrip(tripId)
+        setToast({ message: 'Chuyến đi đã bắt đầu.', type: 'success' })
       } else if (statusConfig.actionType === 'finish') {
         await driverTripService.finishTrip(tripId)
-        setToast({ message: 'Đã ghi nhận kết thúc. Cần xác nhận hai phía và xử lý quyết toán.', type: 'success' })
+        setToast({ message: 'Đã kết thúc chuyến đi, chờ xử lý quyết toán.', type: 'success' })
       }
 
       setShowConfirmModal(false)

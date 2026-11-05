@@ -15,6 +15,7 @@ public record BookingChargeLineResponse(
         BigDecimal amount,
         boolean isWaived,
         BigDecimal effectiveAmount,
-        ChargeConfirmationStatus confirmationStatus
+        ChargeConfirmationStatus confirmationStatus,
+        String evidenceUrl
 ) {
 }

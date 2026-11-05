@@ -44,7 +44,11 @@ public record DriverTripDetailResponse(
         TripLocationResponse latestLocation,
         Instant assignmentExpiresAt,
         Instant plannedEndAt,
-        List<RentalQuoteResponse.Item> pricingItems
+        List<RentalQuoteResponse.Item> pricingItems,
+        Instant driverStartConfirmedAt,
+        Instant renterStartConfirmedAt,
+        Instant driverEndConfirmedAt,
+        Instant renterEndConfirmedAt
 ) {
     public DriverTripDetailResponse(
             Long tripId,
@@ -104,7 +108,11 @@ public record DriverTripDetailResponse(
                 null,
                 null,
                 null,
-                List.of()
+                List.of(),
+                null,
+                null,
+                null,
+                null
         );
     }
 

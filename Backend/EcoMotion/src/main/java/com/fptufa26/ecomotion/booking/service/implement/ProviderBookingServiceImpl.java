@@ -18,10 +18,6 @@ import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
 import com.fptufa26.ecomotion.booking.enums.OperationalResolutionType;
 import com.fptufa26.ecomotion.booking.enums.DriverAssignmentMode;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
-import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
-import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
-import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
-import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.repository.BookingChargeRepository;
 import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository;
@@ -37,13 +33,10 @@ import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.booking.dto.request.ResolveIncidentRequest;
 import com.fptufa26.ecomotion.booking.dto.response.AssignmentSuggestionResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
-import com.fptufa26.ecomotion.booking.entity.TripEvidence;
-import com.fptufa26.ecomotion.booking.entity.TripIncident;
 import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
 import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.booking.service.TripIncidentService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
-import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
@@ -51,7 +44,6 @@ import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
-import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import com.fptufa26.ecomotion.user.service.DriverAssignmentService;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy;
@@ -79,7 +71,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Optional;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -100,7 +91,6 @@ import com.fptufa26.ecomotion.booking.repository.DriverAssignmentRepository;
 import com.fptufa26.ecomotion.booking.repository.TripIncidentRepository;
 import com.fptufa26.ecomotion.dispute.service.DisputeService;
 import java.time.LocalDate;
-import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -121,6 +111,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
 
     private final BookingRepository bookingRepository;
     private final BookingChargeRepository bookingChargeRepository;
+    private final com.fptufa26.ecomotion.booking.repository.BookingChargeEvidenceRepository chargeEvidenceRepository;
+    private final com.fptufa26.ecomotion.booking.service.ChargeEvidenceValidator chargeEvidenceValidator;
+    private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
     private final com.fptufa26.ecomotion.finance.service.implement.RefundEventService refundEventService;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
@@ -314,7 +307,11 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 executionStatus,
                 booking.getActualArrivedAt(),
                 booking.getActualStartAt(),
-                booking.getActualEndAt()
+                booking.getActualEndAt(),
+                booking.getDriverStartConfirmedAt(),
+                booking.getRenterStartConfirmedAt(),
+                booking.getDriverEndConfirmedAt(),
+                booking.getRenterEndConfirmedAt()
         );
 
         return new ProviderBookingDetailResponse(
@@ -636,6 +633,22 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     @Override
     @Transactional
     public BookingChargeResponse addCharge(Long currentUserId, String bookingCodeOrId, AddChargeRequest request) {
+        return addChargeInternal(currentUserId, bookingCodeOrId, request, null);
+    }
+
+    @Override
+    @Transactional
+    public BookingChargeResponse addChargeWithEvidence(Long currentUserId, String bookingCodeOrId, AddChargeRequest request,
+                                                       java.util.List<org.springframework.web.multipart.MultipartFile> files) {
+        chargeEvidenceValidator.validate(files, 0);
+        if (request.clientRequestId() == null || request.clientRequestId().isBlank()) {
+            throw new ConflictException("Mã yêu cầu phụ phí là bắt buộc");
+        }
+        return addChargeInternal(currentUserId, bookingCodeOrId, request, files);
+    }
+
+    private BookingChargeResponse addChargeInternal(Long currentUserId, String bookingCodeOrId, AddChargeRequest request,
+                                                     java.util.List<org.springframework.web.multipart.MultipartFile> files) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
 
@@ -649,13 +662,15 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new ConflictException("Loại phụ phí này không được thêm sau chuyến");
         }
 
-        if (request.evidenceUrl() == null || request.evidenceUrl().isBlank())
+        if (files == null && (request.evidenceUrl() == null || request.evidenceUrl().isBlank()))
             throw new ConflictException("Cần bằng chứng cho phụ phí ghi thủ công");
-        java.net.URI proof;
-        try { proof = java.net.URI.create(request.evidenceUrl().trim()); }
-        catch (IllegalArgumentException exception) { throw new ConflictException("Đường dẫn bằng chứng không hợp lệ"); }
-        if (!("https".equalsIgnoreCase(proof.getScheme()) || "http".equalsIgnoreCase(proof.getScheme())) || proof.getHost() == null)
-            throw new ConflictException("Bằng chứng phải là đường dẫn HTTP/HTTPS hợp lệ");
+        if (files == null) {
+            java.net.URI proof;
+            try { proof = java.net.URI.create(request.evidenceUrl().trim()); }
+            catch (IllegalArgumentException exception) { throw new ConflictException("Đường dẫn bằng chứng không hợp lệ"); }
+            if (!("https".equalsIgnoreCase(proof.getScheme()) || "http".equalsIgnoreCase(proof.getScheme())) || proof.getHost() == null)
+                throw new ConflictException("Bằng chứng phải là đường dẫn HTTP/HTTPS hợp lệ");
+        }
         BookingCharge charge = new BookingCharge();
         charge.setBooking(booking);
         charge.setChargeType(request.chargeType());
@@ -718,9 +733,30 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         charge.setWaived(false);
         charge.setClientRequestId(clientRequestId);
         charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING);
-        charge.setEvidenceUrl(request.evidenceUrl());
+        charge.setEvidenceUrl(files == null ? request.evidenceUrl() : null);
 
-        BookingCharge saved = bookingChargeRepository.save(charge);
+        BookingCharge saved = bookingChargeRepository.saveAndFlush(charge);
+        if (files != null) {
+            for (org.springframework.web.multipart.MultipartFile file : files) {
+                var uploaded = cloudinaryService.uploadSurchargeEvidence(file, booking.getId(), saved.getId());
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCompletion(int status) {
+                            if (status != STATUS_COMMITTED) {
+                                try { cloudinaryService.deleteImageStrict(uploaded.publicId()); }
+                                catch (RuntimeException ex) { log.error("Không thể dọn ảnh Cloudinary {} sau rollback", uploaded.publicId(), ex); }
+                            }
+                        }
+                    });
+                var evidence = new com.fptufa26.ecomotion.booking.entity.BookingChargeEvidence();
+                evidence.setCharge(saved);
+                evidence.setSecureUrl(uploaded.secureUrl());
+                evidence.setPublicId(uploaded.publicId());
+                chargeEvidenceRepository.save(evidence);
+                if (saved.getEvidenceUrl() == null) saved.setEvidenceUrl(uploaded.secureUrl());
+            }
+            bookingChargeRepository.saveAndFlush(saved);
+        }
         bookingNotificationService.changed(booking, "CHARGES_CHANGED");
 
         return toChargeResponse(saved);

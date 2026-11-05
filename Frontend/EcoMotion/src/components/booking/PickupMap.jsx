@@ -75,7 +75,21 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
     primaryTiles.addTo(map)
     if (!readOnly) map.on('click', (event) => selectPoint(event.latlng.lat, event.latlng.lng))
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null; markerRef.current = null; originLayerRef.current = null }
+
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize()
+    })
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+      map.remove()
+      mapRef.current = null
+      markerRef.current = null
+      originLayerRef.current = null
+    }
   }, [onError, readOnly, selectPoint])
 
   useEffect(() => {
@@ -164,7 +178,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
             </button>
           </div>
           {suggestions.length ? (
-            <div className="absolute z-[1000] mt-1 max-h-48 w-full overflow-auto rounded-xl border bg-white shadow-lg">
+            <div className="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-xl border bg-white shadow-lg">
               {suggestions.map((item, index) => (
                 <button key={`${item.latitude}-${item.longitude}-${index}`} type="button"
                   onClick={() => selectPoint(item.latitude, item.longitude, item.displayName || item.address)}
@@ -176,7 +190,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
           ) : null}
         </div>
       ) : null}
-      <div ref={containerRef} className="h-40 w-full overflow-hidden rounded-xl border border-[#E6EBE8] bg-slate-100 sm:h-60" />
+      <div ref={containerRef} className="relative isolate h-40 w-full overflow-hidden rounded-xl border border-[#E6EBE8] bg-slate-100 sm:h-60" />
       {loading ? <p className="text-xs text-[#15803D]">Đang xác định địa chỉ...</p> : null}
       {value?.address ? <p className="text-xs font-medium text-slate-700">Điểm đã chọn: {value.address}</p> : null}
     </div>

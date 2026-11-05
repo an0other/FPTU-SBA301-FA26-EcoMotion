@@ -48,8 +48,8 @@ const TX_STATUS_CONFIG = {
 }
 
 const REQUEST_STATUS_CONFIG = {
-  PENDING: { label: 'Chờ thanh toán', bg: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
-  PROOF_SUBMITTED: { label: 'Chờ đối soát biên lai', bg: 'bg-blue-50 text-blue-800 border-blue-200', dot: 'bg-blue-500' },
+  PENDING: { label: 'Chờ khách chuyển khoản', bg: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  PROOF_SUBMITTED: { label: 'Chờ Provider xác nhận', bg: 'bg-blue-50 text-blue-800 border-blue-200', dot: 'bg-blue-500' },
   PARTIALLY_PAID: { label: 'Thanh toán một phần', bg: 'bg-orange-50 text-orange-800 border-orange-200', dot: 'bg-orange-500' },
   CONFIRMED: { label: 'Đã xác nhận đủ', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500' },
   REJECTED: { label: 'Đã từ chối', bg: 'bg-red-50 text-red-800 border-red-200', dot: 'bg-red-500' },
@@ -129,6 +129,7 @@ export default function ProviderFinancePage() {
   const [confirmationId, setConfirmationId] = useState(null)
   const [confirmNoteInput, setConfirmNoteInput] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
+  const confirmingPayment = useRef(false)
 
   // Form States for Reject & Issue
   const [rejectReasonInput, setRejectReasonInput] = useState('')
@@ -233,16 +234,19 @@ export default function ProviderFinancePage() {
   })
 
   useEffect(() => {
+    const sequence = financeSequence
     const timer = setTimeout(fetchFinanceData, 0)
-    return () => { clearTimeout(timer); ++financeSequence.current }
+    return () => { clearTimeout(timer); ++sequence.current }
   }, [fetchFinanceData])
   useEffect(() => {
+    const sequence = txSequence
     const timer = setTimeout(fetchTransactions, 0)
-    return () => { clearTimeout(timer); ++txSequence.current }
+    return () => { clearTimeout(timer); ++sequence.current }
   }, [fetchTransactions])
   useEffect(() => {
+    const sequence = paymentSequence
     const timer = setTimeout(fetchPaymentRequests, 0)
-    return () => { clearTimeout(timer); ++paymentSequence.current }
+    return () => { clearTimeout(timer); ++sequence.current }
   }, [fetchPaymentRequests])
 
   // Handle Review Refund
@@ -321,18 +325,23 @@ export default function ProviderFinancePage() {
   const handleOpenConfirmModal = (pr) => {
     setConfirmModalData(pr)
     setConfirmationId(crypto.randomUUID())
-    setReceivedAmountInput(String(pr.amount || pr.remainingAmount || ''))
+    setReceivedAmountInput(String(pr.remainingAmount ?? pr.amount ?? ''))
     setBankRefInput('')
     setConfirmNoteInput('')
   }
 
   const handleConfirmPayment = async (e) => {
     e.preventDefault()
-    if (!confirmModalData || isConfirming) return
+    if (!confirmModalData || confirmingPayment.current) return
     if (!Number.isFinite(Number(receivedAmountInput)) || Number(receivedAmountInput) <= 0) {
       setToast({ message: 'Số tiền nhận phải lớn hơn 0.', type: 'error' }); return
     }
+    const remaining = Number(confirmModalData.remainingAmount ?? Math.max(0, Number(confirmModalData.amount) - Number(confirmModalData.paidAmount || 0)))
+    if (Number(receivedAmountInput) > remaining) {
+      setToast({ message: 'Số tiền xác nhận không được vượt quá số tiền còn thiếu.', type: 'error' }); return
+    }
 
+    confirmingPayment.current = true
     try {
       setIsConfirming(true)
       const payload = {
@@ -352,6 +361,7 @@ export default function ProviderFinancePage() {
       console.error('Failed to confirm payment:', err)
       setToast({ message: err.message || 'Xác nhận nhận tiền thất bại.', type: 'error' })
     } finally {
+      confirmingPayment.current = false
       setIsConfirming(false)
     }
   }
@@ -822,8 +832,8 @@ export default function ProviderFinancePage() {
                     className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-medium text-slate-800 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none transition"
                   >
                     <option value="ALL">Tất cả trạng thái</option>
-                    <option value="PENDING">Chờ thanh toán</option>
-                    <option value="PROOF_SUBMITTED">Chờ đối soát biên lai</option>
+                    <option value="PENDING">Chờ khách chuyển khoản</option>
+                    <option value="PROOF_SUBMITTED">Chờ Provider xác nhận</option>
                     <option value="PARTIALLY_PAID">Thanh toán một phần</option>
                     <option value="CONFIRMED">Đã xác nhận đủ</option>
                     <option value="REVIEW_REQUIRED">Cần đối soát</option>
@@ -877,12 +887,13 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : (
                     paymentRequests.map((pr) => {
-                      const statusMeta = REQUEST_STATUS_CONFIG[pr.status] || {
+                      const hasProof = pr.evidences && pr.evidences.length > 0
+                      const effectiveStatus = (hasProof && pr.status === 'PENDING') ? 'PROOF_SUBMITTED' : pr.status
+                      const statusMeta = REQUEST_STATUS_CONFIG[effectiveStatus] || {
                         label: pr.status,
                         bg: 'bg-slate-100 text-slate-700 border-slate-200',
                         dot: 'bg-slate-400',
                       }
-                      const hasProof = pr.evidences && pr.evidences.length > 0
                       const remaining = Number(pr.remainingAmount ?? Math.max(0, Number(pr.amount || 0) - Number(pr.paidAmount || 0)))
                       const cancelling = pr.bookingStatus === 'CANCELLATION_REVIEW' || pr.bookingStatus === 'CANCELLED'
                       const stillCollecting = !cancelling && (
@@ -917,7 +928,8 @@ export default function ProviderFinancePage() {
                             {formatVnd(pr.remainingAmount ?? Math.max(0, Number(pr.amount || 0) - Number(pr.paidAmount || 0)))}
                           </td>
                           <td className="px-4 py-3 font-mono text-[11px] font-semibold text-slate-600">
-                            {pr.transferReference || '—'}
+                            {pr.vnpayPaid ? (pr.vnpayTransactionNo || '—') : (pr.transferReference || '—')}
+                            {pr.vnpayPaidAt && <span className="mt-1 block text-slate-500">{formatDateTime(pr.vnpayPaidAt)}</span>}
                           </td>
                           <td className="px-4 py-3">
                             {['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REJECTED'].includes(pr.status) ? (
@@ -929,7 +941,13 @@ export default function ProviderFinancePage() {
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusMeta.bg}`}>
                               <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
-                              {pr.vnpayVerifying ? 'Đang xác minh thanh toán VNPAY' : pr.status === 'CONFIRMED' && pr.paymentType === 'DEPOSIT' ? 'Đã thanh toán cọc' : statusMeta.label}
+                              {pr.vnpayPaid
+                                ? 'Đã thanh toán qua VNPAY'
+                                : pr.vnpayVerifying
+                                  ? 'Đang kiểm tra thanh toán VNPAY'
+                                  : pr.status === 'CONFIRMED' && pr.paymentType === 'DEPOSIT'
+                                    ? 'Đã thanh toán cọc'
+                                    : statusMeta.label}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -944,29 +962,27 @@ export default function ProviderFinancePage() {
                                   Biên lai
                                 </button>
                               )}
-                              {stillCollecting && (
-                                <>
-                                  {pr.vnpayVerifying && <span className="text-[11px] text-slate-600">VNPAY xác minh tự động</span>}
-                                </>
-                              )}
-                              {pr.status !== 'CONFIRMED' && (
+                              {stillCollecting && !pr.vnpayPaid && !pr.vnpayVerifying && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenConfirmModal(pr)}
+                                    aria-label="Xác nhận chuyển khoản"
                                     className="rounded-lg bg-brand-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-500/40"
-                                    title="Xác nhận chuyển khoản trực tiếp"
+                                    title="Xác nhận thanh toán"
                                   >
-                                    Xác nhận chuyển khoản
+                                    Xác nhận thanh toán
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenRejectModal(pr)}
-                                    className="rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
-                                    title="Từ chối biên lai"
-                                  >
-                                    Từ chối
-                                  </button>
+                                  {Number(pr.paidAmount || 0) === 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRejectModal(pr)}
+                                      className="rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                                      title="Từ chối"
+                                    >
+                                      Từ chối
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => handleOpenReportIssueModal(pr)}
@@ -1492,6 +1508,7 @@ export default function ProviderFinancePage() {
               <button
                 type="button"
                 onClick={() => setConfirmModalData(null)}
+                disabled={isConfirming}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
               >
                 <Icon name="close" className="text-lg" />
@@ -1504,6 +1521,7 @@ export default function ProviderFinancePage() {
                 <div>Nội dung CK: <span className="font-mono font-bold">{confirmModalData.transferReference}</span></div>
                 <div>Số trên QR: <span className="font-bold">{formatVnd(confirmModalData.amount)}</span></div>
                 <div>Đã ghi sổ: <span className="font-bold">{formatVnd(confirmModalData.paidAmount || 0)}</span></div>
+                <div>Còn thiếu: <span className="font-bold">{formatVnd(confirmModalData.remainingAmount ?? Math.max(0, Number(confirmModalData.amount || 0) - Number(confirmModalData.paidAmount || 0)))}</span></div>
               </div>
               {confirmModalData.evidences?.[0] ? (
                 <PaymentEvidenceImage
@@ -1519,11 +1537,12 @@ export default function ProviderFinancePage() {
                   type="number"
                   required
                   min="1000"
+                  max={confirmModalData.remainingAmount ?? Math.max(0, Number(confirmModalData.amount || 0) - Number(confirmModalData.paidAmount || 0))}
                   value={receivedAmountInput}
                   onChange={(e) => setReceivedAmountInput(e.target.value)}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-brand-600 focus:outline-none"
                 />
-                <span className="text-[11px] text-slate-500">Gõ số trên sao kê. Để nguyên nếu đúng số QR. Thiếu sẽ ghi nhận một phần; thừa sẽ tạo lệnh hoàn.</span>
+                <span className="text-[11px] text-slate-500">Nhập số tiền thực nhận, không vượt quá số còn thiếu. Nếu nhận một phần, yêu cầu vẫn chờ phần còn lại.</span>
               </div>
 
               <div>
@@ -1552,6 +1571,7 @@ export default function ProviderFinancePage() {
                 <button
                   type="button"
                   onClick={() => setConfirmModalData(null)}
+                  disabled={isConfirming}
                   className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Hủy bỏ

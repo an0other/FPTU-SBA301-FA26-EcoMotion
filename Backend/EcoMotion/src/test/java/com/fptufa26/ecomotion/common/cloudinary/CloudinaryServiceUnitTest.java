@@ -85,4 +85,14 @@ class CloudinaryServiceUnitTest {
         when(cloudinaryConfig.isMockOrDemo()).thenReturn(true);
         cloudinaryService.deleteImage("ecomotion/sample-id");
     }
+
+    @Test
+    void surchargeUploadAndStrictDeleteRejectUnconfiguredCloudinary() {
+        MockMultipartFile file = new MockMultipartFile("file", "evidence.png", "image/png", new byte[]{1});
+        when(cloudinaryConfig.isMockOrDemo()).thenReturn(true);
+        assertThatThrownBy(() -> cloudinaryService.uploadSurchargeEvidence(file, 1L, 2L))
+                .isInstanceOf(CloudinaryInfrastructureException.class);
+        assertThatThrownBy(() -> cloudinaryService.deleteImageStrict("ecomotion/surcharges/1/2/a"))
+                .isInstanceOf(CloudinaryInfrastructureException.class);
+    }
 }

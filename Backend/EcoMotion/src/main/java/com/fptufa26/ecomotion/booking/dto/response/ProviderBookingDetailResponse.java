@@ -210,7 +210,11 @@ public record ProviderBookingDetailResponse(
             String status,
             Instant actualArrivalAt,
             Instant actualStartAt,
-            Instant actualEndAt
+            Instant actualEndAt,
+            Instant driverStartConfirmedAt,
+            Instant renterStartConfirmedAt,
+            Instant driverEndConfirmedAt,
+            Instant renterEndConfirmedAt
     ) {}
 
     public record PaymentTransactionDetailResponse(

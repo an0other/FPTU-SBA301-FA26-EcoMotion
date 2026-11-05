@@ -143,6 +143,53 @@ public class CloudinaryServiceImpl implements CloudinaryService {
     }
 
     @Override
+    public CloudinaryUploadResult uploadSurchargeEvidence(MultipartFile file, Long bookingId, Long chargeId) {
+        if (file == null || file.isEmpty() || bookingId == null || chargeId == null) {
+            throw new IllegalArgumentException("Ảnh và mã đơn, mã phụ phí là bắt buộc");
+        }
+        if (cloudinaryConfig == null || cloudinaryConfig.isMockOrDemo()) {
+            throw new CloudinaryInfrastructureException("Cloudinary chưa được cấu hình");
+        }
+        String folder = String.format("%s/surcharges/%d/%d", folderPrefix, bookingId, chargeId);
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "folder", folder, "resource_type", "image", "overwrite", false));
+            String url = (String) result.get("secure_url");
+            String publicId = (String) result.get("public_id");
+            if (url == null || !url.startsWith("https://") || publicId == null || publicId.isBlank()) {
+                if (publicId != null && !publicId.isBlank()) deleteImageStrict(publicId);
+                throw new CloudinaryInfrastructureException("Cloudinary không trả về thông tin ảnh hợp lệ");
+            }
+            return new CloudinaryUploadResult(url, publicId, (String) result.get("format"),
+                    result.get("bytes") instanceof Number n ? n.longValue() : file.getSize(),
+                    result.get("width") instanceof Number n ? n.intValue() : null,
+                    result.get("height") instanceof Number n ? n.intValue() : null);
+        } catch (CloudinaryInfrastructureException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new CloudinaryInfrastructureException("Không thể tải ảnh phụ phí lên Cloudinary", ex);
+        }
+    }
+
+    @Override
+    public void deleteImageStrict(String publicId) {
+        if (publicId == null || publicId.isBlank()) throw new IllegalArgumentException("Thiếu mã ảnh Cloudinary");
+        if (cloudinaryConfig == null || cloudinaryConfig.isMockOrDemo())
+            throw new CloudinaryInfrastructureException("Cloudinary chưa được cấu hình");
+        try {
+            Map<?, ?> result = cloudinary.uploader().destroy(publicId, ObjectUtils.emptyMap());
+            Object status = result.get("result");
+            if (!"ok".equals(status) && !"not found".equals(status))
+                throw new CloudinaryInfrastructureException("Cloudinary không xác nhận xóa ảnh");
+        } catch (CloudinaryInfrastructureException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new CloudinaryInfrastructureException("Không thể xóa ảnh trên Cloudinary", ex);
+        }
+    }
+
+    @Override
     public void deleteImage(String publicId) {
         if (publicId == null || publicId.isBlank()) {
             return;

@@ -443,9 +443,24 @@ class PaymentIntegrityIntegrationTest {
     @Test
     void invalidAmountAndWrongProviderDoNotRecordMoney() {
         assertThatThrownBy(() -> confirm("0", "INVALID")).isInstanceOf(InvalidPaymentOperationException.class);
+        assertThatThrownBy(() -> confirm("-1", "NEGATIVE")).isInstanceOf(InvalidPaymentOperationException.class);
+        assertThatThrownBy(() -> confirm("30001", "EXCEEDS-REMAINING")).isInstanceOf(InvalidPaymentOperationException.class);
         assertThatThrownBy(() -> payments.confirmPayment(requestId, outsiderId,
                 new ConfirmPaymentRequest(new BigDecimal("30000"), "OTHER", null))).isInstanceOf(AccessDeniedException.class);
         assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();
+    }
+
+    @Test
+    void providerRejectsManualRequestWithReasonWithoutRecordingPayment() {
+        assertThatThrownBy(() -> payments.rejectPayment(requestId, providerId,
+                new com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest("   ")))
+                .isInstanceOf(InvalidPaymentOperationException.class);
+        var result = payments.rejectPayment(requestId, providerId,
+                new com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest("Không tìm thấy giao dịch"));
+        assertThat(result.status()).isEqualTo(PaymentRequestStatus.REJECTED);
+        assertThat(result.rejectionReason()).isEqualTo("Không tìm thấy giao dịch");
+        assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
     }
 
     @Test

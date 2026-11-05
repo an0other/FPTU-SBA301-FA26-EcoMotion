@@ -33,15 +33,15 @@ export default function VnpayCallbackPage() {
       try {
         const next = await paymentService.queryVnpayTransaction(result.bookingCode, result.vnpTxnRef, controller.signal)
         if (cancelled) return
-        publish({ result: next, error: null, checking: false })
         polls += 1
+        publish({ result: next, error: null, checking: false, exhausted: next.status === 'PENDING_VERIFICATION' && polls >= MAX_POLLS })
         if (next.status === 'PENDING_VERIFICATION' && polls < MAX_POLLS) {
           timer = window.setTimeout(() => poll(next), POLL_INTERVAL_MS)
         }
       } catch (err) {
         if (cancelled) return
         polls += 1
-        publish({ result, error: err?.message || 'Chưa thể kết nối để xác minh thanh toán.', checking: false })
+        publish({ result, error: err?.message || 'Chưa thể kết nối để xác minh thanh toán.', checking: false, exhausted: polls >= MAX_POLLS })
         if (polls < MAX_POLLS) timer = window.setTimeout(() => poll(result), POLL_INTERVAL_MS)
       }
     }
@@ -50,18 +50,21 @@ export default function VnpayCallbackPage() {
       publish({ result: null, error: null, checking: true })
       const params = Object.fromEntries(new URLSearchParams(query))
       if (!params.vnp_TxnRef) {
-        publish({ result: null, error: 'Không nhận được thông tin giao dịch từ VNPay.', checking: false })
+        publish({ result: null, error: 'Không nhận được thông tin giao dịch từ VNPay.', checking: false, exhausted: true })
         return
       }
       try {
         const result = await paymentService.processVnpayCallback(params, controller.signal)
         if (cancelled) return
-        publish({ result, error: null, checking: false })
+        publish({ result, error: null, checking: false, exhausted: result.status === 'PENDING_VERIFICATION' && (!result.bookingCode || !result.vnpTxnRef) })
         if (result.status === 'PENDING_VERIFICATION' && result.bookingCode && result.vnpTxnRef) {
           timer = window.setTimeout(() => poll(result), POLL_INTERVAL_MS)
         }
       } catch (err) {
-        publish({ result: null, error: err?.message || 'Chưa thể xác minh thanh toán. Vui lòng kiểm tra lại sau.', checking: false })
+        if (cancelled) return
+        polls += 1
+        publish({ result: null, error: err?.message || 'Chưa thể xác minh thanh toán. Vui lòng kiểm tra lại sau.', checking: false, exhausted: polls >= MAX_POLLS })
+        if (polls < MAX_POLLS) timer = window.setTimeout(verify, POLL_INTERVAL_MS)
       }
     }
 
@@ -73,11 +76,11 @@ export default function VnpayCallbackPage() {
     }
   }, [query])
 
-  const { result, error, checking } = state
+  const { result, error, checking, exhausted } = state
   const success = result?.status === 'SUCCESS'
   const failed = result?.status === 'FAILED'
   const reconciliation = result?.status === 'RECONCILIATION_REQUIRED'
-  const title = reconciliation ? 'Đã nhận tiền, cần đối soát đơn thuê' : success ? 'Thanh toán thành công!' : failed ? 'Thanh toán không thành công' : 'Đang xác minh thanh toán'
+  const title = reconciliation ? 'Đã nhận tiền, cần đối soát đơn thuê' : success ? 'Thanh toán thành công!' : failed ? 'Thanh toán không thành công' : exhausted ? 'Chưa xác nhận được giao dịch' : 'Đang xác nhận giao dịch'
   const color = success ? 'text-emerald-700 bg-emerald-100' : failed ? 'text-red-700 bg-red-100' : 'text-amber-700 bg-amber-100'
   const bookingPath = result?.bookingCode ? `/renter/bookings/${encodeURIComponent(result.bookingCode)}` : null
 
@@ -103,7 +106,7 @@ export default function VnpayCallbackPage() {
             <div className="flex justify-between gap-3"><dt>Số tiền thanh toán</dt><dd className="font-bold">{Number(result.amount ?? 0).toLocaleString('vi-VN')} ₫</dd></div>
             <div className="flex justify-between gap-3"><dt>Mã giao dịch VNPay</dt><dd className="font-mono break-all">{result.vnpTransactionNo || '—'}</dd></div>
             {result.bankCode && <div className="flex justify-between gap-3"><dt>Ngân hàng</dt><dd>{result.bankCode}</dd></div>}
-            <div className="flex justify-between gap-3"><dt>Trạng thái xác thực</dt><dd className="font-semibold">{success ? 'Đã xác minh bởi máy chủ EcoMotion' : failed ? 'Đã xác minh thất bại' : 'Chờ đối soát'}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Trạng thái xác thực</dt><dd className="font-semibold">{success ? 'Đã xác minh bởi máy chủ EcoMotion' : failed ? 'Đã xác minh thất bại' : reconciliation ? 'Cần đối soát' : 'Đang xác nhận giao dịch'}</dd></div>
           </dl>
         )}
         <div className="flex flex-wrap justify-center gap-3 pt-2">

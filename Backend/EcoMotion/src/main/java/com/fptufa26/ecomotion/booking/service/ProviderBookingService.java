@@ -58,6 +58,9 @@ public interface ProviderBookingService {
 
     BookingChargeResponse addCharge(Long currentUserId, String bookingCodeOrId, AddChargeRequest request);
 
+    BookingChargeResponse addChargeWithEvidence(Long currentUserId, String bookingCodeOrId, AddChargeRequest request,
+                                                java.util.List<org.springframework.web.multipart.MultipartFile> files);
+
     BookingChargeResponse withdrawCharge(Long currentUserId, String bookingCodeOrId, Long chargeId);
 
     SettlementResultResponse finalizeSettlement(Long currentUserId, String bookingCodeOrId);

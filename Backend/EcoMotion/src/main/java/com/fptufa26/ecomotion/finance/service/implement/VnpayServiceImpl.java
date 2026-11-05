@@ -336,7 +336,8 @@ public class VnpayServiceImpl implements VnpayService {
                         c.getAmount(),
                         c.isWaived(),
                         c.isWaived() ? BigDecimal.ZERO : c.getAmount(),
-                        c.getConfirmationStatus()
+                        c.getConfirmationStatus(),
+                        c.getEvidenceUrl()
                 ))
                 .toList();
 
@@ -796,7 +797,7 @@ public class VnpayServiceImpl implements VnpayService {
                 : failed ? "Giao dịch không thành công, đã được máy chủ xác minh"
                 : transaction.getProcessingNote() != null && transaction.getProcessingNote().startsWith("RECONCILIATION_REQUIRED")
                     ? "Thanh toán cần được đối soát. Vui lòng liên hệ hỗ trợ và không thanh toán lại."
-                    : "Đang xác minh thanh toán. Vui lòng không thanh toán lại trong lúc chờ đối soát.";
+                    : "Đang xác nhận giao dịch. Vui lòng không thanh toán lại trong lúc chờ xác nhận.";
         Booking booking = transaction.getBooking();
         boolean monthlyInstallment = isMonthlyInstallment(transaction);
         boolean eligible = monthlyInstallment

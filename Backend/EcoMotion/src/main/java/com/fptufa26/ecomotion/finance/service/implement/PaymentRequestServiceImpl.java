@@ -302,7 +302,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     public PaymentRequestResponse getPaymentRequestDetail(Long paymentRequestId, Long currentUserId) {
-        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId)
+        PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
         validateAccessToBooking(pr.getBooking(), currentUserId);
@@ -472,6 +472,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 .findByBooking_IdAndPaymentType(bookingId, PaymentRequestType.DEPOSIT)
                 .orElse(null);
         if (request == null || request.getFirstProofAt() != null || !request.getEvidences().isEmpty()
+                || request.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
+                || request.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED
+                || request.getStatus() == PaymentRequestStatus.PARTIALLY_PAID
                 || request.getStatus() == PaymentRequestStatus.CONFIRMED
                 || request.getStatus() == PaymentRequestStatus.VOIDED) {
             return false;
@@ -615,6 +618,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 return toResponse(pr);
             }
         }
+        closeStaleOrSupersededVnpayTransactions(booking.getId(), paymentRequestId, pr);
+        if (hasUnresolvedVnpay(pr)) {
+            throw new ConflictException("Giao dịch VNPAY đang được xác minh; không thể xác nhận chuyển khoản thủ công");
+        }
         if (pr.getPaymentType() != PaymentRequestType.DEPOSIT
                 && pr.getPaymentType() != PaymentRequestType.FINAL_BALANCE
                 && pr.getPaymentType() != PaymentRequestType.MONTHLY_INSTALLMENT) {
@@ -647,6 +654,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         if (receivedAmount.signum() <= 0 || receivedAmount.scale() > 2 || receivedAmount.setScale(2).precision() > 14) {
             throw new InvalidPaymentOperationException("Số tiền xác nhận phải lớn hơn 0");
+        }
+        if (receivedAmount.compareTo(neededAmount) > 0) {
+            throw new InvalidPaymentOperationException("Số tiền xác nhận không được vượt quá số tiền còn thiếu");
         }
 
         String bankRef = request.bankTransactionRef() != null && !request.bankTransactionRef().isBlank()
@@ -816,11 +826,27 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     public PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request) {
         Provider provider = resolveProvider(currentUserId);
 
-        PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
+        if (request == null || request.reason() == null || request.reason().isBlank() || request.reason().length() > 500) {
+            throw new InvalidPaymentOperationException("Lý do từ chối phải có từ 1 đến 500 ký tự");
+        }
+
+        PaymentRequest candidate = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
-        if (!pr.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
+        if (!candidate.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
+        }
+
+        Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
+        entityManager.detach(candidate);
+        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId).orElseThrow();
+        entityManager.refresh(pr, LockModeType.PESSIMISTIC_WRITE);
+        if (!booking.getVehicle().getProvider().getId().equals(provider.getId())) {
+            throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán này");
+        }
+        closeStaleOrSupersededVnpayTransactions(booking.getId(), paymentRequestId, pr);
+        if (hasUnresolvedVnpay(pr)) {
+            throw new ConflictException("Giao dịch VNPAY đang được xác minh; không thể từ chối thủ công");
         }
 
         if (pr.getPaidAmount() != null && pr.getPaidAmount().signum() > 0) {
@@ -843,6 +869,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
 
         PaymentRequest saved = paymentRequestRepository.save(pr);
+        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         log.info("Provider {} rejected PaymentRequest #{} with reason: {}",
                 provider.getId(), paymentRequestId, request.reason());
         return toResponse(saved);
@@ -853,11 +880,22 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     public PaymentRequestResponse reportIssue(Long paymentRequestId, Long currentUserId, ReportIssueRequest request) {
         Provider provider = resolveProvider(currentUserId);
 
-        PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
+        PaymentRequest candidate = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
 
-        if (!pr.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
+        if (!candidate.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
+        }
+
+        Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
+        entityManager.detach(candidate);
+        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId).orElseThrow();
+        entityManager.refresh(pr, LockModeType.PESSIMISTIC_WRITE);
+        if (!booking.getVehicle().getProvider().getId().equals(provider.getId())) {
+            throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán này");
+        }
+        if (hasUnresolvedVnpay(pr)) {
+            throw new ConflictException("Giao dịch VNPAY đang được xác minh; không thể báo lệch thủ công");
         }
 
         pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
@@ -1347,6 +1385,44 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
     }
 
+    private void closeStaleOrSupersededVnpayTransactions(Long bookingId, Long paymentRequestId, PaymentRequest pr) {
+        Instant now = clock.instant();
+        bookingPaymentLedgerService.listTransactions(bookingId).stream()
+                .filter(t -> t.getMethod() == PaymentMethod.VNPAY
+                        && t.getStatus() == PaymentStatus.PENDING
+                        && (t.getPaymentRequest() == null || t.getPaymentRequest().getId().equals(paymentRequestId)))
+                .forEach(t -> {
+                    boolean expired = t.getCreatedAt() == null || !t.getCreatedAt().plus(Duration.ofMinutes(15)).isAfter(now);
+                    boolean hasProof = pr.getFirstProofAt() != null || !pr.getEvidences().isEmpty();
+                    if (expired || hasProof) {
+                        t.setStatus(PaymentStatus.FAILED);
+                        t.setProcessingNote("Đã đóng giao dịch VNPAY do chuyển sang xác nhận chuyển khoản trực tiếp");
+                        t.setUpdatedAt(now);
+                        bookingPaymentLedgerService.saveTransaction(t);
+                        log.info("Closed stale/superseded VNPAY transaction #{} for booking {}", t.getId(), bookingId);
+                    }
+                });
+    }
+
+    private boolean hasUnresolvedVnpay(PaymentRequest pr) {
+        if (pr.getFirstProofAt() != null || !pr.getEvidences().isEmpty()
+                || pr.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED) {
+            return false;
+        }
+        PaymentType expected = pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                ? initialPaymentType(pr.getBooking()) : PaymentType.SETTLEMENT;
+        Instant now = clock.instant();
+        return bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream().anyMatch(t ->
+                t.getMethod() == PaymentMethod.VNPAY
+                        && ((t.getStatus() == PaymentStatus.PENDING
+                                && t.getCreatedAt() != null
+                                && t.getCreatedAt().plus(Duration.ofMinutes(15)).isAfter(now))
+                            || (t.getStatus() == PaymentStatus.PAID
+                                && t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED")))
+                        && t.getType() == expected
+                        && (t.getPaymentRequest() == null || t.getPaymentRequest().getId().equals(pr.getId())));
+    }
+
     private PaymentRequestResponse toResponse(PaymentRequest pr) {
         BigDecimal remaining = pr.getAmount().subtract(pr.getPaidAmount()).max(BigDecimal.ZERO);
         String maskedAccount = maskAccountNumber(pr.getAccountNumberSnapshot());
@@ -1355,6 +1431,16 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         List<PaymentEvidenceResponse> evidenceResponses = pr.getEvidences().stream()
                 .map(this::toEvidenceResponse)
                 .toList();
+
+        PaymentType expectedType = pr.getPaymentType() == PaymentRequestType.DEPOSIT
+                ? initialPaymentType(pr.getBooking()) : PaymentType.SETTLEMENT;
+        var vnpayPaid = bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream()
+                .filter(t -> t.getMethod() == PaymentMethod.VNPAY && t.getType() == expectedType
+                        && t.getStatus() == PaymentStatus.PAID
+                        && t.getVerificationMethod() == PaymentVerificationMethod.GATEWAY_VERIFIED
+                        && t.getAppliedAmount() != null && t.getAppliedAmount().signum() > 0
+                        && (t.getPaymentRequest() == null || t.getPaymentRequest().getId().equals(pr.getId())))
+                .findFirst();
 
         return new PaymentRequestResponse(
                 pr.getId(),
@@ -1382,11 +1468,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 pr.getRejectionReason(),
                 pr.getIssueNote(),
                 evidenceResponses,
-                pr.getStatus() != PaymentRequestStatus.CONFIRMED
-                        && bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream().anyMatch(t ->
-                            t.getMethod() == PaymentMethod.VNPAY && t.getStatus() == PaymentStatus.PENDING
-                            && t.getType() == (pr.getPaymentType() == PaymentRequestType.DEPOSIT
-                                ? PaymentType.DEPOSIT_PAY : PaymentType.SETTLEMENT)),
+                pr.getStatus() != PaymentRequestStatus.CONFIRMED && hasUnresolvedVnpay(pr),
+                pr.getStatus() == PaymentRequestStatus.CONFIRMED && vnpayPaid.isPresent(),
+                vnpayPaid.map(PaymentTransaction::getVnpTransactionNo).orElse(null),
+                vnpayPaid.map(PaymentTransaction::getPaidAt).orElse(null),
                 pr.getBooking().getStatus()
         );
     }

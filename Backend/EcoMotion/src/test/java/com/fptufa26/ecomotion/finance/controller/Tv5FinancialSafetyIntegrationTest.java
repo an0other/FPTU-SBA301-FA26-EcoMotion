@@ -307,6 +307,34 @@ class Tv5FinancialSafetyIntegrationTest {
         assertThat(vnpay.queryTransaction(session.bookingCode(), session.vnpTxnRef()).status()).isEqualTo("RECONCILIATION_REQUIRED");
     }
 
+    @Test void verifiedFinalPaymentOf544000IsAppliedOnceWithoutPayout() {
+        var session = tx.execute(status -> {
+            Booking b = em.find(Booking.class, bookingId);
+            ledger.deleteAll(ledger.findByBooking_Id(bookingId));
+            b.setTotalAmount(new BigDecimal("544000"));
+            b.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+            b.setActualEndAt(Instant.now());
+            b.setProviderConfirmedAt(Instant.now());
+            b.setRenterConfirmedAt(Instant.now());
+            em.flush();
+            return vnpay.createPaymentUrl(renterId, new CreateVnpayPaymentUrlRequest(b.getBookingCode(), "FINAL_PAYMENT", null, "vn"), "127.0.0.1");
+        });
+        assertThat(session.amount()).isEqualByComparingTo("544000");
+        var params = signed(session);
+        assertThat(params.get("vnp_Amount")).isEqualTo("54400000");
+        assertThat(vnpay.processCallback(params).status()).isEqualTo("PENDING_VERIFICATION");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("02");
+        assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.COMPLETED);
+        assertThat(ledger.findByBooking_Id(bookingId)).filteredOn(t -> t.getType() == PaymentType.SETTLEMENT)
+                .singleElement().satisfies(t -> {
+                    assertThat(t.getStatus()).isEqualTo(PaymentStatus.PAID);
+                    assertThat(t.getAppliedAmount()).isEqualByComparingTo("544000");
+                });
+        assertThat(ledger.findByBooking_Id(bookingId)).noneMatch(t -> t.getType() == PaymentType.PAYOUT);
+    }
+
     @Test void disputeOpenedAfterCheckoutPreventsCompletionButDoesNotLoseVerifiedMoney() {
         var session = tx.execute(status -> {
             Booking b = em.find(Booking.class, bookingId); ledger.deleteAll(ledger.findByBooking_Id(bookingId));

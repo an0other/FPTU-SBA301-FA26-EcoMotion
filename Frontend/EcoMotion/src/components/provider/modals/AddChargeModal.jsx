@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { providerBookingService } from '../../../services/providerBookingService'
 import { chargeQuote } from '../../../utils/tv5Contracts'
+import { chargeRequestIdentity } from '../../../utils/chargeRequestIdentity'
 
 const labels = {
   OVERTIME: 'Quá giờ (số slot vượt)',
@@ -13,11 +15,40 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
   const [chargeType, setChargeType] = useState('OVERTIME')
   const [quantity, setQuantity] = useState(1)
   const [description, setDescription] = useState('')
-  const [evidenceUrl, setEvidenceUrl] = useState('')
+  const [files, setFiles] = useState([])
+  const [previews, setPreviews] = useState([])
+  const [fieldErrors, setFieldErrors] = useState({})
   const [enteredAmount, setEnteredAmount] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const pendingRequest = useRef(null)
+  const submittingRef = useRef(false)
+  const previewUrls = useRef([])
+  const fileInputRef = useRef(null)
+  const replaceIndex = useRef(null)
+  const dialogRef = useRef(null)
+
+  useEffect(() => () => previewUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+    const previousFocus = document.activeElement
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.focus()
+    return () => {
+      document.body.style.overflow = previousOverflow
+      previousFocus?.focus()
+    }
+  }, [isOpen])
+
+  const replaceFiles = (nextFiles) => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url))
+    previewUrls.current = nextFiles.map((file) => URL.createObjectURL(file))
+    setPreviews(previewUrls.current)
+    setFiles(nextFiles)
+  }
 
   if (!isOpen || !booking) return null
 
@@ -26,18 +57,18 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
 
   const submit = async (event) => {
     event.preventDefault()
-    if (busy) return
-    if (
-      !description.trim() ||
-      !evidenceUrl.trim() ||
-      (chargeType === 'OVERTIME' && (!Number.isInteger(Number(quantity)) || Number(quantity) < 1 || Number(quantity) > 1000000)) ||
-      (chargeType === 'OTHER' && description.trim().length < 20) ||
-      !Number.isFinite(quote.amount) ||
-      quote.amount <= 0
-    ) {
-      setError(chargeType === 'OTHER'
-        ? 'Phụ phí khác cần mô tả ít nhất 20 ký tự, bằng chứng và số tiền lớn hơn 0.'
-        : 'Cần lý do, bằng chứng và số tiền hợp lệ.')
+    if (submittingRef.current) return
+    const errors = {}
+    if (!description.trim()) errors.description = 'Vui lòng nhập lý do phụ phí.'
+    else if (chargeType === 'OTHER' && description.trim().length < 20) errors.description = 'Vui lòng nhập ít nhất 20 ký tự.'
+    if (!files.length) errors.files = 'Vui lòng tải ảnh bằng chứng.'
+    if (files.length > 5) errors.files = 'Chỉ được chọn tối đa 5 ảnh.'
+    if (files.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) errors.files = 'Chỉ chấp nhận ảnh JPEG, PNG hoặc WebP.'
+    if (files.some((file) => !file.size || file.size > 5 * 1024 * 1024)) errors.files = 'Mỗi ảnh phải có dung lượng từ 1 byte đến 5 MB.'
+    if (chargeType === 'OVERTIME' && (!Number.isInteger(Number(quantity)) || Number(quantity) < 1 || Number(quantity) > 1000000)) errors.amount = 'Số slot phải là số nguyên từ 1 đến 1.000.000.'
+    else if (!Number.isFinite(quote.amount) || quote.amount <= 0) errors.amount = 'Vui lòng nhập số tiền hợp lệ lớn hơn 0.'
+    setFieldErrors(errors)
+    if (Object.keys(errors).length) {
       return
     }
     if (!confirming) {
@@ -45,35 +76,69 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
       setError('')
       return
     }
+    const payload = {
+      chargeType,
+      quantity: Number(quantity),
+      description: description.trim(),
+      ...quote,
+    }
+    const identityPayload = { ...payload, files: files.map(({ name, size, lastModified }) => ({ name, size, lastModified })) }
+    pendingRequest.current = chargeRequestIdentity(pendingRequest.current, booking.bookingCode, identityPayload, () => crypto.randomUUID())
+    submittingRef.current = true
     setBusy(true)
     setError('')
     try {
-      const created = await providerBookingService.addCharge(booking.bookingCode, {
-        chargeType,
-        quantity: Number(quantity),
-        description: description.trim(),
-        evidenceUrl: evidenceUrl.trim(),
-        clientRequestId: crypto.randomUUID(),
-        ...quote,
-      })
-      onSuccess?.(created, 'Đã ghi nhận phụ phí theo chính sách chốt của đơn.')
+      const created = await providerBookingService.addChargeWithEvidence(booking.bookingCode, {
+        ...payload,
+        clientRequestId: pendingRequest.current.id,
+      }, files)
+      pendingRequest.current = null
+      replaceFiles([])
+      onSuccess?.(created, 'Tải ảnh lên thành công và đã ghi nhận phụ phí.')
       setConfirming(false)
       onClose()
     } catch (err) {
       setError(err.message || 'Không thể lưu phụ phí.')
+      setFieldErrors((prev) => ({ ...prev, files: 'Không thể hoàn tất tải ảnh và lưu phụ phí. Vui lòng thử lại.' }))
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+  const chooseFiles = (index = null) => {
+    replaceIndex.current = index
+    if (fileInputRef.current) fileInputRef.current.multiple = index === null
+    fileInputRef.current?.click()
+  }
+
+  const handleFileSelection = (event) => {
+    const selected = Array.from(event.target.files || [])
+    if (selected.length) {
+      if (replaceIndex.current === null) replaceFiles(selected)
+      else {
+        const next = [...files]
+        next.splice(replaceIndex.current, 1, selected[0])
+        replaceFiles(next)
+      }
+      setFieldErrors((prev) => ({ ...prev, files: '' }))
+      setError('')
+    }
+    replaceIndex.current = null
+    event.target.value = ''
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-900/50 p-3 sm:p-4">
       <form
+        ref={dialogRef}
         onSubmit={submit}
+        noValidate
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-label="Thêm phụ phí"
-        className="w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg sm:max-h-[calc(100dvh-2rem)]"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
           <div>
@@ -98,7 +163,7 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
           <fieldset disabled={busy || confirming} className="space-y-3.5">
             <label className="block text-xs font-semibold text-slate-700">
               Loại phí
@@ -148,6 +213,7 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
               />
             </label>
             )}
+            {fieldErrors.amount && <p role="alert" className="text-xs text-red-600">{fieldErrors.amount}</p>}
 
             <label className="block text-xs font-semibold text-slate-700">
               Lý do
@@ -161,19 +227,36 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
                 className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
               />
             </label>
+            {fieldErrors.description && <p role="alert" className="text-xs text-red-600">{fieldErrors.description}</p>}
 
-            <label className="block text-xs font-semibold text-slate-700">
-              Đường dẫn bằng chứng
+            <div className="space-y-2" role="group" aria-labelledby="charge-evidence-label" aria-describedby="charge-evidence-help charge-evidence-error">
+              <p id="charge-evidence-label" className="text-xs font-semibold text-slate-700">Tải bằng chứng</p>
               <input
-                required
-                type="url"
-                maxLength={500}
-                value={evidenceUrl}
-                onChange={(e) => setEvidenceUrl(e.target.value)}
-                placeholder="https://..."
-                className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none disabled:bg-slate-50"
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleFileSelection}
+                tabIndex={-1}
+                aria-hidden="true"
+                className="sr-only"
               />
-            </label>
+              <button type="button" onClick={() => chooseFiles()} className="rounded-lg border border-emerald-700 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">Chọn ảnh từ thiết bị</button>
+              <p id="charge-evidence-help" className="text-xs text-slate-500">Hỗ trợ JPG, PNG, WebP; tối đa 5 ảnh, 5 MB mỗi ảnh theo cấu hình mặc định.</p>
+            </div>
+            <p id="charge-evidence-error" role={fieldErrors.files ? 'alert' : undefined} className="text-xs text-red-600">{fieldErrors.files || ''}</p>
+            {files.length > 0 && <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {files.map((file, index) => <div key={`${file.name}-${index}`} className="rounded-lg border border-slate-200 p-2">
+                {previews[index] && <img src={previews[index]} alt={`Bằng chứng ${index + 1}`} className="h-20 w-full rounded object-cover" />}
+                <p className="mt-1 truncate text-xs" title={file.name}>{file.name}</p>
+                <p aria-live="polite" className="mt-1 text-xs text-slate-500">{busy ? 'Đang tải lên...' : error ? 'Không thể tải lên hoặc lưu' : 'Chờ xác nhận để tải lên'}</p>
+                <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-xs font-semibold">
+                  <a href={previews[index]} target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline" aria-label={`Xem ảnh ${file.name}`}>Xem ảnh</a>
+                  <button type="button" onClick={() => chooseFiles(index)} className="text-emerald-700 underline" aria-label={`Thay ảnh ${file.name}`}>Thay ảnh</button>
+                  <button type="button" onClick={() => replaceFiles(files.filter((_, i) => i !== index))} className="text-red-700 underline" aria-label={`Xóa ảnh ${file.name}`}>Xóa ảnh</button>
+                </div>
+              </div>)}
+            </div>}
           </fieldset>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 space-y-1">
@@ -230,10 +313,10 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
             disabled={busy}
             className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
           >
-            {busy ? 'Đang lưu...' : confirming ? 'Xác nhận thêm phụ phí' : 'Tiếp tục'}
+            {busy ? 'Đang tải ảnh và lưu...' : confirming ? 'Xác nhận thêm phụ phí' : 'Tiếp tục'}
           </button>
         </div>
       </form>
     </div>
-  )
+  , document.body)
 }

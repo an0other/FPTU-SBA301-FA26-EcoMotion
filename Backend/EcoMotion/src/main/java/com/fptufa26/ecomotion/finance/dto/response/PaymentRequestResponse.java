@@ -35,6 +35,9 @@ public record PaymentRequestResponse(
         String issueNote,
         List<PaymentEvidenceResponse> evidences,
         boolean vnpayVerifying,
+        boolean vnpayPaid,
+        String vnpayTransactionNo,
+        Instant vnpayPaidAt,
         BookingStatus bookingStatus
 ) {
     public PaymentRequestResponse(
@@ -67,6 +70,6 @@ public record PaymentRequestResponse(
         this(id, null, bookingId, bookingCode, paymentType, amount, paidAmount, remainingAmount, currency,
                 transferReference, bankCodeSnapshot, bankNameSnapshot, accountNumberSnapshot, accountNumberMasked,
                 accountHolderSnapshot, status, qrCodeUrl, expiresAt, firstProofAt, reconciliationDeadline,
-                createdAt, confirmedAt, rejectionReason, issueNote, evidences, false, bookingStatus);
+                createdAt, confirmedAt, rejectionReason, issueNote, evidences, false, false, null, null, bookingStatus);
     }
 }

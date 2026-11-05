@@ -191,7 +191,7 @@ export default function LiveMapViewer({
     : null
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-xs select-none">
+    <div className="relative isolate overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-xs select-none">
       {/* Top Overlay: Status & Timestamps */}
       <div className="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         <div className="flex items-center gap-2 pointer-events-auto">

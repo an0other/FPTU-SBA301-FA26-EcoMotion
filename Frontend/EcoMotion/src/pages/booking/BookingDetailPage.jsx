@@ -1,4 +1,4 @@
-﻿import { useRealtimeSync } from '../../hooks/useRealtimeSync'
+import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -49,6 +49,9 @@ function toCard(detail) {
   const label = planLabel(detail.planType)
   return {
     id: detail.bookingCode,
+    bookingCode: detail.bookingCode,
+    renterName: detail.renterName,
+    providerName: detail.providerName,
     vehicleId: detail.vehicleId,
     status: detail.status,
     planType: detail.planType,
@@ -56,6 +59,10 @@ function toCard(detail) {
     upfront: detail.planType === 'YEARLY',
     createdAt: formatWhen(detail.createdAt),
     actualStartTime: formatWhen(detail.actualStartAt),
+    actualStartAt: detail.actualStartAt,
+    actualEndAt: detail.actualEndAt,
+    formattedActualStart: formatWhen(detail.actualStartAt),
+    formattedActualEnd: formatWhen(detail.actualEndAt),
     canConfirmStart: detail.canConfirmStart,
     canConfirmEnd: detail.canConfirmEnd,
     canCancel: detail.canCancel,
@@ -76,6 +83,7 @@ function toCard(detail) {
       amount: Number(charge.effectiveAmount ?? charge.amount),
       isWaived: Boolean(charge.isWaived),
       confirmationStatus: charge.confirmationStatus,
+      evidenceUrl: charge.evidenceUrl,
     })),
     driver: detail.driver
       ? {

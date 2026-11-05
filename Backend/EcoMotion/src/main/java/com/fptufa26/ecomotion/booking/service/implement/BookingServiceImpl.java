@@ -50,6 +50,7 @@ import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 import com.fptufa26.ecomotion.booking.service.DepositRefundRules;
 import com.fptufa26.ecomotion.common.exception.BadRequestException;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.booking.service.TripTransitions;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -198,8 +199,7 @@ public class BookingServiceImpl implements BookingService {
 
     private static final Set<BookingStatus> CONFIRM_END_STATUSES = EnumSet.of(
             BookingStatus.IN_PROGRESS,
-            BookingStatus.AWAITING_END_CONFIRMATION,
-            BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+            BookingStatus.AWAITING_END_CONFIRMATION);
     private static final Set<BookingStatus> CHARGE_DISPUTE = EnumSet.of(
             BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
             BookingStatus.AWAITING_FINAL_PAYMENT);
@@ -856,20 +856,8 @@ public class BookingServiceImpl implements BookingService {
     public ConfirmStartResponse confirmStart(Long userId, String bookingCode) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
-        if (booking.getRenterStartConfirmedAt() != null) {
+        if (!TripTransitions.confirmStart(booking, TripTransitions.Actor.RENTER, clock.instant())) {
             return toConfirmStart(booking);
-        }
-        if (booking.getStatus() != BookingStatus.DRIVER_ARRIVED
-                && booking.getStatus() != BookingStatus.AWAITING_START_CONFIRMATION) {
-            throw new ConflictException("Chỉ có thể xác nhận bắt đầu sau khi tài xế đã đến điểm đón");
-        }
-        Instant now = clock.instant();
-        booking.setRenterStartConfirmedAt(now);
-        if (booking.getDriverStartConfirmedAt() != null) {
-            booking.setActualStartAt(now);
-            booking.setStatus(BookingStatus.IN_PROGRESS);
-        } else {
-            booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
         }
         bookingRepository.saveAndFlush(booking);
         bookingNotificationService.changed(booking, "BOOKING_CHANGED");
@@ -884,26 +872,8 @@ public class BookingServiceImpl implements BookingService {
     public ConfirmEndResponse confirmEnd(Long userId, String bookingCode) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
-        if ((booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null)
-                && (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT || booking.getStatus() == BookingStatus.COMPLETED)) {
+        if (!TripTransitions.confirmEnd(booking, TripTransitions.Actor.RENTER, clock.instant())) {
             return bookingMapper.toConfirmEnd(booking);
-        }
-        if (booking.getStatus() != BookingStatus.IN_PROGRESS
-                && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION
-                && booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
-            throw new ConflictException("Chuyến đi chưa ở trạng thái cho phép xác nhận kết thúc");
-        }
-        if (booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null) {
-            return bookingMapper.toConfirmEnd(booking);
-        }
-        Instant now = clock.instant();
-        booking.setRenterEndConfirmedAt(now);
-        booking.setRenterConfirmedAt(now);
-        if (booking.getDriverEndConfirmedAt() != null || booking.getProviderConfirmedAt() != null) {
-            booking.setActualEndAt(now);
-            booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
-        } else {
-            booking.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);
         }
         bookingRepository.saveAndFlush(booking);
         bookingNotificationService.changed(booking, "BOOKING_CHANGED");

@@ -60,7 +60,8 @@ public interface BookingMapper {
                 charge.getAmount(),
                 charge.isWaived(),
                 charge.isWaived() ? BigDecimal.ZERO : charge.getAmount(),
-                charge.getConfirmationStatus());
+                charge.getConfirmationStatus(),
+                charge.getEvidenceUrl());
     }
 
     @Mapping(target = "fullName", source = "user.fullName")
@@ -206,6 +207,10 @@ public interface BookingMapper {
                 providerName = vehicle.getProvider().getUser().getFullName();
             }
         }
+        String renterName = null;
+        if (booking.getRenter() != null && booking.getRenter().getUser() != null) {
+            renterName = booking.getRenter().getUser().getFullName();
+        }
         return new BookingDetailResponse(
                 booking.getBookingCode(),
                 booking.getStatus(),
@@ -252,7 +257,12 @@ public interface BookingMapper {
                 snapshot.getFreeRadiusKm(),
                 snapshot.getOutOfRadiusRate(),
                 chargeableKm(snapshot.getDistanceKm(), snapshot.getFreeRadiusKm()),
-                snapshot.getPickupFee());
+                snapshot.getPickupFee(),
+                booking.getDriverStartConfirmedAt(),
+                booking.getRenterStartConfirmedAt(),
+                booking.getDriverEndConfirmedAt(),
+                booking.getRenterEndConfirmedAt(),
+                renterName);
     }
 
     private static Integer chargeableKm(BigDecimal distanceKm, Integer freeRadiusKm) {

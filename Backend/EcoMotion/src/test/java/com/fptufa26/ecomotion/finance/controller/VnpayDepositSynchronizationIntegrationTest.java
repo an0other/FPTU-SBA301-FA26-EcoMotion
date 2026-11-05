@@ -267,11 +267,43 @@ class VnpayDepositSynchronizationIntegrationTest {
     void providerRequestShowsGatewayVerificationUntilIpnIsApplied() {
         var params = attempt();
         assertThat(payments.getPaymentRequestDetail(requestId, providerId).vnpayVerifying()).isTrue();
+        assertThatThrownBy(() -> payments.confirmPayment(requestId, providerId,
+                new com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest(new BigDecimal("960000"), "TEST-MANUAL", null)))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThatThrownBy(() -> payments.rejectPayment(requestId, providerId,
+                new com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest("Test")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
         assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
         var request = payments.getPaymentRequestDetail(requestId, providerId);
         assertThat(request.vnpayVerifying()).isFalse();
+        assertThat(request.vnpayPaid()).isTrue();
+        assertThat(request.vnpayTransactionNo()).isEqualTo("123456789");
+        assertThat(request.vnpayPaidAt()).isNotNull();
         assertThat(request.status()).isEqualTo(PaymentRequestStatus.CONFIRMED);
         assertDepositApplied();
+    }
+
+    @Test
+    void verifiedDeposit486000UpdatesBookingAndBothViewsWithoutManualConfirmation() {
+        tx.executeWithoutResult(s -> {
+            em.createQuery("select p from BookingPolicySnapshot p where p.booking.id = :id", BookingPolicySnapshot.class)
+                    .setParameter("id", bookingId).getSingleResult().setDepositAmount(new BigDecimal("486000"));
+            em.find(PaymentRequest.class, requestId).setAmount(new BigDecimal("486000"));
+        });
+        var params = attempt();
+        assertThat(params.get("vnp_Amount")).isEqualTo("48600000");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("02");
+        var request = payments.getPaymentRequestDetail(requestId, providerId);
+        assertThat(request.paidAmount()).isEqualByComparingTo("486000");
+        assertThat(request.remainingAmount()).isZero();
+        assertThat(request.vnpayPaid()).isTrue();
+        assertThat(request.vnpayTransactionNo()).isEqualTo("123456789");
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(workflow.getWorkflow(renterId, code()).confirmedPaid()).isEqualByComparingTo("486000");
+        assertThat(workflow.getWorkflow(providerId, code()).confirmedPaid()).isEqualByComparingTo("486000");
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
     }
 
     @Test
