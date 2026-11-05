@@ -541,7 +541,14 @@ export const BookingDetail = ({
             </div>
             <PickupLocationCard pickupAddress={booking.pickupAddress}
               pickupLatitude={booking.pickupLatitude} pickupLongitude={booking.pickupLongitude}
-              driverNote={booking.driverNote} />
+              driverNote={booking.driverNote}
+              originLatitude={booking.dispatchOriginLatitude}
+              originLongitude={booking.dispatchOriginLongitude}
+              distanceKm={booking.distanceKm}
+              freeRadiusKm={booking.freeRadiusKm}
+              chargeableKm={booking.chargeableKm}
+              outOfRadiusRate={booking.outOfRadiusRate}
+              pickupFee={booking.pickupFee} />
           </div>
 
           {/* CARD: DRIVER (if assigned) */}

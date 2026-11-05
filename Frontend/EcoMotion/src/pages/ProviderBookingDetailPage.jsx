@@ -18,6 +18,7 @@ import { providerBookingService } from '../services/providerBookingService'
 import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
 import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
+import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 
 function Icon({ name, className = '' }) {
   return (
@@ -574,6 +575,20 @@ export default function ProviderBookingDetailPage() {
                   <span className="text-slate-900 font-medium">{booking.pickupAddress}</span>
                 </div>
               </div>
+              {(booking.dispatchOriginLatitude != null || booking.distanceKm != null || booking.pickupFee != null) && (
+                <PickupDistanceProof
+                  pickupAddress={booking.pickupAddress}
+                  pickupLatitude={booking.pickupLatitude}
+                  pickupLongitude={booking.pickupLongitude}
+                  originLatitude={booking.dispatchOriginLatitude}
+                  originLongitude={booking.dispatchOriginLongitude}
+                  distanceKm={booking.distanceKm}
+                  freeRadiusKm={booking.freeRadiusKm}
+                  chargeableKm={booking.chargeableKm}
+                  outOfRadiusRate={booking.outOfRadiusRate}
+                  pickupFee={booking.pickupFee}
+                />
+              )}
             </div>
           </div>
 

@@ -48,6 +48,13 @@ public record BookingDetailResponse(
         String providerName,
         Instant holdExpiresAt,
         String rejectionReason,
-        List<RentalQuoteResponse.Item> pricingItems
+        List<RentalQuoteResponse.Item> pricingItems,
+        BigDecimal dispatchOriginLatitude,
+        BigDecimal dispatchOriginLongitude,
+        BigDecimal distanceKm,
+        Integer freeRadiusKm,
+        BigDecimal outOfRadiusRate,
+        Integer chargeableKm,
+        BigDecimal pickupFee
 ) {
 }

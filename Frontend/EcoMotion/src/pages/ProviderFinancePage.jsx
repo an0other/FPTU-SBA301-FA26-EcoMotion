@@ -1079,8 +1079,8 @@ export default function ProviderFinancePage() {
                           <td className="px-4 py-3 text-center">
                             {canReview && (ref.status === 'UNDER_REVIEW' || ref.status === 'FAILED') ? (
                               <div className="flex flex-col gap-1">
-                                <button type="button" className="text-[11px] font-semibold text-brand-800 underline" onClick={() => providerFinanceService.reviewRefund(ref.id, refundReviewPayload('CONTINUE')).then(() => fetchFinanceData())}>Tiếp tục phương thức gốc</button>
-                                <button type="button" className="text-[11px] font-semibold text-slate-700 underline" onClick={() => providerFinanceService.reviewRefund(ref.id, refundReviewPayload('MANUAL')).then(() => fetchFinanceData())}>Chuyển chứng từ ngân hàng</button>
+                                <button type="button" className="text-[11px] font-semibold text-brand-800 underline" onClick={() => providerFinanceService.reviewRefund(ref.id, refundReviewPayload('CONTINUE')).then(() => fetchFinanceData()).catch((err) => setToast({ message: err?.response?.data?.message || err?.message || 'Không thể cập nhật hoàn tiền', type: 'error' }))}>Tiếp tục phương thức gốc</button>
+                                <button type="button" className="text-[11px] font-semibold text-slate-700 underline" onClick={() => providerFinanceService.reviewRefund(ref.id, refundReviewPayload('MANUAL')).then(() => fetchFinanceData()).catch((err) => setToast({ message: err?.response?.data?.message || err?.message || 'Không thể cập nhật hoàn tiền', type: 'error' }))}>Chuyển chứng từ ngân hàng</button>
                               </div>
                             ) : canReview ? (
                               <button

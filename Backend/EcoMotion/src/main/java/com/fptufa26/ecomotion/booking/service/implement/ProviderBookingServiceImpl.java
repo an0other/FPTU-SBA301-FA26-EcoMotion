@@ -402,7 +402,12 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getPricingItems().stream().map(item ->
                         new RentalQuoteResponse.Item(
                                 item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
-                                item.getUnitPrice(), item.getQuantity())).toList()
+                                item.getUnitPrice(), item.getQuantity())).toList(),
+                snapshot != null ? snapshot.getDispatchOriginLatitude() : null,
+                snapshot != null ? snapshot.getDispatchOriginLongitude() : null,
+                snapshot != null ? snapshot.getDistanceKm() : null,
+                chargeableKm(snapshot),
+                snapshot != null ? snapshot.getPickupFee() : null
         );
     }
 
@@ -1283,6 +1288,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED).contains(booking.getStatus())) {
             throw new ConflictException("Chỉ xử lý đổi xe, dời lịch hoặc hủy trước khi chuyến bắt đầu");
         }
+    }
+
+    private Integer chargeableKm(BookingPolicySnapshot snapshot) {
+        if (snapshot == null || snapshot.getDistanceKm() == null || snapshot.getFreeRadiusKm() == null) {
+            return null;
+        }
+        return (int) Math.ceil(Math.max(0d, snapshot.getDistanceKm().doubleValue() - snapshot.getFreeRadiusKm()));
     }
 
     private Instant plannedEnd(Booking booking, Instant start) {

@@ -11,10 +11,17 @@ const PIN = L.divIcon({
   iconSize: [28, 28], iconAnchor: [14, 28],
 })
 
-export function PickupMap({ value, onChange, onError, readOnly = false }) {
+const ORIGIN_PIN = L.divIcon({
+  className: '',
+  html: '<div style="width:18px;height:18px;border-radius:50%;background:#1d4ed8;border:3px solid white;box-shadow:0 2px 8px #0005"></div>',
+  iconSize: [18, 18], iconAnchor: [9, 9],
+})
+
+export function PickupMap({ value, onChange, onError, readOnly = false, origin = null }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const markerRef = useRef(null)
+  const originLayerRef = useRef(null)
   const onChangeRef = useRef(onChange)
   const valueRef = useRef(value)
   const initialValueRef = useRef(value)
@@ -68,7 +75,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
     primaryTiles.addTo(map)
     if (!readOnly) map.on('click', (event) => selectPoint(event.latlng.lat, event.latlng.lng))
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null; markerRef.current = null }
+    return () => { map.remove(); mapRef.current = null; markerRef.current = null; originLayerRef.current = null }
   }, [onError, readOnly, selectPoint])
 
   useEffect(() => {
@@ -89,8 +96,30 @@ export function PickupMap({ value, onChange, onError, readOnly = false }) {
         selectPoint(point.lat, point.lng)
       })
     } else markerRef.current.setLatLng(latLng)
-    map.setView(latLng, Math.max(map.getZoom(), 15), { animate: false })
-  }, [readOnly, selectPoint, value?.latitude, value?.longitude])
+    const hasOrigin = origin?.latitude != null && origin?.longitude != null
+    if (!hasOrigin) map.setView(latLng, Math.max(map.getZoom(), 15), { animate: false })
+  }, [origin?.latitude, origin?.longitude, readOnly, selectPoint, value?.latitude, value?.longitude])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return undefined
+    originLayerRef.current?.remove()
+    originLayerRef.current = null
+    if (origin?.latitude == null || origin?.longitude == null) return undefined
+    const originLatLng = [Number(origin.latitude), Number(origin.longitude)]
+    const group = L.layerGroup().addTo(map)
+    group.addLayer(L.marker(originLatLng, { icon: ORIGIN_PIN }))
+    if (value?.latitude != null && value?.longitude != null) {
+      const pickupLatLng = [Number(value.latitude), Number(value.longitude)]
+      group.addLayer(L.polyline([originLatLng, pickupLatLng], { color: '#15803d', weight: 3 }))
+      map.fitBounds(L.latLngBounds([originLatLng, pickupLatLng]), { padding: [28, 28], animate: false })
+    }
+    originLayerRef.current = group
+    return () => {
+      group.remove()
+      originLayerRef.current = null
+    }
+  }, [origin?.latitude, origin?.longitude, value?.latitude, value?.longitude])
 
   useEffect(() => {
     if (readOnly || query.trim().length < 3) return undefined

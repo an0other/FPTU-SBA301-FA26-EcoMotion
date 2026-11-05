@@ -245,7 +245,21 @@ public interface BookingMapper {
                 providerName,
                 holdExpiresAt,
                 booking.getStatus() == BookingStatus.REJECTED ? booking.getOperationalResolutionReason() : null,
-                toPricingItems(booking));
+                toPricingItems(booking),
+                snapshot.getDispatchOriginLatitude(),
+                snapshot.getDispatchOriginLongitude(),
+                snapshot.getDistanceKm(),
+                snapshot.getFreeRadiusKm(),
+                snapshot.getOutOfRadiusRate(),
+                chargeableKm(snapshot.getDistanceKm(), snapshot.getFreeRadiusKm()),
+                snapshot.getPickupFee());
+    }
+
+    private static Integer chargeableKm(BigDecimal distanceKm, Integer freeRadiusKm) {
+        if (distanceKm == null || freeRadiusKm == null) {
+            return null;
+        }
+        return (int) Math.ceil(Math.max(0d, distanceKm.doubleValue() - freeRadiusKm));
     }
 
     @Mapping(target = "bookingCode", source = "booking.bookingCode")

@@ -210,7 +210,12 @@ public class RefundEventService {
         String payDate = source.getVnpPayDate() != null && source.getVnpPayDate().length() >= 14
                 ? source.getVnpPayDate().substring(0, 14)
                 : VNP_DATE.format(source.getCreatedAt() == null ? clock.instant() : source.getCreatedAt());
-        long minor = refund.getAmount().movePointRight(2).longValueExact();
+        long minor;
+        try {
+            minor = refund.getAmount().movePointRight(2).longValueExact();
+        } catch (ArithmeticException ex) {
+            throw new InvalidPaymentOperationException("Số tiền hoàn phải chẵn đến đồng để gửi sang VNPay");
+        }
         VnpayRefundCallResult result = vnpayPaymentGatewayStrategy.refund(
                 refund.getVnpRequestId(), source.getVnpTxnRef(), source.getVnpTransactionNo(), payDate, type, minor,
                 "ecomotion", "Refund " + refund.getSourceEventId());
