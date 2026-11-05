@@ -76,8 +76,9 @@ public class Renter {
     @Column(name = "license_expiry")
     private LocalDate licenseExpiry;
 
-    @Column(name = "license_expiry_unlimited", nullable = false)
-    private boolean licenseExpiryUnlimited;
+    @org.hibernate.annotations.ColumnDefault("false")
+    @Column(name = "license_expiry_unlimited", nullable = false, columnDefinition = "boolean not null default false")
+    private boolean licenseExpiryUnlimited = false;
 
     @Column(name = "license_verified", nullable = false)
     private boolean licenseVerified;
