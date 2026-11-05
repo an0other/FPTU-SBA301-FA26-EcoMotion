@@ -21,6 +21,16 @@ class RenterPaymentSeedIntegrationTest {
     @Autowired PaymentTransactionRepository ledger;
     @Autowired PaymentRequestRepository requests;
     @Autowired EntityManager em;
+    @Autowired com.fptufa26.ecomotion.booking.service.BookingPaymentStateService paymentStates;
+
+    @Test void confirmedDemoDepositIsVerifiedAndAppliedToItsBooking() {
+        var booking = bookings.findByBookingCode("BK-ECO-001").orElseThrow();
+        var state = paymentStates.evaluate(booking, ledger.findByBooking_Id(booking.getId()));
+        assertThat(state.status()).isEqualTo(BookingPaymentStatus.DEPOSIT_PAID);
+        assertThat(state.appliedPaid()).isEqualByComparingTo("540000");
+        assertThat(state.remaining()).isEqualByComparingTo("1260000");
+    }
+
     @Autowired com.fptufa26.ecomotion.dispute.repository.DisputeRepository disputes;
 
     @Test void confirmedDemoBookingDoesNotStartWithAnUnsubmittedComplaint() {

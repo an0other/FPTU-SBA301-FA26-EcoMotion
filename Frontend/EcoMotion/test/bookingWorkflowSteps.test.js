@@ -234,3 +234,12 @@ test('receipt acknowledgement is required after the provider transfers a policy 
   }
   assert.equal(evaluateRefundWorkflow({ ...workflow, refunds: [{ ...workflow.refunds[0], receiptStatus: 'REPORTED_NOT_RECEIVED' }] }).isFullyRefunded, false)
 })
+
+
+test('confirmed booking requiring reconciliation stays at deposit review instead of approval', () => {
+  const steps = evaluateActiveWorkflowSteps({ bookingStatus: 'CONFIRMED', paymentStatus: 'RECONCILIATION_REQUIRED', confirmedPaid: 0 })
+  const deposit = steps.find(step => step.id === 'DEPOSIT')
+  assert.equal(deposit.state, STEP_STATUS.WARNING)
+  assert.equal(deposit.description, 'Cọc cần đối soát')
+  assert.equal(steps.find(step => step.state === STEP_STATUS.CURRENT || step.state === STEP_STATUS.WARNING).id, 'DEPOSIT')
+})
