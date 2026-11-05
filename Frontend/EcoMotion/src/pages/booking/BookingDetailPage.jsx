@@ -129,6 +129,7 @@ export function BookingDetailPage() {
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
   const [workflow, setWorkflow] = useState(null)
+  const [operationalRisk, setOperationalRisk] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
   const { trackingData, loading: trackingLoading, error: trackingError, refetch: refetchTracking } = useRenterTripTracking(
@@ -140,10 +141,13 @@ export function BookingDetailPage() {
   const refreshDetail = useCallback(async () => {
     const id = ++sequence.current
     try {
-      const [row, progress] = await Promise.allSettled([getMyBooking(bookingCode), bookingWorkflowService.get(bookingCode)])
+      const [row, progress, risk] = await Promise.allSettled([
+        getMyBooking(bookingCode), bookingWorkflowService.get(bookingCode), getMyBookingOperationalRisk(bookingCode),
+      ])
       if (id !== sequence.current) return
       if (row.status === 'rejected') throw row.reason
       setDetail(row.value); setError('')
+      setOperationalRisk(risk.status === 'fulfilled' ? risk.value : null)
       setWorkflow(progress.status === 'fulfilled' ? progress.value : null)
       setWorkflowError(progress.status === 'rejected' ? progress.reason.message : null)
     } catch (err) {

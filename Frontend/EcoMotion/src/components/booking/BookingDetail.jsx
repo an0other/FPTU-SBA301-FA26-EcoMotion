@@ -17,6 +17,7 @@ const DISPUTE_LABELS = {
 
 export const BookingDetail = ({
   booking,
+  operationalRisk = null,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
