@@ -13,6 +13,8 @@ export default function DriverDetailModal({
   onRejectClick,
   actionLoading,
   onPreviewImage,
+  onSelectProvider,
+  onSelectUser,
 }) {
   if (!driver) return null
 
@@ -65,8 +67,19 @@ export default function DriverDetailModal({
                   {driver.status}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                Tài xế #{driver.id} • Đơn vị quản lý: <strong>{driver.providerDisplayName || 'Chưa liên kết'}</strong>
+              <p className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                <span>Tài xế #{driver.id} • Đơn vị quản lý:</span>
+                {driver.providerId && onSelectProvider ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectProvider(driver.providerId)}
+                    className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 font-bold text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                  >
+                    {driver.providerDisplayName || `NCC #${driver.providerId}`} →
+                  </button>
+                ) : (
+                  <strong>{driver.providerDisplayName || 'Chưa liên kết'}</strong>
+                )}
               </p>
             </div>
           </div>
@@ -95,8 +108,19 @@ export default function DriverDetailModal({
 
           {/* Section 1: Personal & Organization */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>👤</span> Thông tin tài xế & Đơn vị chủ quản
+            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>👤</span> Thông tin tài xế &amp; Đơn vị chủ quản
+              </span>
+              {driver.userId && onSelectUser && (
+                <button
+                  type="button"
+                  onClick={() => onSelectUser(driver.userId)}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Xem tài khoản gốc (User #{driver.userId}) →
+                </button>
+              )}
             </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
@@ -113,7 +137,17 @@ export default function DriverDetailModal({
               </div>
               <div>
                 <span className="text-slate-500 block">Nhà cung cấp quản lý:</span>
-                <strong className="text-brand-700">{driver.providerDisplayName || 'Chưa gán'}</strong>
+                {driver.providerId && onSelectProvider ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectProvider(driver.providerId)}
+                    className="font-bold text-indigo-700 hover:underline text-left"
+                  >
+                    {driver.providerDisplayName || `NCC #${driver.providerId}`} →
+                  </button>
+                ) : (
+                  <strong className="text-brand-700">{driver.providerDisplayName || 'Chưa gán'}</strong>
+                )}
               </div>
               <div>
                 <span className="text-slate-500 block">Điểm đánh giá uy tín:</span>
@@ -165,7 +199,7 @@ export default function DriverDetailModal({
           {/* Section 3: Driver License Photos */}
           <div>
             <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-              <span>📷</span> Hình ảnh bằng lái xe & Chân dung đối chiếu
+              <span>📷</span> Hình ảnh bằng lái xe &amp; Chân dung đối chiếu
             </h4>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {/* License Front */}

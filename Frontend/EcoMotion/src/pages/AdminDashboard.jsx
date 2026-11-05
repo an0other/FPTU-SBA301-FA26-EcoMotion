@@ -86,7 +86,7 @@ export default function AdminDashboard() {
 
   function handleNavigate(targetTab, options = {}) {
     setActiveTab(targetTab)
-    setTabOptions(options)
+    setTabOptions({ ...options, navKey: Date.now() })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -294,13 +294,16 @@ export default function AdminDashboard() {
             initialSubTab={tabOptions.subTab || 'users'}
             initialFilter={tabOptions}
             onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onNavigate={handleNavigate}
           />
         )}
 
         {activeTab === 'vehicles' && (
           <AdminVehiclesTab
             initialStatus={tabOptions.status || 'ALL'}
+            initialFilter={tabOptions}
             onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onNavigate={handleNavigate}
           />
         )}
 
@@ -309,6 +312,7 @@ export default function AdminDashboard() {
             initialSubTab={tabOptions.subTab || 'bookings'}
             initialFilter={tabOptions}
             onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onNavigate={handleNavigate}
           />
         )}
       </main>

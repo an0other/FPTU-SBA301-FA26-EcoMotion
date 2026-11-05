@@ -1,4 +1,4 @@
-import { IconX, IconWallet, IconCheckCircle, IconClock, IconCar, IconUsers, IconAlertTriangle } from '../../../components/icons/Icons'
+import { IconX, IconWallet, IconCar, IconUsers } from '../../../components/icons/Icons'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -16,8 +16,21 @@ const BOOKING_STATUS_BADGES = {
   DISPUTED: 'bg-purple-50 text-purple-700 border-purple-200',
 }
 
-export default function BookingDetailModal({ booking, onClose, onOpenRefund }) {
+export default function BookingDetailModal({
+  booking,
+  onClose,
+  onOpenRefund,
+  onSelectRenter,
+  onSelectVehicle,
+  onSelectProvider,
+  onSelectDriver,
+}) {
   if (!booking) return null
+
+  const canClickRenter = Boolean((booking.renterUserId || booking.renterId || booking.renterEmail) && onSelectRenter)
+  const canClickVehicle = Boolean(booking.vehicleId && onSelectVehicle)
+  const canClickProvider = Boolean(booking.providerId && onSelectProvider)
+  const canClickDriver = Boolean(booking.driverId && onSelectDriver)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -38,7 +51,8 @@ export default function BookingDetailModal({ booking, onClose, onOpenRefund }) {
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Mã hệ thống: #{booking.id} • Thời điểm tạo đơn: {booking.createdAt ? new Date(booking.createdAt).toLocaleString('vi-VN') : '—'}
+              Mã hệ thống: #{booking.id} • Thời điểm tạo đơn:{' '}
+              {booking.createdAt ? new Date(booking.createdAt).toLocaleString('vi-VN') : '—'}
             </p>
           </div>
 
@@ -53,53 +67,130 @@ export default function BookingDetailModal({ booking, onClose, onOpenRefund }) {
 
         {/* Content Body */}
         <div className="mt-5 space-y-6 text-xs">
-          {/* Section 1: 4-Party Entities Grid */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Renter */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-1">
-              <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <IconUsers className="h-3.5 w-3.5 text-brand-600" /> Khách thuê (Renter)
+          {/* Section 1: 4-Party Entities Grid (Interactive Cross-Navigation) */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Các bên tham gia đơn thuê (Bấm vào từng thẻ để xem trang chi tiết)
               </span>
-              <div className="font-bold text-slate-900 text-sm">{booking.renterName || `Khách #${booking.renterId}`}</div>
-              <div className="text-slate-500 truncate">{booking.renterEmail || '—'}</div>
-              <div className="text-slate-700 font-medium">SĐT: {booking.renterPhone || '—'}</div>
             </div>
-
-            {/* Vehicle */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-1">
-              <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <IconCar className="h-3.5 w-3.5 text-emerald-600" /> Xe phục vụ (Vehicle)
-              </span>
-              <div className="font-bold text-slate-900 text-sm">{booking.vehicleModel || `Xe #${booking.vehicleId}`}</div>
-              <div className="font-mono font-bold text-brand-700">Biển số: {booking.vehicleLicensePlate || '—'}</div>
-              <div className="text-slate-500">Mã xe: #{booking.vehicleId}</div>
-            </div>
-
-            {/* Provider */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-1">
-              <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <span>🏢</span> Đơn vị chủ xe (Provider)
-              </span>
-              <div className="font-bold text-slate-900 text-sm">{booking.providerDisplayName || `NCC #${booking.providerId}`}</div>
-              <div className="text-slate-500">Mã đối tác: #{booking.providerId}</div>
-            </div>
-
-            {/* Driver */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-1">
-              <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <span>👤</span> Tài xế lái xe (Driver)
-              </span>
-              <div className="font-bold text-slate-900 text-sm">
-                {booking.driverName || (booking.driverId ? `Tài xế #${booking.driverId}` : 'Chưa phân công')}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Renter */}
+              <div
+                onClick={() => canClickRenter && onSelectRenter(booking)}
+                title={canClickRenter ? 'Bấm để xem chi tiết khách thuê' : ''}
+                className={`group rounded-2xl border p-3.5 space-y-1 transition-all ${
+                  canClickRenter
+                    ? 'cursor-pointer border-slate-200 bg-slate-50/70 hover:border-brand-400 hover:bg-brand-50/40 hover:shadow-sm'
+                    : 'border-slate-200 bg-slate-50/70'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <IconUsers className="h-3.5 w-3.5 text-brand-600" /> Khách thuê (Renter)
+                  </span>
+                  {canClickRenter && (
+                    <span className="text-[10px] font-bold text-brand-600 group-hover:translate-x-0.5 transition-transform">
+                      Chi tiết →
+                    </span>
+                  )}
+                </div>
+                <div className="font-bold text-slate-900 text-sm group-hover:text-brand-700 transition-colors">
+                  {booking.renterName || `Khách #${booking.renterId}`}
+                </div>
+                <div className="text-slate-500 truncate">{booking.renterEmail || '—'}</div>
+                <div className="text-slate-700 font-medium">SĐT: {booking.renterPhone || '—'}</div>
               </div>
-              <div className="text-slate-500">{booking.driverId ? `Mã TX: #${booking.driverId}` : 'Chờ nhà xe điều phối'}</div>
+
+              {/* Vehicle */}
+              <div
+                onClick={() => canClickVehicle && onSelectVehicle(booking.vehicleId)}
+                title={canClickVehicle ? 'Bấm để xem chi tiết phương tiện' : ''}
+                className={`group rounded-2xl border p-3.5 space-y-1 transition-all ${
+                  canClickVehicle
+                    ? 'cursor-pointer border-slate-200 bg-slate-50/70 hover:border-emerald-400 hover:bg-emerald-50/40 hover:shadow-sm'
+                    : 'border-slate-200 bg-slate-50/70'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <IconCar className="h-3.5 w-3.5 text-emerald-600" /> Xe phục vụ (Vehicle)
+                  </span>
+                  {canClickVehicle && (
+                    <span className="text-[10px] font-bold text-emerald-600 group-hover:translate-x-0.5 transition-transform">
+                      Chi tiết →
+                    </span>
+                  )}
+                </div>
+                <div className="font-bold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
+                  {booking.vehicleModel || `Xe #${booking.vehicleId}`}
+                </div>
+                <div className="font-mono font-bold text-brand-700">
+                  Biển số: {booking.vehicleLicensePlate || '—'}
+                </div>
+                <div className="text-slate-500">Mã xe: #{booking.vehicleId}</div>
+              </div>
+
+              {/* Provider */}
+              <div
+                onClick={() => canClickProvider && onSelectProvider(booking.providerId)}
+                title={canClickProvider ? 'Bấm để xem chi tiết nhà cung cấp' : ''}
+                className={`group rounded-2xl border p-3.5 space-y-1 transition-all ${
+                  canClickProvider
+                    ? 'cursor-pointer border-slate-200 bg-slate-50/70 hover:border-indigo-400 hover:bg-indigo-50/40 hover:shadow-sm'
+                    : 'border-slate-200 bg-slate-50/70'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <span>🏢</span> Đơn vị chủ xe (Provider)
+                  </span>
+                  {canClickProvider && (
+                    <span className="text-[10px] font-bold text-indigo-600 group-hover:translate-x-0.5 transition-transform">
+                      Chi tiết →
+                    </span>
+                  )}
+                </div>
+                <div className="font-bold text-slate-900 text-sm group-hover:text-indigo-700 transition-colors">
+                  {booking.providerDisplayName || `NCC #${booking.providerId}`}
+                </div>
+                <div className="text-slate-500">Mã đối tác: #{booking.providerId}</div>
+              </div>
+
+              {/* Driver */}
+              <div
+                onClick={() => canClickDriver && onSelectDriver(booking.driverId)}
+                title={canClickDriver ? 'Bấm để xem chi tiết tài xế' : ''}
+                className={`group rounded-2xl border p-3.5 space-y-1 transition-all ${
+                  canClickDriver
+                    ? 'cursor-pointer border-slate-200 bg-slate-50/70 hover:border-amber-400 hover:bg-amber-50/40 hover:shadow-sm'
+                    : 'border-slate-200 bg-slate-50/70'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <span>👤</span> Tài xế lái xe (Driver)
+                  </span>
+                  {canClickDriver && (
+                    <span className="text-[10px] font-bold text-amber-600 group-hover:translate-x-0.5 transition-transform">
+                      Chi tiết →
+                    </span>
+                  )}
+                </div>
+                <div className="font-bold text-slate-900 text-sm group-hover:text-amber-700 transition-colors">
+                  {booking.driverName || (booking.driverId ? `Tài xế #${booking.driverId}` : 'Chưa phân công')}
+                </div>
+                <div className="text-slate-500">
+                  {booking.driverId ? `Mã TX: #${booking.driverId}` : 'Chờ nhà xe điều phối'}
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Section 2: Itinerary & Timeline details */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
             <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>📍</span> Lịch trình đón trả & Mốc thời gian
+              <span>📍</span> Lịch trình đón trả &amp; Mốc thời gian
             </h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="sm:col-span-3">
@@ -110,7 +201,9 @@ export default function BookingDetailModal({ booking, onClose, onOpenRefund }) {
               </div>
               <div>
                 <span className="text-slate-500 block">Thời gian hẹn đón:</span>
-                <strong className="text-slate-900">{booking.pickupTime ? new Date(booking.pickupTime).toLocaleString('vi-VN') : '—'}</strong>
+                <strong className="text-slate-900">
+                  {booking.pickupTime ? new Date(booking.pickupTime).toLocaleString('vi-VN') : '—'}
+                </strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Số hành khách:</span>
@@ -118,15 +211,21 @@ export default function BookingDetailModal({ booking, onClose, onOpenRefund }) {
               </div>
               <div>
                 <span className="text-slate-500 block">Tổng thanh toán:</span>
-                <strong className="text-base font-extrabold text-brand-700">{formatVND(booking.totalAmount)}</strong>
+                <strong className="text-base font-extrabold text-brand-700">
+                  {formatVND(booking.totalAmount)}
+                </strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Bắt đầu chuyến đi thực tế:</span>
-                <strong className="text-slate-900">{booking.actualStartAt ? new Date(booking.actualStartAt).toLocaleString('vi-VN') : '—'}</strong>
+                <strong className="text-slate-900">
+                  {booking.actualStartAt ? new Date(booking.actualStartAt).toLocaleString('vi-VN') : '—'}
+                </strong>
               </div>
               <div>
                 <span className="text-slate-500 block">Kết thúc chuyến đi thực tế:</span>
-                <strong className="text-slate-900">{booking.actualEndAt ? new Date(booking.actualEndAt).toLocaleString('vi-VN') : '—'}</strong>
+                <strong className="text-slate-900">
+                  {booking.actualEndAt ? new Date(booking.actualEndAt).toLocaleString('vi-VN') : '—'}
+                </strong>
               </div>
               {booking.cancelReason && (
                 <div className="sm:col-span-3 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-rose-800">
@@ -139,7 +238,7 @@ export default function BookingDetailModal({ booking, onClose, onOpenRefund }) {
           {/* Section 3: Itemized Charges Breakdown Table */}
           <div>
             <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-              <IconWallet className="h-4 w-4 text-brand-600" /> Bóc tách chi phí & Các khoản phụ phí (Charges Breakdown)
+              <IconWallet className="h-4 w-4 text-brand-600" /> Bóc tách chi phí &amp; Các khoản phụ phí (Charges Breakdown)
             </h4>
 
             {(!booking.charges || booking.charges.length === 0) ? (
@@ -172,7 +271,11 @@ export default function BookingDetailModal({ booking, onClose, onOpenRefund }) {
                         <td className="p-3 text-slate-600">{c.description || '—'}</td>
                         <td className="p-3 text-center text-slate-600">{c.quantity || 1}</td>
                         <td className="p-3 text-slate-600">{formatVND(c.unitPrice)}</td>
-                        <td className={`p-3 text-right font-bold ${c.isWaived ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                        <td
+                          className={`p-3 text-right font-bold ${
+                            c.isWaived ? 'line-through text-slate-400' : 'text-slate-900'
+                          }`}
+                        >
                           {formatVND(c.amount)}
                         </td>
                       </tr>

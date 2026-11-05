@@ -13,6 +13,7 @@ export default function EkycDetailModal({
   onStatusUpdate,
   actionLoading,
   onPreviewImage,
+  onSelectUser,
 }) {
   if (!ekyc) return null
 
@@ -38,8 +39,19 @@ export default function EkycDetailModal({
                   {ekyc.ekycStatus}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                User ID #{ekyc.userId} • Email: {ekyc.email} • SĐT: {ekyc.phone || 'Chưa có'}
+              <p className="mt-0.5 text-xs text-slate-500 flex flex-wrap items-center gap-1.5">
+                {ekyc.userId && onSelectUser ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectUser(ekyc.userId)}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-0.5 font-bold text-brand-700 border border-brand-200 hover:bg-brand-100 transition-colors"
+                  >
+                    User ID #{ekyc.userId} →
+                  </button>
+                ) : (
+                  <span>User ID #{ekyc.userId}</span>
+                )}
+                <span>• Email: {ekyc.email} • SĐT: {ekyc.phone || 'Chưa có'}</span>
               </p>
             </div>
           </div>
@@ -57,9 +69,20 @@ export default function EkycDetailModal({
         <div className="mt-5 space-y-5 text-xs">
           {/* Identity Information Grid */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>🪪</span> Dữ liệu cá nhân trích xuất từ thẻ CCCD/CMND
-            </h4>
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <span>🪪</span> Dữ liệu cá nhân trích xuất từ thẻ CCCD/CMND
+              </h4>
+              {ekyc.userId && onSelectUser && (
+                <button
+                  type="button"
+                  onClick={() => onSelectUser(ekyc.userId)}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Xem tài khoản người dùng →
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <span className="text-slate-500 block">Số định danh CCCD:</span>
@@ -90,7 +113,7 @@ export default function EkycDetailModal({
           <div>
             <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <span>🔍</span> Đối chiếu hình ảnh sinh trắc học & Thẻ CCCD
+                <span>🔍</span> Đối chiếu hình ảnh sinh trắc học &amp; Thẻ CCCD
               </span>
               <span className="text-[11px] font-normal text-slate-400">Bấm vào từng ảnh để phóng to toàn màn hình</span>
             </h4>

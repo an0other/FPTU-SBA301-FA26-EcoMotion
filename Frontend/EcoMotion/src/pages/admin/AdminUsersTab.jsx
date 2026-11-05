@@ -28,7 +28,11 @@ const STATUS_BADGES = {
   REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
-export default function AdminUsersTab({ initialSubTab = 'users', initialFilter = {}, onStatsUpdate }) {
+export default function AdminUsersTab({
+  initialSubTab = 'users',
+  initialFilter = {},
+  onStatsUpdate,
+}) {
   const [subTab, setSubTab] = useState(initialSubTab)
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -55,7 +59,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
   // SubTab 3: Drivers
   const [drivers, setDrivers] = useState([])
   const [driverStatus, setDriverStatus] = useState(initialFilter.status || 'ALL')
-  const [driverRejectModal, setDriverRejectModal] = useState(null) // driver object
+  const [driverRejectModal, setDriverRejectModal] = useState(null)
   const [driverRejectReason, setDriverRejectReason] = useState('')
 
   // SubTab 4: eKYC
@@ -90,6 +94,116 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
   useEffect(() => {
     queueMicrotask(loadData)
   }, [loadData])
+
+  // Deep-link / Cross-Navigation Helpers
+  async function openUserById(userId, email) {
+    setSelectedProvider(null)
+    setSelectedDriver(null)
+    setSelectedEkyc(null)
+    setSubTab('users')
+    setUserFilters({ role: 'ALL', status: 'ALL', keyword: '' })
+    try {
+      const list = await adminService.getUsers({})
+      setUsers(list)
+      const found = list.find(
+        (u) =>
+          (userId && Number(u.id) === Number(userId)) ||
+          (email && u.email && u.email.toLowerCase() === email.toLowerCase()),
+      )
+      if (found) {
+        setSelectedUser(found)
+      }
+    } catch (err) {
+      console.error('Failed to open user detail:', err)
+    }
+  }
+
+  async function openProviderById(providerId) {
+    setSelectedUser(null)
+    setSelectedDriver(null)
+    setSelectedEkyc(null)
+    setSubTab('providers')
+    setProviderStatus('ALL')
+    try {
+      const list = await adminService.getProviders('ALL')
+      setProviders(list)
+      const found = list.find((p) => Number(p.id) === Number(providerId))
+      if (found) {
+        setSelectedProvider(found)
+      }
+    } catch (err) {
+      console.error('Failed to open provider detail:', err)
+    }
+  }
+
+  async function openDriverById(driverId, userId) {
+    setSelectedUser(null)
+    setSelectedProvider(null)
+    setSelectedEkyc(null)
+    setSubTab('drivers')
+    setDriverStatus('ALL')
+    try {
+      const list = await adminService.getDrivers('ALL')
+      setDrivers(list)
+      const found = list.find(
+        (d) =>
+          (driverId && Number(d.id) === Number(driverId)) ||
+          (userId && Number(d.userId) === Number(userId)),
+      )
+      if (found) {
+        setSelectedDriver(found)
+      }
+    } catch (err) {
+      console.error('Failed to open driver detail:', err)
+    }
+  }
+
+  async function openEkycByUserId(userId) {
+    setSelectedUser(null)
+    setSelectedProvider(null)
+    setSelectedDriver(null)
+    setSubTab('ekyc')
+    setEkycStatus('ALL')
+    try {
+      const list = await adminService.getEkyc('ALL')
+      setEkycList(list)
+      const found = list.find((e) => Number(e.userId) === Number(userId))
+      if (found) {
+        setSelectedEkyc(found)
+      }
+    } catch (err) {
+      console.error('Failed to open eKYC detail:', err)
+    }
+  }
+
+  // Watch incoming navigation target from AdminDashboard / other tabs
+  useEffect(() => {
+    if (initialFilter?.targetUserId || initialFilter?.targetUserEmail) {
+      openUserById(initialFilter.targetUserId, initialFilter.targetUserEmail)
+    } else if (initialFilter?.targetProviderId) {
+      openProviderById(initialFilter.targetProviderId)
+    } else if (initialFilter?.targetDriverId) {
+      openDriverById(initialFilter.targetDriverId)
+    } else if (initialFilter?.targetEkycUserId) {
+      openEkycByUserId(initialFilter.targetEkycUserId)
+    } else if (initialFilter?.subTab) {
+      setSubTab(initialFilter.subTab)
+      if (initialFilter.status) {
+        if (initialFilter.subTab === 'providers') setProviderStatus(initialFilter.status)
+        if (initialFilter.subTab === 'drivers') setDriverStatus(initialFilter.status)
+        if (initialFilter.subTab === 'ekyc') setEkycStatus(initialFilter.status)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    initialFilter?.navKey,
+    initialFilter?.targetUserId,
+    initialFilter?.targetUserEmail,
+    initialFilter?.targetProviderId,
+    initialFilter?.targetDriverId,
+    initialFilter?.targetEkycUserId,
+    initialFilter?.subTab,
+  ])
 
   // Handle User Status toggle (ACTIVE <-> LOCKED)
   async function handleToggleUserStatus(user) {
@@ -331,7 +445,10 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                       <tr key={u.id} className="transition-colors hover:bg-slate-50/70">
                         <td className="px-5 py-3.5 font-bold text-slate-900">#{u.id}</td>
                         <td className="px-5 py-3.5 font-semibold text-slate-800">
-                          <div className="flex items-center gap-2.5">
+                          <div
+                            onClick={() => setSelectedUser(u)}
+                            className="flex cursor-pointer items-center gap-2.5 group"
+                          >
                             <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-2xs">
                               {(u.avatarUrl || u.portraitUrl) ? (
                                 <img
@@ -346,7 +463,9 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                                 </div>
                               )}
                             </div>
-                            <span className="font-bold text-slate-900">{u.fullName || '—'}</span>
+                            <span className="font-bold text-slate-900 group-hover:text-brand-600 group-hover:underline">
+                              {u.fullName || '—'}
+                            </span>
                           </div>
                         </td>
                         <td className="px-5 py-3.5 text-slate-600">{u.email}</td>
@@ -435,8 +554,23 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                   <div className="space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h4 className="text-base font-bold text-slate-900">{p.brandName || 'Đối tác cá nhân'}</h4>
-                        <span className="text-xs text-slate-500">Mã NCC #{p.id} • User #{p.userId}</span>
+                        <h4 className="text-base font-bold text-slate-900">
+                          {p.displayName || p.brandName || 'Đối tác cá nhân'}
+                        </h4>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                          <span>Mã NCC #{p.id} •</span>
+                          {p.userId ? (
+                            <button
+                              type="button"
+                              onClick={() => openUserById(p.userId)}
+                              className="font-semibold text-brand-700 hover:underline"
+                            >
+                              Đại diện: {p.userFullName || `User #${p.userId}`} →
+                            </button>
+                          ) : (
+                            <span>User #{p.userId}</span>
+                          )}
+                        </div>
                       </div>
                       <span
                         className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider ${
@@ -449,9 +583,9 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
 
                     <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
                       <div><strong className="text-slate-800">Mã số thuế:</strong> {p.taxCode || '—'}</div>
-                      <div><strong className="text-slate-800">Email:</strong> {p.email}</div>
-                      <div><strong className="text-slate-800">Hotline:</strong> {p.phone || '—'}</div>
-                      <div><strong className="text-slate-800">Địa chỉ:</strong> {p.address || '—'}</div>
+                      <div><strong className="text-slate-800">Email:</strong> {p.userEmail || p.email || '—'}</div>
+                      <div><strong className="text-slate-800">Hotline:</strong> {p.hotline || p.userPhone || p.phone || '—'}</div>
+                      <div><strong className="text-slate-800">Địa chỉ:</strong> {p.depotAddress || p.address || '—'}</div>
                     </div>
                   </div>
 
@@ -545,7 +679,9 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
-                          <h4 className="truncate text-sm font-bold text-slate-900">{d.userFullName || d.fullName || 'Tài xế'}</h4>
+                          <h4 className="truncate text-sm font-bold text-slate-900">
+                            {d.userFullName || d.fullName || 'Tài xế'}
+                          </h4>
                           <span
                             className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                               STATUS_BADGES[d.status] || 'bg-slate-100 text-slate-700'
@@ -563,6 +699,18 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                       <div><strong className="text-slate-800">Số GPLX:</strong> {d.licenseNo || d.licenseNumber || '—'}</div>
                       <div><strong className="text-slate-800">Hạng bằng:</strong> {d.licenseClass || '—'}</div>
                       <div><strong className="text-slate-800">Hết hạn:</strong> {d.licenseExpiry || '—'}</div>
+                      {d.providerId && (
+                        <div className="flex items-center gap-1">
+                          <strong className="text-slate-800">Đơn vị chủ quản:</strong>
+                          <button
+                            type="button"
+                            onClick={() => openProviderById(d.providerId)}
+                            className="font-bold text-indigo-700 hover:underline truncate"
+                          >
+                            {d.providerDisplayName || `NCC #${d.providerId}`} →
+                          </button>
+                        </div>
+                      )}
                       {d.rejectReason && (
                         <div className="text-red-700">
                           <strong>Lý do từ chối:</strong> {d.rejectReason}
@@ -647,17 +795,24 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                   <div className="flex flex-wrap items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4">
                     <div>
                       <h4 className="text-base font-bold text-slate-900">{e.fullName || 'Khách thuê'}</h4>
-                      <span className="text-xs text-slate-500">
-                        User ID #{e.userId} • Email: {e.email} • SĐT: {e.phone || '—'}
+                      <span className="text-xs text-slate-500 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openUserById(e.userId)}
+                          className="font-bold text-brand-700 hover:underline"
+                        >
+                          User ID #{e.userId} →
+                        </button>
+                        <span>• Email: {e.email} • SĐT: {e.phone || '—'}</span>
                       </span>
                     </div>
 
                     <span
                       className={`inline-block rounded-full border px-3 py-1 text-xs font-bold tracking-wider ${
-                        STATUS_BADGES[e.status] || 'bg-slate-100 text-slate-700'
+                        STATUS_BADGES[e.ekycStatus || e.status] || 'bg-slate-100 text-slate-700'
                       }`}
                     >
-                      eKYC: {e.status}
+                      eKYC: {e.ekycStatus || e.status}
                     </span>
                   </div>
 
@@ -736,7 +891,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                     >
                       Thẩm định chi tiết
                     </button>
-                    {e.status !== 'VERIFIED' && (
+                    {(e.ekycStatus || e.status) !== 'VERIFIED' && (
                       <button
                         type="button"
                         disabled={actionLoading}
@@ -746,7 +901,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
                         Xác nhận eKYC hợp lệ
                       </button>
                     )}
-                    {e.status !== 'REJECTED' && (
+                    {(e.ekycStatus || e.status) !== 'REJECTED' && (
                       <button
                         type="button"
                         disabled={actionLoading}
@@ -781,7 +936,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
 
             <form onSubmit={handleConfirmRejectDriver} className="mt-4 space-y-4">
               <p className="text-xs text-slate-600">
-                Nhập lý do từ chối hồ sơ của tài xế <strong>{driverRejectModal.fullName}</strong>. Lý do sẽ được lưu vào hệ thống và hiển thị cho tài xế/chủ xe.
+                Nhập lý do từ chối hồ sơ của tài xế <strong>{driverRejectModal.userFullName || driverRejectModal.fullName}</strong>. Lý do sẽ được lưu vào hệ thống và hiển thị cho tài xế/chủ xe.
               </p>
 
               <div>
@@ -837,6 +992,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
           </div>
         </div>
       )}
+
       {/* Dedicated Inspection Modals */}
       {selectedUser && (
         <UserDetailModal
@@ -848,28 +1004,9 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
           }}
           actionLoading={actionLoading}
           onPreviewImage={(url) => setPreviewImage(url)}
-          onViewDriverDetail={(u) => {
-            setSelectedUser(null)
-            const foundDriver = drivers.find((drv) => drv.userId === u.id || drv.id === u.driverId)
-            if (foundDriver) {
-              setSelectedDriver(foundDriver)
-            } else {
-              setSelectedDriver({
-                id: u.driverId,
-                userId: u.id,
-                userFullName: u.fullName,
-                userEmail: u.email,
-                userPhone: u.phone,
-                licenseNo: u.licenseNo,
-                licenseClass: u.licenseClass,
-                licenseExpiry: u.licenseExpiry,
-                portraitUrl: u.portraitUrl || u.avatarUrl,
-                licenseImageUrl: u.licenseImageUrl,
-                providerDisplayName: u.providerDisplayName,
-                status: u.driverStatus || 'APPROVED',
-              })
-            }
-          }}
+          onViewDriverDetail={(u) => openDriverById(u.driverId, u.id)}
+          onViewProviderDetail={(providerId) => openProviderById(providerId)}
+          onViewEkycDetail={(userId) => openEkycByUserId(userId)}
         />
       )}
 
@@ -882,6 +1019,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
             setSelectedProvider(null)
           }}
           actionLoading={actionLoading}
+          onSelectUser={(userId) => openUserById(userId)}
         />
       )}
 
@@ -899,6 +1037,8 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
           }}
           actionLoading={actionLoading}
           onPreviewImage={(url) => setPreviewImage(url)}
+          onSelectProvider={(providerId) => openProviderById(providerId)}
+          onSelectUser={(userId) => openUserById(userId)}
         />
       )}
 
@@ -912,6 +1052,7 @@ export default function AdminUsersTab({ initialSubTab = 'users', initialFilter =
           }}
           actionLoading={actionLoading}
           onPreviewImage={(url) => setPreviewImage(url)}
+          onSelectUser={(userId) => openUserById(userId)}
         />
       )}
     </div>

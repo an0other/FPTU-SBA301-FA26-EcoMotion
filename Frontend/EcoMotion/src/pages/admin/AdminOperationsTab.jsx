@@ -6,8 +6,6 @@ import {
   IconWallet,
   IconSearch,
   IconX,
-  IconEye,
-  IconCheckCircle,
   IconImage,
 } from '../../components/icons/Icons'
 import BookingDetailModal from './modals/BookingDetailModal'
@@ -51,7 +49,12 @@ const DISPUTE_STATUS_BADGES = {
   REJECTED: 'bg-slate-100 text-slate-700 border-slate-200',
 }
 
-export default function AdminOperationsTab({ initialSubTab = 'bookings', initialFilter = {}, onStatsUpdate }) {
+export default function AdminOperationsTab({
+  initialSubTab = 'bookings',
+  initialFilter = {},
+  onStatsUpdate,
+  onNavigate,
+}) {
   const [subTab, setSubTab] = useState(initialSubTab)
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -68,7 +71,9 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   const [disputeStatus, setDisputeStatus] = useState(initialFilter.status || 'ALL')
   const [resolvingDispute, setResolvingDispute] = useState(null)
   const [disputeForm, setDisputeForm] = useState({
-    status: 'RESOLVED', decision: 'KEEP_CHARGE', resolution: '',
+    status: 'RESOLVED',
+    decision: 'KEEP_CHARGE',
+    resolution: '',
   })
 
   // SubTab 3: Payments & Refund
@@ -84,8 +89,24 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   }, [initialSubTab])
 
   useEffect(() => {
+    if (initialFilter?.targetBookingId) {
+      setSubTab('bookings')
+      setBookingStatus('ALL')
+      openBookingDetail(initialFilter.targetBookingId)
+    } else if (initialFilter?.targetDisputeId) {
+      setSubTab('disputes')
+      setDisputeStatus('ALL')
+      adminService.getDisputes('ALL').then((list) => {
+        setDisputes(list)
+        const found = list.find((d) => Number(d.id) === Number(initialFilter.targetDisputeId))
+        if (found) setResolvingDispute(found)
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFilter?.navKey, initialFilter?.targetBookingId, initialFilter?.targetDisputeId])
+
+  useEffect(() => {
     loadData()
-    // loadData reads the selected operation filters represented below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subTab, bookingStatus, disputeStatus])
 
@@ -118,6 +139,59 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
       setSelectedBooking(full)
     } catch (err) {
       alert('Không thể tải chi tiết đơn: ' + err.message)
+    }
+  }
+
+  // Cross-Navigation Helpers
+  function navigateToUser(userId, email) {
+    setSelectedBooking(null)
+    setResolvingDispute(null)
+    setSelectedPayment(null)
+    if (onNavigate) {
+      onNavigate('users', {
+        subTab: 'users',
+        status: 'ALL',
+        targetUserId: userId,
+        targetUserEmail: email,
+      })
+    }
+  }
+
+  function navigateToProvider(providerId) {
+    setSelectedBooking(null)
+    setResolvingDispute(null)
+    setSelectedPayment(null)
+    if (onNavigate) {
+      onNavigate('users', {
+        subTab: 'providers',
+        status: 'ALL',
+        targetProviderId: providerId,
+      })
+    }
+  }
+
+  function navigateToDriver(driverId) {
+    setSelectedBooking(null)
+    setResolvingDispute(null)
+    setSelectedPayment(null)
+    if (onNavigate) {
+      onNavigate('users', {
+        subTab: 'drivers',
+        status: 'ALL',
+        targetDriverId: driverId,
+      })
+    }
+  }
+
+  function navigateToVehicle(vehicleId) {
+    setSelectedBooking(null)
+    setResolvingDispute(null)
+    setSelectedPayment(null)
+    if (onNavigate) {
+      onNavigate('vehicles', {
+        status: 'ALL',
+        targetVehicleId: vehicleId,
+      })
     }
   }
 
@@ -291,7 +365,8 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                     <th className="px-5 py-3.5">Mã đơn</th>
                     <th className="px-5 py-3.5">Thời gian đón</th>
                     <th className="px-5 py-3.5">Địa chỉ đón</th>
-                    <th className="px-5 py-3.5">Khách</th>
+                    <th className="px-5 py-3.5">Khách thuê</th>
+                    <th className="px-5 py-3.5">Tài xế</th>
                     <th className="px-5 py-3.5">Tổng tiền</th>
                     <th className="px-5 py-3.5">Trạng thái</th>
                     <th className="px-5 py-3.5 text-right">Thao tác</th>
@@ -300,19 +375,56 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                 <tbody className="divide-y divide-slate-100">
                   {bookings.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="py-8 text-center text-slate-400">
+                      <td colSpan="8" className="py-8 text-center text-slate-400">
                         {loading ? 'Đang tải danh sách đơn...' : 'Không có đơn thuê nào phù hợp'}
                       </td>
                     </tr>
                   ) : (
                     bookings.map((b) => (
                       <tr key={b.id} className="transition-colors hover:bg-slate-50/70">
-                        <td className="px-5 py-3.5 font-mono font-bold text-slate-900">{b.bookingCode}</td>
-                        <td className="px-5 py-3.5 text-slate-600">{b.pickupTime || '—'}</td>
-                        <td className="px-5 py-3.5 max-w-[200px] truncate text-slate-700" title={b.pickupAddress}>
+                        <td className="px-5 py-3.5 font-mono font-bold text-slate-900">
+                          <button
+                            type="button"
+                            onClick={() => openBookingDetail(b.id)}
+                            className="hover:text-brand-600 hover:underline"
+                          >
+                            {b.bookingCode}
+                          </button>
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {b.pickupTime ? new Date(b.pickupTime).toLocaleString('vi-VN') : '—'}
+                        </td>
+                        <td className="px-5 py-3.5 max-w-[180px] truncate text-slate-700" title={b.pickupAddress}>
                           {b.pickupAddress || '—'}
                         </td>
-                        <td className="px-5 py-3.5 font-semibold text-slate-700">{b.passengerCount} người</td>
+                        <td className="px-5 py-3.5">
+                          {(b.renterUserId || b.renterEmail) ? (
+                            <button
+                              type="button"
+                              onClick={() => navigateToUser(b.renterUserId, b.renterEmail)}
+                              className="font-semibold text-brand-700 hover:underline text-left"
+                            >
+                              {b.renterName || `Khách #${b.renterId}`}
+                            </button>
+                          ) : (
+                            <span className="font-semibold text-slate-700">
+                              {b.renterName || `${b.passengerCount} người`}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {b.driverId ? (
+                            <button
+                              type="button"
+                              onClick={() => navigateToDriver(b.driverId)}
+                              className="font-semibold text-amber-700 hover:underline text-left"
+                            >
+                              {b.driverName || `Tài xế #${b.driverId}`}
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 italic">Chưa gán</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5 font-bold text-slate-900">{formatVND(b.totalAmount)}</td>
                         <td className="px-5 py-3.5">
                           <span
@@ -371,7 +483,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                 <thead className="border-b border-slate-200 bg-slate-50 font-bold uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-5 py-3.5">Mã khiếu nại</th>
-                    <th className="px-5 py-3.5">Đơn hàng (Booking ID)</th>
+                    <th className="px-5 py-3.5">Đơn hàng</th>
                     <th className="px-5 py-3.5">Danh mục</th>
                     <th className="px-5 py-3.5">Người khiếu nại</th>
                     <th className="px-5 py-3.5">Nội dung &amp; Bằng chứng</th>
@@ -391,13 +503,37 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                     disputes.map((d) => (
                       <tr key={d.id} className="transition-colors hover:bg-slate-50/70">
                         <td className="px-5 py-3.5 font-bold text-slate-900">DISP-#{d.id}</td>
-                        <td className="px-5 py-3.5 font-mono text-slate-600">Đơn #{d.bookingId}</td>
+                        <td className="px-5 py-3.5 font-mono">
+                          {d.bookingId ? (
+                            <button
+                              type="button"
+                              onClick={() => openBookingDetail(d.bookingId)}
+                              className="font-bold text-brand-700 hover:underline"
+                            >
+                              #{d.bookingCode || `Đơn #${d.bookingId}`}
+                            </button>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5">
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
                             {d.category || 'OTHER'}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-slate-600">User #{d.raisedBy}</td>
+                        <td className="px-5 py-3.5">
+                          {d.raisedById ? (
+                            <button
+                              type="button"
+                              onClick={() => navigateToUser(d.raisedById, d.raisedByEmail)}
+                              className="font-semibold text-brand-700 hover:underline text-left"
+                            >
+                              {d.raisedByName || `User #${d.raisedById}`}
+                            </button>
+                          ) : (
+                            <span className="text-slate-600">{d.raisedByName || '—'}</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5 max-w-[240px]">
                           <p className="line-clamp-2 font-medium text-slate-800" title={d.description || ''}>
                             {d.description || <span className="text-slate-400 italic font-normal">Chưa có mô tả</span>}
@@ -498,21 +634,33 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                     payments.map((p) => (
                       <tr key={p.id} className="transition-colors hover:bg-slate-50/70">
                         <td className="px-5 py-3.5 font-mono font-bold text-slate-900">TXN-#{p.id}</td>
-                        <td className="px-5 py-3.5 font-mono text-slate-600">Đơn #{p.bookingId}</td>
+                        <td className="px-5 py-3.5 font-mono">
+                          {p.bookingId ? (
+                            <button
+                              type="button"
+                              onClick={() => openBookingDetail(p.bookingId)}
+                              className="font-bold text-brand-700 hover:underline"
+                            >
+                              #{p.bookingCode || `Đơn #${p.bookingId}`}
+                            </button>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5 font-semibold text-slate-800">{p.type}</td>
                         <td className="px-5 py-3.5">
                           <span
                             className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
-                              p.direction === 'OUT'
+                              p.direction === 'OUT' || p.direction === 'OUTBOUND'
                                 ? 'bg-rose-100 text-rose-800'
                                 : 'bg-emerald-100 text-emerald-800'
                             }`}
                           >
-                            {p.direction === 'OUT' ? 'Tiền ra (OUT)' : 'Thu vào (IN)'}
+                            {p.direction === 'OUT' || p.direction === 'OUTBOUND' ? 'Tiền ra (OUT)' : 'Thu vào (IN)'}
                           </span>
                         </td>
                         <td className="px-5 py-3.5 font-bold text-slate-900">
-                          {p.direction === 'OUT' ? '-' : '+'}
+                          {p.direction === 'OUT' || p.direction === 'OUTBOUND' ? '-' : '+'}
                           {formatVND(p.amount)}
                         </td>
                         <td className="px-5 py-3.5 text-slate-600">{p.method || 'VNPAY'}</td>
@@ -521,7 +669,9 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                             {p.status}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-slate-500">{p.paidAt || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-500">
+                          {p.paidAt ? new Date(p.paidAt).toLocaleString('vi-VN') : '—'}
+                        </td>
                         <td className="px-5 py-3.5 text-right whitespace-nowrap">
                           <button
                             type="button"
@@ -549,6 +699,10 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
           setShowRefundModal(true)
           setRefundForm((prev) => ({ ...prev, bookingId: String(bookingId) }))
         }}
+        onSelectRenter={(b) => navigateToUser(b.renterUserId, b.renterEmail)}
+        onSelectVehicle={(vehicleId) => navigateToVehicle(vehicleId)}
+        onSelectProvider={(providerId) => navigateToProvider(providerId)}
+        onSelectDriver={(driverId) => navigateToDriver(driverId)}
       />
 
       <DisputeDetailModal
@@ -556,13 +710,28 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
         onClose={() => setResolvingDispute(null)}
         onResolve={handleResolveDispute}
         actionLoading={actionLoading}
+        onSelectBooking={(bookingId) => {
+          setResolvingDispute(null)
+          openBookingDetail(bookingId)
+        }}
+        onSelectUser={(userId) => navigateToUser(userId)}
+        onSelectVehicle={(vehicleId) => navigateToVehicle(vehicleId)}
+        onSelectProvider={(providerId) => navigateToProvider(providerId)}
+        onSelectDriver={(driverId) => navigateToDriver(driverId)}
       />
 
       <PaymentDetailModal
         payment={selectedPayment}
         onClose={() => setSelectedPayment(null)}
+        onSelectBooking={(bookingId) => {
+          setSelectedPayment(null)
+          openBookingDetail(bookingId)
+        }}
+        onSelectUser={(userId) => navigateToUser(userId)}
+        onSelectVehicle={(vehicleId) => navigateToVehicle(vehicleId)}
+        onSelectProvider={(providerId) => navigateToProvider(providerId)}
+        onSelectDriver={(driverId) => navigateToDriver(driverId)}
       />
-
 
       {/* Mock Refund Modal */}
       {showRefundModal && (

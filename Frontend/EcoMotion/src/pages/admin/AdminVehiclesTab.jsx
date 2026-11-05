@@ -4,7 +4,6 @@ import {
   IconCar,
   IconSearch,
   IconX,
-  IconEye,
   IconTag,
 } from '../../components/icons/Icons'
 import VehicleDetailModal from './modals/VehicleDetailModal'
@@ -17,14 +16,12 @@ const STATUS_BADGES = {
   MAINTENANCE: 'bg-blue-50 text-blue-700 border-blue-200',
 }
 
-const DOC_TYPE_LABELS = {
-  REGISTRATION: 'Đăng ký xe (Cà-vẹt)',
-  INSPECTION: 'Giấy chứng nhận Đăng kiểm',
-  INSURANCE: 'Bảo hiểm xe bắt buộc',
-  OTHER: 'Giấy tờ pháp lý khác',
-}
-
-export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate }) {
+export default function AdminVehiclesTab({
+  initialStatus = 'ALL',
+  initialFilter = {},
+  onStatsUpdate,
+  onNavigate,
+}) {
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -36,7 +33,6 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
   // Detail Modal
   const [selectedVehicle, setSelectedVehicle] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
-  const [showRejectInput, setShowRejectInput] = useState(false)
   const [previewDocUrl, setPreviewDocUrl] = useState(null)
 
   const loadVehicles = useCallback(async () => {
@@ -56,6 +52,13 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
     queueMicrotask(loadVehicles)
   }, [loadVehicles])
 
+  useEffect(() => {
+    if (initialFilter?.targetVehicleId) {
+      setStatusFilter('ALL')
+      openDetailModal({ id: initialFilter.targetVehicleId })
+    }
+  }, [initialFilter?.navKey, initialFilter?.targetVehicleId])
+
   function handleSearchSubmit(e) {
     e.preventDefault()
     loadVehicles()
@@ -63,13 +66,23 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
 
   async function openDetailModal(vehicleSummary) {
     setSelectedVehicle(null)
-    setShowRejectInput(false)
     setRejectReason('')
     try {
       const fullDetail = await adminService.getVehicleDetail(vehicleSummary.id)
       setSelectedVehicle(fullDetail)
     } catch (err) {
       alert('Không thể tải chi tiết xe: ' + err.message)
+    }
+  }
+
+  function handleNavigateToProvider(providerId) {
+    setSelectedVehicle(null)
+    if (onNavigate && providerId) {
+      onNavigate('users', {
+        subTab: 'providers',
+        status: 'ALL',
+        targetProviderId: providerId,
+      })
     }
   }
 
@@ -191,9 +204,9 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
               <div>
                 {/* Photo Header */}
                 <div className="relative aspect-16/10 w-full overflow-hidden bg-slate-100">
-                  {v.mainImageUrl ? (
+                  {(v.mainImageUrl || (v.imageUrls && v.imageUrls[0])) ? (
                     <img
-                      src={v.mainImageUrl}
+                      src={v.mainImageUrl || v.imageUrls[0]}
                       alt={`${v.brand} ${v.model}`}
                       className="h-full w-full object-cover"
                       onError={(e) => { e.target.style.display = 'none' }}
@@ -231,9 +244,19 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
                   </div>
 
                   <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-600">
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5">
-                      Chủ xe #{v.providerId}
-                    </span>
+                    {v.providerId ? (
+                      <button
+                        type="button"
+                        onClick={() => handleNavigateToProvider(v.providerId)}
+                        className="rounded-md bg-indigo-50 border border-indigo-100 px-2 py-0.5 font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                      >
+                        {v.providerDisplayName || `Chủ xe #${v.providerId}`} →
+                      </button>
+                    ) : (
+                      <span className="rounded-md bg-slate-100 px-2 py-0.5">
+                        Chủ xe #{v.providerId}
+                      </span>
+                    )}
                     <span className="rounded-md bg-slate-100 px-2 py-0.5">
                       {v.transmission || 'Tự động'}
                     </span>
@@ -268,6 +291,7 @@ export default function AdminVehiclesTab({ initialStatus = 'ALL', onStatsUpdate 
           onReject={(id, reason) => handleReject(id, reason)}
           actionLoading={actionLoading}
           onPreviewDoc={(url) => setPreviewDocUrl(url)}
+          onSelectProvider={(providerId) => handleNavigateToProvider(providerId)}
         />
       )}
 

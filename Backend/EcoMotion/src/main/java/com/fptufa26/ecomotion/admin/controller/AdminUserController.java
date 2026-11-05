@@ -105,9 +105,8 @@ public class AdminUserController {
     public ResponseEntity<ApiResponse<List<AdminEkycDto>>> listEkyc(
             @RequestParam(required = false) EkycStatus status) {
         List<User> users = userService.listAdminUsers(null, null, null);
-        EkycStatus target = (status != null) ? status : EkycStatus.PENDING;
         List<AdminEkycDto> dtos = users.stream()
-                .filter(u -> u.getEkycStatus() == target)
+                .filter(u -> status == null || u.getEkycStatus() == status)
                 .map(this::mapEkycDto)
                 .toList();
         return ResponseEntity.ok(ApiResponse.ok(dtos));
@@ -150,6 +149,11 @@ public class AdminUserController {
                 if (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()) {
                     builder.avatarUrl(d.getPortraitUrl());
                 }
+            });
+        } else if (user.getRole() == Role.PROVIDER) {
+            userService.findProviderProfile(user.getId()).ifPresent(p -> {
+                builder.providerId(p.getId())
+                        .providerDisplayName(p.getDisplayName());
             });
         }
 

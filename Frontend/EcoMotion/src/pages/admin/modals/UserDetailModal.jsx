@@ -24,6 +24,8 @@ export default function UserDetailModal({
   actionLoading,
   onPreviewImage,
   onViewDriverDetail,
+  onViewProviderDetail,
+  onViewEkycDetail,
 }) {
   const [avatarError, setAvatarError] = useState(false)
   if (!user) return null
@@ -99,9 +101,20 @@ export default function UserDetailModal({
             </div>
             <div>
               <span className="text-slate-500 block">Trạng thái định danh eKYC:</span>
-              <span className="inline-block mt-0.5 rounded-full border px-2 py-0.5 text-[10px] font-bold bg-slate-100">
-                {user.ekycStatus || 'PENDING'}
-              </span>
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className="inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold bg-slate-100">
+                  {user.ekycStatus || 'PENDING'}
+                </span>
+                {onViewEkycDetail && (
+                  <button
+                    type="button"
+                    onClick={() => onViewEkycDetail(user.id)}
+                    className="text-[11px] font-bold text-brand-600 hover:underline"
+                  >
+                    Xem hồ sơ eKYC →
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <span className="text-slate-500 block">Thời điểm tạo tài khoản:</span>
@@ -109,6 +122,21 @@ export default function UserDetailModal({
                 {user.createdAt ? new Date(user.createdAt).toLocaleString('vi-VN') : '—'}
               </strong>
             </div>
+            {user.role === 'PROVIDER' && user.providerId && onViewProviderDetail && (
+              <div className="sm:col-span-2 pt-1 border-t border-slate-200/70 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-500 block">Đơn vị Nhà cung cấp liên kết:</span>
+                  <strong className="text-indigo-700">{user.providerDisplayName || `NCC #${user.providerId}`}</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onViewProviderDetail(user.providerId)}
+                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                >
+                  Xem hồ sơ Nhà cung cấp →
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Section 2: Driver Specific Details & Photos */}
@@ -146,9 +174,20 @@ export default function UserDetailModal({
                   <strong className="text-slate-900 mt-0.5 block">{user.licenseExpiry || 'Không thời hạn'}</strong>
                 </div>
                 {user.providerDisplayName && (
-                  <div className="sm:col-span-3">
-                    <span className="text-slate-500 block">Đơn vị / Nhà cung cấp chủ quản:</span>
-                    <strong className="text-brand-700">{user.providerDisplayName}</strong>
+                  <div className="sm:col-span-3 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-500 block">Đơn vị / Nhà cung cấp chủ quản:</span>
+                      <strong className="text-brand-700">{user.providerDisplayName}</strong>
+                    </div>
+                    {user.providerId && onViewProviderDetail && (
+                      <button
+                        type="button"
+                        onClick={() => onViewProviderDetail(user.providerId)}
+                        className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                      >
+                        Xem Nhà cung cấp →
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -222,7 +261,7 @@ export default function UserDetailModal({
                 onClick={() => onViewDriverDetail(user)}
                 className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-xs font-bold text-brand-700 hover:bg-brand-100 transition-all"
               >
-                Xem chi tiết duyệt tài xế
+                Xem chi tiết duyệt tài xế →
               </button>
             )}
           </div>
