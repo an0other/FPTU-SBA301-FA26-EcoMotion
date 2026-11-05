@@ -59,10 +59,12 @@ public class RenterPaymentDataSeeder {
     private final VehicleRepository vehicleRepository;
     private final RentalPlanRepository rentalPlanRepository;
     private final EntityManager entityManager;
+    private final SeedDepositPaymentSynchronizer depositPayments;
 
     @Transactional
     public void seed() {
         if (bookingRepository.existsByBookingCode(R12_BOOKING_CODE)) {
+            depositPayments.synchronize(bookingRepository.findByBookingCodeForUpdate(R12_BOOKING_CODE).orElseThrow());
             return;
         }
 
@@ -106,6 +108,7 @@ public class RenterPaymentDataSeeder {
         BigDecimal depositAmount = baseAmount
                 .multiply(snapshot.getDepositRatio())
                 .setScale(2, RoundingMode.HALF_UP);
+        snapshot.setDepositAmount(depositAmount);
 
         if (depositAmount.signum() <= 0) {
             throw new IllegalStateException(
@@ -127,14 +130,14 @@ public class RenterPaymentDataSeeder {
                 createdAt);
         entityManager.persist(depositCharge);
 
-        booking.setStatus(BookingStatus.ACCEPTED);
-
         PaymentTransaction payment = createDepositPayment(
                 booking,
                 depositCharge,
                 depositAmount,
                 createdAt);
         entityManager.persist(payment);
+        entityManager.flush();
+        depositPayments.synchronize(booking);
 
         booking.setStatus(BookingStatus.CONFIRMED);
 
@@ -302,6 +305,7 @@ public class RenterPaymentDataSeeder {
         payment.setCharge(depositCharge);
         payment.setType(PaymentType.DEPOSIT_PAY);
         payment.setAmount(depositAmount);
+        payment.setAppliedAmount(depositAmount);
         payment.setDirection(PaymentDirection.IN);
         payment.setMethod(PaymentMethod.BANK_TRANSFER);
         payment.setStatus(PaymentStatus.PAID);

@@ -39,6 +39,18 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class RefundEventService {
+    @Transactional(readOnly = true)
+    public BigDecimal reservedForEvent(Long bookingId, String eventId) {
+        return refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
+                .filter(r -> belongsToEvent(r, eventId) && RefundMath.RESERVED.contains(r.getStatus()))
+                .map(RefundRequest::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasOpenRefunds(Long bookingId) {
+        return refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
+                .anyMatch(r -> RefundMath.RESERVED.contains(r.getStatus()) && r.getStatus() != RefundStatus.REFUNDED);
+    }
 
     private static final DateTimeFormatter VNP_DATE = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
             .withZone(ZoneId.of("Asia/Ho_Chi_Minh"));

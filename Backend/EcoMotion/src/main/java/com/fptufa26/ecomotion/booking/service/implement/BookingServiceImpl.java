@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
+import com.fptufa26.ecomotion.finance.service.RefundMath;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
@@ -148,7 +150,7 @@ public class BookingServiceImpl implements BookingService {
     private final Clock clock;
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
-    private final com.fptufa26.ecomotion.finance.service.implement.RefundEventService refundEventService;
+    private final RefundEventService refundEventService;
 
     @Override
     @Transactional(readOnly = true)
@@ -777,27 +779,39 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public CancelBookingResponse cancel(Long userId, String bookingCode) {
-        Booking booking = requireOwned(userId, bookingCode);
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (booking.getCancelReason() == CancelReason.RENTER_REQUEST && booking.getCancelledAt() != null
+                && (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)) {
+            return bookingMapper.toCancel(booking, refundEventService.reservedForEvent(booking.getId(), "CANCEL:" + booking.getId()));
+        }
         if (!CANCELLABLE.contains(booking.getStatus())) {
             throw new ConflictException("Booking cannot be cancelled");
         }
         BookingPolicySnapshot snapshot = requireSnapshot(booking);
-        Instant cancelledAt = Instant.now();
+        Instant cancelledAt = clock.instant();
         PaymentRequest depositRequest = paymentRequestService
                 .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
                 .orElse(null);
-        boolean hasVerifiedDeposit = depositRequest != null && depositRequest.getPaidAmount().signum() > 0;
-        boolean moneyRecorded = depositRequest != null
-                && (depositRequest.getStatus() == PaymentRequestStatus.CONFIRMED || hasVerifiedDeposit);
+        List<PaymentTransaction> recordedPayments = paymentTransactionRepository.findByBooking_Id(booking.getId());
+        BigDecimal recordedDeposit = paidDeposit(recordedPayments);
+        boolean hasVerifiedDeposit = recordedDeposit != null;
+        boolean moneyRecorded = recordedPayments.stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
+                && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0)
+                || depositRequest != null
+                && (depositRequest.getStatus() == PaymentRequestStatus.CONFIRMED || depositRequest.getPaidAmount().signum() > 0);
         boolean proofStillOpen = depositRequest != null
                 && !moneyRecorded
                 && (depositRequest.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
                     || depositRequest.getStatus() == PaymentRequestStatus.PARTIALLY_PAID
                     || depositRequest.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED);
-        boolean needsReview = moneyRecorded || proofStillOpen;
+        BigDecimal remainingReceived = refundEventService.remainingReceived(booking.getId());
+        boolean needsReview = proofStillOpen || refundEventService.hasOpenRefunds(booking.getId())
+                || moneyRecorded && (!hasVerifiedDeposit || remainingReceived.signum() > 0);
         BigDecimal refundAmount = hasVerifiedDeposit
                 ? refundAmount(booking, snapshot, cancelledAt)
                 : BigDecimal.ZERO;
+        refundAmount = refundAmount.min(remainingReceived);
         if (refundAmount.signum() > 0) {
             saveRefund(booking, refundAmount);
         }
@@ -848,6 +862,10 @@ public class BookingServiceImpl implements BookingService {
     public ConfirmEndResponse confirmEnd(Long userId, String bookingCode) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
+        if ((booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null)
+                && (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT || booking.getStatus() == BookingStatus.COMPLETED)) {
+            return bookingMapper.toConfirmEnd(booking);
+        }
         if (booking.getStatus() != BookingStatus.IN_PROGRESS
                 && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION
                 && booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
@@ -863,7 +881,7 @@ public class BookingServiceImpl implements BookingService {
             booking.setActualEndAt(now);
             booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         } else {
-            booking.setStatus(BookingStatus.IN_PROGRESS);
+            booking.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);
         }
         bookingRepository.saveAndFlush(booking);
         bookingNotificationService.changed(booking, "BOOKING_CHANGED");
@@ -1060,9 +1078,8 @@ public class BookingServiceImpl implements BookingService {
                 .filter(payment -> payment.getType() == PaymentType.DEPOSIT_PAY
                         && payment.getDirection() == PaymentDirection.IN
                         && payment.getStatus() == PaymentStatus.PAID)
-                .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
-                        ? payment.getAppliedAmount()
-                        : payment.getAmount())
+                .map(payment -> RefundMath.appliedPortion(
+                        payment.getAmount(), payment.getAppliedAmount(), payment.getProcessingNote()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return total.signum() > 0 ? total : null;
     }

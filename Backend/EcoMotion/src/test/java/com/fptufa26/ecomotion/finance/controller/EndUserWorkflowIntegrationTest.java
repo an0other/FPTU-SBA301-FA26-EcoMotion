@@ -1,5 +1,8 @@
 package com.fptufa26.ecomotion.finance.controller;
 
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import com.fptufa26.ecomotion.booking.entity.*;
 import com.fptufa26.ecomotion.booking.enums.*;
 import com.fptufa26.ecomotion.booking.repository.*;
@@ -30,16 +33,16 @@ import java.util.concurrent.*;
 import static org.assertj.core.api.Assertions.*;
 
 @SpringBootTest(properties = {"app.finance.sandbox-payout-enabled=true", "logging.level.org.hibernate.SQL=WARN"})
-@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 class EndUserWorkflowIntegrationTest {
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    @MockitoBean
     com.fptufa26.ecomotion.booking.service.MapGeocodingService geocoding;
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    @MockitoBean
     com.fptufa26.ecomotion.notification.external.service.ExternalNotificationDispatcherService external;
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    @MockitoBean
     com.fptufa26.ecomotion.common.storage.FileStorageService storage;
-    @org.springframework.test.context.DynamicPropertySource
+    @DynamicPropertySource
     static void database(org.springframework.test.context.DynamicPropertyRegistry registry) {
         if (!Boolean.getBoolean("tv5.workflow.postgres")) return;
         String url = System.getProperty("tv5.postgres.url");
@@ -365,16 +368,15 @@ class EndUserWorkflowIntegrationTest {
         assertThat(result.refundedAmount()).isZero();
         assertThat(result.refundableAmount()).isZero();
         assertThatThrownBy(() -> refunds.createRefundRequest(renterId, request("100000", "duplicate"))).isInstanceOf(RuntimeException.class);
-        org.mockito.Mockito.when(storage.store(org.mockito.ArgumentMatchers.eq("refund-proof"), org.mockito.ArgumentMatchers.anyLong(),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(byte[].class), org.mockito.ArgumentMatchers.anyString()))
-                .thenReturn("/test-only/refund-proof.pdf");
         long refundId = ledger.findByBooking_Id(bookingId).stream().filter(t -> t.getType() == PaymentType.REFUND).findFirst().orElseThrow().getId();
         var proof = new MockMultipartFile("file", "refund.pdf", "application/pdf", "%PDF-1.4 test evidence".getBytes());
-        refunds.completeRefund(providerId, refundId, proof, "JOURNEY-" + UUID.randomUUID(), "Bank transfer confirmed");
+        // ready() collected via VNPay: a bank-transfer image cannot settle a gateway refund.
+        assertThatThrownBy(() -> refunds.completeRefund(providerId, refundId, proof, "JOURNEY-" + UUID.randomUUID(), "Bank transfer confirmed"))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
         var completed = workflow.getWorkflow(renterId, code());
-        assertThat(completed.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
-        assertThat(completed.refundedAmount()).isEqualByComparingTo("100000");
-        assertThat(completed.pendingRefundAmount()).isZero();
+        assertThat(completed.bookingStatus()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(completed.refundedAmount()).isZero();
+        assertThat(completed.pendingRefundAmount()).isEqualByComparingTo("100000");
     }
 
     @Test void changedTermsRequireNewDriverConsentAndRejectOldTabSnapshot() {

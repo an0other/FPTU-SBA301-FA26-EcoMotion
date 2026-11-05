@@ -417,14 +417,16 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getDriverEndConfirmedAt() != null) {
             return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
         }
-        if (booking.getStatus() != BookingStatus.IN_PROGRESS || booking.getActualStartAt() == null) {
+        if ((booking.getStatus() != BookingStatus.IN_PROGRESS && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION)
+                || booking.getActualStartAt() == null) {
             throw new InvalidTripTransitionException("Chỉ có thể kết thúc chuyến đi đang thực hiện (IN_PROGRESS)");
         }
 
         Instant now = clock.instant();
         booking.setDriverEndConfirmedAt(now);
-        if (booking.getRenterEndConfirmedAt() != null) booking.setActualEndAt(now);
-        booking.setStatus(booking.getRenterEndConfirmedAt() != null
+        boolean renterEnded = booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null;
+        if (renterEnded && booking.getActualEndAt() == null) booking.setActualEndAt(now);
+        booking.setStatus(renterEnded
                 ? BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
                 : BookingStatus.AWAITING_END_CONFIRMATION);
         if (booking.getProviderConfirmedAt() == null) {

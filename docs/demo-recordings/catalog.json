@@ -1,0 +1,649 @@
+[
+  {
+    "key": "01-cong-khai",
+    "name": "1. Tìm xe, chính sách và tài khoản",
+    "chapters": [
+      {
+        "seconds": 5.2,
+        "title": "01 • Tổng quan: tìm xe và bộ lọc",
+        "url": "http://127.0.0.1:5173/",
+        "note": "Dữ liệu từ backend thật; video quay giao diện trình duyệt, không có lời thoại."
+      },
+      {
+        "seconds": 17.6,
+        "title": "02 • Chi tiết xe và các gói thuê",
+        "url": "http://127.0.0.1:5173/vehicles/1",
+        "note": "Giờ / ngày / tháng có tài xế; gói năm đi theo hợp đồng tự lái."
+      },
+      {
+        "seconds": 26.9,
+        "title": "03 • Chính sách thuê, cọc và hủy",
+        "url": "http://127.0.0.1:5173/policy",
+        "note": ""
+      },
+      {
+        "seconds": 36.2,
+        "title": "04 • Đăng ký người thuê",
+        "url": "http://127.0.0.1:5173/register",
+        "note": "OTP email → đăng ký → kích hoạt; không gửi OTP thật trong phần tổng quan."
+      },
+      {
+        "seconds": 45.8,
+        "title": "05 • Kích hoạt tài khoản",
+        "url": "http://127.0.0.1:5173/activate",
+        "note": "Cần token, OTP điện thoại, ảnh CCCD và đối chiếu khuôn mặt thật để hoàn tất."
+      },
+      {
+        "seconds": 55.2,
+        "title": "06 • Đăng nhập theo vai trò",
+        "url": "http://127.0.0.1:5173/login",
+        "note": "Các phần sau dùng phiên đăng nhập demo thật qua API; CAPTCHA tắt riêng trong phiên backend local."
+      }
+    ],
+    "size": 4.2
+  },
+  {
+    "key": "02-nguoi-thue",
+    "name": "2. Người thuê: đơn, thanh toán, đánh giá",
+    "chapters": [
+      {
+        "seconds": 5.6,
+        "title": "01 • Hồ sơ người thuê và GPLX",
+        "url": "http://127.0.0.1:5173/me",
+        "note": ""
+      },
+      {
+        "seconds": 14.9,
+        "title": "02 • Danh sách đơn và các trạng thái",
+        "url": "http://127.0.0.1:5173/renter/bookings",
+        "note": ""
+      },
+      {
+        "seconds": 24.2,
+        "title": "03 • Tạo yêu cầu thuê có tài xế",
+        "url": "http://127.0.0.1:5173/renter/bookings/new",
+        "note": ""
+      },
+      {
+        "seconds": 33.5,
+        "title": "04 • Chi tiết đơn đã thu cọc",
+        "url": "http://127.0.0.1:5173/renter/bookings/EM-SEED-R12-001",
+        "note": "Xem lịch trình, tiền, đề xuất thay đổi và các thao tác theo trạng thái."
+      },
+      {
+        "seconds": 42.8,
+        "title": "05 • Thanh toán: chuyển khoản và VNPay",
+        "url": "http://127.0.0.1:5173/renter/bookings/EM-SEED-R12-001/payment",
+        "note": "Không thực hiện giao dịch tiền thật."
+      },
+      {
+        "seconds": 52.7,
+        "title": "06 • Lịch sử giao dịch",
+        "url": "http://127.0.0.1:5173/renter/payments",
+        "note": ""
+      },
+      {
+        "seconds": 61.9,
+        "title": "07 • Đơn hoàn thành và quyết toán",
+        "url": "http://127.0.0.1:5173/renter/bookings/EM-SEED-R16-001",
+        "note": ""
+      },
+      {
+        "seconds": 71.1,
+        "title": "08 • Đánh giá xe và tài xế",
+        "url": "http://127.0.0.1:5173/renter/bookings/EM-SEED-R16-001/reviews",
+        "note": "Chỉ đơn đã hoàn tất mới có thể gửi đánh giá."
+      },
+      {
+        "seconds": 80.4,
+        "title": "09 • Thuê năm: hợp đồng tự lái",
+        "url": "http://127.0.0.1:5173/renter/yearly-rental",
+        "note": "Cần GPLX đủ điều kiện, một kỳ 365 ngày và hợp đồng đã ký."
+      }
+    ],
+    "size": 7.1
+  },
+  {
+    "key": "03-nha-xe",
+    "name": "3. Nhà xe: đội xe, tài xế, lịch và tài chính",
+    "chapters": [
+      {
+        "seconds": 5.3,
+        "title": "01 • Tổng quan nhà xe",
+        "url": "http://127.0.0.1:5173/provider",
+        "note": ""
+      },
+      {
+        "seconds": 14.4,
+        "title": "02 • Đội xe và trạng thái duyệt",
+        "url": "http://127.0.0.1:5173/provider/vehicles",
+        "note": ""
+      },
+      {
+        "seconds": 23.6,
+        "title": "03 • Đăng xe mới",
+        "url": "http://127.0.0.1:5173/provider/vehicles/new",
+        "note": ""
+      },
+      {
+        "seconds": 33.0,
+        "title": "04 • Hub xe: giấy tờ, giá và thông tin",
+        "url": "http://127.0.0.1:5173/provider/vehicles/1",
+        "note": ""
+      },
+      {
+        "seconds": 42.9,
+        "title": "05 • Chặn lịch bảo trì / không phục vụ",
+        "url": "http://127.0.0.1:5173/provider/schedules",
+        "note": ""
+      },
+      {
+        "seconds": 52.2,
+        "title": "06 • Quản lý tài xế và hồ sơ duyệt",
+        "url": "http://127.0.0.1:5173/provider/drivers",
+        "note": ""
+      },
+      {
+        "seconds": 61.6,
+        "title": "07 • Hàng đợi đơn và phân công tài xế",
+        "url": "http://127.0.0.1:5173/provider/bookings",
+        "note": ""
+      },
+      {
+        "seconds": 71.0,
+        "title": "08 • Chi tiết đơn và điều phối",
+        "url": "http://127.0.0.1:5173/provider/bookings/EM-SEED-R12-001",
+        "note": ""
+      },
+      {
+        "seconds": 80.2,
+        "title": "09 • Chuyến đang chạy và phụ phí",
+        "url": "http://127.0.0.1:5173/provider/bookings/EM-2026-9003",
+        "note": ""
+      },
+      {
+        "seconds": 89.5,
+        "title": "10 • Tài chính: thu tiền, đối soát và hoàn",
+        "url": "http://127.0.0.1:5173/provider/finance",
+        "note": ""
+      },
+      {
+        "seconds": 97.9,
+        "title": "Tài chính • Yêu cầu thanh toán",
+        "url": "http://127.0.0.1:5173/provider/finance",
+        "note": ""
+      },
+      {
+        "seconds": 106.2,
+        "title": "Tài chính • Hoàn tiền",
+        "url": "http://127.0.0.1:5173/provider/finance",
+        "note": ""
+      },
+      {
+        "seconds": 114.6,
+        "title": "Tài chính • Giao dịch",
+        "url": "http://127.0.0.1:5173/provider/finance",
+        "note": ""
+      }
+    ],
+    "size": 10.8
+  },
+  {
+    "key": "04-tai-xe",
+    "name": "4. Tài xế: lịch làm việc và tác nghiệp",
+    "chapters": [
+      {
+        "seconds": 5.7,
+        "title": "01 • Lịch tài xế và trạng thái làm việc",
+        "url": "http://127.0.0.1:5173/driver/schedule",
+        "note": ""
+      },
+      {
+        "seconds": 15.0,
+        "title": "02 • Tác nghiệp chuyến đi",
+        "url": "http://127.0.0.1:5173/driver/trips/BK-1P9A55",
+        "note": "Nhận → đến điểm đón → hai bên bắt đầu → hai bên kết thúc; thao tác phụ thuộc trạng thái."
+      }
+    ],
+    "size": 1.8
+  },
+  {
+    "key": "05-admin",
+    "name": "5. Admin: duyệt hồ sơ, xe và vận hành",
+    "chapters": [
+      {
+        "seconds": 5.6,
+        "title": "01 • Tổng quan và dòng tiền",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 14.3,
+        "title": "Admin • A02",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 22.7,
+        "title": "Duyệt hồ sơ • Nhà cung cấp",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 30.9,
+        "title": "Duyệt hồ sơ • Tài xế",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 39.2,
+        "title": "Duyệt hồ sơ • eKYC",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 47.5,
+        "title": "Duyệt hồ sơ • Người dùng",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 55.7,
+        "title": "Admin • A03",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 64.0,
+        "title": "Admin • A04",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 72.4,
+        "title": "Vận hành • Hoàn tiền",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 80.7,
+        "title": "Vận hành • Thanh toán",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 89.2,
+        "title": "Vận hành • Đơn thuê",
+        "url": "http://127.0.0.1:5173/admin",
+        "note": ""
+      }
+    ],
+    "size": 7.7
+  },
+  {
+    "key": "06-thue-nam",
+    "name": "6. Thuê năm: đơn đang chạy và kỳ tháng",
+    "chapters": [
+      {
+        "seconds": 6.1,
+        "title": "06-thue-nam",
+        "url": "http://127.0.0.1:5173/renter/bookings/EM-SEED-YEARLY-ACTIVE/yearly-rental",
+        "note": "Đơn seed đang chạy; kỳ tháng là dữ liệu demo, không tự sinh đủ 12 kỳ."
+      }
+    ],
+    "size": 0.9
+  },
+  {
+    "key": "07-gplx-bi-chan",
+    "name": "7. Nhánh GPLX chưa đủ điều kiện",
+    "chapters": [
+      {
+        "seconds": 5.2,
+        "title": "07-gplx-bi-chan",
+        "url": "http://127.0.0.1:5173/renter/yearly-rental",
+        "note": "Kiểm tra điều kiện GPLX trước khi đặt năm."
+      }
+    ],
+    "size": 0.8
+  },
+  {
+    "key": "08-tai-xe-cho-duyet",
+    "name": "8. Nhánh tài xế chưa duyệt",
+    "chapters": [
+      {
+        "seconds": 5.3,
+        "title": "08-tai-xe-cho-duyet",
+        "url": "http://127.0.0.1:5173/driver/schedule",
+        "note": "Đăng nhập được nhưng không được nhận chuyến khi hồ sơ chưa duyệt."
+      }
+    ],
+    "size": 0.8
+  },
+  {
+    "key": "11-quan-ly-va-duyet",
+    "name": "9. Nhà xe: giấy tờ, giá và biểu mẫu quản lý",
+    "chapters": [
+      {
+        "seconds": 6.0,
+        "title": "01 • Quản lý hồ sơ xe đã duyệt",
+        "url": "http://localhost:5173/provider/vehicles/1",
+        "note": ""
+      },
+      {
+        "seconds": 14.5,
+        "title": "02 • Bốn loại giấy tờ và trạng thái kiểm duyệt",
+        "url": "http://localhost:5173/provider/vehicles/1?tab=documents",
+        "note": ""
+      },
+      {
+        "seconds": 22.9,
+        "title": "03 • Giá gói giờ, ngày, tháng và năm",
+        "url": "http://localhost:5173/provider/vehicles/1?tab=pricing",
+        "note": "Giá trên đơn cũ dùng snapshot chính sách tại thời điểm đặt."
+      },
+      {
+        "seconds": 32.4,
+        "title": "04 • Danh sách và hồ sơ tài xế",
+        "url": "http://localhost:5173/provider/drivers",
+        "note": ""
+      },
+      {
+        "seconds": 41.8,
+        "title": "06 • Điều phối đơn đã thu cọc",
+        "url": "http://localhost:5173/provider/bookings/EM-SEED-R12-001",
+        "note": ""
+      },
+      {
+        "seconds": 50.1,
+        "title": "07 • Chọn tài xế và gợi ý phân công",
+        "url": "http://localhost:5173/provider/bookings/EM-SEED-R12-001",
+        "note": ""
+      },
+      {
+        "seconds": 59.7,
+        "title": "08 • Quản lý dòng tiền",
+        "url": "http://localhost:5173/provider/finance",
+        "note": ""
+      },
+      {
+        "seconds": 68.0,
+        "title": "Tài chính • Yêu cầu thanh toán",
+        "url": "http://localhost:5173/provider/finance",
+        "note": ""
+      },
+      {
+        "seconds": 76.3,
+        "title": "Tài chính • Hoàn tiền",
+        "url": "http://localhost:5173/provider/finance",
+        "note": ""
+      }
+    ],
+    "size": 7.4
+  },
+  {
+    "key": "12-phe-duyet",
+    "name": "10. Admin: hồ sơ, kiểm duyệt và vận hành",
+    "chapters": [
+      {
+        "seconds": 6.1,
+        "title": "01 • Vai trò kiểm duyệt của admin",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 14.7,
+        "title": "02 • Quản lý người dùng và các hồ sơ",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 23.0,
+        "title": "Hồ sơ • Nhà cung cấp",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 31.3,
+        "title": "Hồ sơ • Tài xế",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 39.6,
+        "title": "Hồ sơ • eKYC",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 47.8,
+        "title": "Hồ sơ • Người dùng",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 56.1,
+        "title": "03 • Duyệt xe mở bán",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 65.3,
+        "title": "05 • Quay lại điều hành",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      },
+      {
+        "seconds": 73.7,
+        "title": "06 • Tranh chấp, hoàn tiền và thanh toán",
+        "url": "http://localhost:5173/admin",
+        "note": ""
+      }
+    ],
+    "size": 6.2
+  },
+  {
+    "key": "13-dat-xe-den-thanh-toan",
+    "name": "11. Thực hành: đặt xe và giữ chỗ thành công",
+    "chapters": [
+      {
+        "seconds": 5.8,
+        "title": "01 • Chọn ngày và giờ thuê",
+        "url": "http://localhost:5173/renter/bookings/new?vehicleId=2",
+        "note": ""
+      },
+      {
+        "seconds": 13.6,
+        "title": "02 • Báo giá thành công từ backend",
+        "url": "http://localhost:5173/renter/bookings/new?vehicleId=2",
+        "note": ""
+      },
+      {
+        "seconds": 22.0,
+        "title": "03 • Chọn điểm đón trên bản đồ",
+        "url": "http://localhost:5173/renter/bookings/new?vehicleId=2",
+        "note": ""
+      },
+      {
+        "seconds": 32.9,
+        "title": "04 • Định vị và tính phí đón",
+        "url": "http://localhost:5173/renter/bookings/new?vehicleId=2",
+        "note": ""
+      },
+      {
+        "seconds": 41.2,
+        "title": "05 • Kiểm tra tổng giá và cọc",
+        "url": "http://localhost:5173/renter/bookings/new?vehicleId=2",
+        "note": ""
+      },
+      {
+        "seconds": 49.5,
+        "title": "06 • Kết quả gửi yêu cầu đặt xe",
+        "url": "http://localhost:5173/renter/bookings/new?vehicleId=2",
+        "note": ""
+      }
+    ],
+    "size": 4.8
+  },
+  {
+    "key": "16-hoan-tat-tac-nghiep",
+    "name": "12. Tài xế gửi xác nhận kết thúc",
+    "chapters": [
+      {
+        "seconds": 5.7,
+        "title": "01 • Tài xế kết thúc chuyến seed",
+        "url": "http://localhost:5173/driver/trips/BK-1P9A55",
+        "note": ""
+      },
+      {
+        "seconds": 14.2,
+        "title": "02 • Hộp thoại xác nhận kết thúc",
+        "url": "http://localhost:5173/driver/trips/BK-1P9A55",
+        "note": ""
+      },
+      {
+        "seconds": 22.5,
+        "title": "03 • Tài xế đã gửi xác nhận kết thúc",
+        "url": "http://localhost:5173/driver/trips/BK-1P9A55",
+        "note": ""
+      }
+    ],
+    "size": 2.5
+  },
+  {
+    "key": "17-hai-ben-va-quyet-toan",
+    "name": "13. Người thuê xác nhận và kết quả thực tế",
+    "chapters": [
+      {
+        "seconds": 5.6,
+        "title": "01 • Người thuê xác nhận kết thúc",
+        "url": "http://localhost:5173/renter/bookings/BK-1P9A55",
+        "note": ""
+      },
+      {
+        "seconds": 14.0,
+        "title": "03 • Kết quả xác nhận kết thúc",
+        "url": "http://localhost:5173/renter/bookings/BK-1P9A55",
+        "note": ""
+      }
+    ],
+    "size": 1.7
+  },
+  {
+    "key": "18-huy-va-nghia-vu-hoan",
+    "name": "14. Hủy đơn đã thu cọc: kết quả thực tế",
+    "chapters": [
+      {
+        "seconds": 5.5,
+        "title": "01 • Đơn có 330.000 đồng cọc đã nhận",
+        "url": "http://localhost:5173/renter/bookings/EM-SEED-R12-001",
+        "note": ""
+      },
+      {
+        "seconds": 13.8,
+        "title": "02 • Hủy sớm: hoàn 100% cọc",
+        "url": "http://localhost:5173/renter/bookings/EM-SEED-R12-001",
+        "note": ""
+      },
+      {
+        "seconds": 22.0,
+        "title": "03 • Đã gửi hủy: kiểm tra trạng thái đối soát",
+        "url": "http://localhost:5173/renter/bookings/EM-SEED-R12-001",
+        "note": ""
+      }
+    ],
+    "size": 2.6
+  },
+  {
+    "key": "20-thanh-toan-coc",
+    "name": "15. Yêu cầu cọc mới: VietQR và VNPay",
+    "chapters": [
+      {
+        "seconds": 5.8,
+        "title": "01 • Yêu cầu cọc thật từ đơn vừa tạo",
+        "url": "http://localhost:5173/renter/bookings/EM-2026-000043/payment",
+        "note": "Demo giao diện; không chuyển tiền thật và không giả kết quả cổng thanh toán."
+      },
+      {
+        "seconds": 14.0,
+        "title": "Phương thức • Chuyển khoản",
+        "url": "http://localhost:5173/renter/bookings/EM-2026-000043/payment",
+        "note": ""
+      },
+      {
+        "seconds": 22.3,
+        "title": "Phương thức • VietQR",
+        "url": "http://localhost:5173/renter/bookings/EM-2026-000043/payment",
+        "note": ""
+      },
+      {
+        "seconds": 30.7,
+        "title": "Phương thức • VNPay",
+        "url": "http://localhost:5173/renter/bookings/EM-2026-000043/payment",
+        "note": ""
+      }
+    ],
+    "size": 2.7
+  },
+  {
+    "key": "21-ket-qua-va-gioi-han",
+    "name": "16. Đơn mới và biểu mẫu tranh chấp",
+    "chapters": [
+      {
+        "seconds": 5.6,
+        "title": "01 • Đơn mới đã được tạo và giữ chỗ",
+        "url": "http://localhost:5173/renter/bookings/EM-2026-000043/submitted",
+        "note": "Báo giá 300.000 đồng; cọc 90.000 đồng. Chưa chuyển tiền."
+      },
+      {
+        "seconds": 14.7,
+        "title": "02 • Tranh chấp: biểu mẫu theo trạng thái đơn",
+        "url": "http://localhost:5173/renter/bookings/EM-2026-9003",
+        "note": "Chỉ trình bày biểu mẫu; không tạo khiếu nại giả."
+      }
+    ],
+    "size": 1.7
+  },
+  {
+    "key": "22-quyet-toan-va-hoan",
+    "name": "17. Phụ phí, ngân hàng, yêu cầu thu và hoàn",
+    "chapters": [
+      {
+        "seconds": 5.5,
+        "title": "01 • Nhà xe kiểm tra kết quả xác nhận hai bên",
+        "url": "http://localhost:5173/provider/bookings/BK-1P9A55",
+        "note": "Bản quay giữ nguyên trạng thái thực tế và lỗi gặp trong phiên demo."
+      },
+      {
+        "seconds": 13.9,
+        "title": "02 • Phụ phí theo snapshot chính sách",
+        "url": "http://localhost:5173/provider/bookings/BK-1P9A55",
+        "note": ""
+      },
+      {
+        "seconds": 23.3,
+        "title": "03 • Đối soát và hoàn tiền",
+        "url": "http://localhost:5173/provider/finance",
+        "note": ""
+      },
+      {
+        "seconds": 31.5,
+        "title": "04 • Danh sách hoàn tiền thực tế",
+        "url": "http://localhost:5173/provider/finance",
+        "note": "Sau khi hủy seed, màn hình đang hiển thị số yêu cầu thực tế; chưa có nghĩa là tiền đã hoàn."
+      },
+      {
+        "seconds": 39.8,
+        "title": "05 • Tài khoản ngân hàng nhận tiền",
+        "url": "http://localhost:5173/provider/finance",
+        "note": ""
+      },
+      {
+        "seconds": 48.0,
+        "title": "06 • Yêu cầu thu cọc của đơn vừa tạo",
+        "url": "http://localhost:5173/provider/finance",
+        "note": ""
+      }
+    ],
+    "size": 4.4
+  }
+]
