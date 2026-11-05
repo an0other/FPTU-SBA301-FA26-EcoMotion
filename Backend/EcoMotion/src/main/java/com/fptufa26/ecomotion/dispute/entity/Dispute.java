@@ -22,6 +22,13 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.time.Instant;
+import java.math.BigDecimal;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.JoinTable;
+import java.util.Set;
+import java.util.LinkedHashSet;
+import com.fptufa26.ecomotion.finance.entity.RefundRequest;
+import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
@@ -71,6 +78,24 @@ public class Dispute {
 
     @Column(length = 1000)
     private String resolution;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "decision", length = 30)
+    private DisputeResolutionDecision decision;
+
+    @Column(name = "refund_award_total", precision = 14, scale = 2)
+    private BigDecimal refundAwardTotal;
+
+    @Column(name = "resolved_at")
+    private Instant resolvedAt;
+
+    @Column(name="trip_end_action", length=40)
+    private String tripEndAction;
+
+    @ManyToMany
+    @JoinTable(name = "dispute_refund_link", joinColumns = @JoinColumn(name = "dispute_id"),
+            inverseJoinColumns = @JoinColumn(name = "refund_request_id"))
+    private Set<RefundRequest> relatedRefunds = new LinkedHashSet<>();
 
     public List<String> getEvidenceUrlList() {
         if (evidenceUrls == null || evidenceUrls.isBlank()) {

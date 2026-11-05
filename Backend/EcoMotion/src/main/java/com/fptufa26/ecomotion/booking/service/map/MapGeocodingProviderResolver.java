@@ -16,12 +16,12 @@ public class MapGeocodingProviderResolver {
 
     public MapGeocodingProviderResolver(
             List<MapGeocodingProvider> providerList,
-            @Value("${app.map.provider:NOMINATIM}") String defaultProviderName) {
+            @Value("${app.map.provider:VIETMAP}") String defaultProviderName) {
         this.providers = providerList != null ? providerList.stream()
                 .filter(p -> p != null && p.getProviderName() != null && !p.getProviderName().isBlank())
                 .collect(Collectors.toMap(p -> p.getProviderName().trim().toUpperCase(), p -> p, (a, b) -> a))
                 : Map.of();
-        this.defaultProviderName = defaultProviderName != null ? defaultProviderName.trim().toUpperCase() : "NOMINATIM";
+        this.defaultProviderName = defaultProviderName != null ? defaultProviderName.trim().toUpperCase() : "VIETMAP";
     }
 
     public MapGeocodingProvider resolveDefaultProvider() {

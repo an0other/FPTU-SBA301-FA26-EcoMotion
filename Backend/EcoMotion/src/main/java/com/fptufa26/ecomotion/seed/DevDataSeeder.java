@@ -16,10 +16,6 @@ import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.common.crypto.DeterministicCipher;
-import com.fptufa26.ecomotion.dispute.entity.Dispute;
-import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
-import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
-import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
 import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
@@ -133,7 +129,6 @@ public class DevDataSeeder implements ApplicationRunner {
     private final BookingPolicySnapshotRepository snapshotRepository;
     private final BookingChargeRepository chargeRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
-    private final DisputeRepository disputeRepository;
     private final ScheduleService scheduleService;
     private final YearlyRentalDataSeeder yearlyRentalDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
@@ -714,20 +709,6 @@ public class DevDataSeeder implements ApplicationRunner {
             tx1.setGatewayRef("VNPAY-20261016-001");
             tx1.setPaidAt(Instant.now().minus(Duration.ofHours(5)));
             paymentTransactionRepository.save(tx1);
-
-            Dispute dispute = new Dispute();
-            dispute.setBooking(savedBooking1);
-            dispute.setCharge(savedCharge2);
-            dispute.setRaisedBy(userRepository.findById(1L).orElseThrow());
-            dispute.setCategory(DisputeCategory.CHARGE);
-            dispute.setStatus(DisputeStatus.OPEN);
-            dispute.setDescription("Khách khiếu nại phụ phí vệ sinh: Khách ói ra sàn xe nhưng đã tự lau dọn kỹ và khử mùi bằng tinh dầu, đề nghị giảm phí vệ sinh chuyên sâu.");
-            dispute.setEvidenceUrlList(List.of(
-                    "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80",
-                    "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80"
-            ));
-            dispute.setResolution(null);
-            disputeRepository.save(dispute);
         }
     }
 

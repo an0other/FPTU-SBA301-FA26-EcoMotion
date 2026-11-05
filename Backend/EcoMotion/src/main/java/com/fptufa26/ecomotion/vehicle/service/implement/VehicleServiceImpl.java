@@ -85,9 +85,12 @@ public class VehicleServiceImpl implements VehicleService {
                             || provider.depotLongitude() == null) {
                         return null;
                     }
-                    double distance = mapLocationService.distanceKm(latitude.doubleValue(), longitude.doubleValue(),
-                            provider.depotLatitude().doubleValue(),
-                            provider.depotLongitude().doubleValue());
+                    double latRange = radiusKm / 110.0;
+                    double lonRange = radiusKm / (110.0 * Math.max(0.01, Math.cos(Math.toRadians(latitude.doubleValue()))));
+                    if (Math.abs(provider.depotLatitude().doubleValue() - latitude.doubleValue()) > latRange
+                            || Math.abs(provider.depotLongitude().doubleValue() - longitude.doubleValue()) > lonRange) return null;
+                    double distance = mapLocationService.distanceKm(provider.depotLatitude().doubleValue(),
+                            provider.depotLongitude().doubleValue(), latitude.doubleValue(), longitude.doubleValue());
                     return distance <= radiusKm
                             ? new VehicleMapResponse(card, provider.depotLatitude(),
                             provider.depotLongitude(), distance)

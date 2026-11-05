@@ -332,8 +332,9 @@ export default function BookingProgressStepper({
               )}
             </div>
 
+            {!provider && !booking.driverName && <p className="text-sm text-slate-700">Nhà xe đang bố trí tài xế cho chuyến của bạn. Thông tin tài xế sẽ được cập nhật tại đây khi có phân công.</p>}
             {/* Cảnh báo nếu chưa có tài xế */}
-            {!booking.driverName && (
+            {provider && !booking.driverName && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-amber-900 flex items-start gap-2.5">
                 <Icon name="warning" className="text-[18px] text-amber-600 shrink-0 mt-0.5" />
                 <div>
@@ -346,7 +347,7 @@ export default function BookingProgressStepper({
             )}
 
             {/* Hướng dẫn xử lý nếu hết tài xế phù hợp */}
-            {!booking.driverName && (
+            {provider && !booking.driverName && (
               <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-slate-700 flex items-start gap-2.5">
                 <Icon name="help_outline" className="text-[18px] text-slate-500 shrink-0 mt-0.5" />
                 <div>
@@ -362,7 +363,7 @@ export default function BookingProgressStepper({
             )}
 
             {/* Thông tin thời gian phản hồi khi đang chờ tài xế */}
-            {booking.driverName && !isDriverConfirmed && !isDriverRejected && (
+            {provider && booking.driverName && !isDriverConfirmed && !isDriverRejected && (
               <p className="text-[11px] text-slate-600 pt-0.5">
                 Yêu cầu đã được gửi tới tài xế. Tài xế có 15 phút để phản hồi nhận chuyến. Nhà xe có thể sử dụng nút <strong>&quot;Điều phối lại tài xế&quot;</strong> ở góc trên nếu tài xế không phản hồi kịp thời.
               </p>
@@ -403,7 +404,7 @@ export default function BookingProgressStepper({
                   <Icon name="add_card" className="text-[16px]" />
                   <span>Thêm phụ phí</span>
                 </button>
-                {booking.providerConfirmedAt && booking.renterConfirmedAt && (
+                {booking.providerConfirmedAt && (booking.renterConfirmedAt || workflow?.endConfirmations?.[0]?.confirmationMethod === 'AUTO') && (
                   <button
                     type="button"
                     onClick={() => onAction('FINALIZE_SETTLEMENT')}

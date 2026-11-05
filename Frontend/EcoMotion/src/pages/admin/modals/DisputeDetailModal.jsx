@@ -8,30 +8,26 @@ function formatVND(amount) {
 
 const DISPUTE_STATUS_BADGES = {
   OPEN: 'bg-rose-50 text-rose-700 border-rose-200',
-  UNDER_REVIEW: 'bg-amber-50 text-amber-700 border-amber-200',
   IN_REVIEW: 'bg-amber-50 text-amber-700 border-amber-200',
   RESOLVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   REJECTED: 'bg-slate-100 text-slate-700 border-slate-200',
 }
 
-export default function DisputeDetailModal({
-  dispute,
-  onClose,
-  onResolve,
-  actionLoading,
-  onSelectBooking,
-  onSelectUser,
-  onSelectVehicle,
-  onSelectProvider,
-  onSelectDriver,
-}) {
-  if (!dispute) return null
+export default function DisputeDetailModal({ dispute, ...props }) {
+  return dispute ? <DisputeDetailForm key={dispute.id} dispute={dispute} {...props} /> : null
+}
 
+function DisputeDetailForm({
+  dispute, onClose, onResolve, actionLoading, error,
+  onSelectBooking, onSelectUser, onSelectVehicle, onSelectProvider, onSelectDriver,
+}) {
   const isResolvedOrRejected = dispute.status === 'RESOLVED' || dispute.status === 'REJECTED'
 
   const [form, setForm] = useState({
     status: isResolvedOrRejected ? dispute.status : 'RESOLVED',
-    decision: 'KEEP_CHARGE',
+    decision: dispute.decision || 'WAIVE_CHARGE',
+    refundAwardTotal: dispute.refundAwardTotal ?? '',
+    tripEndAction: '',
     resolution: dispute.resolution || '',
   })
   const [previewImage, setPreviewImage] = useState(null)
@@ -58,12 +54,15 @@ export default function DisputeDetailModal({
       alert('Vui lòng nhập nội dung phán quyết / giải pháp phân xử.')
       return
     }
-    onResolve(dispute.id, form.status, form.decision, form.resolution.trim())
+    onResolve(dispute.id, form.status,
+      dispute.category === 'CHARGE' && form.status !== 'IN_REVIEW' ? form.decision : undefined,
+      form.resolution.trim(), dispute.category === 'DEPOSIT_REFUND' && form.status === 'RESOLVED' ? Number(form.refundAwardTotal) : undefined,
+      dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' ? form.tripEndAction || undefined : undefined)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-      <div className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label={`Phân xử khiếu nại #${dispute.id}`} className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
@@ -318,8 +317,14 @@ export default function DisputeDetailModal({
                 <span>Tranh chấp đã được phân xử xong</span>
               </div>
               <p className="rounded-xl border border-emerald-200 bg-white p-3 font-medium text-slate-800">
-                {dispute.resolution || 'Không có ghi chú phân xử'}
+                {dispute.resolution || 'Chưa ghi nhận'}
               </p>
+              <p className="mt-2 text-xs text-slate-600">Người xử lý: {dispute.handledByName || 'Chưa ghi nhận'} · Thời điểm phân xử: {dispute.resolvedAt ? new Date(dispute.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa ghi nhận'}</p>
+              {dispute.category === 'TRIP_NOT_CONFIRMED' && !dispute.tripEndAction && <form onSubmit={handleSubmit} className="space-y-2 border-t pt-3">
+                <label className="block">Hành động sau xác minh<select required value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="block w-full rounded-lg border p-2"><option value="">Chọn hành động</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option></select></label>
+                {error && <p role="alert">{error}</p>}<button disabled={actionLoading} className="min-h-11 rounded-lg bg-emerald-800 px-4 text-white">Áp dụng hành động với chuyến</button>
+              </form>}
+              {dispute.refundAwardTotal != null && <p className="mt-2 text-sm font-semibold">Tổng mức hoàn theo phán quyết: {formatVND(dispute.refundAwardTotal)}</p>}
             </div>
           ) : (
             /* Resolution Form */
@@ -328,6 +333,7 @@ export default function DisputeDetailModal({
                 <IconShield className="h-4 w-4 text-brand-600" /> Biểu mẫu Phán quyết &amp; Giải quyết tranh chấp
               </h4>
 
+              {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
               {/* Status Selector */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
@@ -335,17 +341,17 @@ export default function DisputeDetailModal({
                 </label>
                 <select
                   value={form.status}
-                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
+                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value, decision: e.target.value === 'REJECTED' ? 'KEEP_CHARGE' : 'WAIVE_CHARGE' }))}
                   className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500"
                 >
                   <option value="RESOLVED">RESOLVED (Đã phân xử chấp thuận)</option>
                   <option value="REJECTED">REJECTED (Bác bỏ khiếu nại)</option>
-                  <option value="UNDER_REVIEW">UNDER_REVIEW (Đang điều tra thêm)</option>
+                  <option value="IN_REVIEW">IN_REVIEW (Đang điều tra thêm)</option>
                 </select>
               </div>
 
               {/* Decision Radio for Charges */}
-              {dispute.category === 'CHARGE' && (
+              {dispute.category === 'CHARGE' && form.status !== 'IN_REVIEW' && (
                 <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
                   <span className="block font-bold text-slate-700">Phương án xử lý khoản tiền:</span>
                   <div className="space-y-2">
@@ -354,6 +360,7 @@ export default function DisputeDetailModal({
                         type="radio"
                         name="decision"
                         value="KEEP_CHARGE"
+                        disabled={form.status !== 'REJECTED'}
                         checked={form.decision === 'KEEP_CHARGE'}
                         onChange={(e) => setForm((prev) => ({ ...prev, decision: e.target.value }))}
                         className="mt-0.5"
@@ -371,6 +378,7 @@ export default function DisputeDetailModal({
                         type="radio"
                         name="decision"
                         value="WAIVE_CHARGE"
+                        disabled={form.status !== 'RESOLVED'}
                         checked={form.decision === 'WAIVE_CHARGE'}
                         onChange={(e) => setForm((prev) => ({ ...prev, decision: e.target.value }))}
                         className="mt-0.5"
@@ -386,6 +394,17 @@ export default function DisputeDetailModal({
                 </div>
               )}
 
+              {dispute.category === 'DEPOSIT_REFUND' && form.status === 'RESOLVED' && <label className="block space-y-2 font-semibold text-slate-800">
+                <span>Tổng tiền cọc khách được hoàn (đ)</span>
+                <input type="number" required min="0.01" step="0.01" value={form.refundAwardTotal}
+                  onChange={e => setForm(prev => ({ ...prev, refundAwardTotal: e.target.value }))}
+                  className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
+                <span className="block text-xs font-normal text-slate-600">Nhập tổng mức hoàn theo phán quyết. Hệ thống trừ phần đã hoàn hoặc đang xử lý để chỉ tạo phần thiếu; chưa chuyển tiền ở bước này.</span>
+              </label>}
+              {dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' && <label className="block">Hành động với chuyến
+                <select value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="mt-2 block w-full rounded-lg border p-3">
+                  <option value="">Chỉ ghi kết luận, giữ nguyên tạm dừng</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option>
+                </select></label>}
               {/* Resolution Notes */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
@@ -394,6 +413,7 @@ export default function DisputeDetailModal({
                 <textarea
                   rows="3"
                   required
+                  maxLength={1000}
                   placeholder="Ghi rõ lý do phân xử, căn cứ biên bản bàn giao xe hoặc thỏa thuận giữa các bên..."
                   value={form.resolution}
                   onChange={(e) => setForm((prev) => ({ ...prev, resolution: e.target.value }))}

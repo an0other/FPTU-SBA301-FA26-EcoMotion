@@ -41,7 +41,7 @@ export function PickupDistanceProof({
         <div className="rounded-xl border border-[#E6EBE8] bg-[#F7F8F6] p-3 text-sm text-[#14221A]">
           <p className="font-semibold">Phí đón đã chốt lúc đặt</p>
           <p className="mt-1 text-[#3D4A42]">
-            Đường chim bay từ điểm xuất phát đến điểm đón: {Number(distanceKm).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} km
+            Khoảng cách đã lưu khi đặt từ điểm xuất phát đến điểm đón: {Number(distanceKm).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} km
             {' · '}Miễn phí {freeRadiusKm} km
           </p>
           <p className="mt-2">
@@ -71,9 +71,6 @@ export function PickupLocationCard({
   pickupFee,
 }) {
   const hasPoint = pickupLatitude != null && pickupLongitude != null
-  const navigationUrl = hasPoint
-    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${pickupLatitude},${pickupLongitude}`)}${originLatitude != null && originLongitude != null ? `&origin=${encodeURIComponent(`${originLatitude},${originLongitude}`)}` : ''}`
-    : null
   return (
     <div className="space-y-3">
       <PickupDistanceProof
@@ -90,7 +87,7 @@ export function PickupLocationCard({
       />
       <p className="text-sm font-semibold text-[#14221A]">{pickupAddress}</p>
       {driverNote ? <p className="rounded-xl bg-[#F7F8F6] p-3 text-xs text-slate-700">Ghi chú cho tài xế: {driverNote}</p> : null}
-      {navigationUrl ? <a href={navigationUrl} target="_blank" rel="noreferrer" className="inline-flex text-xs font-semibold text-[#15803D] hover:underline">Mở chỉ đường trên Google Maps →</a> : null}
+
     </div>
   )
 }

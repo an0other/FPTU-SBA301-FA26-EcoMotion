@@ -27,7 +27,7 @@ class DriverAssignmentEligibilityTest {
     NotificationStreamService notifications = mock(NotificationStreamService.class);
     BookingPolicySnapshotRepository snapshots = mock(BookingPolicySnapshotRepository.class);
     BookingChargeRepository charges = mock(BookingChargeRepository.class);
-    DriverOptimizationServiceImpl service = new DriverOptimizationServiceImpl(bookings, users, assignments, incidents,
+    DriverOptimizationServiceImpl service = new DriverOptimizationServiceImpl(mock(com.fptufa26.ecomotion.location.service.MapLocationService.class), bookings, users, assignments, incidents,
             mock(VehicleLocationRepository.class), snapshots, charges,
             mock(MapGeocodingService.class), notifications, Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC),
             mock(com.fptufa26.ecomotion.booking.service.BookingNotificationService.class),

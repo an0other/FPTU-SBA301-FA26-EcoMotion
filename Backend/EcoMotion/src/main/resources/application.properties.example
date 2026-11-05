@@ -258,15 +258,12 @@ springdoc.packages-to-scan=com.fptufa26.ecomotion
 
 
 # ===============================
-# Map address lookup (OpenStreetMap Nominatim)
+# VIETMAP services (key is supplied through VIETMAP_SERVICES_KEY environment variable)
 # ===============================
-app.map.reverse-url=https://nominatim.openstreetmap.org/reverse
-app.map.search-url=https://nominatim.openstreetmap.org/search
-app.map.fallback-reverse-url=https://photon.komoot.io/reverse
-app.map.fallback-search-url=https://photon.komoot.io/api/
-app.map.user-agent=EcoMotion-localhost/1.0 (https://github.com/an0other/FPTU-SBA301-FA26-EcoMotion)
-app.map.connect-timeout=5s
-app.map.request-timeout=8s
+app.map.provider=VIETMAP
+app.vietmap.base-url=https://maps.vietmap.vn/api
+app.vietmap.timeout=5s
+app.trip-end.check-ms=10000
 
 app.optimization.max-solver-time-seconds=5
 app.optimization.assignment-timeout-minutes=15

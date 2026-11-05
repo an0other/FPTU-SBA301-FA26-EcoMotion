@@ -803,7 +803,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 return "Booking không còn đủ điều kiện xác nhận kỳ thanh toán gói năm";
             }
         } else if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT || booking.getActualEndAt() == null
-                || booking.getCancelledAt() != null || booking.getProviderConfirmedAt() == null || booking.getRenterConfirmedAt() == null) {
+                || booking.getCancelledAt() != null || booking.getProviderConfirmedAt() == null || !booking.isEndAccepted()) {
             return "Booking chưa đủ điều kiện tất toán chuyến";
         } else if (request.getAmount().subtract(request.getPaidAmount()).compareTo(calculateRemainingAmount(booking)) != 0) {
             return "Số tiền quyết toán không còn khớp nghĩa vụ của booking";
