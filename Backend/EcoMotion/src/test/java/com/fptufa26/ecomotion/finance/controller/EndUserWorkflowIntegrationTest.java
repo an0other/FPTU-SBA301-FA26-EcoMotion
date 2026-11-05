@@ -57,6 +57,7 @@ class EndUserWorkflowIntegrationTest {
     }
 
     @Autowired com.fptufa26.ecomotion.dispute.service.DisputeService disputes;
+    @MockitoBean com.fptufa26.ecomotion.location.service.implement.VietmapClient vietmap;
 
     @Test void depositDisputeIsAvailableDuringCancellationReviewAndDuplicateReviewIsBlocked() {
         tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW));
@@ -253,6 +254,103 @@ class EndUserWorkflowIntegrationTest {
                 .allMatch(r -> r.getStatus() == RefundStatus.UNDER_REVIEW && r.getVnpRequestId() == null);
     }
 
+    @Test void driverEndStartsTwelveHourWindowAndManualConfirmationUsesReportedEndTime() {
+        long[] driver = ready(); optimization.manualAssign(bookingId, driver[0], driver[2]);
+        trips.confirmTrip(driver[1], code()); trips.arriveAtPickup(driver[1], code());
+        trips.startTrip(driver[1], code()); renterBookings.confirmStart(renterId, code());
+        trips.finishTrip(driver[1], code());
+        var history = new tools.jackson.databind.ObjectMapper().valueToTree(workflow.getWorkflow(renterId, code())).path("endConfirmations");
+        assertThat(history.size()).isEqualTo(1);
+        Instant reported = bookings.findById(bookingId).orElseThrow().getDriverEndConfirmedAt();
+        renterBookings.confirmEnd(renterId, code());
+        assertThat(bookings.findById(bookingId).orElseThrow().getActualEndAt()).isEqualTo(reported);
+    }
+
+    @Test void pickupFeeUsesRoadMetersAndRoundsOnlyBeyondFreeRadius() {
+        long[] ids=tx.execute(s -> {
+            var b=em.find(Booking.class,bookingId); var p=b.getVehicle().getProvider();
+            p.setDepotLatitude(new BigDecimal("10.8")); p.setDepotLongitude(new BigDecimal("106.7"));
+            b.getPlan().setFreeRadiusKm(3); b.getPlan().setOutOfRadiusRate(new BigDecimal("10000"));
+            return new long[]{b.getVehicle().getId(),b.getPlan().getId()};
+        });
+        var request=new com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest(ids[0],ids[1],new BigDecimal("10.81"),new BigDecimal("106.71"));
+        for(double meters:new double[]{3000,3000.1,4000,4000.1}) {
+            org.mockito.Mockito.when(vietmap.route(10.8,106.7,10.81,106.71)).thenReturn(
+                    new com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse(meters,1200,
+                            List.of(List.of(106.7,10.8),List.of(106.71,10.81)),"VIETMAP_CAR",Instant.now()));
+            var quote=renterBookings.quotePickup(request);
+            assertThat(quote.pickupFee()).isEqualByComparingTo(new BigDecimal(meters==3000?"0":meters<=4000?"10000":"20000"));
+            assertThat(quote.durationSeconds()).isEqualTo(1200); assertThat(quote.distanceSource()).isEqualTo("VIETMAP_CAR");
+        }
+    }
+
+    @Test void missingMapKeyDoesNotInventStraightLineDistance() {
+        assertThatThrownBy(() -> new com.fptufa26.ecomotion.location.service.implement.VietmapClient(new tools.jackson.databind.ObjectMapper(),"http://127.0.0.1:1","",java.time.Duration.ofSeconds(1)).route(10.7,106.6,10.8,106.7))
+                .isInstanceOf(com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException.class);
+    }
+
+    @Autowired com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService endWindows;
+    @Autowired com.fptufa26.ecomotion.booking.repository.TripEndConfirmationRepository endHistories;
+
+    void reportTripEnd() {
+        long[] driver=ready();optimization.manualAssign(bookingId,driver[0],driver[2]);trips.confirmTrip(driver[1],code());
+        trips.arriveAtPickup(driver[1],code());trips.startTrip(driver[1],code());renterBookings.confirmStart(renterId,code());trips.finishTrip(driver[1],code());
+    }
+    @Test void expiredTripEndIsAutomaticIdempotentAndDoesNotPretendRenterActed() {
+        reportTripEnd();var h=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
+        assertThat(java.time.Duration.between(h.getReportedAt(),h.getDeadline()).toHours()).isEqualTo(12);
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.booking.entity.TripEndConfirmation.class,h.getId()).setDeadline(Instant.now().minusSeconds(1)));
+        endWindows.confirmExpired();endWindows.confirmExpired();
+        var booking=bookings.findById(bookingId).orElseThrow();assertThat(booking.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+        assertThat(booking.getActualEndAt()).isEqualTo(h.getReportedAt());assertThat(booking.getRenterConfirmedAt()).isNull();assertThat(booking.getEndConfirmationMethod()).isEqualTo("AUTO");
+        assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(1);
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+    }
+    @Test void objectionPausesExpiryAndAdminMustExplicitlyReopenOrResume() {
+        reportTripEnd();var h=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
+        var objection=renterBookings.openDispute(renterId,code(),new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED,(Long)null,"Trip is still running"));
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.booking.entity.TripEndConfirmation.class,h.getId()).setDeadline(Instant.now().minusSeconds(1)));
+        endWindows.confirmExpired();assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_END_CONFIRMATION);
+        disputes.resolveDispute(objection.disputeId(),adminId,com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED,null,"Verified trip",null);
+        endWindows.confirmExpired();assertThat(endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow().getState()).isEqualTo("PAUSED");
+        disputes.resolveDispute(objection.disputeId(),adminId,com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED,null,"Verified trip",null,"REOPEN_CONFIRMATION");
+        var reopened=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();assertThat(reopened.getDeadline()).isAfter(Instant.now().plusSeconds(11*3600));assertThat(reopened.getReportedAt()).isEqualTo(h.getReportedAt());
+        assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(2);
+    }
+    @Test void adminResumeKeepsHistoryAndAllowsAnotherDriverReport() {
+        reportTripEnd();var objection=renterBookings.openDispute(renterId,code(),new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED,(Long)null,"Wrong end report"));
+        disputes.resolveDispute(objection.disputeId(),adminId,com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED,null,"Continue the trip",null,"RESUME_TRIP");
+        var b=bookings.findById(bookingId).orElseThrow();assertThat(b.getStatus()).isEqualTo(BookingStatus.IN_PROGRESS);assertThat(b.getDriverEndConfirmedAt()).isNull();
+        long driverUser=tx.execute(s -> em.find(Booking.class,bookingId).getDriver().getUser().getId());
+        trips.finishTrip(driverUser,code());assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(2);
+    }
+    @Test void expiryAndManualConfirmationSerializeWithoutDuplicatingHistory() throws Exception {
+        reportTripEnd();
+        var h=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
+        tx.executeWithoutResult(s -> em.find(TripEndConfirmation.class,h.getId()).setDeadline(Instant.now().minusSeconds(1)));
+        assertThat(race(() -> endWindows.confirmExpired(), () -> renterBookings.confirmEnd(renterId,code()))).containsOnly(true);
+        assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(1);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+    }
+
+    @Test void lateObjectionCannotReopenAnElapsedWindow() {
+        reportTripEnd();
+        var h=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
+        tx.executeWithoutResult(s -> em.find(TripEndConfirmation.class,h.getId()).setDeadline(Instant.now().minusSeconds(1)));
+        assertThatThrownBy(() -> renterBookings.openDispute(renterId,code(),new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED,(Long)null,"Late objection")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThat(disputes.getDisputesByBookingId(bookingId)).isEmpty();
+        endWindows.confirmExpired();
+        assertThat(bookings.findById(bookingId).orElseThrow().getEndConfirmationMethod()).isEqualTo("AUTO");
+    }
+
+    @Test void legacyWaitingEndDoesNotGetRetroactiveAutomaticAcceptance() {
+        tx.executeWithoutResult(s -> {var b=em.find(Booking.class,bookingId);b.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);b.setProviderConfirmedAt(Instant.now().minusSeconds(100000));});
+        endWindows.confirmExpired();assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_END_CONFIRMATION);
+    }
+
     @Test void driverRejectsThenNextDriverAcceptsAndFeedbackIsPrivateToProvider() {
         long[] first = ready(); long[] second = ready();
         optimization.manualAssign(bookingId, first[0], first[2]);
@@ -416,6 +514,7 @@ class EndUserWorkflowIntegrationTest {
     }
 
     @Test void renterCreatesHeldBookingPaysDepositDriverPerformsTripAndFinalPaymentCompletesSettlement() {
+        org.mockito.Mockito.when(vietmap.route(10.8,106.7,10.8,106.7)).thenReturn(new com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse(0,0,List.of(List.of(106.7,10.8),List.of(106.7,10.8)),"VIETMAP_CAR",Instant.now()));
         long[] driver = ready();
         var created = tx.execute(s -> {
             Booking fixture = em.find(Booking.class, bookingId);

@@ -20,7 +20,8 @@ public class MapGeocodingServiceImpl implements MapGeocodingService {
 
     private final MapGeocodingProviderResolver providerResolver;
     private final MapGeocodingProvider fallbackProvider;
-    private final Map<String, Optional<GeoPoint>> cache = new ConcurrentHashMap<>();
+    private record CachedPoint(GeoPoint point, java.time.Instant expires) { }
+    private final Map<String, CachedPoint> cache = new ConcurrentHashMap<>();
 
     @Autowired
     public MapGeocodingServiceImpl(MapGeocodingProviderResolver providerResolver) {
@@ -40,14 +41,15 @@ public class MapGeocodingServiceImpl implements MapGeocodingService {
         }
 
         String normalizedAddress = address.trim().toLowerCase();
-        Optional<GeoPoint> cached = cache.get(normalizedAddress);
-        if (cached != null) {
-            return cached;
+        CachedPoint cached = cache.get(normalizedAddress);
+        if (cached != null && cached.expires().isAfter(java.time.Instant.now())) {
+            return Optional.of(cached.point());
         }
 
         Optional<GeoPoint> resolved = resolveCoordinates(address.trim());
-        if (cache.size() < MAX_CACHE_SIZE) {
-            cache.put(normalizedAddress, resolved);
+        cache.entrySet().removeIf(entry -> !entry.getValue().expires().isAfter(java.time.Instant.now()));
+        if (resolved.isPresent() && cache.size() < MAX_CACHE_SIZE) {
+            cache.put(normalizedAddress, new CachedPoint(resolved.get(), java.time.Instant.now().plusSeconds(60)));
         }
         return resolved;
     }

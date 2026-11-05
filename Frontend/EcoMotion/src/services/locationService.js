@@ -1,6 +1,11 @@
 import apiClient from './apiClient'
 
 export const locationService = {
+  async route({ fromLatitude, fromLongitude, toLatitude, toLongitude }) {
+    const { data } = await apiClient.get('/location/route', { params: { fromLatitude, fromLongitude, toLatitude, toLongitude } })
+    if (!data?.data?.coordinates?.length) throw new Error('Chưa có tuyến ô tô hợp lệ')
+    return data.data
+  },
   async findNearbyVehicles({ latitude, longitude, radiusKm, keyword, location,
     fuelType, planType, maxPrice, sortBy }) {
     const params = { latitude, longitude, radiusKm }

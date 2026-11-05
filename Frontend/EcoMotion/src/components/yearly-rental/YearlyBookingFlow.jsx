@@ -125,6 +125,7 @@ export default function YearlyBookingFlow({
         pickupLatitude: Number(pickup.latitude),
         pickupLongitude: Number(pickup.longitude),
         driverNote: '',
+        expectedPickupFee: pickupQuote.pickupFee,
         passengerCount: effectivePassengers,
       })
 

@@ -91,7 +91,7 @@ public class AdminOperationsController {
             @AuthenticationPrincipal SecurityUser securityUser) {
         Long adminId = (securityUser != null) ? securityUser.getUserId() : null;
         Dispute resolved = disputeService.resolveDispute(
-                id, adminId, request.getStatus(), request.getDecision(), request.getResolution(), request.getRefundAwardTotal());
+                id, adminId, request.getStatus(), request.getDecision(), request.getResolution(), request.getRefundAwardTotal(), request.getTripEndAction());
         return ResponseEntity.ok(ApiResponse.ok("Xử lý tranh chấp thành công", mapDisputeDto(resolved)));
     }
 
@@ -193,6 +193,7 @@ public class AdminOperationsController {
                 .decision(d.getDecision())
                 .refundAwardTotal(d.getRefundAwardTotal())
                 .resolvedAt(d.getResolvedAt())
+                .tripEndAction(d.getTripEndAction())
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())
                 .build();

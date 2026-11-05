@@ -36,6 +36,7 @@ public class AdminDisputeDto {
     private DisputeResolutionDecision decision;
     private BigDecimal refundAwardTotal;
     private Instant resolvedAt;
+    private String tripEndAction;
     private Instant createdAt;
     private Instant updatedAt;
 }

@@ -99,6 +99,13 @@ public class Booking {
     @Column(name = "renter_start_confirmed_at")
     private Instant renterStartConfirmedAt;
 
+    @Column(name = "end_confirmation_method", length = 30)
+    private String endConfirmationMethod;
+
+    public boolean isEndAccepted() {
+        return renterEndConfirmedAt != null || renterConfirmedAt != null || "AUTO".equals(endConfirmationMethod);
+    }
+
     @Column(name = "actual_end_at")
     private Instant actualEndAt;
 

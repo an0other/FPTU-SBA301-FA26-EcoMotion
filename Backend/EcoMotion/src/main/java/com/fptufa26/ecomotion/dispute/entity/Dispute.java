@@ -89,6 +89,9 @@ public class Dispute {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    @Column(name="trip_end_action", length=40)
+    private String tripEndAction;
+
     @ManyToMany
     @JoinTable(name = "dispute_refund_link", joinColumns = @JoinColumn(name = "dispute_id"),
             inverseJoinColumns = @JoinColumn(name = "refund_request_id"))

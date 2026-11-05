@@ -139,3 +139,18 @@ test('new dispute SSE event refreshes the ruling without waiting for polling', a
   await page.evaluate(() => window.disputeStream.listeners.DISPUTE_UPDATED?.({ type: 'DISPUTE_UPDATED', data: '{"bookingCode":"DISP-SSE"}' }))
   await expect(history.getByText(/Kết luận mới từ admin/)).toBeVisible({ timeout: 3000 })
 })
+
+test('admin explicitly reopens the trip end window instead of implicitly finishing a trip', async ({ page }) => {
+  let payload
+  const row = { id: 21, bookingCode: 'END-TEST', category: 'TRIP_NOT_CONFIRMED', status: 'OPEN', description: 'Trip is still running' }
+  await adminPage(page, [row], async route => {
+    payload = route.request().postDataJSON()
+    await route.fulfill({ json: { data: { ...row, ...payload } } })
+  })
+  await page.getByRole('button', { name: 'Phân xử & Chi tiết' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Phân xử khiếu nại #21' })
+  await dialog.locator('select').nth(1).selectOption('REOPEN_CONFIRMATION')
+  await dialog.locator('textarea').fill('Đã xác minh mốc tài xế báo kết thúc, mở lại 12 giờ')
+  await dialog.getByRole('button', { name: 'Lưu kết quả phân xử' }).click()
+  await expect.poll(() => payload?.tripEndAction).toBe('REOPEN_CONFIRMATION')
+})

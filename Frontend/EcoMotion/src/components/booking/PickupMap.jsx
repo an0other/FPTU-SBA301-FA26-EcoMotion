@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { attachVietmap } from '../map/vietmapBase'
 import { locationService } from '../../services/locationService'
 import { pickupAfterAddressEdit } from '../../utils/bookingAvailability'
 
@@ -28,6 +29,8 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
   const [query, setQuery] = useState(value?.address ?? '')
   const [suggestions, setSuggestions] = useState([])
   const [loading, setLoading] = useState(false)
+  const [mapError, setMapError] = useState('')
+  const [routeError, setRouteError] = useState('')
 
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
   useEffect(() => { valueRef.current = value }, [value])
@@ -56,26 +59,15 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
     }
   }, [onError, readOnly])
 
-  const tileErrorReportedRef = useRef(false)
 
   useEffect(() => {
     const initialValue = initialValueRef.current
     const map = L.map(containerRef.current, { scrollWheelZoom: true })
       .setView(initialValue?.latitude != null ? [initialValue.latitude, initialValue.longitude] : DEFAULT_CENTER, initialValue?.latitude != null ? 16 : 13)
-    const primaryTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
-    })
-    primaryTiles.on('tileerror', () => {
-      if (!tileErrorReportedRef.current) {
-        tileErrorReportedRef.current = true
-        onError?.('Bản đồ tạm thời gián đoạn kết nối máy chủ; điểm đón và địa chỉ đã chọn vẫn được giữ nguyên.')
-      }
-    })
-    primaryTiles.addTo(map)
-    if (!readOnly) map.on('click', (event) => selectPoint(event.latlng.lat, event.latlng.lng))
+    const detach = attachVietmap(map, { onLoad: () => setMapError(''), onError: message => setMapError(message) })
+    if (!readOnly) map.on('click', (event) => { if (map.__vietmapReady) selectPoint(event.latlng.lat, event.latlng.lng) })
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null; markerRef.current = null; originLayerRef.current = null }
+    return () => { detach(); map.remove(); mapRef.current = null; markerRef.current = null; originLayerRef.current = null }
   }, [onError, readOnly, selectPoint])
 
   useEffect(() => {
@@ -111,7 +103,11 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
     group.addLayer(L.marker(originLatLng, { icon: ORIGIN_PIN }))
     if (value?.latitude != null && value?.longitude != null) {
       const pickupLatLng = [Number(value.latitude), Number(value.longitude)]
-      group.addLayer(L.polyline([originLatLng, pickupLatLng], { color: '#15803d', weight: 3 }))
+      let active = true
+      locationService.route({ fromLatitude: Number(origin.latitude), fromLongitude: Number(origin.longitude), toLatitude: Number(value.latitude), toLongitude: Number(value.longitude) })
+        .then(route => { if (active && mapRef.current === map && map.hasLayer(group)) { const line = L.polyline(route.coordinates.map(([lon, lat]) => [lat, lon]), { color: '#15803d', weight: 3 }); group.addLayer(line); map.fitBounds(line.getBounds(), { padding: [28, 28], maxZoom: 16 }); setRouteError('') } })
+        .catch(() => { if (active && mapRef.current === map) setRouteError('Chưa tải được tuyến ô tô. Không dùng đường nối thẳng thay thế; phí đã lưu của đơn không thay đổi.') })
+      group.on('remove', () => { active = false })
       map.fitBounds(L.latLngBounds([originLatLng, pickupLatLng]), { padding: [28, 28], animate: false })
     }
     originLayerRef.current = group
@@ -177,6 +173,8 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
         </div>
       ) : null}
       <div ref={containerRef} className="h-40 w-full overflow-hidden rounded-xl border border-[#E6EBE8] bg-slate-100 sm:h-60" />
+      {mapError && <p role="alert" className="text-xs text-amber-900">{mapError}</p>}
+      {routeError && <p className="text-xs text-amber-900">{routeError}</p>}
       {loading ? <p className="text-xs text-[#15803D]">Đang xác định địa chỉ...</p> : null}
       {value?.address ? <p className="text-xs font-medium text-slate-700">Điểm đã chọn: {value.address}</p> : null}
     </div>

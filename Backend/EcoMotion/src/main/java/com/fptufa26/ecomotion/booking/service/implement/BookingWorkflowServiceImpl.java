@@ -53,6 +53,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     private final VehicleService vehicles;
     private final EntityManager entityManager;
     private final Clock clock;
+    private final TripEndConfirmationService endConfirmations;
 
     @Override
     public BookingWorkflowResponse getWorkflow(Long currentUserId, String bookingCode) {
@@ -110,7 +111,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                             d.getCharge() == null ? null : d.getCharge().getDescription(), d.getDescription(), d.getEvidenceUrlList(),
                             d.getStatus(), d.getHandledBy() == null ? null : d.getHandledBy().getFullName(), d.getResolution(),
                             d.getDecision(), d.getCreatedAt(), d.getResolvedAt(), d.getRefundAwardTotal(), ids, disputeFinancialStatus(linked));
-                    }).toList());
+                    }).toList(), endConfirmations.history(booking.getId()));
     }
 
     private String disputeFinancialStatus(List<RefundResponse> linked) {

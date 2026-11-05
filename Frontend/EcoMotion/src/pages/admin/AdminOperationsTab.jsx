@@ -118,7 +118,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   }
 
   // Dispute Resolve
-  async function handleResolveDispute(disputeId, status, decision, resolution, refundAwardTotal) {
+  async function handleResolveDispute(disputeId, status, decision, resolution, refundAwardTotal, tripEndAction) {
     setActionLoading(true)
     try {
       await adminService.resolveDispute(
@@ -127,6 +127,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
         decision,
         resolution,
         refundAwardTotal,
+        tripEndAction,
       )
       setMessage({ type: 'success', text: 'Đã cập nhật phân xử tranh chấp thành công!' })
       setResolvingDispute(null)

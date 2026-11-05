@@ -42,6 +42,7 @@ public class DisputeServiceImpl implements DisputeService {
     private final UserService userService;
     private final EntityManager entityManager;
     private final Clock clock;
+    private final com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService endConfirmations;
     private final BookingNotificationService notifications;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
@@ -64,6 +65,7 @@ public class DisputeServiceImpl implements DisputeService {
                         || d.getCharge() != null && charge != null && d.getCharge().getId().equals(charge.getId())));
         if (duplicate) throw new ConflictException("Khiếu nại này đang được xử lý. Vui lòng theo dõi kết quả hiện có");
 
+        if(category==DisputeCategory.TRIP_NOT_CONFIRMED) endConfirmations.ensureCanObject(booking);
         Dispute dispute = new Dispute();
         dispute.setBooking(booking);
         dispute.setCharge(category == DisputeCategory.CHARGE ? charge : null);
@@ -74,6 +76,7 @@ public class DisputeServiceImpl implements DisputeService {
         dispute.setDescription(description);
         dispute.setEvidenceUrlList(evidenceUrls);
         disputeRepository.save(dispute);
+        if(category == DisputeCategory.TRIP_NOT_CONFIRMED) endConfirmations.pause(booking, dispute.getId());
         notifications.changed(booking, "DISPUTE_OPENED");
         return new DisputeOpenedResponse(
                 dispute.getCategory(),
@@ -110,6 +113,13 @@ public class DisputeServiceImpl implements DisputeService {
     @Transactional
     public Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
                                   DisputeResolutionDecision decision, String resolution, BigDecimal refundAwardTotal) {
+        return resolveDispute(disputeId,adminUserId,status,decision,resolution,refundAwardTotal,null);
+    }
+
+    @Override
+    @Transactional
+    public Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
+                                  DisputeResolutionDecision decision, String resolution, BigDecimal refundAwardTotal, String tripEndAction) {
         Dispute candidate = disputeRepository.findById(disputeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tranh chấp không tồn tại: " + disputeId));
         Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
@@ -120,11 +130,18 @@ public class DisputeServiceImpl implements DisputeService {
         if (status == null || status == DisputeStatus.OPEN || resolution == null || resolution.isBlank() || resolution.trim().length() > 1000)
             throw new ConflictException("Cần trạng thái thụ lý/phán quyết hợp lệ và kết luận từ 1 đến 1000 ký tự");
         String note = resolution.trim();
+        if(tripEndAction!=null && (dispute.getCategory()!=DisputeCategory.TRIP_NOT_CONFIRMED || status==DisputeStatus.IN_REVIEW))
+            throw new ConflictException("Hành động kết thúc chỉ dùng khi phân xử khiếu nại kết thúc");
         if (dispute.getStatus() == DisputeStatus.RESOLVED || dispute.getStatus() == DisputeStatus.REJECTED) {
             boolean sameAmount = dispute.getRefundAwardTotal() == null ? refundAwardTotal == null
                     : refundAwardTotal != null && dispute.getRefundAwardTotal().compareTo(refundAwardTotal) == 0;
-            if (dispute.getStatus() == status && dispute.getDecision() == decision && Objects.equals(dispute.getResolution(), note) && sameAmount)
+            if (dispute.getStatus() == status && dispute.getDecision() == decision && Objects.equals(dispute.getResolution(), note) && sameAmount) {
+                if(tripEndAction==null || tripEndAction.equals(dispute.getTripEndAction())) return dispute;
+                if(dispute.getTripEndAction()!=null) throw new ConflictException("Hành động kết thúc đã được thực hiện");
+                endConfirmations.adminAction(booking,disputeId,adminUserId,tripEndAction,note);
+                dispute.setTripEndAction(tripEndAction);
                 return dispute;
+            }
             throw new ConflictException("Khiếu nại đã phân xử; không thể thay đổi phán quyết");
         }
         boolean charge = dispute.getCategory() == DisputeCategory.CHARGE;
@@ -149,6 +166,10 @@ public class DisputeServiceImpl implements DisputeService {
             dispute.getRelatedRefunds().addAll(refundEventService.awardDepositRefund(booking.getId(), dispute.getId(), refundAwardTotal, admin));
             if (refundEventService.hasOpenRefunds(booking.getId())) booking.setStatus(BookingStatus.CANCELLATION_REVIEW);
             bookingPaymentLedgerService.saveBooking(booking);
+        }
+        if(tripEndAction!=null) {
+            endConfirmations.adminAction(booking,disputeId,adminUserId,tripEndAction,note);
+            dispute.setTripEndAction(tripEndAction);
         }
         if (status != DisputeStatus.IN_REVIEW) refreshFinalPayment(booking);
         notifications.changed(booking, "DISPUTE_UPDATED");

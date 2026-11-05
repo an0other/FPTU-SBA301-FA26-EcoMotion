@@ -57,6 +57,7 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class DriverOptimizationServiceImpl implements DriverOptimizationService {
+    private final com.fptufa26.ecomotion.location.service.MapLocationService roadMaps;
 
     private static final Logger log = LoggerFactory.getLogger(DriverOptimizationServiceImpl.class);
 
@@ -670,10 +671,13 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
         }
 
         if (pickupPoint == null) return new DistanceAndEta(null, null, "không xác định");
-        double distanceKm = haversineDistanceKm(driverLat, driverLon, pickupPoint.latitude(), pickupPoint.longitude());
-        int etaMinutes = Math.max(5, (int) Math.round((distanceKm / 30.0) * 60.0) + 5);
-
-        return new DistanceAndEta(distanceKm, etaMinutes, source);
+        try {
+            var route=roadMaps.route(driverLat,driverLon,pickupPoint.latitude(),pickupPoint.longitude());
+            if(route==null) return new DistanceAndEta(null,null,"Chưa có tuyến ô tô hợp lệ");
+            return new DistanceAndEta(route.distanceMeters()/1000.0,(int)Math.ceil(route.durationSeconds()/60.0),source+" · VIETMAP đường bộ");
+        } catch(com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException | IllegalArgumentException ex) {
+            return new DistanceAndEta(null,null,"Định tuyến ô tô chưa khả dụng; có thể phân công thủ công sau khi kiểm tra");
+        }
     }
 
     private boolean isFresh(Instant timestamp) {
@@ -681,16 +685,6 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
                 && Duration.between(timestamp, clock.instant()).getSeconds() <= optimizationProperties.getLocationMaxAgeSeconds();
     }
 
-    private double haversineDistanceKm(double lat1, double lon1, double lat2, double lon2) {
-        final double r = 6371.0;
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2.0) * Math.sin(dLat / 2.0)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLon / 2.0) * Math.sin(dLon / 2.0);
-        double c = 2.0 * Math.atan2(Math.sqrt(a), Math.sqrt(1.0 - a));
-        return r * c;
-    }
 
     private double calculateSuitabilityScore(int etaMinutes, long activeTripsToday, double rating) {
         return -((long) etaMinutes * optimizationProperties.getWeightEta()

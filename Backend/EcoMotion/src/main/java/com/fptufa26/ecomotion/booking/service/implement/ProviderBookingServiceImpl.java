@@ -760,7 +760,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         if (booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
             throw new ConflictException("Đơn thuê chưa ở bước chốt quyết toán");
         }
-        if (booking.getProviderConfirmedAt() == null || booking.getRenterConfirmedAt() == null) {
+        if (booking.getProviderConfirmedAt() == null || !booking.isEndAccepted()) {
             throw new ConflictException("Cần xác nhận kết thúc từ cả tài xế và người thuê trước khi chốt quyết toán");
         }
         if (disputeService.hasOpenDispute(booking.getId())) {

@@ -26,6 +26,11 @@ import java.time.Instant;
 @NoArgsConstructor
 public class BookingPolicySnapshot {
 
+    @Column(name="route_quoted_at")
+    private java.time.Instant routeQuotedAt;
+    @Column(name="route_duration_seconds")
+    private Long routeDurationSeconds;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

@@ -8,7 +8,7 @@ const decisions = { WAIVE_CHARGE: 'Miễn khoản phụ phí', KEEP_CHARGE: 'Gi�
 
 export default function DisputeHistory({ disputes = [] }) {
   if (!disputes.length) return null
-  return <section aria-label="Lịch sử khiếu nại" className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
+  return <section id="booking-disputes" aria-label="Lịch sử khiếu nại" className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
     <h2 className="text-base font-semibold text-slate-900">Khiếu nại và kết quả xử lý</h2>
     {disputes.map(dispute => <article key={dispute.id} className="space-y-2 border-t border-slate-200 pt-4 text-sm text-slate-700">
       <div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold text-slate-900">#{dispute.id} · {categories[dispute.category] || dispute.category}</h3><span>{statuses[dispute.status] || dispute.status}</span></div>

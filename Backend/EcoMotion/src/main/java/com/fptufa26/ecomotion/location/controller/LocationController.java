@@ -27,6 +27,13 @@ public class LocationController {
     private final MapLocationService mapLocationService;
     private final VehicleService vehicleService;
 
+    @GetMapping("/route")
+    public ApiResponse<com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse> route(
+            @RequestParam double fromLatitude,@RequestParam double fromLongitude,
+            @RequestParam double toLatitude,@RequestParam double toLongitude) {
+        return ApiResponse.success(mapLocationService.route(fromLatitude,fromLongitude,toLatitude,toLongitude));
+    }
+
     @GetMapping("/map")
     @Operation(summary = "Find rentable vehicles near a selected position")
     public ApiResponse<List<VehicleMapResponse>> findNearbyVehicles(

@@ -49,7 +49,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vehicles", "/api/vehicles/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/location/map", "/api/location/map/reverse",
-                                "/api/location/map/search").permitAll()
+                                "/api/location/map/search", "/api/location/route").permitAll()
                         .requestMatchers(
                                 "/api/v1/payment/vnpay/**", "/api/v1/payments/vnpay/**",
                                 "/api/payment/vnpay/**", "/api/payments/vnpay/**",

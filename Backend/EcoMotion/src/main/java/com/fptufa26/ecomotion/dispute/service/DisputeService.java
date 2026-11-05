@@ -30,6 +30,9 @@ public interface DisputeService {
     Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
                            DisputeResolutionDecision decision, String resolution, BigDecimal refundAwardTotal);
 
+    Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
+                           DisputeResolutionDecision decision, String resolution, BigDecimal refundAwardTotal, String tripEndAction);
+
     long countOpenOrInReview();
 
     long countTotalDisputes();

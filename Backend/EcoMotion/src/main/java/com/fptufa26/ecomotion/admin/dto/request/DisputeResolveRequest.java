@@ -22,4 +22,6 @@ public class DisputeResolveRequest {
 
     @Digits(integer = 12, fraction = 2)
     private BigDecimal refundAwardTotal;
+
+    private String tripEndAction;
 }

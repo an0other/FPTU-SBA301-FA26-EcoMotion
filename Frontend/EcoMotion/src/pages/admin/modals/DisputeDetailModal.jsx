@@ -24,6 +24,7 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
     status: isResolvedOrRejected ? dispute.status : 'RESOLVED',
     decision: dispute.decision || 'WAIVE_CHARGE',
     refundAwardTotal: dispute.refundAwardTotal ?? '',
+    tripEndAction: '',
     resolution: dispute.resolution || '',
   })
   const [previewImage, setPreviewImage] = useState(null)
@@ -52,7 +53,8 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
     }
     onResolve(dispute.id, form.status,
       dispute.category === 'CHARGE' && form.status !== 'IN_REVIEW' ? form.decision : undefined,
-      form.resolution.trim(), dispute.category === 'DEPOSIT_REFUND' && form.status === 'RESOLVED' ? Number(form.refundAwardTotal) : undefined)
+      form.resolution.trim(), dispute.category === 'DEPOSIT_REFUND' && form.status === 'RESOLVED' ? Number(form.refundAwardTotal) : undefined,
+      dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' ? form.tripEndAction || undefined : undefined)
   }
 
   return (
@@ -196,6 +198,10 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
                 {dispute.resolution || 'Chưa ghi nhận'}
               </p>
               <p className="mt-2 text-xs text-slate-600">Người xử lý: {dispute.handledByName || 'Chưa ghi nhận'} · Thời điểm phân xử: {dispute.resolvedAt ? new Date(dispute.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa ghi nhận'}</p>
+              {dispute.category === 'TRIP_NOT_CONFIRMED' && !dispute.tripEndAction && <form onSubmit={handleSubmit} className="space-y-2 border-t pt-3">
+                <label className="block">Hành động sau xác minh<select required value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="block w-full rounded-lg border p-2"><option value="">Chọn hành động</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option></select></label>
+                {error && <p role="alert">{error}</p>}<button disabled={actionLoading} className="min-h-11 rounded-lg bg-emerald-800 px-4 text-white">Áp dụng hành động với chuyến</button>
+              </form>}
               {dispute.refundAwardTotal != null && <p className="mt-2 text-sm font-semibold">Tổng mức hoàn theo phán quyết: {formatVND(dispute.refundAwardTotal)}</p>}
             </div>
           ) : (
@@ -273,6 +279,10 @@ function DisputeDetailForm({ dispute, onClose, onResolve, actionLoading, error }
                   className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
                 <span className="block text-xs font-normal text-slate-600">Nhập tổng mức hoàn theo phán quyết. Hệ thống trừ phần đã hoàn hoặc đang xử lý để chỉ tạo phần thiếu; chưa chuyển tiền ở bước này.</span>
               </label>}
+              {dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' && <label className="block">Hành động với chuyến
+                <select value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="mt-2 block w-full rounded-lg border p-3">
+                  <option value="">Chỉ ghi kết luận, giữ nguyên tạm dừng</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option>
+                </select></label>}
               {/* Resolution Notes */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
