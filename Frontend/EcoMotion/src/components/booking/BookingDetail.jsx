@@ -292,8 +292,14 @@ export const BookingDetail = ({
 
           {booking.status === 'CANCELLATION_REVIEW' && (
             <div className="p-5 bg-orange-50 border border-orange-200 rounded-[16px]">
-              <h2 className="text-base font-bold text-orange-900">Đang đối soát yêu cầu huỷ</h2>
-              <p className="text-xs text-orange-800 mt-1">Biên lai đã được gửi nên hệ thống cần kiểm tra khoản tiền trước khi huỷ hoặc hoàn tiền.</p>
+              <h2 className="text-base font-bold text-orange-900">
+                {booking.depositCollected ? 'Đơn đã hủy, nhà xe đang chuyển hoàn' : 'Đang đối soát yêu cầu huỷ'}
+              </h2>
+              <p className="text-xs text-orange-800 mt-1">
+                {booking.depositCollected
+                  ? 'Tiền cọc đã được ghi nhận. Nhà xe đang chuyển khoản hoàn, không cần kiểm tra lại biên lai cọc.'
+                  : 'Biên lai đã được gửi nên hệ thống cần kiểm tra khoản tiền trước khi huỷ hoặc hoàn tiền.'}
+              </p>
             </div>
           )}
 

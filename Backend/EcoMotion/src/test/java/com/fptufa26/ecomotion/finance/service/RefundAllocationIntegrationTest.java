@@ -5,6 +5,7 @@ import com.fptufa26.ecomotion.booking.entity.BookingCharge;
 import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.service.BookingService;
 import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
 import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
@@ -13,7 +14,12 @@ import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
+import com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.RefundRequest;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.enums.RefundStatus;
 import com.fptufa26.ecomotion.finance.repository.RefundRequestRepository;
 import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
@@ -73,6 +79,7 @@ class RefundAllocationIntegrationTest {
     @Autowired RefundEventService refunds;
     @Autowired RefundService refundService;
     @Autowired PaymentRequestService payments;
+    @Autowired BookingService bookingService;
     @Autowired com.fptufa26.ecomotion.booking.service.ProviderBookingService providerBookings;
     @Autowired RefundRequestRepository requests;
     @Autowired BookingRepository bookings;
@@ -229,6 +236,38 @@ class RefundAllocationIntegrationTest {
     }
 
     @Test
+    void cancelAfterConfirmedDepositKeepsThePaymentAndBlocksAnotherConfirmation() {
+        long requestId = tx.execute(status -> depositRequest(PaymentRequestStatus.CONFIRMED, new BigDecimal("300000.00")).getId());
+        bookingService.cancel(renterUserId, bookingCode);
+        PaymentRequestStatus paymentStatus = tx.execute(status -> em.find(PaymentRequest.class, requestId).getStatus());
+        BookingStatus bookingStatus = tx.execute(status -> em.find(Booking.class, bookingId).getStatus());
+        assertThat(paymentStatus).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        assertThat(bookingStatus).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId))
+                .extracting(RefundRequest::getSourceEventId)
+                .anyMatch(id -> id.startsWith("CANCEL:" + bookingId));
+        assertThatThrownBy(() -> payments.confirmPayment(requestId, providerUserId,
+                new ConfirmPaymentRequest(new BigDecimal("300000"), "AGAIN", null)))
+                .isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> payments.rejectPayment(requestId, providerUserId, new RejectPaymentRequest("Không từ chối tiền đã thu")))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void cancelAfterUnconfirmedProofMovesTheRequestToReview() {
+        long requestId = tx.execute(status -> {
+            em.createQuery("select t from PaymentTransaction t where t.booking.id = :id", PaymentTransaction.class)
+                    .setParameter("id", bookingId)
+                    .getResultList()
+                    .forEach(row -> row.setStatus(PaymentStatus.FAILED));
+            return depositRequest(PaymentRequestStatus.PROOF_SUBMITTED, BigDecimal.ZERO).getId();
+        });
+        bookingService.cancel(renterUserId, bookingCode);
+        PaymentRequestStatus paymentStatus = tx.execute(status -> em.find(PaymentRequest.class, requestId).getStatus());
+        assertThat(paymentStatus).isEqualTo(PaymentRequestStatus.REVIEW_REQUIRED);
+    }
+
+    @Test
     void payoutDoesNotZeroRefundableAndFailedNeedsAVerifiedResponse() {
         tx.executeWithoutResult(status -> {
             Booking booking = em.find(Booking.class, bookingId);
@@ -269,6 +308,22 @@ class RefundAllocationIntegrationTest {
         user.setStatus(UserStatus.ACTIVE);
         em.persist(user);
         return user;
+    }
+
+    private PaymentRequest depositRequest(PaymentRequestStatus status, BigDecimal paidAmount) {
+        PaymentRequest request = new PaymentRequest();
+        request.setBooking(em.find(Booking.class, bookingId));
+        request.setPaymentType(PaymentRequestType.DEPOSIT);
+        request.setAmount(new BigDecimal("300000.00"));
+        request.setPaidAmount(paidAmount);
+        request.setTransferReference("DEP-" + UUID.randomUUID());
+        request.setBankCodeSnapshot("VCB");
+        request.setBankNameSnapshot("Vietcombank");
+        request.setAccountNumberSnapshot("0123456789");
+        request.setAccountHolderSnapshot("REFUND TEST");
+        request.setStatus(status);
+        em.persist(request);
+        return request;
     }
 
     private PaymentTransaction paidIn(Booking booking, BigDecimal amount, BigDecimal applied) {

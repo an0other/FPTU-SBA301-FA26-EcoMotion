@@ -55,6 +55,7 @@ const REQUEST_STATUS_CONFIG = {
   REJECTED: { label: 'Đã từ chối', bg: 'bg-red-50 text-red-800 border-red-200', dot: 'bg-red-500' },
   EXPIRED: { label: 'Hết hạn', bg: 'bg-slate-100 text-slate-700 border-slate-300', dot: 'bg-slate-400' },
   REVIEW_REQUIRED: { label: 'Cần đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200', dot: 'bg-purple-500' },
+  VOIDED: { label: 'Đã hủy yêu cầu', bg: 'bg-slate-100 text-slate-600 border-slate-300', dot: 'bg-slate-400' },
 }
 
 const REFUND_STATUS_CONFIG = {
@@ -877,6 +878,14 @@ export default function ProviderFinancePage() {
                         dot: 'bg-slate-400',
                       }
                       const hasProof = pr.evidences && pr.evidences.length > 0
+                      const remaining = Number(pr.remainingAmount ?? Math.max(0, Number(pr.amount || 0) - Number(pr.paidAmount || 0)))
+                      const cancelling = pr.bookingStatus === 'CANCELLATION_REVIEW' || pr.bookingStatus === 'CANCELLED'
+                      const stillCollecting = !cancelling && (
+                        pr.status === 'PENDING'
+                        || pr.status === 'PROOF_SUBMITTED'
+                        || (pr.status === 'PARTIALLY_PAID' && remaining > 0)
+                      )
+                      const collected = pr.status === 'CONFIRMED' || Number(pr.paidAmount || 0) > 0
 
                       return (
                         <tr key={pr.id} className="hover:bg-slate-50/80">
@@ -930,7 +939,7 @@ export default function ProviderFinancePage() {
                                   Biên lai
                                 </button>
                               )}
-                              {pr.status !== 'CONFIRMED' && (
+                              {stillCollecting && (
                                 <>
                                   <button
                                     type="button"
@@ -957,6 +966,9 @@ export default function ProviderFinancePage() {
                                     Báo lệch
                                   </button>
                                 </>
+                              )}
+                              {!stillCollecting && collected && cancelling && (
+                                <span className="text-[11px] font-semibold text-slate-600">Đã thu, sang tab Hoàn tiền</span>
                               )}
                             </div>
                           </td>
@@ -1080,20 +1092,20 @@ export default function ProviderFinancePage() {
                               >
                                 Xem xét duyệt
                               </button>
+                            ) : ref.status === 'PROCESSING' && ref.refundMethod !== 'VNPAY' && ref.paymentTransactionId ? (
+                              <button
+                                type="button"
+                                onClick={() => setProofRefund(ref)}
+                                className="inline-flex h-8 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 text-xs font-bold text-brand-800 hover:bg-brand-100"
+                              >
+                                Xác nhận đã hoàn tiền
+                              </button>
+                            ) : ref.status === 'PROCESSING' && !ref.paymentTransactionId ? (
+                              <span className="text-[11px] font-semibold text-rose-700">Thiếu mã giao dịch hoàn. Tải lại trang trước khi xác nhận.</span>
                             ) : (
-                              ref.status === 'PROCESSING' && ref.paymentTransactionId && ref.refundMethod !== 'VNPAY' ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setProofRefund(ref)}
-                                  className="inline-flex h-8 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 text-xs font-bold text-brand-800 hover:bg-brand-100"
-                                >
-                                  Tải biên lai hoàn tiền
-                                </button>
-                              ) : (
-                                <span className="text-slate-400 text-[11px]">
-                                  {ref.status === 'REFUNDED' ? 'Đã hoàn tiền' : 'Không có thao tác'}
-                                </span>
-                              )
+                              <span className="text-slate-400 text-[11px]">
+                                {ref.status === 'REFUNDED' ? 'Đã hoàn tiền' : 'Không có thao tác'}
+                              </span>
                             )}
                           </td>
                         </tr>

@@ -106,7 +106,7 @@ test('refund approval uses the DTO and only proof confirmation marks money refun
   await page.getByRole('button', { name: 'Xem xét duyệt' }).click()
   await page.getByRole('button', { name: 'Xác nhận kết quả' }).click()
   await expect.poll(() => reviewBody).toEqual({ action: 'APPROVE' })
-  await page.getByRole('button', { name: 'Tải biên lai hoàn tiền' }).click()
+  await page.getByRole('button', { name: 'Xác nhận đã hoàn tiền' }).click()
   const dialog = page.getByRole('dialog', { name: 'Biên lai hoàn tiền' })
   await dialog.locator('input[type=file]').setInputFiles({ name: 'proof.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 Test') })
   await dialog.getByLabel('Mã giao dịch').fill('TV5-REF-TEST')

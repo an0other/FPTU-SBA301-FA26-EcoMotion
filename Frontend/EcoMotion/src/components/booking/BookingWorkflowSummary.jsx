@@ -251,7 +251,7 @@ export default function BookingWorkflowSummary({
                     to="/provider/finance"
                     className="text-[11px] font-bold text-brand-700 underline"
                   >
-                    Nộp biên lai
+                    Xác nhận đã hoàn tiền
                   </Link>
                 )}
               </div>

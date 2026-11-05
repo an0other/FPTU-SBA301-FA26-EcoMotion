@@ -569,8 +569,17 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
         }
 
-        if (pr.getStatus() == PaymentRequestStatus.CONFIRMED
-                || pr.getStatus() == PaymentRequestStatus.REJECTED
+        BookingStatus bookingStatus = pr.getBooking().getStatus();
+        boolean cancelling = bookingStatus == BookingStatus.CANCELLED
+                || bookingStatus == BookingStatus.CANCELLATION_REVIEW;
+        BigDecimal alreadyPaid = pr.getPaidAmount() == null ? BigDecimal.ZERO : pr.getPaidAmount();
+        boolean fullyCollected = pr.getStatus() == PaymentRequestStatus.CONFIRMED
+                || alreadyPaid.compareTo(pr.getAmount()) >= 0;
+        if (cancelling || fullyCollected) {
+            throw new ConflictException("Khoản cọc đã được ghi nhận. Hãy xử lý hoàn tiền.");
+        }
+
+        if (pr.getStatus() == PaymentRequestStatus.REJECTED
                 || pr.getStatus() == PaymentRequestStatus.VOIDED) {
             throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã được xử lý hoặc không còn hiệu lực");
         }
@@ -689,6 +698,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
         }
 
+        if (pr.getPaidAmount() != null && pr.getPaidAmount().signum() > 0) {
+            throw new ConflictException("Không thể từ chối khoản đã ghi nhận tiền. Hãy xử lý hoàn tiền.");
+        }
         if (pr.getStatus() == PaymentRequestStatus.CONFIRMED) {
             throw new InvalidPaymentOperationException("Không thể từ chối yêu cầu thanh toán đã được xác nhận thành công");
         }
@@ -1226,7 +1238,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 pr.getConfirmedAt(),
                 pr.getRejectionReason(),
                 pr.getIssueNote(),
-                evidenceResponses
+                evidenceResponses,
+                pr.getBooking().getStatus()
         );
     }
 

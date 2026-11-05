@@ -768,11 +768,14 @@ public class BookingServiceImpl implements BookingService {
                 .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
                 .orElse(null);
         boolean hasVerifiedDeposit = depositRequest != null && depositRequest.getPaidAmount().signum() > 0;
-        boolean needsReview = depositRequest != null
-                && (hasVerifiedDeposit
-                    || depositRequest.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
+        boolean moneyRecorded = depositRequest != null
+                && (depositRequest.getStatus() == PaymentRequestStatus.CONFIRMED || hasVerifiedDeposit);
+        boolean proofStillOpen = depositRequest != null
+                && !moneyRecorded
+                && (depositRequest.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
                     || depositRequest.getStatus() == PaymentRequestStatus.PARTIALLY_PAID
                     || depositRequest.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED);
+        boolean needsReview = moneyRecorded || proofStillOpen;
         BigDecimal refundAmount = hasVerifiedDeposit
                 ? refundAmount(booking, snapshot, cancelledAt)
                 : BigDecimal.ZERO;
@@ -783,8 +786,8 @@ public class BookingServiceImpl implements BookingService {
         booking.setCancelReason(CancelReason.RENTER_REQUEST);
         booking.setCancelledAt(cancelledAt);
         booking.setStatus(needsReview ? BookingStatus.CANCELLATION_REVIEW : BookingStatus.CANCELLED);
-        if (depositRequest != null) {
-            depositRequest.setStatus(needsReview ? PaymentRequestStatus.REVIEW_REQUIRED : PaymentRequestStatus.VOIDED);
+        if (depositRequest != null && !moneyRecorded) {
+            depositRequest.setStatus(proofStillOpen ? PaymentRequestStatus.REVIEW_REQUIRED : PaymentRequestStatus.VOIDED);
         }
         scheduleService.release(booking.getId());
         if (booking.getDriver() != null) {

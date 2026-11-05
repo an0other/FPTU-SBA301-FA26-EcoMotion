@@ -159,7 +159,7 @@ export function BookingDetailPage() {
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
       <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} error={workflowError} onRefresh={refreshDetail} /></div>
       <BookingDetail
-        booking={booking}
+        booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
         operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
