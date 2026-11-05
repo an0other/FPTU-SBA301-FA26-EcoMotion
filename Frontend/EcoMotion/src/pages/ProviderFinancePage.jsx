@@ -9,8 +9,8 @@ import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImag
 import { HoldCountdown } from '../components/payments/HoldCountdown'
 
 function formatVnd(amount) {
-  if (amount == null || Number.isNaN(Number(amount))) return '0 ₫'
-  return Number(amount).toLocaleString('vi-VN') + ' ₫'
+  if (amount == null || Number.isNaN(Number(amount))) return '0\u00A0₫'
+  return `${Number(amount).toLocaleString('vi-VN')}\u00A0₫`
 }
 
 function formatDateTime(isoString) {
@@ -56,6 +56,14 @@ const REQUEST_STATUS_CONFIG = {
   EXPIRED: { label: 'Hết hạn', bg: 'bg-slate-100 text-slate-700 border-slate-300', dot: 'bg-slate-400' },
   REVIEW_REQUIRED: { label: 'Cần đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200', dot: 'bg-purple-500' },
   VOIDED: { label: 'Đã hủy yêu cầu', bg: 'bg-slate-100 text-slate-600 border-slate-300', dot: 'bg-slate-400' },
+}
+
+/** Yêu cầu còn hiệu lực để nhà xe xác nhận / từ chối / báo lệch. */
+function canProviderManagePaymentRequest(pr, remaining) {
+  if (pr.vnpayVerifying) return false
+  if (['EXPIRED', 'VOIDED', 'CONFIRMED'].includes(pr.status)) return false
+  if (pr.status === 'PARTIALLY_PAID' && remaining <= 0) return false
+  return ['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REVIEW_REQUIRED', 'REJECTED'].includes(pr.status)
 }
 
 const REFUND_STATUS_CONFIG = {
@@ -697,7 +705,7 @@ export default function ProviderFinancePage() {
                 <tbody className="divide-y divide-slate-100">
                   {loading && transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
                           <span className="text-xs font-medium">Đang tải lịch sử giao dịch...</span>
@@ -835,25 +843,40 @@ export default function ProviderFinancePage() {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
+            <div className="overflow-x-hidden">
+              <table className="w-full table-fixed border-collapse text-left text-xs leading-snug">
+                <colgroup>
+                  <col className="w-[12%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[17%]" />
+                </colgroup>
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
-                    <th className="px-4 py-3">Mã đơn</th>
-                    <th className="px-4 py-3">Loại</th>
-                    <th className="px-4 py-3 text-right">Số trên QR</th>
-                    <th className="px-4 py-3 text-right">Đã ghi sổ</th>
-                    <th className="px-4 py-3 text-right">Còn thiếu</th>
-                    <th className="px-4 py-3">Nội dung CK</th>
-                    <th className="px-4 py-3">Hold còn</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3 text-center">Thao tác</th>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                    <th className="px-2.5 py-3">Mã đơn</th>
+                    <th className="px-2.5 py-3">Loại</th>
+                    <th className="px-2.5 py-3 text-right" title="Số tiền trên mã QR / yêu cầu chuyển khoản">
+                      Số tiền
+                    </th>
+                    <th className="px-2.5 py-3 text-right" title="Phần chưa xác nhận">
+                      Còn thiếu
+                    </th>
+                    <th className="px-2.5 py-3">Nội dung CK</th>
+                    <th className="px-2.5 py-3" title="Thời gian còn lại trước khi hết hạn giữ chỗ xe">
+                      Hạn giữ chỗ
+                    </th>
+                    <th className="px-2.5 py-3">Trạng thái</th>
+                    <th className="px-2.5 py-3 text-center">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading && paymentRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
                           <span className="text-xs font-medium">Đang tải danh sách yêu cầu thanh toán...</span>
@@ -862,7 +885,7 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : paymentRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400">
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="payments" className="text-3xl text-slate-300" />
                           <span>Chưa có yêu cầu thanh toán nào trong bộ lọc này</span>
@@ -885,78 +908,89 @@ export default function ProviderFinancePage() {
                         || (pr.status === 'PARTIALLY_PAID' && remaining > 0)
                       )
                       const collected = pr.status === 'CONFIRMED' || Number(pr.paidAmount || 0) > 0
+                      const requestAmount = Number(pr.amount || 0)
+                      const paidAmount = Number(pr.paidAmount || 0)
+                      const showPartialPaid = paidAmount > 0 && paidAmount < requestAmount
 
                       return (
                         <tr key={pr.id} className="hover:bg-slate-50/80">
-                          <td className="px-4 py-3 font-mono font-bold text-brand-800">
+                          <td className="px-2.5 py-3 font-mono text-[13px] font-bold text-brand-800">
                             <button
                               type="button"
                               onClick={() => handleViewBreakdown(pr.bookingCode)}
-                              className="hover:underline font-bold"
-                              title="Xem đối soát chi tiết đơn này"
+                              className="block max-w-full truncate text-left hover:underline"
+                              title={`${pr.bookingCode} — xem đối soát`}
                             >
                               {pr.bookingCode}
                             </button>
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-700">
-                            {pr.paymentType === 'DEPOSIT' ? 'Tiền cọc' : 'Quyết toán'}
+                          <td className="px-2.5 py-3 whitespace-nowrap font-medium text-slate-700">
+                            {pr.paymentType === 'DEPOSIT' ? 'Cọc' : 'Quyết toán'}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                            {formatVnd(pr.amount)}
+                          <td className="px-2.5 py-3 text-right whitespace-nowrap">
+                            <span className="font-mono text-[13px] font-bold text-slate-900">{formatVnd(requestAmount)}</span>
+                            {showPartialPaid ? (
+                              <span className="ml-1 text-[11px] font-semibold text-emerald-700" title={`Đã xác nhận ${formatVnd(paidAmount)}`}>
+                                (đã thu)
+                              </span>
+                            ) : paidAmount > 0 && paidAmount >= requestAmount ? (
+                              <span className="ml-1 text-[11px] font-semibold text-emerald-700">· đủ</span>
+                            ) : null}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">
-                            {formatVnd(pr.paidAmount || 0)}
+                          <td className="px-2.5 py-3 text-right font-mono text-[13px] font-semibold text-slate-700 whitespace-nowrap">
+                            {remaining > 0 ? formatVnd(remaining) : (
+                              <span className="text-slate-400" title="Không còn thiếu">—</span>
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-semibold text-slate-700">
-                            {formatVnd(pr.remainingAmount ?? Math.max(0, Number(pr.amount || 0) - Number(pr.paidAmount || 0)))}
+                          <td className="px-2.5 py-3 font-mono text-xs font-semibold text-slate-600">
+                            <span className="block truncate" title={pr.transferReference || undefined}>
+                              {pr.transferReference || '—'}
+                            </span>
                           </td>
-                          <td className="px-4 py-3 font-mono text-[11px] font-semibold text-slate-600">
-                            {pr.transferReference || '—'}
-                          </td>
-                          <td className="px-4 py-3">
+                          <td className="px-2.5 py-3 whitespace-nowrap">
                             {['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REJECTED'].includes(pr.status) ? (
-                              <HoldCountdown expiresAt={pr.expiresAt} compact />
+                              <HoldCountdown expiresAt={pr.expiresAt} compact shortLabel />
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusMeta.bg}`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
-                              {pr.vnpayVerifying ? 'Đang xác minh thanh toán VNPAY' : pr.status === 'CONFIRMED' && pr.paymentType === 'DEPOSIT' ? 'Đã thanh toán cọc' : statusMeta.label}
+                          <td className="px-2.5 py-3">
+                            <span
+                              className={`inline-flex max-w-full items-center gap-1 truncate rounded-full border px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap ${statusMeta.bg}`}
+                              title={pr.vnpayVerifying ? 'Đang xác minh thanh toán VNPAY' : undefined}
+                            >
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusMeta.dot}`} />
+                              <span className="truncate">
+                                {pr.vnpayVerifying ? 'VNPAY đang xác minh' : pr.status === 'CONFIRMED' && pr.paymentType === 'DEPOSIT' ? 'Đã cọc' : statusMeta.label}
+                              </span>
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          <td className="px-2.5 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1 flex-nowrap">
                               {hasProof && (
                                 <button
                                   type="button"
                                   onClick={() => setViewProofModalData(pr)}
-                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                                  className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap"
                                   title="Xem biên lai khách tải lên"
                                 >
                                   Biên lai
                                 </button>
                               )}
-                              {stillCollecting && (
-                                <>
-                                  {pr.vnpayVerifying && <span className="text-[11px] text-slate-600">VNPAY xác minh tự động</span>}
-                                </>
-                              )}
-                              {pr.status !== 'CONFIRMED' && (
+                              {canProviderManagePaymentRequest(pr, remaining) && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenConfirmModal(pr)}
-                                    className="rounded-lg bg-brand-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                                    className="shrink-0 rounded-md bg-brand-700 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-brand-800 whitespace-nowrap"
                                     title="Xác nhận chuyển khoản trực tiếp"
                                   >
-                                    Xác nhận chuyển khoản
+                                    Xác nhận
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenRejectModal(pr)}
-                                    className="rounded border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                                    className="shrink-0 rounded border border-red-200 bg-white px-2 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 whitespace-nowrap"
                                     title="Từ chối biên lai"
                                   >
                                     Từ chối
@@ -964,15 +998,23 @@ export default function ProviderFinancePage() {
                                   <button
                                     type="button"
                                     onClick={() => handleOpenReportIssueModal(pr)}
-                                    className="rounded border border-purple-200 bg-white px-2 py-1 text-[11px] font-semibold text-purple-700 hover:bg-purple-50"
-                                    title="Báo cáo sai lệch"
+                                    className="shrink-0 rounded border border-purple-200 bg-white px-2 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-50 whitespace-nowrap"
+                                    title="Báo lệch — báo cáo sai lệch"
                                   >
-                                    Báo lệch
+                                    Lệch
                                   </button>
                                 </>
                               )}
+                              {pr.status === 'EXPIRED' && (
+                                <span className="text-xs font-medium text-slate-500 whitespace-nowrap" title="Đơn đã hết hạn giữ chỗ">
+                                  Không thao tác
+                                </span>
+                              )}
+                              {pr.status === 'VOIDED' && (
+                                <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Đã hủy YC</span>
+                              )}
                               {!stillCollecting && collected && cancelling && (
-                                <span className="text-[11px] font-semibold text-slate-600">Đã thu, sang tab Hoàn tiền</span>
+                                <span className="text-xs font-semibold text-slate-600">Đã thu, sang tab Hoàn tiền</span>
                               )}
                             </div>
                           </td>
@@ -1037,7 +1079,7 @@ export default function ProviderFinancePage() {
                 <tbody className="divide-y divide-slate-100">
                   {loading && refunds.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
                           <span className="text-xs font-medium">Đang tải danh sách hoàn tiền...</span>

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
-import { bookingStatusMeta, canShowOperationalRisk, renterCanSeeDriver } from '../../utils/bookingStatus';
+import { bookingStatusMeta, canShowOperationalRisk, paymentStatusLabel, renterCanSeeDriver } from '../../utils/bookingStatus';
+import { BookingOrderSummaryCard } from './BookingOrderSummaryCard';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
@@ -17,6 +18,7 @@ const DISPUTE_LABELS = {
 
 export const BookingDetail = ({
   booking,
+  workflow = null,
   operationalRisk = null,
   onGoBack,
   onGoToCarPage,
@@ -43,6 +45,7 @@ export const BookingDetail = ({
   const [disputeNote, setDisputeNote] = useState('');
   const [editing, setEditing] = useState(false);
   const statusMeta = bookingStatusMeta(booking.status);
+  const paymentLabel = paymentStatusLabel(workflow?.paymentStatus);
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -153,6 +156,11 @@ export const BookingDetail = ({
             </h1>
 
             <span className={`px-3 py-1 rounded-full border text-xs font-semibold ${statusMeta.badgeClass}`}>{statusMeta.label}</span>
+            {paymentLabel ? (
+              <span className="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-800">
+                {paymentLabel}
+              </span>
+            ) : null}
           </div>
 
           <div className="text-xs sm:text-sm text-gray-600">
@@ -558,8 +566,15 @@ export const BookingDetail = ({
               </div>
             </div>
 
-            <div className="pt-2 border-t border-[#E6EBE8] text-xs font-medium text-[#6D7A72]">
-              Kết thúc dự kiến: {booking.formattedEnd}
+            <div className="grid gap-2 border-t border-[#E6EBE8] pt-3 text-xs sm:grid-cols-2">
+              <div className="rounded-lg bg-[#F7F8F6] px-3 py-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#6D7A72]">Kết thúc dự kiến</span>
+                <span className="mt-0.5 block text-sm font-semibold text-[#14221A]">{booking.formattedEnd || '—'}</span>
+              </div>
+              <div className="rounded-lg bg-[#F7F8F6] px-3 py-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-[#6D7A72]">Thời lượng</span>
+                <span className="mt-0.5 block text-sm font-semibold text-[#14221A]">{booking.durationLabel || `${booking.slots} slot`}</span>
+              </div>
             </div>
             <PickupLocationCard pickupAddress={booking.pickupAddress}
               pickupLatitude={booking.pickupLatitude} pickupLongitude={booking.pickupLongitude}
@@ -737,6 +752,22 @@ export const BookingDetail = ({
 
         {/* Right Column (5 cols) */}
         <div className="lg:col-span-5 flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
+          <BookingOrderSummaryCard
+            bookingCode={booking.id}
+            status={booking.status}
+            paymentStatus={workflow?.paymentStatus}
+            formattedStart={booking.formattedStart}
+            formattedEnd={booking.formattedEnd}
+            durationLabel={booking.durationLabel}
+            totalAmount={booking.totalAmount}
+            depositAmount={booking.depositAmount}
+            confirmedPaid={workflow?.confirmedPaid}
+            remainingAmount={workflow?.remainingAmount}
+            pickupFee={booking.pickupFee}
+            charges={booking.charges}
+            showStatusBadges={false}
+          />
+
           {/* Timeline Card */}
           <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
             <h3 className="text-sm font-bold text-[#14221A]">Tiến trình đơn</h3>

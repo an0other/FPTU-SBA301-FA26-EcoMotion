@@ -10,7 +10,9 @@ import { readErrorMessage } from '../../services/apiClient'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { hasValidPickup } from '../../utils/bookingAvailability'
-import { pricingDescription, rentalSelection, rentalPayload, rentalTimeInput, rentalTimeError } from '../../utils/rentalPricing'
+import {
+  pricingDescription, rentalSelection, rentalPayload, rentalTimeInput, rentalTimeError, minReturnRentalInstant,
+} from '../../utils/rentalPricing'
 
 export function BookingRequestPage() {
   const navigate = useNavigate()
@@ -97,7 +99,16 @@ export function BookingRequestPage() {
       if (err?.status === 409) { setStep(1); setRentalRetry(value => value + 1) }
     } finally { setSubmitting(false) }
   }
-  function changeTime(setter, value) { setter(value); setStep(1) }
+  function changeStart(value) {
+    setStart(value)
+    setEnd(prev => {
+      if (!rentalTimeError(value, prev)) return prev
+      const minReturn = minReturnRentalInstant(value)
+      return minReturn ? rentalTimeInput(minReturn.toISOString()) : prev
+    })
+    setStep(1)
+  }
+  function changeEnd(value) { setEnd(value); setStep(1) }
   function chooseWindow(window) {
     const hours = request ? (new Date(request.requestedEndAt) - new Date(request.pickupTime)) / 3600000 : 1
     setStart(rentalTimeInput(window.startAt))
@@ -115,7 +126,7 @@ export function BookingRequestPage() {
     totalLabel={selected ? formatCurrency(total) : ''} depositAmount={deposit}
     onStepSelect={next => next < step && setStep(next)} contentWidth={step === 1 ? 'wide' : 'form'}>
     {step === 1 ? <ChoosePlanStep plans={vehicle.plans} start={start} end={end}
-      onStart={value => changeTime(setStart, value)} onEnd={value => changeTime(setEnd, value)}
+      onStart={changeStart} onEnd={changeEnd}
       quote={currentRental?.data} pending={rentalPending} requestedEnd={request?.requestedEndAt}
       error={timeError || currentRental?.error || ''} timeError={timeError}
       selected={selected} onSelect={option => setChoice({ quote: currentRental, option })}

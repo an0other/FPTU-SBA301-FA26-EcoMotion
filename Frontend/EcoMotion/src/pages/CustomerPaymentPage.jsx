@@ -12,6 +12,11 @@ import {
   isPaymentRequestExpired,
   RECONCILIATION_DURATION_MS,
 } from '../utils/paymentDisplay'
+import { getMyBooking } from '../services/bookingService'
+import { bookingWorkflowService } from '../services/bookingWorkflowService'
+import { formatBookingWhen } from '../utils/bookingDateTime'
+import { rentalDurationLabel } from '../utils/rentalPricing'
+import { BookingOrderSummaryCard } from '../components/booking/BookingOrderSummaryCard'
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`} aria-hidden="true">{name}</span>
@@ -47,6 +52,7 @@ export default function CustomerPaymentPage() {
   const [inlineError, setInlineError] = useState(null)
   const [dismissedLoadError, setDismissedLoadError] = useState(null)
   const [submittingProof, setSubmittingProof] = useState(false)
+  const [bookingSummary, setBookingSummary] = useState(null)
 
   const fetchPaymentRequests = useCallback(async (silent = false) => {
     try {
@@ -81,6 +87,43 @@ export default function CustomerPaymentPage() {
     }
     return undefined
   }, [bookingIdentifier, fetchPaymentRequests])
+
+  useEffect(() => {
+    if (!bookingIdentifier) return undefined
+    let cancelled = false
+    Promise.all([
+      getMyBooking(bookingIdentifier),
+      bookingWorkflowService.get(bookingIdentifier).catch(() => null),
+    ]).then(([detail, workflow]) => {
+      if (cancelled || !detail) return
+      const hours = detail.endTime && detail.pickupTime
+        ? (new Date(detail.endTime) - new Date(detail.pickupTime)) / 3600000
+        : null
+      setBookingSummary({
+        status: detail.status,
+        paymentStatus: workflow?.paymentStatus ?? detail.paymentStatus,
+        formattedStart: formatBookingWhen(detail.pickupTime),
+        formattedEnd: formatBookingWhen(detail.endTime),
+        durationLabel: hours != null ? rentalDurationLabel(hours) : '',
+        totalAmount: detail.totalAmount,
+        depositAmount: detail.depositAmount,
+        confirmedPaid: workflow?.confirmedPaid,
+        remainingAmount: workflow?.remainingAmount,
+        pickupFee: detail.pickupFee,
+        charges: (detail.charges ?? []).map((charge) => ({
+          chargeId: charge.chargeId,
+          chargeType: charge.chargeType,
+          label: charge.chargeType === 'OUT_OF_RADIUS' ? 'Phí đón ngoài phạm vi' : charge.description,
+          description: charge.description,
+          amount: Number(charge.effectiveAmount ?? charge.amount),
+          isWaived: Boolean(charge.isWaived),
+        })),
+      })
+    }).catch(() => {
+      if (!cancelled) setBookingSummary(null)
+    })
+    return () => { cancelled = true }
+  }, [bookingIdentifier])
 
   // Auto-polling while request is pending or reviewing
   useEffect(() => {
@@ -315,6 +358,15 @@ export default function CustomerPaymentPage() {
             )}
           </div>
         </header>
+
+        {bookingSummary ? (
+          <div className="mt-4">
+            <BookingOrderSummaryCard
+              bookingCode={bookingIdentifier}
+              {...bookingSummary}
+            />
+          </div>
+        ) : null}
 
         {requests.length > 1 && (
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">

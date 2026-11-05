@@ -634,7 +634,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new ConflictException("Khoản cọc đã được ghi nhận. Hãy xử lý hoàn tiền.");
         }
         if (pr.getStatus() == PaymentRequestStatus.REJECTED
-                || pr.getStatus() == PaymentRequestStatus.VOIDED) {
+                || pr.getStatus() == PaymentRequestStatus.VOIDED
+                || pr.getStatus() == PaymentRequestStatus.EXPIRED) {
             throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã được xử lý hoặc không còn hiệu lực");
         }
         if (pr.getStatus() == PaymentRequestStatus.CONFIRMED
@@ -832,6 +833,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (pr.getStatus() == PaymentRequestStatus.CONFIRMED) {
             throw new InvalidPaymentOperationException("Không thể từ chối yêu cầu thanh toán đã được xác nhận thành công");
         }
+        if (pr.getStatus() == PaymentRequestStatus.EXPIRED || pr.getStatus() == PaymentRequestStatus.VOIDED) {
+            throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã hết hạn hoặc không còn hiệu lực");
+        }
 
         pr.setStatus(PaymentRequestStatus.REJECTED);
         pr.setRejectionReason(request.reason());
@@ -861,6 +865,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         if (!pr.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
+        }
+        if (pr.getStatus() == PaymentRequestStatus.EXPIRED || pr.getStatus() == PaymentRequestStatus.VOIDED
+                || pr.getStatus() == PaymentRequestStatus.CONFIRMED) {
+            throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã hết hạn hoặc không còn hiệu lực");
         }
 
         pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);

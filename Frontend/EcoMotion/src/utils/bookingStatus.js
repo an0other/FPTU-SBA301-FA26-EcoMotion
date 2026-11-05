@@ -147,6 +147,96 @@ export function bookingStatusMeta(status) {
   }
 }
 
+export const PAYMENT_STATUS_LABELS = {
+  VERIFYING: 'Đang xác minh thanh toán',
+  RECONCILIATION_REQUIRED: 'Đã nhận tiền, cần đối soát',
+  UNPAID: 'Chưa thanh toán',
+  AWAITING_DEPOSIT: 'Chờ đặt cọc',
+  DEPOSIT_PAID: 'Đã thanh toán cọc',
+  PARTIALLY_PAID: 'Thanh toán một phần',
+  FULLY_PAID: 'Đã tất toán',
+  PAID: 'Đã thanh toán',
+  REFUND_PENDING: 'Chờ hoàn tiền',
+  REFUNDED: 'Đã hoàn tiền',
+  FAILED: 'Thanh toán lỗi',
+}
+
+export function paymentStatusLabel(paymentStatus) {
+  if (!paymentStatus) return null
+  return PAYMENT_STATUS_LABELS[paymentStatus] ?? paymentStatus
+}
+
+/** Mã lý do hủy từ backend (CancelReason) → copy hiển thị cho người dùng. */
+export const CANCEL_REASON_META = {
+  RENTER_REQUEST: {
+    label: 'Khách chủ động hủy',
+    description: 'Bạn hoặc nhà xe đã hủy đơn theo yêu cầu trước khi chuyến diễn ra.',
+    icon: 'person_off',
+  },
+  PROVIDER_NO_VEHICLE: {
+    label: 'Không còn xe phù hợp',
+    description: 'Nhà xe không thể cung cấp xe cho khung giờ này.',
+    icon: 'directions_car',
+  },
+  PROVIDER_NO_DRIVER: {
+    label: 'Không sắp xếp được tài xế',
+    description: 'Nhà xe không tìm được tài xế cho chuyến trong thời hạn quy định.',
+    icon: 'person_off',
+  },
+  PREVIOUS_RENTER_OVERDUE: {
+    label: 'Chuyến trước kéo dài',
+    description: 'Chuyến thuê liền kề chưa kết thúc kịp nên đơn này không thể tiếp tục.',
+    icon: 'schedule',
+  },
+  DEPOSIT_TIMEOUT: {
+    label: 'Hết hạn giữ chỗ (chưa cọc kịp)',
+    description: 'Đơn bị hủy tự động vì tiền cọc chưa được thanh toán trong thời gian giữ chỗ. Bạn có thể đặt lại xe với khung giờ khác.',
+    icon: 'timer_off',
+  },
+  YEARLY_REQUEST_TIMEOUT: {
+    label: 'Hết hạn xử lý gói năm',
+    description: 'Yêu cầu thuê năm không được xử lý kịp trong thời hạn cho phép.',
+    icon: 'event_busy',
+  },
+  YEARLY_CONTRACT_TIMEOUT: {
+    label: 'Hết hạn ký hợp đồng năm',
+    description: 'Hợp đồng thuê năm chưa hoàn tất kịp thời hạn cam kết.',
+    icon: 'description',
+  },
+  FORCE_MAJEURE: {
+    label: 'Bất khả kháng',
+    description: 'Đơn dừng do sự kiện bất khả kháng theo chính sách nền tảng.',
+    icon: 'thunderstorm',
+  },
+  SYSTEM: {
+    label: 'Hệ thống hủy',
+    description: 'Đơn được hủy theo quy trình tự động của hệ thống.',
+    icon: 'smart_toy',
+  },
+}
+
+export function cancelReasonPresentation(rawReason) {
+  if (!rawReason) {
+    return {
+      label: null,
+      description: 'Đơn thuê không tiếp tục thực hiện.',
+      icon: 'info',
+      isKnownCode: false,
+    }
+  }
+  const code = String(rawReason).trim()
+  const meta = CANCEL_REASON_META[code]
+  if (meta) {
+    return { ...meta, isKnownCode: true }
+  }
+  return {
+    label: code,
+    description: null,
+    icon: 'chat',
+    isKnownCode: false,
+  }
+}
+
 export function bookingMatchesFilter(status, filterId) {
   if (filterId === 'ALL') return true
   if (filterId === 'ACTION_NEEDED') return false

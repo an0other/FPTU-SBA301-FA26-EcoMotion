@@ -19,6 +19,7 @@ import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
 import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
+import { paymentStatusLabel } from '../utils/bookingStatus'
 
 function Icon({ name, className = '' }) {
   return (
@@ -34,20 +35,6 @@ function Icon({ name, className = '' }) {
 function formatVnd(amount) {
   if (amount == null) return '0 ₫'
   return Number(amount).toLocaleString('vi-VN') + ' ₫'
-}
-
-const PAYMENT_STATUS_LABELS = {
-  VERIFYING: 'Đang xác minh thanh toán',
-  RECONCILIATION_REQUIRED: 'Đã nhận tiền, cần đối soát',
-  UNPAID: 'Chưa thanh toán',
-  AWAITING_DEPOSIT: 'Chờ đặt cọc',
-  DEPOSIT_PAID: 'Đã thanh toán cọc',
-  PARTIALLY_PAID: 'Thanh toán một phần',
-  FULLY_PAID: 'Đã tất toán',
-  PAID: 'Đã thanh toán',
-  REFUND_PENDING: 'Chờ hoàn tiền',
-  REFUNDED: 'Đã hoàn tiền',
-  FAILED: 'Thanh toán lỗi',
 }
 
 function formatDateTime(isoString) {
@@ -375,7 +362,7 @@ export default function ProviderBookingDetailPage() {
               <BookingStatusBadge status={booking.status} />
               {booking.paymentStatus && (
                 <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
-                  Thanh toán: {PAYMENT_STATUS_LABELS[booking.paymentStatus] || 'Chưa xác định trạng thái thanh toán'}
+                  Thanh toán: {paymentStatusLabel(booking.paymentStatus) || 'Chưa xác định trạng thái thanh toán'}
                 </span>
               )}
               {booking.driverName && (
@@ -569,6 +556,10 @@ export default function ProviderBookingDetailPage() {
                     <span className="text-slate-500">Giờ đón khách:</span>
                     <strong className="text-brand-900 font-bold">{formatDateTime(booking.pickupTime)}</strong>
                   </div>
+                  <div className="flex justify-between border-t border-slate-200 pt-1">
+                    <span className="text-slate-500">Giờ trả dự kiến:</span>
+                    <strong className="text-brand-900 font-bold">{formatDateTime(booking.plannedEndAt)}</strong>
+                  </div>
                 </div>
               </div>
 
@@ -619,6 +610,24 @@ export default function ProviderBookingDetailPage() {
 
               {/* Policy Snapshot breakdown */}
               <div className="space-y-2 text-xs border-t border-slate-100 pt-3">
+                {workflow?.confirmedPaid != null && Number(workflow.confirmedPaid) > 0 ? (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Đã thu (xác nhận):</span>
+                    <strong className="text-emerald-800 font-mono">{formatVnd(workflow.confirmedPaid)}</strong>
+                  </div>
+                ) : null}
+                {workflow?.remainingAmount != null && Number(workflow.remainingAmount) > 0 ? (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Còn phải thu:</span>
+                    <strong className="text-amber-900 font-mono">{formatVnd(workflow.remainingAmount)}</strong>
+                  </div>
+                ) : null}
+                {booking.pickupFee != null && Number(booking.pickupFee) > 0 ? (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Phí đón:</span>
+                    <strong className="text-slate-900 font-mono">{formatVnd(booking.pickupFee)}</strong>
+                  </div>
+                ) : null}
                 <div className="flex justify-between text-slate-600">
                   <span>Giá 1 slot thuê:</span>
                   <strong className="text-slate-900 font-mono">{formatVnd(booking.slotPrice)}</strong>

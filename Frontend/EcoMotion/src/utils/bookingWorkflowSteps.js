@@ -97,11 +97,16 @@ export function getActiveFinancialMetrics(workflow) {
       badgeClass: 'text-amber-800 bg-amber-50 border-amber-200 font-bold',
     })
   }
-  if (remaining > 0 && !isClosed) {
+  const awaitingDeposit = ['AWAITING_DEPOSIT', 'ACCEPTED'].includes(workflow.bookingStatus)
+    && paid <= 0
+    && workflow.paymentStatus !== 'DEPOSIT_PAID'
+    && !['FULLY_PAID', 'PAID'].includes(workflow.paymentStatus)
+
+  if (remaining > 0 && !isClosed && !awaitingDeposit) {
     metrics.push({
       id: 'remainingAmount',
       label: ['AWAITING_FINAL_PAYMENT', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(workflow.bookingStatus)
-        ? 'Cần quyết toán thêm' : 'Còn lại theo chi phí hiện tại',
+        ? 'Cần quyết toán thêm' : 'Còn phải trả (đã trừ đã thu)',
       amount: remaining,
       badgeClass: 'text-purple-800 bg-purple-50 border-purple-200 font-bold',
     })

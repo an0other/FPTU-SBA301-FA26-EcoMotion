@@ -1,5 +1,8 @@
 import { parseVietnamDateTime } from './bookingDateTime.js'
 
+/** Thời lượng thuê tối thiểu (giờ tròn) — khớp gói giờ / luồng báo giá. */
+export const MIN_RENTAL_DURATION_HOURS = 4
+
 export function rentalDurationLabel(hours) {
   const days = Math.floor(hours / 24)
   const rest = hours % 24
@@ -13,15 +16,40 @@ export function parseRentalTime(value) {
   const [date, time] = value.split('T')
   return parseVietnamDateTime(date, time)
 }
+export function minReturnRentalInstant(start) {
+  const pickup = parseRentalTime(start)
+  if (!pickup) return null
+  return new Date(pickup.getTime() + MIN_RENTAL_DURATION_HOURS * 3600000)
+}
+
 export function rentalTimeError(start, end) {
   const pickup = parseRentalTime(start)
   const returned = parseRentalTime(end)
-  return pickup && returned && returned <= pickup ? 'Thời gian trả xe phải sau thời gian nhận xe.' : ''
+  if (!pickup || !returned) return ''
+  const minReturn = minReturnRentalInstant(start)
+  if (minReturn && returned < minReturn) {
+    return `Thời gian trả xe phải sau giờ nhận xe ít nhất ${MIN_RENTAL_DURATION_HOURS} giờ.`
+  }
+  return ''
 }
+
+export function rentalEndTimeConstraints(start) {
+  const minReturn = minReturnRentalInstant(start)
+  if (!minReturn) return { minDate: null, minHourForDate: () => null }
+  const minInput = rentalTimeInput(minReturn.toISOString())
+  const minDate = minInput.slice(0, 10)
+  const minHourOnMinDate = minInput.slice(11, 16)
+  return {
+    minDate,
+    minHourForDate: (dateYmd) => (dateYmd === minDate ? minHourOnMinDate : null),
+  }
+}
+
 export function rentalSelection(vehicleId, start, end) {
   const pickup = parseRentalTime(start)
   const requestedEnd = parseRentalTime(end)
-  if (!vehicleId || !pickup || !requestedEnd || requestedEnd <= pickup) return null
+  const minReturn = minReturnRentalInstant(start)
+  if (!vehicleId || !pickup || !requestedEnd || !minReturn || requestedEnd < minReturn) return null
   return { vehicleId, pickupTime: pickup.toISOString(), requestedEndAt: requestedEnd.toISOString() }
 }
 export function rentalPayload(vehicleId, request, option, pickup, passengerCount, driverNote) {
