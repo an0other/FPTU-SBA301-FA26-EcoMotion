@@ -948,8 +948,13 @@ export default function ProviderFinancePage() {
                             </span>
                           </td>
                           <td className="px-2.5 py-3 whitespace-nowrap">
-                            {['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REJECTED'].includes(pr.status) ? (
-                              <HoldCountdown expiresAt={pr.expiresAt} compact shortLabel />
+                            {['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REJECTED', 'REVIEW_REQUIRED'].includes(pr.status) ? (
+                              <HoldCountdown
+                                expiresAt={pr.reconciliationDeadline || pr.expiresAt}
+                                compact
+                                shortLabel
+                                variant={['PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REVIEW_REQUIRED'].includes(pr.status) ? 'reconciliation' : 'hold'}
+                              />
                             ) : (
                               <span className="text-slate-400">—</span>
                             )}

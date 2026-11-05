@@ -1297,15 +1297,45 @@ public class BookingServiceImpl implements BookingService {
                 && endConfirmations.history(booking.getId()).stream().findFirst().map(h -> !"PAUSED".equals(h.state())).orElse(true);
     }
 
+    private static final Set<PaymentRequestStatus> DEPOSIT_HOLD_COUNTDOWN_STATUSES = Set.of(
+            PaymentRequestStatus.PENDING,
+            PaymentRequestStatus.REJECTED,
+            PaymentRequestStatus.EXPIRED,
+            PaymentRequestStatus.PROOF_SUBMITTED,
+            PaymentRequestStatus.PARTIALLY_PAID,
+            PaymentRequestStatus.REVIEW_REQUIRED);
+
+    private static final Set<PaymentRequestStatus> DEPOSIT_RECONCILIATION_STATUSES = Set.of(
+            PaymentRequestStatus.PROOF_SUBMITTED,
+            PaymentRequestStatus.PARTIALLY_PAID,
+            PaymentRequestStatus.REVIEW_REQUIRED);
+
     private Instant holdExpiresAt(Booking booking) {
-        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+        if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT
+                && booking.getStatus() != BookingStatus.ACCEPTED) {
             return null;
         }
-        return paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
-                .map(PaymentRequest::getExpiresAt)
-                .orElseGet(() -> booking.getCreatedAt() == null
-                        ? null
-                        : booking.getCreatedAt().plus(INITIAL_HOLD_DURATION));
+        Optional<PaymentRequest> depositOpt = paymentRequestService.findPaymentRequest(
+                booking.getId(), PaymentRequestType.DEPOSIT);
+        if (depositOpt.isPresent()) {
+            PaymentRequest request = depositOpt.get();
+            if (!DEPOSIT_HOLD_COUNTDOWN_STATUSES.contains(request.getStatus())) {
+                return null;
+            }
+            if (DEPOSIT_RECONCILIATION_STATUSES.contains(request.getStatus())
+                    && request.getReconciliationDeadline() != null) {
+                return request.getReconciliationDeadline();
+            }
+            if (request.getExpiresAt() != null) {
+                return request.getExpiresAt();
+            }
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+            return booking.getCreatedAt() == null
+                    ? null
+                    : booking.getCreatedAt().plus(INITIAL_HOLD_DURATION);
+        }
+        return null;
     }
 
     private Booking requireOwned(Long userId, String bookingCode) {

@@ -341,7 +341,14 @@ export const BookingDetail = ({
                     : 'Vui lòng hoàn tất thanh toán cọc giữ chỗ để khóa lịch xe.'}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                {booking.holdExpiresAt ? (
+                  <HoldCountdown
+                    expiresAt={booking.holdExpiresAt}
+                    durationMs={booking.upfront ? 24 * 60 * 60 * 1000 : undefined}
+                  />
+                ) : null}
+                <div className="flex items-center gap-2">
                 {booking.canCancel ? <button
                   onClick={() => setIsCancelModalOpen(true)}
                   type="button"
@@ -357,6 +364,7 @@ export const BookingDetail = ({
                 >
                   {booking.upfront ? 'Thanh toán trả trước' : 'Thanh toán cọc'}
                 </button> : null}
+                </div>
               </div>
             </div>
           )}
