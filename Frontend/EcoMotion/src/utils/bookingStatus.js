@@ -251,7 +251,13 @@ export function canShowFinalPaymentCTA(actionKind) {
   return actionKind === 'PAY_SETTLEMENT'
 }
 
-export function listPaymentLabel(status, { holdExpired = false, actionKind } = {}) {
+export function listPaymentLabel(status, { holdExpired = false, actionKind, depositPaymentStatus } = {}) {
+  if (depositPaymentStatus === 'REJECTED') {
+    return 'Biên lai cọc bị từ chối'
+  }
+  if (depositPaymentStatus === 'PROOF_SUBMITTED' || depositPaymentStatus === 'REVIEW_REQUIRED') {
+    return 'Chờ nhà xe xác nhận cọc'
+  }
   if (WAITING_DEPOSIT_STATUSES.has(status) && holdExpired) {
     return 'Hết hạn giữ chỗ'
   }
@@ -274,10 +280,13 @@ export function isWaitingDeposit(status) {
   return WAITING_DEPOSIT_STATUSES.has(status)
 }
 
-export function cardAction(actionKind) {
+export function cardAction(actionKind, depositPaymentStatus) {
   switch (actionKind) {
     case 'PAY_DEPOSIT':
-      return { kind: 'PAY_DEPOSIT', label: 'Thanh toán cọc' }
+      return {
+        kind: 'PAY_DEPOSIT',
+        label: depositPaymentStatus === 'REJECTED' ? 'Gửi lại cọc / biên lai' : 'Thanh toán cọc',
+      }
     case 'PAY_SETTLEMENT':
       return { kind: 'PAY_SETTLEMENT', label: 'Thanh toán quyết toán' }
     case 'CONFIRM_START':

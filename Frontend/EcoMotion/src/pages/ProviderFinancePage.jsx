@@ -5,6 +5,7 @@ import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { providerFinanceService, SUPPORTED_BANKS } from '../services/providerFinanceService'
+import { providerBookingService } from '../services/providerBookingService'
 import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
 import { HoldCountdown } from '../components/payments/HoldCountdown'
 
@@ -52,18 +53,234 @@ const REQUEST_STATUS_CONFIG = {
   PROOF_SUBMITTED: { label: 'Chờ đối soát biên lai', bg: 'bg-blue-50 text-blue-800 border-blue-200', dot: 'bg-blue-500' },
   PARTIALLY_PAID: { label: 'Thanh toán một phần', bg: 'bg-orange-50 text-orange-800 border-orange-200', dot: 'bg-orange-500' },
   CONFIRMED: { label: 'Đã xác nhận đủ', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500' },
-  REJECTED: { label: 'Đã từ chối', bg: 'bg-red-50 text-red-800 border-red-200', dot: 'bg-red-500' },
+  REJECTED: { label: 'Từ chối biên lai', bg: 'bg-red-50 text-red-800 border-red-200', dot: 'bg-red-500' },
   EXPIRED: { label: 'Hết hạn', bg: 'bg-slate-100 text-slate-700 border-slate-300', dot: 'bg-slate-400' },
   REVIEW_REQUIRED: { label: 'Cần đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200', dot: 'bg-purple-500' },
   VOIDED: { label: 'Đã hủy yêu cầu', bg: 'bg-slate-100 text-slate-600 border-slate-300', dot: 'bg-slate-400' },
 }
 
-/** Yêu cầu còn hiệu lực để nhà xe xác nhận / từ chối / báo lệch. */
-function canProviderManagePaymentRequest(pr, remaining) {
+/** Khách đã gửi biên lai / đang đối soát — mới hiện Xác nhận & T.chối BL (không khi mới chờ thanh toán). */
+function canProviderReviewPaymentProof(pr, hasProof, remaining) {
   if (pr.vnpayVerifying) return false
-  if (['EXPIRED', 'VOIDED', 'CONFIRMED'].includes(pr.status)) return false
-  if (pr.status === 'PARTIALLY_PAID' && remaining <= 0) return false
-  return ['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REVIEW_REQUIRED', 'REJECTED'].includes(pr.status)
+  if (['EXPIRED', 'VOIDED', 'CONFIRMED', 'REJECTED'].includes(pr.status)) return false
+  if (['PROOF_SUBMITTED', 'REVIEW_REQUIRED'].includes(pr.status)) return true
+  if (pr.status === 'PARTIALLY_PAID' && remaining > 0) return true
+  if (pr.status === 'PENDING' && hasProof) return true
+  return false
+}
+
+/** Cọc qua VietQR/VNPAY: không báo lệch thủ công trên bảng (chỉ xác nhận/từ chối biên lai khi đã có chứng từ). */
+function canProviderReportIssue(pr, hasProof, remaining) {
+  if (pr.paymentType === 'DEPOSIT') return false
+  return canProviderReviewPaymentProof(pr, hasProof, remaining)
+}
+
+function awaitingCustomerDeposit(pr, hasProof) {
+  return pr.paymentType === 'DEPOSIT'
+    && pr.status === 'PENDING'
+    && !hasProof
+    && !pr.vnpayVerifying
+}
+
+function providerCanDeclineTrip(pr, hasProof) {
+  const paid = Number(pr.paidAmount || 0)
+  return pr.paymentType === 'DEPOSIT'
+    && pr.status === 'PENDING'
+    && !hasProof
+    && paid <= 0
+    && !pr.vnpayVerifying
+    && ['AWAITING_DEPOSIT', 'ACCEPTED'].includes(pr.bookingStatus)
+}
+
+const financeActionBtn =
+  'shrink-0 rounded-md px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600'
+
+function FinanceActionHint({ children, tone = 'muted', title }) {
+  const toneClass =
+    tone === 'amber'
+      ? 'bg-amber-50 text-amber-800 border-amber-100'
+      : tone === 'blue'
+        ? 'bg-blue-50 text-blue-800 border-blue-100'
+        : 'bg-slate-50 text-slate-500 border-slate-100'
+  return (
+    <span
+      className={`inline-flex max-w-[11rem] items-center justify-center rounded-md border px-2 py-1 text-center text-[11px] font-medium leading-snug ${toneClass}`}
+      title={title}
+    >
+      {children}
+    </span>
+  )
+}
+
+function PaymentRequestActionsCell({
+  pr,
+  hasProof,
+  remaining,
+  cancelling,
+  stillCollecting,
+  collected,
+  onViewProof,
+  onConfirm,
+  onReject,
+  onReportIssue,
+  onOpenRefundsTab,
+  onDeclineTrip,
+}) {
+  const showReceipt =
+    hasProof && (pr.status === 'CONFIRMED' || canProviderReviewPaymentProof(pr, hasProof, remaining))
+  const reviewing = canProviderReviewPaymentProof(pr, hasProof, remaining)
+  const awaiting = awaitingCustomerDeposit(pr, hasProof)
+  const canDecline = providerCanDeclineTrip(pr, hasProof)
+  const showReportIssue = canProviderReportIssue(pr, hasProof, remaining)
+
+  if (pr.status === 'EXPIRED' || pr.status === 'VOIDED') {
+    return (
+      <div className="flex min-h-[2.25rem] items-center justify-center">
+        <span className="text-sm font-medium text-slate-300" title={pr.status === 'EXPIRED' ? 'Đơn đã hết hạn giữ chỗ' : 'Yêu cầu đã hủy'}>
+          —
+        </span>
+      </div>
+    )
+  }
+
+  if (pr.vnpayVerifying) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 py-0.5">
+        <FinanceActionHint tone="blue" title="Trạng thái chi tiết ở cột Trạng thái">
+          Đang xử lý cổng
+        </FinanceActionHint>
+      </div>
+    )
+  }
+
+  if (reviewing) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1.5 py-0.5">
+        <div className="flex flex-wrap items-center justify-center gap-1">
+          {showReceipt ? (
+            <button
+              type="button"
+              onClick={onViewProof}
+              className={`${financeActionBtn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+              title="Xem biên lai khách tải lên"
+            >
+              Biên lai
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`${financeActionBtn} bg-brand-700 font-bold text-white hover:bg-brand-800`}
+            title="Xác nhận biên lai / chuyển khoản khách đã gửi"
+          >
+            Xác nhận
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            className={`${financeActionBtn} border border-red-200 bg-white text-red-600 hover:bg-red-50`}
+            title="Từ chối biên lai khách đã gửi"
+          >
+            Từ chối biên lai
+          </button>
+          {showReportIssue ? (
+            <button
+              type="button"
+              onClick={onReportIssue}
+              className={`${financeActionBtn} border border-purple-200 bg-white text-purple-700 hover:bg-purple-50`}
+              title="Báo lệch — báo cáo sai lệch"
+            >
+              Lệch
+            </button>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
+  if (pr.status === 'REJECTED') {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 py-0.5">
+        <FinanceActionHint
+          tone="amber"
+          title="Từ chối biên lai chuyển khoản — khách có thể nộp lại trong thời gian giữ chỗ"
+        >
+          Chờ biên lai mới
+        </FinanceActionHint>
+      </div>
+    )
+  }
+
+  if (awaiting) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1.5 py-0.5">
+        <FinanceActionHint tone="amber" title="Chưa có biên lai hoặc xác nhận từ VNPAY">
+          Chờ khách thanh toán
+        </FinanceActionHint>
+        {canDecline ? (
+          <button
+            type="button"
+            onClick={() => onDeclineTrip(pr)}
+            className={`${financeActionBtn} border border-red-200 bg-white text-red-700 hover:bg-red-50`}
+            title="Hủy chuyến ngay — khách không thể cọc thêm (chưa thu tiền thì không cần hoàn)"
+          >
+            Hủy nhận đơn
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
+  if (!stillCollecting && collected && cancelling) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1.5 py-0.5">
+        {showReceipt ? (
+          <button
+            type="button"
+            onClick={onViewProof}
+            className={`${financeActionBtn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+          >
+            Biên lai
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onOpenRefundsTab}
+          className="text-[11px] font-semibold text-brand-800 underline-offset-2 hover:underline"
+          title="Đã thu cọc — xử lý hoàn tiền tại tab Hoàn tiền"
+        >
+          Sang tab Hoàn tiền →
+        </button>
+      </div>
+    )
+  }
+
+  if (pr.status === 'CONFIRMED' || (collected && !stillCollecting)) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1 py-0.5">
+        {showReceipt ? (
+          <button
+            type="button"
+            onClick={onViewProof}
+            className={`${financeActionBtn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+            title="Xem biên lai đã lưu"
+          >
+            Biên lai
+          </button>
+        ) : (
+          <span className="text-[11px] font-medium text-slate-400" title="Đã ghi nhận thanh toán">
+            Hoàn tất
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-[2.25rem] items-center justify-center">
+      <span className="text-sm font-medium text-slate-300">—</span>
+    </div>
+  )
 }
 
 const REFUND_STATUS_CONFIG = {
@@ -142,6 +359,9 @@ export default function ProviderFinancePage() {
   const [isRejecting, setIsRejecting] = useState(false)
   const [issueNoteInput, setIssueNoteInput] = useState('')
   const [isReportingIssue, setIsReportingIssue] = useState(false)
+  const [declineTripModalData, setDeclineTripModalData] = useState(null)
+  const [declineTripReason, setDeclineTripReason] = useState('Không còn xe trống cho khung giờ này.')
+  const [isDecliningTrip, setIsDecliningTrip] = useState(false)
 
 
   // Fetch summary and bank accounts
@@ -388,6 +608,37 @@ export default function ProviderFinancePage() {
   }
 
   // Handle Report Issue
+  const handleOpenDeclineTripModal = (pr) => {
+    setDeclineTripModalData(pr)
+    setDeclineTripReason('Không còn xe trống cho khung giờ này.')
+  }
+
+  const handleDeclineTrip = async (event) => {
+    event.preventDefault()
+    if (!declineTripModalData || isDecliningTrip) return
+    const reason = declineTripReason.trim()
+    if (!reason) return
+    setIsDecliningTrip(true)
+    try {
+      const bookingCode = declineTripModalData.bookingCode
+      const result = await providerBookingService.resolveOperationalRisk(bookingCode, {
+        resolution: 'CANCEL_AND_REFUND',
+        reason,
+      })
+      setDeclineTripModalData(null)
+      setToast({
+        message: result?.message || `Đã hủy đơn ${bookingCode}. Khách không thể cọc thêm.`,
+        type: 'success',
+      })
+      fetchPaymentRequests()
+      fetchFinanceData()
+    } catch (err) {
+      setToast({ message: err.message || 'Không thể hủy nhận đơn.', type: 'error' })
+    } finally {
+      setIsDecliningTrip(false)
+    }
+  }
+
   const handleOpenReportIssueModal = (pr) => {
     setReportIssueModalData(pr)
     setIssueNoteInput('')
@@ -829,7 +1080,7 @@ export default function ProviderFinancePage() {
                     <option value="PARTIALLY_PAID">Thanh toán một phần</option>
                     <option value="CONFIRMED">Đã xác nhận đủ</option>
                     <option value="REVIEW_REQUIRED">Cần đối soát</option>
-                    <option value="REJECTED">Đã từ chối</option>
+                    <option value="REJECTED">Từ chối biên lai</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
                     <Icon name="expand_more" className="text-[18px]" />
@@ -852,8 +1103,8 @@ export default function ProviderFinancePage() {
                   <col className="w-[10%]" />
                   <col className="w-[14%]" />
                   <col className="w-[13%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[17%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[18%]" />
                 </colgroup>
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
@@ -948,7 +1199,11 @@ export default function ProviderFinancePage() {
                             </span>
                           </td>
                           <td className="px-2.5 py-3 whitespace-nowrap">
-                            {['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REJECTED', 'REVIEW_REQUIRED'].includes(pr.status) ? (
+                            {pr.status === 'REJECTED' ? (
+                              <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap" title="Đã từ chối biên lai; chờ khách gửi lại trước khi đối soát tiếp">
+                                Chờ biên lai mới
+                              </span>
+                            ) : ['PENDING', 'PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REVIEW_REQUIRED'].includes(pr.status) ? (
                               <HoldCountdown
                                 expiresAt={pr.reconciliationDeadline || pr.expiresAt}
                                 compact
@@ -970,58 +1225,21 @@ export default function ProviderFinancePage() {
                               </span>
                             </span>
                           </td>
-                          <td className="px-2.5 py-3 text-center">
-                            <div className="flex items-center justify-center gap-1 flex-nowrap">
-                              {hasProof && (
-                                <button
-                                  type="button"
-                                  onClick={() => setViewProofModalData(pr)}
-                                  className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap"
-                                  title="Xem biên lai khách tải lên"
-                                >
-                                  Biên lai
-                                </button>
-                              )}
-                              {canProviderManagePaymentRequest(pr, remaining) && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenConfirmModal(pr)}
-                                    className="shrink-0 rounded-md bg-brand-700 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-brand-800 whitespace-nowrap"
-                                    title="Xác nhận chuyển khoản trực tiếp"
-                                  >
-                                    Xác nhận
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenRejectModal(pr)}
-                                    className="shrink-0 rounded border border-red-200 bg-white px-2 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 whitespace-nowrap"
-                                    title="Từ chối biên lai"
-                                  >
-                                    Từ chối
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenReportIssueModal(pr)}
-                                    className="shrink-0 rounded border border-purple-200 bg-white px-2 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-50 whitespace-nowrap"
-                                    title="Báo lệch — báo cáo sai lệch"
-                                  >
-                                    Lệch
-                                  </button>
-                                </>
-                              )}
-                              {pr.status === 'EXPIRED' && (
-                                <span className="text-xs font-medium text-slate-500 whitespace-nowrap" title="Đơn đã hết hạn giữ chỗ">
-                                  Không thao tác
-                                </span>
-                              )}
-                              {pr.status === 'VOIDED' && (
-                                <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Đã hủy YC</span>
-                              )}
-                              {!stillCollecting && collected && cancelling && (
-                                <span className="text-xs font-semibold text-slate-600">Đã thu, sang tab Hoàn tiền</span>
-                              )}
-                            </div>
+                          <td className="px-2 py-3 align-middle">
+                            <PaymentRequestActionsCell
+                              pr={pr}
+                              hasProof={hasProof}
+                              remaining={remaining}
+                              cancelling={cancelling}
+                              stillCollecting={stillCollecting}
+                              collected={collected}
+                              onViewProof={() => setViewProofModalData(pr)}
+                              onConfirm={() => handleOpenConfirmModal(pr)}
+                              onReject={() => handleOpenRejectModal(pr)}
+                              onReportIssue={() => handleOpenReportIssueModal(pr)}
+                              onOpenRefundsTab={() => setActiveTab('refunds')}
+                              onDeclineTrip={handleOpenDeclineTripModal}
+                            />
                           </td>
                         </tr>
                       )
@@ -1601,6 +1819,61 @@ export default function ProviderFinancePage() {
                 >
                   {isConfirming && <Icon name="sync" className="animate-spin text-sm" />}
                   Xác nhận đã nhận tiền
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {declineTripModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Hủy nhận chuyến (chưa thu cọc)</h3>
+              <button
+                type="button"
+                onClick={() => setDeclineTripModalData(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <Icon name="close" className="text-lg" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDeclineTrip} className="mt-4 space-y-4">
+              <p className="text-xs leading-relaxed text-slate-600">
+                Đơn <span className="font-bold text-slate-900">#{declineTripModalData.bookingCode}</span> sẽ bị hủy ngay.
+                Yêu cầu cọc đóng lại — khách không thể thanh toán thêm. Vì chưa ghi nhận tiền, bạn không cần hoàn tiền.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Lý do (gửi cho khách) *</label>
+                <textarea
+                  rows={3}
+                  required
+                  maxLength={500}
+                  value={declineTripReason}
+                  onChange={(e) => setDeclineTripReason(e.target.value)}
+                  placeholder="Ví dụ: Xe hỏng đột xuất, không còn xe thay thế..."
+                  className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs focus:border-brand-600 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setDeclineTripModalData(null)}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Quay lại
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDecliningTrip || !declineTripReason.trim()}
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 text-xs font-semibold text-white shadow-xs hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isDecliningTrip && <Icon name="sync" className="animate-spin text-sm" />}
+                  Xác nhận hủy chuyến
                 </button>
               </div>
             </form>

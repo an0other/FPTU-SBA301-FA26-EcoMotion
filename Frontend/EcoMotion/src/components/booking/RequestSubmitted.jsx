@@ -152,9 +152,11 @@ export const RequestSubmitted = ({
               {!cancelled && !holdExpired && !awaitingProvider ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-600" /> : null}
               {statusBadge.label}
             </span>
-            <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${orderStatusMeta.badgeClass}`}>
-              Đơn: {orderStatusMeta.label}
-            </span>
+            {orderStatusMeta.label !== statusBadge.label ? (
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${orderStatusMeta.badgeClass}`}>
+                Đơn: {orderStatusMeta.label}
+              </span>
+            ) : null}
           </div>
 
           <p className="mx-auto max-w-md text-sm leading-relaxed text-[#14221A]/65">

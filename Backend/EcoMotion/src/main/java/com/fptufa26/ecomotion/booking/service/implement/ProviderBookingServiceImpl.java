@@ -1202,10 +1202,14 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 message = "Đã dời giờ nhận xe để xử lý nguy cơ xe về trễ";
             }
             case CANCEL_AND_REFUND -> {
+                paymentRequestService.voidUnpaidDepositIfProviderWithdraws(booking.getId());
                 refundAmount = createFullProviderCancellationRefund(booking, provider.getUser());
                 booking.setCancelledBy(provider.getUser());
                 booking.setCancelledAt(now);
-                booking.setCancelReason(CancelReason.PREVIOUS_RENTER_OVERDUE);
+                var cancelRisk = vehicleOperationalRiskService.assess(booking);
+                booking.setCancelReason(cancelRisk.atRisk()
+                        ? CancelReason.PREVIOUS_RENTER_OVERDUE
+                        : CancelReason.PROVIDER_NO_VEHICLE);
                 booking.setStatus(refundAmount.signum() > 0
                         ? BookingStatus.CANCELLATION_REVIEW
                         : BookingStatus.CANCELLED);
@@ -1358,11 +1362,13 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             ));
         }
 
+        boolean providerCancelledTrip = booking.getOperationalResolution() == OperationalResolutionType.CANCEL_AND_REFUND
+                && booking.getOperationalResolvedAt() != null;
         if (booking.getOperationalResolution() != null && booking.getOperationalResolvedAt() != null) {
             String title = switch (booking.getOperationalResolution()) {
                 case CHANGE_VEHICLE -> "Đã đổi xe thay thế";
                 case RESCHEDULE -> "Đã dời giờ nhận xe";
-                case CANCEL_AND_REFUND -> "Đã hủy và tạo yêu cầu hoàn tiền";
+                case CANCEL_AND_REFUND -> "Nhà xe đã hủy chuyến";
             };
             events.add(new ProviderBookingDetailResponse.TimelineEventResponse(
                     title,
@@ -1470,8 +1476,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             ));
         }
 
-        if (booking.getStatus() == BookingStatus.CANCELLED
-                || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW) {
+        if ((booking.getStatus() == BookingStatus.CANCELLED
+                || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)
+                && !providerCancelledTrip) {
             String reasonText = booking.getCancelReason() == null ? "Yêu cầu hủy" : switch (booking.getCancelReason()) {
                 case RENTER_REQUEST -> "Khách thuê yêu cầu hủy";
                 case PROVIDER_NO_VEHICLE -> "Nhà cung cấp không còn xe phù hợp";

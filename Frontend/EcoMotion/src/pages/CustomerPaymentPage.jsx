@@ -359,6 +359,18 @@ export default function CustomerPaymentPage() {
           </div>
         </header>
 
+        {selectedRequest.status === 'REJECTED' ? (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950">
+            <p className="font-bold">Nhà xe đã từ chối biên lai chuyển khoản</p>
+            {selectedRequest.rejectionReason ? (
+              <p className="mt-1 text-xs text-rose-900/90">Lý do: {selectedRequest.rejectionReason}</p>
+            ) : null}
+            <p className="mt-2 text-xs leading-relaxed text-rose-900/85">
+              Đơn vẫn giữ chỗ trong thời gian còn lại. Bạn có thể thanh toán lại bằng VNPAY hoặc chuyển khoản và tải biên lai mới.
+            </p>
+          </div>
+        ) : null}
+
         {bookingSummary ? (
           <div className="mt-4">
             <BookingOrderSummaryCard

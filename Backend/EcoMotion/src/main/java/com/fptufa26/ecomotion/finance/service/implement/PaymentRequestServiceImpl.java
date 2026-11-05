@@ -490,6 +490,32 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         return paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, type);
     }
 
+    @Override
+    @Transactional
+    public void voidUnpaidDepositIfProviderWithdraws(Long bookingId) {
+        paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, PaymentRequestType.DEPOSIT).ifPresent(pr -> {
+            if (pr.getPaidAmount() != null && pr.getPaidAmount().signum() > 0) {
+                return;
+            }
+            if (pr.getStatus() == PaymentRequestStatus.CONFIRMED) {
+                return;
+            }
+            if (pr.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
+                    || pr.getStatus() == PaymentRequestStatus.PARTIALLY_PAID
+                    || pr.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED) {
+                throw new ConflictException(
+                        "Khách đã gửi biên lai hoặc đang đối soát — xử lý biên lai trước khi hủy chuyến");
+            }
+            if (pr.getStatus() == PaymentRequestStatus.VOIDED || pr.getStatus() == PaymentRequestStatus.EXPIRED) {
+                return;
+            }
+            pr.setStatus(PaymentRequestStatus.VOIDED);
+            pr.setIssueNote("Nhà xe đã hủy nhận chuyến trước khi thu cọc");
+            pr.setUpdatedAt(clock.instant());
+            paymentRequestRepository.save(pr);
+        });
+    }
+
     private void registerTimelyProof(PaymentRequest request) {
         Instant now = clock.instant();
         if (request.getFirstProofAt() == null) {
@@ -835,6 +861,14 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
         if (pr.getStatus() == PaymentRequestStatus.EXPIRED || pr.getStatus() == PaymentRequestStatus.VOIDED) {
             throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã hết hạn hoặc không còn hiệu lực");
+        }
+        if (pr.getStatus() == PaymentRequestStatus.REJECTED) {
+            throw new InvalidPaymentOperationException(
+                    "Biên lai đã bị từ chối. Chờ khách gửi bằng chứng mới trước khi từ chối lại.");
+        }
+        if (pr.getStatus() == PaymentRequestStatus.PENDING && pr.getEvidences().isEmpty()) {
+            throw new InvalidPaymentOperationException(
+                    "Chưa có biên lai thanh toán để từ chối. Nếu nhà xe không thể phục vụ chuyến, hãy hủy đơn tại chi tiết đơn thuê.");
         }
 
         pr.setStatus(PaymentRequestStatus.REJECTED);

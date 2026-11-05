@@ -91,9 +91,10 @@ function TerminalCancellationPanel({
     ? (rejectionText ? 'Lý do từ chối' : 'Không tiếp tục thực hiện')
     : (cancelInfo.label ? 'Lý do hủy' : 'Thông tin')
   const reasonBadge = isRejected ? null : cancelInfo.label
+  const providerCancelNote = booking.cancelDetailNote?.trim()
   const reasonBody = isRejected
     ? (rejectionText || 'Nhà xe không thể nhận đơn với thông tin và khung giờ hiện tại.')
-    : (cancelInfo.description || cancelInfo.label || 'Đơn thuê không tiếp tục thực hiện.')
+    : (providerCancelNote || cancelInfo.description || cancelInfo.label || 'Đơn thuê không tiếp tục thực hiện.')
 
   const vehicleId = booking.vehicleId ?? booking.vehicle?.id
   const rebookPath = vehicleId
@@ -194,7 +195,9 @@ function TerminalCancellationPanel({
 
             {financialMetrics.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-amber-200/60 pt-3">
-                <span className="text-xs font-medium text-slate-600">Tài chính liên quan:</span>
+                {financialMetrics.length > 1 ? (
+                  <span className="text-xs font-medium text-slate-600">Tài chính liên quan:</span>
+                ) : null}
                 {financialMetrics.map((m) => (
                   <span
                     key={m.id}

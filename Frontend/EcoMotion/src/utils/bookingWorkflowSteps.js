@@ -73,6 +73,16 @@ export function getActiveFinancialMetrics(workflow) {
   const remaining = Number(workflow.remainingAmount || 0)
   const isClosed = isTerminalBooking(workflow.bookingStatus)
 
+  // Full refund after cancel: one amount line instead of duplicate "đã thu" + "đang hoàn" badges.
+  if (isClosed && pendingRefund > 0 && refunded === 0 && paid > 0 && pendingRefund >= paid) {
+    return [{
+      id: 'pendingRefundAmount',
+      label: 'Hoàn lại (đang xử lý)',
+      amount: pendingRefund,
+      badgeClass: 'text-amber-800 bg-amber-50 border-amber-200 font-bold',
+    }]
+  }
+
   if (paid > 0) {
     metrics.push({
       id: 'confirmedPaid',
@@ -139,13 +149,20 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   let depositState = STEP_STATUS.PENDING
   let depositDescription = 'Chờ duyệt đơn'
 
+  const prepDepositStatuses = new Set(['PENDING', 'ACCEPTED', 'AWAITING_DEPOSIT'])
+  const hasRecordedInboundPayment = confirmedPaid > 0
+    || ['DEPOSIT_PAID', 'PARTIALLY_PAID', 'FULLY_PAID', 'PAID', 'REFUND_PENDING', 'VERIFYING'].includes(paymentStatus)
+
   const hasPaidDeposit = confirmedPaid > 0 && !['RECONCILIATION_REQUIRED', 'REFUNDED'].includes(paymentStatus) && [
     'CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED', 'DRIVER_ARRIVED',
     'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION',
     'AWAITING_EXTRA_CHARGE_CONFIRMATION', 'AWAITING_FINAL_PAYMENT', 'COMPLETED',
   ].includes(status)
 
-  if (paymentStatus === 'RECONCILIATION_REQUIRED' && [
+  if (paymentStatus === 'REFUND_PENDING' && hasRecordedInboundPayment) {
+    depositState = STEP_STATUS.WARNING
+    depositDescription = 'Đã thu cọc — đang hoàn tiền'
+  } else if (paymentStatus === 'RECONCILIATION_REQUIRED' && [
     'PENDING', 'ACCEPTED', 'AWAITING_DEPOSIT', 'CONFIRMED', 'DRIVER_ASSIGNED',
     'DRIVER_CONFIRMED', 'DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION',
   ].includes(status)) {
@@ -157,6 +174,11 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   } else if (paymentStatus === 'VERIFYING') {
     depositState = STEP_STATUS.CURRENT
     depositDescription = 'Đang xác minh thanh toán'
+  } else if (hasRecordedInboundPayment && prepDepositStatuses.has(status)) {
+    depositState = STEP_STATUS.WARNING
+    depositDescription = paymentStatus === 'PARTIALLY_PAID'
+      ? 'Đã nhận một phần — cần đối soát cọc'
+      : 'Tiền đã ghi nhận — chờ xác nhận đơn'
   } else if (status === 'AWAITING_DEPOSIT' || status === 'ACCEPTED' || paymentStatus === 'AWAITING_DEPOSIT') {
     depositState = STEP_STATUS.CURRENT
     depositDescription = 'Chờ khách cọc'

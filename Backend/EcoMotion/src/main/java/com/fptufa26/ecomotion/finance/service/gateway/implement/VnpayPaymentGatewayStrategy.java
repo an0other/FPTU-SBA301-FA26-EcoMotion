@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.finance.service.gateway.implement;
 import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.finance.config.VnpayConfig;
 import com.fptufa26.ecomotion.finance.config.VnpayUtils;
+import com.fptufa26.ecomotion.finance.exception.InvalidPaymentOperationException;
 import com.fptufa26.ecomotion.finance.service.gateway.PaymentGatewayStrategy;
 import com.fptufa26.ecomotion.finance.service.gateway.dto.PaymentUrlCommand;
 import com.fptufa26.ecomotion.finance.service.gateway.dto.PaymentUrlResult;
@@ -53,7 +54,12 @@ public class VnpayPaymentGatewayStrategy implements PaymentGatewayStrategy {
         String vnpCreateDate = VNP_DATE_FORMATTER.format(command.createDate());
         String vnpExpireDate = VNP_DATE_FORMATTER.format(command.expireDate());
         if (vnpayConfig.getTmnCode().isBlank() || vnpayConfig.getHashSecret().isBlank()) {
-            throw new IllegalStateException("VNPAY merchant credentials are not configured");
+            throw new InvalidPaymentOperationException(
+                    "Chưa cấu hình VNPAY Sandbox. Thêm VNPAY_TMN_CODE và VNPAY_HASH_SECRET vào Backend/EcoMotion/.env (merchant tại sandbox.vnpayment.vn), rồi restart backend.");
+        }
+        if (vnpayConfig.getPaymentUrl() == null || vnpayConfig.getPaymentUrl().isBlank()) {
+            throw new InvalidPaymentOperationException(
+                    "Thiếu app.vnpay.payment-url / VNPAY_PAYMENT_URL trong cấu hình backend.");
         }
         long vnpAmount = command.amount().movePointRight(2).longValueExact();
 

@@ -42,6 +42,8 @@ function toCard(item) {
     depositAmount: item.depositAmount == null ? null : Number(item.depositAmount),
     canPay: Boolean(item.canPay),
     actionKind: item.actionKind || 'NONE',
+    depositPaymentStatus: item.depositPaymentStatus ?? null,
+    depositRejectionReason: item.depositRejectionReason ?? null,
     holdExpiresAt: item.holdExpiresAt,
     atRisk: Boolean(item.atRisk),
     riskMessage: item.riskMessage,

@@ -497,7 +497,10 @@ export default function ProviderBookingDetailPage() {
           />
         </section>
 
-        {workflow?.canProposeAlternative && (operationalRisk?.atRisk || workflow.needsDriver || workflow.proposal) && (
+        {workflow?.canProposeAlternative && (
+          operationalRisk?.atRisk || workflow.needsDriver || workflow.proposal
+          || booking.status === 'AWAITING_DEPOSIT' || booking.status === 'ACCEPTED'
+        ) && (
           <OperationalRiskPanel
             booking={booking}
             risk={operationalRisk}
