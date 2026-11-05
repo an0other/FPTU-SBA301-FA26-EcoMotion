@@ -92,6 +92,39 @@ public class RefundEventService {
         return reserve(bookingId, sourceEventId, amount, reason, actor, sourceTransactionId);
     }
 
+    @Transactional
+    public List<RefundRequest> awardDepositRefund(Long bookingId, Long disputeId, BigDecimal award, User actor) {
+        ledger.requireBookingForUpdate(bookingId);
+        List<PaymentTransaction> transactions = ledger.listTransactions(bookingId);
+        List<RefundRequest> requests = refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId);
+        if (!unlinkedRefundOuts(transactions, requests).isEmpty() || requests.stream()
+                .anyMatch(r -> RefundMath.RESERVED.contains(r.getStatus()) && r.getSourcePaymentTransaction() == null))
+            throw new ConflictException("Lịch sử hoàn thiếu liên kết nguồn tiền; cần đối soát trước khi phân xử");
+        List<PaymentTransaction> deposits = transactions.stream().filter(this::paidIn)
+                .filter(t -> t.getType() == PaymentType.DEPOSIT_PAY).sorted(Comparator.comparing(PaymentTransaction::getId)).toList();
+        BigDecimal received = deposits.stream().map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal committed = requests.stream().filter(r -> RefundMath.RESERVED.contains(r.getStatus()))
+                .filter(r -> r.getSourcePaymentTransaction() != null && r.getSourcePaymentTransaction().getType() == PaymentType.DEPOSIT_PAY)
+                .map(RefundRequest::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (award == null || award.signum() <= 0 || award.scale() > 2 || award.precision() > 14
+                || award.compareTo(received) > 0 || award.compareTo(committed) < 0)
+            throw new ConflictException("Tổng mức hoàn phải lớn hơn 0, không vượt cọc thực nhận và không thấp hơn số đã hoàn/cam kết");
+        BigDecimal left = award.subtract(committed);
+        for (PaymentTransaction source : deposits) {
+            if (left.signum() == 0) break;
+            BigDecimal slice = room(source, requests).min(left);
+            if (slice.signum() > 0) {
+                var added = reserveOnTransaction(bookingId, "DISPUTE_DEPOSIT:" + disputeId + ":" + source.getId(), slice,
+                        "Hoàn cọc theo phán quyết khiếu nại #" + disputeId, actor, source.getId());
+                requests.addAll(added);
+                left = left.subtract(slice);
+            }
+        }
+        if (left.signum() != 0) throw new ConflictException("Không đủ nguồn cọc khả dụng; cần đối soát");
+        return requests.stream().filter(r -> r.getSourcePaymentTransaction() != null
+                && r.getSourcePaymentTransaction().getType() == PaymentType.DEPOSIT_PAY && RefundMath.RESERVED.contains(r.getStatus())).toList();
+    }
+
     @Transactional(readOnly = true)
     public BigDecimal openAllocated(Long bookingId, BigDecimal obligation) {
         List<RefundRequest> requests = refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId);
@@ -340,7 +373,7 @@ public class RefundEventService {
         refund.setRequestedBy(actor);
         refund.setCreatedAt(clock.instant());
         refund.setUpdatedAt(clock.instant());
-        if (payoutHeld) {
+        if (payoutHeld || source.getMethod() == PaymentMethod.VNPAY && (sourceEventId.startsWith("DISPUTE_DEPOSIT:") || sourceEventId.startsWith("WAIVE:"))) {
             refund.setStatus(RefundStatus.UNDER_REVIEW);
         } else if (source.getMethod() == PaymentMethod.VNPAY) {
             refund.setStatus(RefundStatus.PROCESSING);

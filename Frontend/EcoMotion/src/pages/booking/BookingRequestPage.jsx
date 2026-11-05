@@ -90,7 +90,7 @@ export function BookingRequestPage() {
     if (!vehicle || !request || !selected || !pickupQuote || pickupPending || pickupError || submitting) return
     setSubmitting(true); setError('')
     try {
-      const created = await createBooking(rentalPayload(vehicle.id, request, selected, pickup, effectivePassengers, driverNote))
+      const created = await createBooking({ ...rentalPayload(vehicle.id, request, selected, pickup, effectivePassengers, driverNote), expectedPickupFee: pickupQuote.pickupFee })
       navigate('/renter/bookings/' + created.bookingCode + '/submitted')
     } catch (err) {
       setError(readErrorMessage(err))

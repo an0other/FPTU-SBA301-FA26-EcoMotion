@@ -13,6 +13,8 @@ import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -38,6 +40,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("dev")
 @org.springframework.transaction.annotation.Transactional
 class BookingConflictRegressionIntegrationTest {
+    @MockitoBean
+    private com.fptufa26.ecomotion.location.service.implement.VietmapClient vietmap;
+
+    @BeforeEach
+    void roadRoutingFixture() {
+        org.mockito.Mockito.when(vietmap.route(org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble()))
+                .thenReturn(new com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse(4500, 600,
+                        java.util.List.of(java.util.List.of(106.7, 10.8), java.util.List.of(106.652345, 10.801234)),
+                        "VIETMAP_CAR", java.time.Instant.now()));
+    }
+
 
     @Autowired
     private MockMvc mockMvc;
@@ -63,7 +77,7 @@ class BookingConflictRegressionIntegrationTest {
     @Autowired
     private com.fptufa26.ecomotion.user.repository.DriverRepository driverRepository;
 
-    @org.junit.jupiter.api.BeforeEach
+    @BeforeEach
     void isolateRenterConflictScenariosFromUnfinishedSeedTrips() {
         driverRepository.findAll().forEach(driver -> {
             driver.setLicenseExpiry(java.time.LocalDate.of(2040, 12, 31));

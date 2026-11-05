@@ -447,7 +447,7 @@ export default function ProviderBookingDetailPage() {
             )}
 
             {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' &&
-              booking.providerConfirmedAt && booking.renterConfirmedAt && (
+              booking.providerConfirmedAt && (booking.renterConfirmedAt || workflow?.endConfirmations?.[0]?.confirmationMethod === 'AUTO') && (
               <button
                 type="button"
                 onClick={handleFinalizeSettlement}

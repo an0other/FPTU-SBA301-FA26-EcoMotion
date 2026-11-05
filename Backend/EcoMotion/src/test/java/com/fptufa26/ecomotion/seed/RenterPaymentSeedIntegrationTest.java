@@ -21,6 +21,13 @@ class RenterPaymentSeedIntegrationTest {
     @Autowired PaymentTransactionRepository ledger;
     @Autowired PaymentRequestRepository requests;
     @Autowired EntityManager em;
+    @Autowired com.fptufa26.ecomotion.dispute.repository.DisputeRepository disputes;
+
+    @Test void confirmedDemoBookingDoesNotStartWithAnUnsubmittedComplaint() {
+        var booking = bookings.findByBookingCode("BK-ECO-001").orElseThrow();
+        assertThat(disputes.findByBooking_Id(booking.getId())).isEmpty();
+    }
+
 
     @Test void newSeedHasConfirmedDepositAndExistingCancelledSeedIsBackfilledWithoutNewMoney() {
         var b=bookings.findByBookingCode("EM-SEED-R12-001").orElseThrow();

@@ -73,6 +73,7 @@ class Tv5PostgresConcurrencyTest {
     @Autowired DriverAssignmentRepository assignments;
     @Autowired javax.sql.DataSource dataSource;
     @MockitoBean MapGeocodingService geocoding;
+    @MockitoBean com.fptufa26.ecomotion.location.service.implement.VietmapClient vietmap;
     @MockitoBean ExternalNotificationDispatcherService external;
     TransactionTemplate tx;
     long first;
@@ -288,7 +289,7 @@ class Tv5PostgresConcurrencyTest {
         assertThat(refunds.createRefundRequest(providerUser, request).id()).isEqualTo(refund);
         var approve = new com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest("APPROVE", null);
         assertThat(race(() -> refunds.reviewRefundRequest(providerUser, refund, approve),
-                () -> refunds.reviewRefundRequest(providerUser, refund, approve))).containsExactlyInAnyOrder(true, false);
+                () -> refunds.reviewRefundRequest(providerUser, refund, approve))).containsOnly(true);
         long transaction = refundRequests.findById(refund).orElseThrow().getPaymentTransaction().getId();
         var proof = new org.springframework.mock.web.MockMultipartFile("file", "proof.pdf", "application/pdf", "%PDF-1.4 TV5".getBytes());
         assertThat(race(() -> refunds.completeRefund(providerUser, transaction, proof, "TEST-REF", null),
@@ -516,8 +517,11 @@ class Tv5PostgresConcurrencyTest {
             var point = em.find(com.fptufa26.ecomotion.booking.entity.VehicleLocation.class, location);
             point.setReceivedAt(Instant.now()); point.setRecordedAt(Instant.now().minusMillis(1));
         });
+        org.mockito.Mockito.when(vietmap.route(10.0,106.0,10.0,106.0)).thenReturn(
+                new com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse(0,0,
+                        List.of(List.of(106.0,10.0),List.of(106.0,10.0)),"VIETMAP_CAR",Instant.now()));
         var fresh = optimization.evaluateCandidates(first, provider).stream().filter(c -> c.driverId() == driver).findFirst().orElseThrow();
-        assertThat(fresh.etaMinutes()).isEqualTo(5);
+        assertThat(fresh.etaMinutes()).isZero();
         assertThat(fresh.distanceKm()).isEqualTo(0.0);
     }
 

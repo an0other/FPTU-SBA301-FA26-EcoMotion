@@ -290,7 +290,7 @@ export default function VehicleListPage() {
                           </div>
                         )}
                         <p className="mt-2 text-[11px] text-slate-500">
-                          Dữ liệu địa chỉ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap contributors</a>
+                          Dữ liệu địa chỉ: <a href="https://maps.vietmap.vn/" target="_blank" rel="noopener noreferrer" className="underline">VIETMAP</a>
                         </p>
                         {locationMessage && <p role="status" className="mt-2 text-xs text-slate-600">{locationMessage}</p>}
                       </div>
