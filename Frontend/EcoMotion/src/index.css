@@ -62,6 +62,19 @@ html {
   scroll-padding-top: 5rem;
 }
 
+/* Leaflet/VIETMAP GL panes use z-index 400+; isolate each map so tiles cannot float over sidebar/header on scroll. */
+.leaflet-map-shell {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.leaflet-map-shell .leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
 .leaflet-interactive[role='button']:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
 .vehicle-map-popup { min-width: 0; font-family: 'Be Vietnam Pro', sans-serif; }
 .vehicle-map-popup-address { margin: 0 0 8px; color: #475569; font-size: 11px; }

@@ -736,7 +736,7 @@ export const BookingDetail = ({
         </div>
 
         {/* Right Column (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col gap-5 sticky top-24">
+        <div className="lg:col-span-5 flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
           {/* Timeline Card */}
           <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
             <h3 className="text-sm font-bold text-[#14221A]">Tiến trình đơn</h3>

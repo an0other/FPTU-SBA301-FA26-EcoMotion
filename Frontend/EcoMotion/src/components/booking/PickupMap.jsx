@@ -172,7 +172,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
           ) : null}
         </div>
       ) : null}
-      <div ref={containerRef} className="h-40 w-full overflow-hidden rounded-xl border border-[#E6EBE8] bg-slate-100 sm:h-60" />
+      <div ref={containerRef} className="leaflet-map-shell h-40 w-full rounded-xl border border-[#E6EBE8] bg-slate-100 sm:h-60" />
       {mapError && <p role="alert" className="text-xs text-amber-900">{mapError}</p>}
       {routeError && <p className="text-xs text-amber-900">{routeError}</p>}
       {loading ? <p className="text-xs text-[#15803D]">Đang xác định địa chỉ...</p> : null}
