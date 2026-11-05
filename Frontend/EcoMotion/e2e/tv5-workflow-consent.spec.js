@@ -36,12 +36,13 @@ async function setup(page, shared, failure) {
   })
 }
 
-test('renter rejects alternative, refreshes persisted decision and requests refund with canonical payload', async ({ page }) => {
+test('renter rejects alternative without creating a refund or showing a generic refund form', async ({ page }) => {
   const shared = { workflow: structuredClone(initial), responses: [], refunds: [] }
   await setup(page, shared)
   await page.goto('/renter/bookings/TV5-CONSENT')
   const summary = page.getByRole('region', { name: 'Tiến trình đơn thuê' })
   await expect(summary.getByText('Chưa có tài xế', { exact: true })).toBeVisible()
+  await expect(summary.getByText('Yêu cầu xem xét hoàn tiền', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Từ chối phương án', exact: true }).click()
   await page.getByLabel('Ghi chú phản hồi').fill('Tôi cần giữ giờ cũ')
   await page.getByRole('button', { name: 'Xác nhận phản hồi', exact: true }).click()
@@ -49,13 +50,10 @@ test('renter rejects alternative, refreshes persisted decision and requests refu
   expect(shared.responses).toEqual([{ action: 'REJECT', reason: 'Tôi cần giữ giờ cũ' }])
   await page.reload()
   await expect(summary.getByText('Khách đã từ chối phương án')).toBeVisible()
-  await summary.getByText('Yêu cầu xem xét hoàn tiền', { exact: true }).click()
-  await page.getByLabel('Số tiền yêu cầu hoàn').fill('30000')
-  await page.getByLabel('Lý do yêu cầu hoàn').fill('Không có tài xế')
-  await page.getByRole('button', { name: 'Gửi yêu cầu hoàn tiền', exact: true }).click()
-  await expect.poll(() => shared.refunds).toEqual([{ bookingCode: 'TV5-CONSENT', amount: 30000, reason: 'Không có tài xế' }])
-  await expect(summary.getByText(/Chờ xem xét/)).toBeVisible()
+  await expect(summary.getByText('Yêu cầu xem xét hoàn tiền', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Gửi yêu cầu hoàn tiền', exact: true })).toHaveCount(0)
+  expect(shared.refunds).toEqual([])
+  expect(shared.workflow.bookingStatus).toBe('CONFIRMED')
 })
 
 for (const status of [400, 401, 403, 404, 409, 500]) {
