@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "document-ai"
+version = "0.32.0"
+description = "Local document analysis pipeline, CLI and HTTP API"
+requires-python = ">=3.11,<3.13"
+dependencies = ["numpy>=1.26,<3", "PyYAML>=6,<7", "Pillow>=10.4,<13", "opencv-python-headless>=4.10,<5", "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "python-multipart>=0.0.18"]
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "qrcode>=8,<9", "httpx>=0.27,<1"]
+qr = ["zxing-cpp>=2.2,<3"]
+ocr = ["paddleocr>=3.1,<4"]
+[project.scripts]
+document-ai = "document_ai.cli:main"
+[tool.setuptools.packages.find]
+where = ["src"]
+[tool.setuptools.package-data]
+"document_ai.reader" = ["reader.html"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "id": "existing-report",
+      "report": "REPLACE_WITH_ABSOLUTE_REPORT_PATH",
+      "expected": {}
+    }
+  ]
+}

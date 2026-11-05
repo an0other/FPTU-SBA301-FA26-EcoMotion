@@ -85,6 +85,10 @@ public class DevDataSeeder implements ApplicationRunner {
 
     public static final String DEFAULT_PASSWORD = "EcoMotion@123";
 
+    private final RenterPaymentDataSeeder renterPaymentDataSeeder;
+    private final RenterReviewDataSeeder renterReviewDataSeeder;
+    private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
+
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
 
@@ -129,8 +133,7 @@ public class DevDataSeeder implements ApplicationRunner {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final DisputeRepository disputeRepository;
     private final ScheduleService scheduleService;
-    private final RenterPaymentDataSeeder renterPaymentDataSeeder;
-    private final RenterReviewDataSeeder renterReviewDataSeeder;
+    private final YearlyRentalDataSeeder yearlyRentalDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
 
     private record PlanPrices(String hourly, String daily, String monthly) {
@@ -152,6 +155,9 @@ public class DevDataSeeder implements ApplicationRunner {
         seedUser(105L, "long.hoang@ecomotion.vn", "0901000025", "Hoàng Bảo Long", Role.RENTER);
         seedUser(106L, "cuong.nguyen@ecomotion.vn", "0901000026", "Nguyễn Việt Cường", Role.RENTER);
         seedUser(107L, "mai.truong@ecomotion.vn", "0901000027", "Trương Thanh Mai", Role.RENTER);
+        seedUser(108L, "renter.yearly.blocked@ecomotion.vn", "0901000108", "Nguyễn An Khôi", Role.RENTER);
+        seedUser(109L, "renter.yearly.active@ecomotion.vn", "0901000109", "Trần Minh Nhật", Role.RENTER);
+        seedUser(110L, "renter.yearly.flow@ecomotion.vn", "0901000110", "Lê Gia Hân", Role.RENTER);
 
         User driverUser1 = seedUser(201L, "driver.nam@ecomotion.vn", "0901000031", "Nguyễn Văn Nam", Role.DRIVER);
         User driverUser2 = seedUser(202L, "driver.cuong@ecomotion.vn", "0901000032", "Trương Hùng Cường", Role.DRIVER);
@@ -173,6 +179,9 @@ public class DevDataSeeder implements ApplicationRunner {
         seedRenterProfile(userRepository.findById(105L).orElseThrow());
         seedRenterProfile(userRepository.findById(106L).orElseThrow());
         seedRenterProfile(userRepository.findById(107L).orElseThrow());
+        seedRenterProfile(userRepository.findById(108L).orElseThrow());
+        seedRenterProfile(userRepository.findById(109L).orElseThrow());
+        seedRenterProfile(userRepository.findById(110L).orElseThrow());
 
         Driver driverNam = seedDriver(driverUser1, providerA, "7901230001", "B2");
         Driver driverCuong = seedDriver(driverUser2, providerA, "7901230002", "D");
@@ -277,7 +286,9 @@ public class DevDataSeeder implements ApplicationRunner {
         renterPaymentDataSeeder.seed();
         realignPinnedIdentitySequences();
         renterReviewDataSeeder.seed();
+        yearlyRentalDataSeeder.seed();
         realignPinnedIdentitySequences();
+        renterYearlyBookingDataSeeder.seed();
     }
 
     private void seedBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {

@@ -1,0 +1,9 @@
+# Fresh .venv-corners only. Do not apply to existing OCR .venv.
+# torch pair follows official PyTorch 2.6.0 CUDA 12.4 Windows wheels.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+ultralytics==8.4.189
+numpy>=1.26,<3
+Pillow>=10.4,<13
+PyYAML>=6,<7

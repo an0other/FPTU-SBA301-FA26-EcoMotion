@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.booking.service.implement;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.service.BookingHoldExpiryService;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
@@ -28,7 +29,20 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
     public void expireDueHolds(Instant now) {
         for (Long bookingId : scheduleService.expiredHoldBookingIds(now)) {
             Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
-            if (booking == null || booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
+            if (booking == null) {
+                continue;
+            }
+            if (booking.getPlan() != null && booking.getPlan().getPlanType() == PlanType.YEARLY
+                    && booking.getStatus() == BookingStatus.PENDING) {
+                expireYearly(booking, now, CancelReason.YEARLY_REQUEST_TIMEOUT);
+                continue;
+            }
+            if (booking.getPlan() != null && booking.getPlan().getPlanType() == PlanType.YEARLY
+                    && booking.getStatus() == BookingStatus.ACCEPTED) {
+                expireYearly(booking, now, CancelReason.YEARLY_CONTRACT_TIMEOUT);
+                continue;
+            }
+            if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
                 continue;
             }
             if (transactions.findByBooking_Id(bookingId).stream().anyMatch(t ->
@@ -43,5 +57,14 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
             booking.setCancelledAt(now);
             notifications.changed(booking, "BOOKING_CHANGED");
         }
+    }
+
+    private void expireYearly(Booking booking, Instant now, CancelReason reason) {
+        scheduleService.release(booking.getId());
+        booking.setStatus(BookingStatus.CANCELLED);
+        booking.setCancelReason(reason);
+        booking.setCancelledAt(now);
+        booking.setCancelledBy(null);
+        notifications.changed(booking, "BOOKING_CHANGED");
     }
 }

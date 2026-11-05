@@ -1,0 +1,53 @@
+{
+  "id": "vn-gplx-pet-reader-lab",
+  "version": "0.5.0-reader-lab",
+  "document_type": "VN_DRIVING_LICENSE",
+  "validated": false,
+  "required_sides": [
+    "FRONT",
+    "BACK"
+  ],
+  "limits": {
+    "max_bytes": 8388608,
+    "max_pixels": 20000000
+  },
+  "quality": {
+    "min_short_side": 400,
+    "min_laplacian_variance": 60,
+    "max_dark_fraction": 0.65,
+    "max_bright_fraction": 0.8,
+    "calibrated": false
+  },
+  "templates": {
+    "FRONT": {
+      "reference": null,
+      "min_inlier_ratio": 0.6
+    },
+    "BACK": {
+      "reference": null,
+      "min_inlier_ratio": 0.6
+    }
+  },
+  "forensics": {
+    "mode": "disabled",
+    "thresholds_validated": false
+  },
+  "diagnostic_metrics": false,
+  "ocr": {
+    "engine": "paddle",
+    "version": "PP-OCRv6",
+    "lang": "vi",
+    "device": "cpu",
+    "detection_model": "PP-OCRv6_small_det",
+    "recognition_model": "PP-OCRv6_small_rec"
+  },
+  "fields": [],
+  "qr": {
+    "BACK": {
+      "enabled": true,
+      "required": false
+    }
+  },
+  "comparisons": [],
+  "rules": []
+}

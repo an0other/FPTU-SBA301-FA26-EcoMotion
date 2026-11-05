@@ -28,7 +28,14 @@ import java.util.Map;
 import com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse;
 
 @RestController
-@RequestMapping({"/api/v1/payment/vnpay", "/api/payment/vnpay", "/v1/payment/vnpay", "/payment/vnpay"})
+@RequestMapping({
+        "/api/v1/payment/vnpay",
+        "/api/v1/payments/vnpay",
+        "/api/payment/vnpay",
+        "/api/payments/vnpay",
+        "/v1/payment/vnpay",
+        "/payment/vnpay"
+})
 @RequiredArgsConstructor
 @Tag(name = "VNPAY Payment Gateway", description = "VNPAY Sandbox payment url generation, IPN webhook, and callback verification")
 public class VnpayPaymentController {
