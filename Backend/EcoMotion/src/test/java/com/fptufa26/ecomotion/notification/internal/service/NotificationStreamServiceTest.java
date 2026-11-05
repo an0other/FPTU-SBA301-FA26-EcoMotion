@@ -1,5 +1,5 @@
-package com.fptufa26.ecomotion.common.service;
-import com.fptufa26.ecomotion.common.service.implement.NotificationStreamServiceImpl;
+package com.fptufa26.ecomotion.notification.internal.service;
+import com.fptufa26.ecomotion.notification.internal.service.impl.NotificationStreamServiceImpl;
 import com.fptufa26.ecomotion.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -41,5 +41,19 @@ class NotificationStreamServiceTest {
             TransactionSynchronizationManager.clearSynchronization();
             TransactionSynchronizationManager.setActualTransactionActive(false);
         }
+    }
+    @Test void failedEmitterIsRemovedWithoutAffectingOtherUsers() throws Exception {
+        var service = new NotificationStreamServiceImpl(mock(UserService.class), null);
+        SseEmitter failed = mock(SseEmitter.class), other = mock(SseEmitter.class);
+        doThrow(new java.io.IOException("disconnected")).when(failed).send(any(SseEmitter.SseEventBuilder.class));
+        service.registerEmitter(1L, failed);
+        service.registerEmitter(2L, other);
+        service.sendEventToUser(1L, "UPDATE", "{}");
+        service.sendEventToUser(1L, "UPDATE", "{}");
+        verify(failed, times(1)).send(any(SseEmitter.SseEventBuilder.class));
+        verify(failed).complete();
+        verifyNoInteractions(other);
+        service.sendEventToUser(2L, "UPDATE", "{}");
+        verify(other).send(any(SseEmitter.SseEventBuilder.class));
     }
 }

@@ -84,7 +84,7 @@ class VnpayDepositSynchronizationIntegrationTest {
     @Autowired com.fptufa26.ecomotion.finance.service.PaymentReconciliationService reconciliation;
     @Autowired com.fptufa26.ecomotion.booking.service.BookingWorkflowService workflow;
     @Autowired com.fptufa26.ecomotion.booking.service.ProviderBookingService providerBookings;
-    @Autowired com.fptufa26.ecomotion.common.service.NotificationStreamService notifications;
+    @Autowired com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService notifications;
     @Autowired tools.jackson.databind.ObjectMapper mapper;
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) {

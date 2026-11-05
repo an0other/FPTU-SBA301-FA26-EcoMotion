@@ -1,7 +1,7 @@
-package com.fptufa26.ecomotion.common.controller;
+package com.fptufa26.ecomotion.notification.internal.controller;
 
 import com.fptufa26.ecomotion.common.security.SecurityUser;
-import com.fptufa26.ecomotion.common.service.NotificationStreamService;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
