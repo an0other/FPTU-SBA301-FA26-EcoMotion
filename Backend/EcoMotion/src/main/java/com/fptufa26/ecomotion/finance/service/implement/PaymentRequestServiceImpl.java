@@ -473,7 +473,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 .orElse(null);
         if (request == null || request.getFirstProofAt() != null || !request.getEvidences().isEmpty()
                 || request.getStatus() == PaymentRequestStatus.CONFIRMED
-                || request.getStatus() == PaymentRequestStatus.VOIDED) {
+                || request.getStatus() == PaymentRequestStatus.VOIDED
+                || request.getStatus() == PaymentRequestStatus.PROOF_SUBMITTED
+                || request.getStatus() == PaymentRequestStatus.PARTIALLY_PAID
+                || request.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED) {
             return false;
         }
         request.setStatus(PaymentRequestStatus.EXPIRED);

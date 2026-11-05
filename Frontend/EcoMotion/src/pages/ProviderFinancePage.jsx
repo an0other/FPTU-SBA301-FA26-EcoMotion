@@ -124,7 +124,6 @@ export default function ProviderFinancePage() {
   const [breakdownData, setBreakdownData] = useState(null)
 
   // Form States for Confirmation
-  const [receivedAmountInput, setReceivedAmountInput] = useState('')
   const [bankRefInput, setBankRefInput] = useState('')
   const [confirmationId, setConfirmationId] = useState(null)
   const [confirmNoteInput, setConfirmNoteInput] = useState('')
@@ -321,7 +320,6 @@ export default function ProviderFinancePage() {
   const handleOpenConfirmModal = (pr) => {
     setConfirmModalData(pr)
     setConfirmationId(crypto.randomUUID())
-    setReceivedAmountInput(String(pr.amount || pr.remainingAmount || ''))
     setBankRefInput('')
     setConfirmNoteInput('')
   }
@@ -329,14 +327,10 @@ export default function ProviderFinancePage() {
   const handleConfirmPayment = async (e) => {
     e.preventDefault()
     if (!confirmModalData || isConfirming) return
-    if (!Number.isFinite(Number(receivedAmountInput)) || Number(receivedAmountInput) <= 0) {
-      setToast({ message: 'Số tiền nhận phải lớn hơn 0.', type: 'error' }); return
-    }
 
     try {
       setIsConfirming(true)
       const payload = {
-        receivedAmount: Number(receivedAmountInput),
         confirmationId,
         bankTransactionRef: bankRefInput.trim() || undefined,
         note: confirmNoteInput.trim() || undefined,
@@ -1504,6 +1498,16 @@ export default function ProviderFinancePage() {
                 <div>Nội dung CK: <span className="font-mono font-bold">{confirmModalData.transferReference}</span></div>
                 <div>Số trên QR: <span className="font-bold">{formatVnd(confirmModalData.amount)}</span></div>
                 <div>Đã ghi sổ: <span className="font-bold">{formatVnd(confirmModalData.paidAmount || 0)}</span></div>
+                <p className="pt-1 text-[11px] text-emerald-700/90">
+                  VietQR khóa đúng số tiền trên QR. Xác nhận sẽ ghi nhận{' '}
+                  <span className="font-bold">
+                    {formatVnd(
+                      confirmModalData.remainingAmount
+                        ?? Math.max(0, Number(confirmModalData.amount || 0) - Number(confirmModalData.paidAmount || 0)),
+                    )}
+                  </span>
+                  .
+                </p>
               </div>
               {confirmModalData.evidences?.[0] ? (
                 <PaymentEvidenceImage
@@ -1512,19 +1516,6 @@ export default function ProviderFinancePage() {
                   className="h-36 w-full rounded-xl border border-slate-200 object-contain bg-slate-50"
                 />
               ) : null}
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700">Số tiền trên sao kê bạn đã nhận (VND) *</label>
-                <input
-                  type="number"
-                  required
-                  min="1000"
-                  value={receivedAmountInput}
-                  onChange={(e) => setReceivedAmountInput(e.target.value)}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-xs focus:border-brand-600 focus:outline-none"
-                />
-                <span className="text-[11px] text-slate-500">Gõ số trên sao kê. Để nguyên nếu đúng số QR. Thiếu sẽ ghi nhận một phần; thừa sẽ tạo lệnh hoàn.</span>
-              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng (Tùy chọn)</label>

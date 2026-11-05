@@ -1,5 +1,11 @@
+import { useEffect, useRef, useState } from 'react'
 import { HoldCountdown } from '../payments/HoldCountdown'
 import { DEPOSIT_HOLD_COPY } from '../../utils/bookingCopy'
+import {
+  isDepositAwaitingProvider,
+  RECONCILIATION_DURATION_MS,
+  remainingMs,
+} from '../../utils/paymentDisplay'
 
 const FUEL_LABELS = {
   EV: 'Thuần điện (EV)',
@@ -26,13 +32,73 @@ function InfoRow({ icon, label, children }) {
 
 export const RequestSubmitted = ({
   booking,
+  depositPaymentStatus = null,
   onPayDeposit,
+  onReissueDeposit,
   onGoToMyBookings,
   onGoToCarPage,
+  onRefreshBooking,
+  reissuing = false,
 }) => {
+  const [now, setNow] = useState(() => Date.now())
+  const refreshedAfterExpiry = useRef(false)
+
+  useEffect(() => {
+    if (!booking.holdExpiresAt) return undefined
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [booking.holdExpiresAt])
+
+  const awaitingProvider = isDepositAwaitingProvider(depositPaymentStatus)
+  const holdMs = remainingMs(booking.holdExpiresAt, now)
+  const holdExpired = !awaitingProvider && holdMs != null && holdMs <= 0
+  const cancelled = booking.status === 'CANCELLED' && !awaitingProvider
+  const canPayDeposit = Boolean(booking.canPay) && !holdExpired && !cancelled && !awaitingProvider
+
+  useEffect(() => {
+    if (!holdExpired || refreshedAfterExpiry.current || !onRefreshBooking) return
+    refreshedAfterExpiry.current = true
+    onRefreshBooking()
+  }, [holdExpired, onRefreshBooking])
+
+  useEffect(() => {
+    if (!holdExpired) refreshedAfterExpiry.current = false
+  }, [booking.holdExpiresAt, booking.canPay, booking.status])
+
+  const showReissue = holdExpired && !cancelled && !awaitingProvider && typeof onReissueDeposit === 'function'
+
+  const title = awaitingProvider
+    ? 'Đã gửi biên lai — chờ nhà xe xác nhận cọc'
+    : cancelled
+      ? 'Đơn đã hủy do hết thời gian cọc'
+      : holdExpired
+        ? 'Đã hết thời gian giữ chỗ'
+        : 'Lịch xe đã được giữ thành công!'
+
+  const statusBadge = awaitingProvider
+    ? { label: 'Đang đối soát', className: 'bg-blue-100 text-blue-900' }
+    : cancelled
+      ? { label: 'Đã hủy', className: 'bg-red-100 text-red-900' }
+      : holdExpired
+        ? { label: 'Hết hạn cọc', className: 'bg-red-100 text-red-900' }
+        : { label: 'Chờ thanh toán cọc', className: 'bg-amber-100 text-amber-900' }
+
+  const hint = awaitingProvider
+    ? 'Lịch xe vẫn được giữ trong thời gian đối soát. Nhà xe sẽ xác nhận chuyển khoản; bạn không cần gửi lại biên lai trừ khi bị từ chối.'
+    : cancelled
+      ? 'Hệ thống đã huỷ đơn và nhả lịch xe. Bạn có thể đặt lại xe khác hoặc xem chi tiết trong đơn của tôi.'
+      : holdExpired
+        ? 'Thời hạn 15 phút đã qua. Thanh toán cọc tạm thời bị khoá; cấp lại yêu cầu thanh toán nếu xe vẫn còn trống.'
+        : `${DEPOSIT_HOLD_COPY.submitHint} ${DEPOSIT_HOLD_COPY.confirmedWhen}`
+
+  const headerTone = awaitingProvider
+    ? 'bg-blue-50 text-blue-700'
+    : cancelled || holdExpired
+      ? 'bg-red-50 text-red-700'
+      : 'bg-brand-50 text-brand-700'
+
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs text-[#64748B] sm:text-sm">
         <button type="button" onClick={onGoToCarPage} className="transition-colors hover:text-brand-700">
           Trang chủ
@@ -49,48 +115,57 @@ export const RequestSubmitted = ({
         <span className="font-medium text-[#14221A]">Đơn {booking.id}</span>
       </nav>
 
-      {/* Main card */}
       <div className="relative mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-[#E6EBE8] bg-white p-6 shadow-sm sm:p-10">
-        {/* Top accent */}
-        <div className="absolute inset-x-0 top-0 h-1 bg-brand-700" />
+        <div className={`absolute inset-x-0 top-0 h-1 ${awaitingProvider ? 'bg-blue-500' : cancelled || holdExpired ? 'bg-red-500' : 'bg-brand-700'}`} />
 
-        {/* Success icon */}
         <div className="flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 shadow-xs">
-            <svg className="h-8 w-8 text-brand-700" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
+          <div className={`flex h-16 w-16 items-center justify-center rounded-full shadow-xs ${headerTone}`}>
+            {awaitingProvider ? (
+              <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : cancelled || holdExpired ? (
+              <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12V12.75z" />
+              </svg>
+            ) : (
+              <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            )}
           </div>
         </div>
 
-        {/* Title + booking code */}
         <div className="mt-5 space-y-3 text-center">
           <h1 className="text-xl font-bold tracking-tight text-[#14221A] sm:text-2xl">
-            Lịch xe đã được giữ thành công!
+            {title}
           </h1>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="rounded-lg border border-[#E6EBE8] bg-[#F7F8F6] px-3 py-1 font-mono text-2xl font-bold tracking-wider text-[#14221A]">
               {booking.id}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-600" />
-              Chờ thanh toán cọc
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${statusBadge.className}`}>
+              {!cancelled && !holdExpired && !awaitingProvider ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-600" /> : null}
+              {statusBadge.label}
             </span>
           </div>
 
           <p className="mx-auto max-w-md text-sm leading-relaxed text-[#14221A]/65">
-            {DEPOSIT_HOLD_COPY.submitHint} {DEPOSIT_HOLD_COPY.confirmedWhen}
+            {hint}
           </p>
 
-          {booking.holdExpiresAt ? (
+          {booking.holdExpiresAt && !cancelled ? (
             <div className="flex justify-center pt-1">
-              <HoldCountdown expiresAt={booking.holdExpiresAt} />
+              <HoldCountdown
+                expiresAt={booking.holdExpiresAt}
+                variant={awaitingProvider ? 'reconciliation' : 'hold'}
+                durationMs={awaitingProvider ? RECONCILIATION_DURATION_MS : undefined}
+              />
             </div>
           ) : null}
         </div>
 
-        {/* Reservation summary */}
         <div className="my-6 space-y-3 rounded-xl border border-[#E6EBE8] bg-[#F7F8F6] p-5">
           <InfoRow
             label="Phương tiện"
@@ -148,7 +223,6 @@ export const RequestSubmitted = ({
 
           <div className="h-px bg-[#E6EBE8]" />
 
-          {/* Deposit highlight */}
           <div className="rounded-xl border border-brand-100 bg-white p-4 shadow-xs">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
@@ -176,27 +250,31 @@ export const RequestSubmitted = ({
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <button
-            onClick={onPayDeposit}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-500 sm:w-auto"
-            type="button"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
-            </svg>
-            Thanh toán cọc
-          </button>
+        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
+          {canPayDeposit ? (
+            <button
+              onClick={onPayDeposit}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-800 focus-visible:ring-2 focus-visible:ring-brand-500 sm:w-auto"
+              type="button"
+            >
+              Thanh toán cọc
+            </button>
+          ) : null}
+          {showReissue ? (
+            <button
+              type="button"
+              disabled={reissuing}
+              onClick={onReissueDeposit}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-brand-600 bg-white px-6 py-3 text-sm font-semibold text-brand-800 transition-colors hover:bg-brand-50 disabled:opacity-50 sm:w-auto"
+            >
+              {reissuing ? 'Đang cấp lại...' : 'Cấp lại yêu cầu thanh toán'}
+            </button>
+          ) : null}
           <button
             onClick={onGoToMyBookings}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-brand-600 bg-white px-6 py-3 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-500 sm:w-auto"
             type="button"
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-            </svg>
             Xem đơn của tôi
           </button>
           <button
@@ -204,14 +282,10 @@ export const RequestSubmitted = ({
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#E6EBE8] bg-white px-6 py-3 text-sm font-semibold text-[#14221A] transition-colors hover:bg-[#F7F8F6] focus-visible:ring-2 focus-visible:ring-brand-500 sm:w-auto"
             type="button"
           >
-            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
-            </svg>
             Về trang xe
           </button>
         </div>
 
-        {/* Support */}
         <div className="mt-6 text-center">
           <p className="text-xs text-[#14221A]/50">
             Cần hỗ trợ?{' '}
