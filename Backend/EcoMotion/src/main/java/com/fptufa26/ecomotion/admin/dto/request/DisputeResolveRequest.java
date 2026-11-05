@@ -5,6 +5,9 @@ import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Digits;
+import java.math.BigDecimal;
 
 @Data
 public class DisputeResolveRequest {
@@ -14,5 +17,9 @@ public class DisputeResolveRequest {
     private DisputeResolutionDecision decision;
 
     @NotBlank(message = "Nội dung giải quyết không được để trống")
+    @Size(max = 1000, message = "Kết luận tối đa 1000 ký tự")
     private String resolution;
+
+    @Digits(integer = 12, fraction = 2)
+    private BigDecimal refundAwardTotal;
 }

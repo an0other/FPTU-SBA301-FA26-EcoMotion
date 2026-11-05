@@ -833,6 +833,9 @@ CREATE TABLE dispute (
     handled_by   bigint,
     category     varchar(30)  NOT NULL,
     status       varchar(20)  NOT NULL DEFAULT 'OPEN',
+    decision varchar(30),
+    refund_award_total numeric(14,2),
+    resolved_at timestamptz,
     resolution   varchar(1000),
     created_at   timestamptz  NOT NULL DEFAULT now(),
     updated_at   timestamptz  NOT NULL DEFAULT now(),
@@ -1123,3 +1126,9 @@ UPDATE rental_plan SET slot_price=round(slot_price * 60 / slot_length_minutes, 0
                        slot_length_minutes=60, updated_at=now()
 WHERE plan_type='HOURLY' AND slot_length_minutes<>60;
 COMMIT;
+
+CREATE TABLE IF NOT EXISTS dispute_refund_link (
+    dispute_id bigint NOT NULL REFERENCES dispute(id),
+    refund_request_id bigint NOT NULL REFERENCES refund_request(id),
+    PRIMARY KEY (dispute_id, refund_request_id)
+);

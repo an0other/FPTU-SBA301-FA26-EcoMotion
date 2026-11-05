@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.admin.dto.response;
 
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
+import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -32,6 +33,9 @@ public class AdminDisputeDto {
     private String description;
     private List<String> evidenceUrls;
     private String resolution;
+    private DisputeResolutionDecision decision;
+    private BigDecimal refundAwardTotal;
+    private Instant resolvedAt;
     private Instant createdAt;
     private Instant updatedAt;
 }

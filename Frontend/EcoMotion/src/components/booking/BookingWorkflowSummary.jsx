@@ -5,6 +5,7 @@ import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { REFUND_WORKFLOW_LABELS } from '../../utils/bookingWorkflow'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import BookingProgressStepper from './BookingProgressStepper'
+import DisputeHistory from './DisputeHistory'
 import RefundReceiptTimeline from './RefundReceiptTimeline'
 
 function Icon({ name, className = '' }) {
@@ -111,6 +112,8 @@ export default function BookingWorkflowSummary({
         provider={provider}
         onAction={onAction}
       />
+
+      <DisputeHistory disputes={workflow?.disputes} />
 
       {/* Operational Proposal Card if pending / accepted / rejected */}
       {proposal && (

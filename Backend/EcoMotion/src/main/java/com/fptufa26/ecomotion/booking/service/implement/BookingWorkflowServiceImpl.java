@@ -23,6 +23,10 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import com.fptufa26.ecomotion.dispute.dto.response.DisputeResponse;
+import com.fptufa26.ecomotion.finance.dto.response.RefundResponse;
+import com.fptufa26.ecomotion.finance.enums.RefundStatus;
+import java.util.Comparator;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -96,7 +100,26 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                 paid, returned, pendingRefund, refunds.refundableAmount(currentUserId, booking.getBookingCode()), remaining,
                 booking.getPickupTime(), booking.getAssignmentExpiresAt(), needsDriver,
                 provider && MUTABLE.contains(booking.getStatus()), nextAction(booking, provider, payment, settlement, needsDriver, proposal),
-                proposal, feedback, refundRows, booking.getUpdatedAt());
+                proposal, feedback, refundRows, booking.getUpdatedAt(),
+                disputes.getDisputesByBookingId(booking.getId()).stream()
+                    .sorted(Comparator.comparing(com.fptufa26.ecomotion.dispute.entity.Dispute::getCreatedAt).reversed())
+                    .map(d -> {
+                        var ids = d.getRelatedRefunds().stream().map(com.fptufa26.ecomotion.finance.entity.RefundRequest::getId).sorted().toList();
+                        var linked = refundRows.stream().filter(r -> ids.contains(r.id())).toList();
+                        return new DisputeResponse(d.getId(), d.getCategory(), d.getCharge() == null ? null : d.getCharge().getId(),
+                            d.getCharge() == null ? null : d.getCharge().getDescription(), d.getDescription(), d.getEvidenceUrlList(),
+                            d.getStatus(), d.getHandledBy() == null ? null : d.getHandledBy().getFullName(), d.getResolution(),
+                            d.getDecision(), d.getCreatedAt(), d.getResolvedAt(), d.getRefundAwardTotal(), ids, disputeFinancialStatus(linked));
+                    }).toList());
+    }
+
+    private String disputeFinancialStatus(List<RefundResponse> linked) {
+        if (linked.isEmpty()) return "NOT_APPLICABLE";
+        if (linked.stream().anyMatch(r -> r.status() == RefundStatus.FAILED || r.status() == RefundStatus.REJECTED
+                || r.status() == RefundStatus.PENDING_RECONCILIATION || "REPORTED_NOT_RECEIVED".equals(r.receiptStatus()))) return "RECONCILIATION_REQUIRED";
+        if (linked.stream().anyMatch(r -> r.status() != RefundStatus.REFUNDED)) return "AWAITING_REFUND";
+        if (linked.stream().anyMatch(r -> "WAITING".equals(r.receiptStatus()))) return "AWAITING_RECEIPT";
+        return "COMPLETED";
     }
 
     @Override

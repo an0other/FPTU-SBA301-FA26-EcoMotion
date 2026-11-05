@@ -119,7 +119,6 @@ export const BookingDetail = ({
       await onOpenDispute({
         category: complaintCategory,
         chargeId: complaintCategory === 'CHARGE' ? Number(complaintCharge) : undefined,
-        chargeType: complaintCategory === 'CHARGE' ? complaintCharge : undefined,
         description: complaintDescription.trim(),
         evidenceUrls,
       });
@@ -638,7 +637,7 @@ export const BookingDetail = ({
                       className="w-full h-11 px-3.5 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none cursor-pointer"
                     >
                       <option value="" disabled>-- Chọn khoản --</option>
-                      {booking.charges.filter((charge) => !charge.isWaived && !['BASE_RENTAL', 'DEPOSIT'].includes(charge.chargeType)).map((charge) => (
+                      {booking.charges.filter((charge) => !charge.isWaived && charge.confirmationStatus !== 'DISPUTED' && !['BASE_RENTAL', 'DEPOSIT'].includes(charge.chargeType)).map((charge) => (
                         <option key={charge.chargeId} value={charge.chargeId}>{charge.label}</option>
                       ))}
                     </select>

@@ -943,9 +943,6 @@ public class BookingServiceImpl implements BookingService {
             }
             charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.DISPUTED);
             chargeRepository.save(charge);
-        } else if (request.category() == DisputeCategory.DEPOSIT_REFUND
-                && chargeRepository.findAllByBooking_IdAndChargeType(booking.getId(), ChargeType.DEPOSIT).isEmpty()) {
-            throw new ConflictException("No deposit to dispute");
         }
         requireDisputeAllowed(booking, request.category());
         PaymentRequest finalRequest = null;
@@ -1026,37 +1023,25 @@ public class BookingServiceImpl implements BookingService {
                 holdExpiresAt(booking));
     }
 
-    private void requireDisputeAllowed(Booking booking, DisputeCategory category) {
-        boolean allowed = switch (category) {
-            case CHARGE -> CHARGE_DISPUTE.contains(booking.getStatus());
-            case SERVICE_QUALITY -> booking.getStatus() == BookingStatus.IN_PROGRESS
-                    || booking.getStatus() == BookingStatus.COMPLETED;
-            case DEPOSIT_REFUND -> booking.getStatus() == BookingStatus.CANCELLED;
-            case TRIP_NOT_CONFIRMED -> booking.getStatus() == BookingStatus.IN_PROGRESS
-                    && (booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null);
+    private boolean disputeAllowed(Booking booking, DisputeCategory category) {
+        return switch (category) {
+            case CHARGE -> CHARGE_DISPUTE.contains(booking.getStatus()) && chargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
+                    .anyMatch(c -> !c.isWaived() && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT);
+            case SERVICE_QUALITY -> booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.COMPLETED;
+            case DEPOSIT_REFUND -> (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)
+                    && paymentTransactionRepository.findByBooking_Id(booking.getId()).stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
+                        && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0);
+            case TRIP_NOT_CONFIRMED -> booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
+                    && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null));
         };
-        if (!allowed) {
-            throw new ConflictException("Dispute is not available for this booking");
-        }
+    }
+
+    private void requireDisputeAllowed(Booking booking, DisputeCategory category) {
+        if (!disputeAllowed(booking, category)) throw new ConflictException("Loại khiếu nại không phù hợp với trạng thái đơn hiện tại");
     }
 
     private List<DisputeCategory> disputeCategories(Booking booking, List<BookingCharge> charges) {
-        List<DisputeCategory> categories = new ArrayList<>();
-        if (CHARGE_DISPUTE.contains(booking.getStatus()) && !charges.isEmpty()) {
-            categories.add(DisputeCategory.CHARGE);
-        }
-        if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.COMPLETED) {
-            categories.add(DisputeCategory.SERVICE_QUALITY);
-        }
-        boolean hasDeposit = charges.stream().anyMatch(charge -> charge.getChargeType() == ChargeType.DEPOSIT);
-        if (booking.getStatus() == BookingStatus.CANCELLED && hasDeposit) {
-            categories.add(DisputeCategory.DEPOSIT_REFUND);
-        }
-        if (booking.getStatus() == BookingStatus.IN_PROGRESS
-                && (booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null)) {
-            categories.add(DisputeCategory.TRIP_NOT_CONFIRMED);
-        }
-        return categories;
+        return java.util.Arrays.stream(DisputeCategory.values()).filter(category -> disputeAllowed(booking, category)).toList();
     }
 
     private RefundPreviewResponse refundPreview(Booking booking,

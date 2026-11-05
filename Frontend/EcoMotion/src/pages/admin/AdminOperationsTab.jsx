@@ -6,8 +6,6 @@ import {
   IconWallet,
   IconSearch,
   IconX,
-  IconEye,
-  IconCheckCircle,
   IconImage,
 } from '../../components/icons/Icons'
 import BookingDetailModal from './modals/BookingDetailModal'
@@ -46,7 +44,7 @@ const BOOKING_STATUS_BADGES = {
 
 const DISPUTE_STATUS_BADGES = {
   OPEN: 'bg-rose-50 text-rose-700 border-rose-200',
-  UNDER_REVIEW: 'bg-amber-50 text-amber-700 border-amber-200',
+  IN_REVIEW: 'bg-amber-50 text-amber-700 border-amber-200',
   RESOLVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   REJECTED: 'bg-slate-100 text-slate-700 border-slate-200',
 }
@@ -67,9 +65,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   const [disputes, setDisputes] = useState([])
   const [disputeStatus, setDisputeStatus] = useState(initialFilter.status || 'ALL')
   const [resolvingDispute, setResolvingDispute] = useState(null)
-  const [disputeForm, setDisputeForm] = useState({
-    status: 'RESOLVED', decision: 'KEEP_CHARGE', resolution: '',
-  })
+
 
   // SubTab 3: Payments & Refund
   const [payments, setPayments] = useState([])
@@ -122,7 +118,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
   }
 
   // Dispute Resolve
-  async function handleResolveDispute(disputeId, status, decision, resolution) {
+  async function handleResolveDispute(disputeId, status, decision, resolution, refundAwardTotal) {
     setActionLoading(true)
     try {
       await adminService.resolveDispute(
@@ -130,6 +126,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
         status,
         decision,
         resolution,
+        refundAwardTotal,
       )
       setMessage({ type: 'success', text: 'Đã cập nhật phân xử tranh chấp thành công!' })
       setResolvingDispute(null)
@@ -348,7 +345,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
           <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
             <span className="text-xs font-bold text-slate-600">Lọc theo trạng thái tranh chấp:</span>
             <div className="flex gap-2">
-              {['ALL', 'OPEN', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED'].map((st) => (
+              {['ALL', 'OPEN', 'IN_REVIEW', 'RESOLVED', 'REJECTED'].map((st) => (
                 <button
                   key={st}
                   type="button"
@@ -425,12 +422,9 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
                           <button
                             type="button"
                             onClick={() => {
+                              setMessage(null)
                               setResolvingDispute(d)
-                              setDisputeForm({
-                                status: d.status === 'OPEN' ? 'RESOLVED' : d.status,
-                                decision: 'KEEP_CHARGE',
-                                resolution: d.resolution || '',
-                              })
+
                             }}
                             className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-600"
                           >
@@ -553,6 +547,7 @@ export default function AdminOperationsTab({ initialSubTab = 'bookings', initial
 
       <DisputeDetailModal
         dispute={resolvingDispute}
+        error={message?.type === 'error' ? message.text : ''}
         onClose={() => setResolvingDispute(null)}
         onResolve={handleResolveDispute}
         actionLoading={actionLoading}

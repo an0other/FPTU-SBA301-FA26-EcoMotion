@@ -58,6 +58,201 @@ class EndUserWorkflowIntegrationTest {
 
     @Autowired com.fptufa26.ecomotion.dispute.service.DisputeService disputes;
 
+    @Test void depositDisputeIsAvailableDuringCancellationReviewAndDuplicateReviewIsBlocked() {
+        tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW));
+        var opened = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, (Long) null, "Missing deposit refund"));
+        disputes.resolveDispute(opened.disputeId(), adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.IN_REVIEW, null, "Reviewing bank evidence");
+        assertThatThrownBy(() -> renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, (Long) null, "Duplicate review")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    @Test void missingEndConfirmationDisputeIsAvailableAtActualWaitingStep() {
+        tx.executeWithoutResult(s -> {
+            var b = em.find(Booking.class, bookingId); b.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);
+            b.setProviderConfirmedAt(Instant.now()); b.setRenterConfirmedAt(null);
+        });
+        var opened = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED, (Long) null, "Please review trip completion"));
+        assertThat(opened.disputeId()).isNotNull();
+    }
+
+    @Test void contradictoryChargeDecisionCannotWaiveMoney() {
+        ready();
+        var opened = tx.execute(s -> {
+            var b = em.find(Booking.class, bookingId);
+            var charge = new BookingCharge(); charge.setBooking(b); charge.setChargeType(ChargeType.PARKING);
+            charge.setDescription("Disputed parking"); charge.setQuantity(1); charge.setUnitPrice(new BigDecimal("20000"));
+            charge.setAmount(new BigDecimal("20000")); charge.setCreatedBy(b.getRenter().getUser()); em.persist(charge);
+            return disputes.open(b, b.getRenter().getUser(), com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE, charge);
+        });
+        assertThatThrownBy(() -> disputes.resolveDispute(opened.disputeId(), adminId,
+                com.fptufa26.ecomotion.dispute.enums.DisputeStatus.REJECTED,
+                com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE, "Contradictory ruling"))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    @Test void adminDepositAwardCreatesOnlyMissingRefundAndExposesRulingToParticipants() throws Exception {
+        ready();
+        tx.executeWithoutResult(s -> {
+            var b = em.find(Booking.class, bookingId); b.setPickupTime(Instant.now().plusSeconds(3600));
+            ledger.findByBooking_Id(bookingId).forEach(t -> { t.setMethod(PaymentMethod.BANK_TRANSFER); t.setAmount(new BigDecimal("540000")); });
+        });
+        renterBookings.cancel(renterId, code());
+        var opened = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, (Long) null, "Request full deposit refund"));
+        String body = "{\"status\":\"RESOLVED\",\"resolution\":\"Approve full deposit refund\",\"refundAwardTotal\":540000}";
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/admin/operations/disputes/" + opened.disputeId() + "/resolve")
+                    .header("Authorization", "Bearer " + tx.execute(s -> jwt.generateAccessToken(em.find(User.class, adminId))))
+                    .contentType("application/json").content(body))
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+        }
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(2);
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream().map(r -> r.getAmount()).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("540000");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/renter/bookings/" + code() + "/workflow")
+                .header("Authorization", "Bearer " + tx.execute(s -> jwt.generateAccessToken(em.find(User.class, renterId)))))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.data.disputes[0].resolution").value("Approve full deposit refund"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.data.disputes[0].financialStatus").value("AWAITING_REFUND"));
+    }
+
+    long cancelledDepositDispute() {
+        ready();
+        tx.executeWithoutResult(s -> {
+            var b = em.find(Booking.class, bookingId); b.setPickupTime(Instant.now().plusSeconds(3600));
+            ledger.findByBooking_Id(bookingId).forEach(t -> { t.setMethod(PaymentMethod.BANK_TRANSFER); t.setAmount(new BigDecimal("540000")); });
+        });
+        renterBookings.cancel(renterId, code());
+        return renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, (Long) null, "Please review refund")).disputeId();
+    }
+
+    @Test void depositAwardBoundsAndMissingEvidenceRollBackRulingAndMoney() {
+        long id = cancelledDepositDispute();
+        for (String invalid : List.of("0", "540001", "269999", "1.123")) {
+            assertThatThrownBy(() -> disputes.resolveDispute(id, adminId,
+                    com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Refund ruling", new BigDecimal(invalid)))
+                    .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+            assertThat(disputes.getDisputeById(id).orElseThrow().getStatus()).isEqualTo(com.fptufa26.ecomotion.dispute.enums.DisputeStatus.OPEN);
+            assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(1);
+        }
+        tx.executeWithoutResult(s -> {
+            var refund = requests.findByBooking_IdOrderByCreatedAtDesc(bookingId).getFirst(); refund.setSourcePaymentTransaction(null);
+        });
+        assertThatThrownBy(() -> disputes.resolveDispute(id, adminId,
+                com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Refund ruling", new BigDecimal("540000")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThat(disputes.getDisputeById(id).orElseThrow().getResolvedAt()).isNull();
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(1);
+    }
+
+    @Test void existingRefundCommitmentIsLinkedWithoutNewMoneyAndParticipantsAreAuthorized() {
+        long id = cancelledDepositDispute();
+        disputes.resolveDispute(id, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Existing refund is correct", new BigDecimal("270000"));
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(1);
+        var renterView = workflow.getWorkflow(renterId, code()).disputes().getFirst();
+        assertThat(renterView.refundRequestIds()).hasSize(1);
+        assertThat(renterView.resolvedAt()).isNotNull();
+        assertThat(renterView.handledByName()).isNotBlank();
+        assertThat(workflow.getWorkflow(providerId, code()).disputes().getFirst().resolution()).isEqualTo(renterView.resolution());
+        long foreign = tx.execute(s -> user(Role.RENTER).getId());
+        assertThatThrownBy(() -> workflow.getWorkflow(foreign, code())).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> disputes.resolveDispute(id, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Changed award", new BigDecimal("540000")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    @Test void concurrentComplaintCreationCreatesOnlyOneActiveReview() throws Exception {
+        tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW));
+        Runnable submit = () -> renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, (Long) null, "Concurrent complaint"));
+        assertThat(race(submit, submit)).containsExactlyInAnyOrder(true, false);
+        assertThat(disputes.getDisputesByBookingId(bookingId)).hasSize(1);
+    }
+
+    @Test void twoAdminsCannotCreateDuplicateDepositAwards() throws Exception {
+        long id = cancelledDepositDispute();
+        long secondAdmin = tx.execute(s -> user(Role.ADMIN).getId());
+        Runnable first = () -> disputes.resolveDispute(id, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Award full refund", new BigDecimal("540000"));
+        Runnable second = () -> disputes.resolveDispute(id, secondAdmin, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Award full refund", new BigDecimal("540000"));
+        assertThat(race(first, second)).containsOnly(true);
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(2);
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream().map(r -> r.getAmount()).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("540000");
+    }
+
+    @Test void reviewAndRejectionDoNotCreateRefundsOrFinancialDecisions() {
+        long id = cancelledDepositDispute();
+        disputes.resolveDispute(id, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.IN_REVIEW, null, "Reviewing documents");
+        assertThat(disputes.getDisputeById(id).orElseThrow().getResolvedAt()).isNull();
+        assertThatThrownBy(() -> disputes.resolveDispute(id, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.OPEN, null, "Back to open"))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        disputes.resolveDispute(id, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.REJECTED, null, "Cancellation policy upheld");
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(1);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+    }
+
+    @Test void paidFinalRequestIsPreservedAndOnlyUnblockedAfterEveryReviewCloses() {
+        ready();
+        long[] ids = tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId); b.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+            var charge = new BookingCharge(); charge.setBooking(b); charge.setChargeType(ChargeType.PARKING);
+            charge.setDescription("Parking"); charge.setQuantity(1); charge.setUnitPrice(new BigDecimal("20000"));
+            charge.setAmount(new BigDecimal("20000")); charge.setCreatedBy(b.getRenter().getUser()); em.persist(charge);
+            var pr = new PaymentRequest(); pr.setBooking(b); pr.setPaymentType(PaymentRequestType.FINAL_BALANCE);
+            pr.setAmount(new BigDecimal("220000")); pr.setPaidAmount(new BigDecimal("10000"));
+            pr.setTransferReference(UUID.randomUUID().toString()); pr.setBankCodeSnapshot("VCB"); pr.setBankNameSnapshot("Bank");
+            pr.setAccountNumberSnapshot("123456789"); pr.setAccountHolderSnapshot("Owner"); pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
+            pr.setExpiresAt(Instant.now().minusSeconds(86400)); em.persist(pr);
+            var paid = incoming(b, PaymentMethod.BANK_TRANSFER, new BigDecimal("10000")); paid.setType(PaymentType.SETTLEMENT); paid.setPaymentRequest(pr);
+            em.flush();
+            var fee = disputes.open(b, b.getRenter().getUser(), com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE, charge);
+            var quality = disputes.open(b, b.getRenter().getUser(), com.fptufa26.ecomotion.dispute.enums.DisputeCategory.SERVICE_QUALITY, null);
+            return new long[]{fee.disputeId(), quality.disputeId(), pr.getId()};
+        });
+        disputes.resolveDispute(ids[0], adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.REJECTED,
+                com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.KEEP_CHARGE, "Parking charge upheld");
+        assertThat(tx.<PaymentRequestStatus>execute(s -> em.find(PaymentRequest.class, ids[2]).getStatus())).isEqualTo(PaymentRequestStatus.REVIEW_REQUIRED);
+        disputes.resolveDispute(ids[1], adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Service explanation accepted");
+        tx.executeWithoutResult(s -> {
+            var pr = em.find(PaymentRequest.class, ids[2]); assertThat(pr.getPaidAmount()).isEqualByComparingTo("10000");
+            assertThat(pr.getStatus()).isEqualTo(PaymentRequestStatus.PARTIALLY_PAID);
+            assertThat(pr.getExpiresAt()).isAfter(Instant.now().plusSeconds(47 * 3600));
+        });
+    }
+
+    @Autowired com.fptufa26.ecomotion.common.service.NotificationStreamService notificationStream;
+
+    @Test void disputeEventsAreDeliveredOnlyAfterCommit() throws Exception {
+        tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW));
+        var emitter = org.mockito.Mockito.mock(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.class);
+        notificationStream.registerEmitter(renterId, emitter);
+        try {
+            tx.executeWithoutResult(s -> {
+                disputes.open(em.find(Booking.class, bookingId), em.find(User.class, renterId),
+                        com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, null, "Rollback complaint", List.of());
+                org.mockito.Mockito.verifyNoInteractions(emitter);
+                s.setRollbackOnly();
+            });
+            org.mockito.Mockito.verifyNoInteractions(emitter);
+            renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                    com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, (Long) null, "Committed complaint"));
+            org.mockito.Mockito.verify(emitter).send(org.mockito.ArgumentMatchers.any(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder.class));
+        } finally { notificationStream.removeEmitter(renterId, emitter); }
+    }
+
+    @Test void depositRulingQueuesGatewayRefundInsteadOfSendingMoney() {
+        ready();
+        tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setPickupTime(Instant.now().plusSeconds(3600)));
+        renterBookings.cancel(renterId, code());
+        long id = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, (Long) null, "Gateway refund review")).disputeId();
+        disputes.resolveDispute(id, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null, "Award full deposit", new BigDecimal("100000"));
+        assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
+                .filter(r -> r.getSourceEventId().startsWith("DISPUTE_DEPOSIT:")))
+                .allMatch(r -> r.getStatus() == RefundStatus.UNDER_REVIEW && r.getVnpRequestId() == null);
+    }
+
     @Test void driverRejectsThenNextDriverAcceptsAndFeedbackIsPrivateToProvider() {
         long[] first = ready(); long[] second = ready();
         optimization.manualAssign(bookingId, first[0], first[2]);
