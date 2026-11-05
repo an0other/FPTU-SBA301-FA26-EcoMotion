@@ -240,16 +240,34 @@ public class RenterDrivingLicenseServiceImpl implements RenterDrivingLicenseServ
     }
 
     private DocumentAiReadResult parseSuccessfulRead(Map<String, Object> response) {
-        if (!"READ_SUCCESS".equals(value(response.get("status")))
-                || !"VN_DRIVING_LICENSE".equals(value(response.get("documentType")))) {
+        String status = value(response.get("status"));
+        List<?> reasons = response.get("statusReasons") instanceof List<?> list
+                ? list
+                : List.of();
+        // Temporary demo policy: accept complete reads flagged only for field review.
+        boolean demoReviewAccepted =
+                "PROCESSED".equals(value(response.get("code")))
+                && "REVIEW_REQUIRED".equals(status)
+                && reasons.size() == 1
+                && reasons.contains("REQUIRED_FIELDS_NEED_REVIEW");
+
+        if (!"VN_DRIVING_LICENSE".equals(value(response.get("documentType")))
+                || !("READ_SUCCESS".equals(status) || demoReviewAccepted)) {
             throw new DocumentAiReadRejectedException(
                     "AI chưa đọc được GPLX đầy đủ. Vui lòng tải ảnh rõ cả hai mặt và thử lại.");
         }
         Map<String, Object> assessment = object(response.get("assessment"));
         Map<String, Object> reading = object(assessment.get("readingAssessment"));
         Map<String, Object> comparison = object(response.get("coreComparison"));
-        if (!"ALL_MAIN_FIELDS_READ".equals(value(reading.get("status")))
-                || !"MATCH".equals(value(comparison.get("status")))) {
+        Map<String, Object> qrData = object(response.get("qrData"));
+        String comparisonStatus = value(comparison.get("status"));
+        String qrStatus = value(qrData.get("status"));
+        // Temporary demo policy for older licenses without a readable QR code.
+        boolean demoOcrOnly = "PARTIAL".equals(comparisonStatus)
+                && ("NOT_READ".equals(qrStatus) || "DISABLED".equals(qrStatus));
+        if ((!demoReviewAccepted
+                && !"ALL_MAIN_FIELDS_READ".equals(value(reading.get("status"))))
+                || !("MATCH".equals(comparisonStatus) || demoOcrOnly)) {
             throw new DocumentAiReadRejectedException(
                     "Thông tin OCR và mã QR chưa khớp đầy đủ. Vui lòng kiểm tra lại ảnh GPLX.");
         }
