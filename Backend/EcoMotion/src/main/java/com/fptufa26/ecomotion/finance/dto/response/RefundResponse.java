@@ -23,6 +23,17 @@ public record RefundResponse(
         String gatewayRefundRef,
         Instant createdAt,
         Instant updatedAt,
-        PaymentMethod refundMethod
+        PaymentMethod refundMethod,
+        String recipientBankName,
+        String recipientAccountHolder,
+        String recipientAccountNumber,
+        String receiptStatus,
+        Instant receiptWaitingAt,
+        Instant receiptDeadline,
+        Instant receiptConfirmedAt,
+        Long receiptConfirmedBy,
+        Instant receiptReportedAt,
+        Instant receiptAutoConfirmedAt,
+        boolean proofAvailable
 ) {
 }

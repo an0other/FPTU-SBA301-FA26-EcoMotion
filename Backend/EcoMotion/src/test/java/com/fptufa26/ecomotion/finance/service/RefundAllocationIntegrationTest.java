@@ -89,6 +89,19 @@ class RefundAllocationIntegrationTest {
     long providerUserId;
     String bookingCode;
 
+    @Test void refundProofDoesNotRequireBankReferenceOrNote() {
+        tx.executeWithoutResult(s -> em.createQuery("select t from PaymentTransaction t where t.booking.id=:id", PaymentTransaction.class)
+                .setParameter("id",bookingId).getResultList().forEach(t -> t.setMethod(PaymentMethod.BANK_TRANSFER)));
+        User actor=tx.execute(s -> em.find(User.class,providerUserId));
+        var refund=refunds.reserve(bookingId,"CANCEL:optional",new BigDecimal("300000"),"Test refund",actor).getFirst();
+        Long transactionId=tx.execute(s -> em.find(RefundRequest.class,refund.getId()).getPaymentTransaction().getId());
+        var proof=new org.springframework.mock.web.MockMultipartFile("file","refund.pdf","application/pdf","%PDF-1.4 test".getBytes());
+        var result=refundService.completeRefund(providerUserId,transactionId,proof,null,null);
+        assertThat(result.status()).isEqualTo(PaymentStatus.PAID);
+        assertThat(result.bankReference()).isNull();
+        assertThat(result.completedAt()).isNotNull();
+    }
+
     @BeforeEach
     void fixture() {
         tx = new TransactionTemplate(manager);

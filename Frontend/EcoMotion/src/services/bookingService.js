@@ -50,8 +50,13 @@ export async function updateBookingRequestDetails(bookingCode, body) {
   return data.data
 }
 
-export async function cancelMyBooking(bookingCode) {
-  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/cancel`)
+export async function cancelMyBooking(bookingCode, account) {
+  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/cancel`, account)
+  return data.data
+}
+
+export async function updateRefundAccount(bookingCode, account) {
+  const { data } = await apiClient.patch(`/renter/bookings/${bookingPath(bookingCode)}/refund-account`, account)
   return data.data
 }
 

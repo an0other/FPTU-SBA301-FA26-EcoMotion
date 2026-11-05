@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.controller;
 
+import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
@@ -149,8 +150,17 @@ public class RenterBookingController {
     @PostMapping("/{bookingCode}/cancel")
     public ApiResponse<CancelBookingResponse> cancel(
             @AuthenticationPrincipal SecurityUser user,
-            @PathVariable String bookingCode) {
-        return ApiResponse.success(bookingService.cancel(user.getUserId(), bookingCode));
+            @PathVariable String bookingCode,
+            @Valid @RequestBody(required = false) RefundAccountRequest account) {
+        return ApiResponse.success(bookingService.cancel(user.getUserId(), bookingCode, account));
+    }
+
+    @PatchMapping("/{bookingCode}/refund-account")
+    public ApiResponse<Void> updateRefundAccount(@AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            @Valid @RequestBody RefundAccountRequest account) {
+        bookingService.updateRefundAccount(user.getUserId(), bookingCode, account);
+        return ApiResponse.success(null);
     }
 
     @PostMapping("/{bookingCode}/confirm-end")

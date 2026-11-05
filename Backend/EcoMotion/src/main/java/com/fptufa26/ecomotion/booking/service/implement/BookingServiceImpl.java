@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import java.time.format.DateTimeFormatter;
+import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
 import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
 import com.fptufa26.ecomotion.finance.service.RefundMath;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
@@ -778,6 +780,26 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
+    public CancelBookingResponse cancel(Long userId, String bookingCode, RefundAccountRequest account) {
+        CancelBookingResponse response = cancel(userId, bookingCode);
+        if (account != null) {
+            Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId).orElseThrow();
+            refundEventService.updateRecipientAccount(booking.getId(), account);
+        }
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public void updateRefundAccount(Long userId, String bookingCode, RefundAccountRequest account) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
+        if (refundEventService.updateRecipientAccount(booking.getId(), account) == 0)
+            throw new ConflictException("Không còn khoản hoàn chuyển khoản có thể cập nhật");
+    }
+
+    @Override
+    @Transactional
     public CancelBookingResponse cancel(Long userId, String bookingCode) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
@@ -1043,21 +1065,27 @@ public class BookingServiceImpl implements BookingService {
                                                 List<PaymentTransaction> payments,
                                                 Instant at) {
         if (!CANCELLABLE.contains(booking.getStatus())) {
-            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "Đơn này không huỷ được");
+            return new RefundPreviewResponse(false, null, BigDecimal.ZERO, "Đơn này không huỷ được", false);
         }
         if (snapshot.getPlanType() == PlanType.YEARLY) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Trả trước không hoàn theo chính sách gói năm");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Trả trước không hoàn theo chính sách gói năm", false);
         }
         BigDecimal paidDeposit = paidDeposit(payments);
         if (paidDeposit == null) {
-            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Chưa thu cọc, số hoàn là 0");
+            return new RefundPreviewResponse(true, null, BigDecimal.ZERO, "Chưa thu cọc, số hoàn là 0", false);
         }
         BigDecimal ratio = DepositRefundRules.ratio(snapshot.getPlanType(), at, booking.getPickupTime());
         BigDecimal amount = paidDeposit.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
-        String explanation = ratio.compareTo(DepositRefundRules.FULL) == 0
-                ? "Huỷ trước mốc, hoàn 100% cọc"
-                : "Huỷ sau mốc, hoàn 50% cọc. Phần còn lại thuộc nhà cung cấp";
-        return new RefundPreviewResponse(true, ratio, amount, explanation);
+        boolean monthly = snapshot.getPlanType() == PlanType.MONTHLY;
+        Instant deadline = booking.getPickupTime().minus(monthly ? Duration.ofDays(30) : Duration.ofHours(24));
+        String cutoff = DateTimeFormatter.ofPattern("HH:mm 'ngày' dd/MM/yyyy")
+                .withZone(ZoneId.of("Asia/Ho_Chi_Minh")).format(deadline);
+        String explanation = "Mốc hoàn 100% cọc: " + cutoff + " (ít nhất " + (monthly ? "30 ngày" : "24 giờ")
+                + " trước giờ nhận xe). Nếu hủy sau thời điểm này, bạn được hoàn 50% cọc.";
+        amount = amount.min(refundEventService.remainingReceived(booking.getId()));
+        boolean manualRefund = amount.signum() > 0 && payments.stream().anyMatch(p -> p.getType() == PaymentType.DEPOSIT_PAY
+                && p.getDirection() == PaymentDirection.IN && p.getStatus() == PaymentStatus.PAID && p.getMethod() != PaymentMethod.VNPAY);
+        return new RefundPreviewResponse(true, ratio, amount, explanation, manualRefund);
     }
 
     private BigDecimal refundAmount(Booking booking, BookingPolicySnapshot snapshot, Instant cancelledAt) {

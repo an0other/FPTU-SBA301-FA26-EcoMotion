@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.service;
 
+import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
@@ -59,6 +60,10 @@ public interface BookingService {
             Long userId, String bookingCode, UpdateBookingRequestDetails request);
 
     CancelBookingResponse cancel(Long userId, String bookingCode);
+
+    CancelBookingResponse cancel(Long userId, String bookingCode, RefundAccountRequest account);
+
+    void updateRefundAccount(Long userId, String bookingCode, RefundAccountRequest account);
 
     ConfirmStartResponse confirmStart(Long userId, String bookingCode);
 

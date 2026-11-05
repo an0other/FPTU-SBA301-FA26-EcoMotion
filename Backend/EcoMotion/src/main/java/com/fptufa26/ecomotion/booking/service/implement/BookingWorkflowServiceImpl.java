@@ -66,8 +66,11 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                 .map(BookingCharge::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         boolean closed = Set.of(BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus());
         BigDecimal remaining = closed ? BigDecimal.ZERO : booking.getTotalAmount().add(extras).subtract(paid.subtract(returned)).max(BigDecimal.ZERO);
+        var refundRows = refunds.listRefundsByBooking(currentUserId, booking.getBookingCode());
+        boolean completedPolicyRefund = closed && returned.signum() > 0 && !refundRows.isEmpty()
+                && refundRows.stream().allMatch(r -> Set.of("REFUNDED", "REJECTED").contains(r.status().name()));
         String payment = reconcile ? "RECONCILIATION_REQUIRED" : pendingRefund.signum() > 0 ? "REFUND_PENDING"
-                : verifying ? "VERIFYING" : returned.signum() > 0 && paid.compareTo(returned) <= 0 ? "REFUNDED"
+                : verifying ? "VERIFYING" : (completedPolicyRefund || returned.signum() > 0 && paid.compareTo(returned) <= 0) ? "REFUNDED"
                 : paid.signum() == 0 ? "UNPAID" : remaining.signum() > 0 ? "PARTIALLY_PAID" : "COVERED";
         boolean needsDriver = !closed && (booking.isDriverReplacementRequired()
                 || booking.getStatus() == BookingStatus.CONFIRMED && booking.getDriver() == null
@@ -93,7 +96,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                 paid, returned, pendingRefund, refunds.refundableAmount(currentUserId, booking.getBookingCode()), remaining,
                 booking.getPickupTime(), booking.getAssignmentExpiresAt(), needsDriver,
                 provider && MUTABLE.contains(booking.getStatus()), nextAction(booking, provider, payment, settlement, needsDriver, proposal),
-                proposal, feedback, refunds.listRefundsByBooking(currentUserId, booking.getBookingCode()), booking.getUpdatedAt());
+                proposal, feedback, refundRows, booking.getUpdatedAt());
     }
 
     @Override
@@ -235,6 +238,14 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     }
 
     private String nextAction(Booking booking, boolean provider, String payment, String settlement, boolean needsDriver, BookingWorkflowResponse.Proposal proposal) {
+        if (Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW, BookingStatus.REJECTED).contains(booking.getStatus())
+                && "DISPUTED".equals(settlement)) {
+            return "REFUNDED".equals(payment)
+                    ? "Nhà xe đã xác nhận chuyển khoản hoàn tiền theo chính sách. Yêu cầu xem xét của bạn vẫn đang mở và được xử lý riêng; kiểm tra tài khoản nhận tiền và biên lai."
+                    : "Đơn đã hủy. Yêu cầu xem xét của bạn đang được xử lý; theo dõi tiến trình hoàn tiền và phản hồi của bộ phận hỗ trợ.";
+        }
+        if ("REFUNDED".equals(payment) && Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus()))
+            return "Nhà xe đã xác nhận chuyển khoản hoàn tiền theo chính sách. Bạn có thể kiểm tra tài khoản nhận tiền và biên lai hoàn tiền.";
         if ("RECONCILIATION_REQUIRED".equals(payment)) return "Tiền đã được ghi nhận nhưng đơn cần đối soát. Không thanh toán lại; liên hệ nhà xe hoặc hỗ trợ để xử lý tiền đã nhận.";
         if ("REFUND_PENDING".equals(payment)) return provider ? "Có khoản hoàn đang xử lý. Mở Tài chính để xác nhận chuyển khoản và biên lai sau khi đã chuyển tiền." : "Khoản hoàn đang được xử lý. Đồng ý hoàn tiền chưa có nghĩa tiền đã vào tài khoản của bạn.";
         if (proposal != null && "PENDING".equals(proposal.status())) return provider ? "Đang chờ khách chấp thuận phương án. Chưa thay đổi xe hoặc giờ đón." : "Nhà xe gửi phương án thay thế. Xem thay đổi và chọn đồng ý hoặc từ chối; chưa có thay đổi nào được áp dụng.";

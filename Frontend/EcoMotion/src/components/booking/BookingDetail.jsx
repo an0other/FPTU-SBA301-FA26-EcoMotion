@@ -161,7 +161,7 @@ export const BookingDetail = ({
           </div>
         </div>
         {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
-        {operationalRisk?.atRisk && (
+        {operationalRisk?.atRisk && !['CANCELLED', 'CANCELLATION_REVIEW', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
           <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">Nguy cơ xe về trễ</p>
             <p className="mt-1">{operationalRisk.message}</p>
@@ -812,13 +812,16 @@ export const BookingDetail = ({
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
         refundExplanation={booking.refundExplanation}
-        onConfirmCancel={async () => {
+        refundAmount={booking.refundAmount}
+        requiresBankAccount={booking.refundRequiresBankAccount}
+        onConfirmCancel={async account => {
           setActionError('');
           try {
-            await onCancelBooking(booking.id);
+            await onCancelBooking(booking.id, account);
             setIsCancelModalOpen(false);
           } catch (err) {
             setActionError(readErrorMessage(err));
+            throw err;
           }
         }}
       />

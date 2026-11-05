@@ -9,6 +9,7 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
 import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSummary'
+import { RefundAccountPanel } from '../../components/booking/RefundAccountPanel'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 
 const CHARGE_LABELS = {
@@ -63,6 +64,8 @@ function toCard(detail) {
     holdExpiresAt: detail.holdExpiresAt,
     depositAmount: Number(detail.depositAmount ?? 0),
     refundExplanation: detail.refundPreview?.explanation ?? '',
+    refundAmount: Number(detail.refundPreview?.amount ?? 0),
+    refundRequiresBankAccount: detail.refundPreview?.requiresBankAccount ?? Number(detail.refundPreview?.amount ?? 0) > 0,
     disputeCategories: detail.disputeCategories ?? [],
     charges: (detail.charges ?? []).map((charge) => ({
       chargeId: charge.chargeId,
@@ -159,6 +162,8 @@ export function BookingDetailPage() {
   }
 
   const booking = toCard(detail)
+  const manualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
+    && !['REFUNDED', 'REJECTED'].includes(refund.status))
 
   return (
     <>
@@ -171,8 +176,8 @@ export function BookingDetailPage() {
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
-        onCancelBooking={async () => {
-          const updated = await cancelMyBooking(booking.id)
+        onCancelBooking={async (_code, account) => {
+          const updated = await cancelMyBooking(booking.id, account)
           navigate(`/renter/bookings/${updated.bookingCode}`, { replace: true })
           await refreshDetail()
         }}
@@ -199,6 +204,8 @@ export function BookingDetailPage() {
         trackingError={trackingError}
         onRefreshTracking={refetchTracking}
       />
+      {['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail.status) && manualRefunds.length > 0 &&
+        <RefundAccountPanel key={`${booking.id}:${manualRefunds[0].id}`} bookingCode={booking.id} refunds={manualRefunds} onSaved={refreshDetail} />}
     </>
   )
 }

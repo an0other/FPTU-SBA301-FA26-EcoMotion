@@ -215,7 +215,7 @@ public class RefundServiceImpl implements RefundService {
         validateProof(proof);
 
         String reference = normalizeReference(bankReference);
-        if (bookingPaymentLedgerService.gatewayReferenceExists(reference)) {
+        if (reference != null && bookingPaymentLedgerService.gatewayReferenceExists(reference)) {
             throw new ConflictException("Mã giao dịch ngân hàng đã được sử dụng");
         }
         String normalizedNote = normalizeNote(note);
@@ -250,6 +250,11 @@ public class RefundServiceImpl implements RefundService {
 
         refundRequestRepository.findByPaymentTransaction_Id(transaction.getId()).ifPresent(refund -> {
             refund.setStatus(RefundStatus.REFUNDED);
+            if (refund.getReceiptStatus() == null) {
+                refund.setReceiptStatus("WAITING");
+                refund.setReceiptWaitingAt(now);
+                refund.setReceiptDeadline(now.plus(java.time.Duration.ofHours(72)));
+            }
             refund.setGatewayRefundRef(transaction.getGatewayRef());
             refund.setUpdatedAt(now);
             refundRequestRepository.save(refund);
@@ -347,7 +352,7 @@ public class RefundServiceImpl implements RefundService {
 
     private String normalizeReference(String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Mã giao dịch hoàn tiền là bắt buộc");
+            return null;
         }
         String normalized = value.trim().toUpperCase(Locale.ROOT);
         if (normalized.length() > 100) throw new IllegalArgumentException("Mã giao dịch tối đa 100 ký tự");
@@ -403,7 +408,12 @@ public class RefundServiceImpl implements RefundService {
                 r.getGatewayRefundRef(),
                 r.getCreatedAt(),
                 r.getUpdatedAt(),
-                r.getPaymentTransaction() != null ? r.getPaymentTransaction().getMethod() : null
+                r.getPaymentTransaction() != null ? r.getPaymentTransaction().getMethod() : null,
+                r.getRecipientBankName(), r.getRecipientAccountHolder(), r.getRecipientAccountNumber(),
+                r.getReceiptStatus(), r.getReceiptWaitingAt(), r.getReceiptDeadline(),
+                r.getReceiptConfirmedAt(), r.getReceiptConfirmedBy(), r.getReceiptReportedAt(), r.getReceiptAutoConfirmedAt(),
+                r.getPaymentTransaction() != null && r.getPaymentTransaction().getReceiptUrl() != null
+                        && !r.getPaymentTransaction().getReceiptUrl().isBlank()
         );
     }
 

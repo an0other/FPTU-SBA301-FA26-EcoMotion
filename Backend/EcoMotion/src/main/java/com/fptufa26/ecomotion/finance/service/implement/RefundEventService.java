@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.finance.service.implement;
 
+import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
@@ -39,6 +40,23 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class RefundEventService {
+    @Transactional
+    public int updateRecipientAccount(Long bookingId, RefundAccountRequest account) {
+        ledger.requireBookingForUpdate(bookingId);
+        int updated = 0;
+        for (RefundRequest refund : refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId)) {
+            if (refund.getStatus() == RefundStatus.REFUNDED || refund.getStatus() == RefundStatus.REJECTED) continue;
+            PaymentTransaction source = refund.getPaymentTransaction() != null
+                    ? refund.getPaymentTransaction() : refund.getSourcePaymentTransaction();
+            if (source != null && source.getMethod() == PaymentMethod.VNPAY) continue;
+            refund.setRecipientBankName(account.bankName().trim());
+            refund.setRecipientAccountHolder(account.accountHolder().trim());
+            refund.setRecipientAccountNumber(account.accountNumber().trim());
+            refund.setUpdatedAt(clock.instant());
+            updated++;
+        }
+        return updated;
+    }
     @Transactional(readOnly = true)
     public BigDecimal reservedForEvent(Long bookingId, String eventId) {
         return refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()

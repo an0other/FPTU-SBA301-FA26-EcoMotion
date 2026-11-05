@@ -70,6 +70,9 @@ public class PaymentTransaction {
     @Column(name = "transaction_code", length = 32, unique = true)
     private String transactionCode;
 
+    @Column(name = "manual_confirmation_id", length = 64, unique = true)
+    private String manualConfirmationId;
+
     @Column(name = "gateway_ref", length = 100)
     private String gatewayRef;
 

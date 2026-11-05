@@ -350,6 +350,59 @@ class EndUserWorkflowIntegrationTest {
                 .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
     }
 
+    @Test void halfDepositRefundCompletesIndependentlyOfOpenCancellationReview() throws Exception {
+        org.mockito.Mockito.when(storage.store(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(byte[].class), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("refund-proof/test.pdf");
+        org.mockito.Mockito.when(storage.read("refund-proof/test.pdf")).thenReturn("%PDF-1.4 evidence".getBytes());
+        ready();
+        tx.executeWithoutResult(s -> {
+            em.find(Booking.class, bookingId).setPickupTime(Instant.now().plusSeconds(3600));
+            ledger.findByBooking_Id(bookingId).stream().filter(t -> t.getDirection() == PaymentDirection.IN)
+                    .forEach(t -> t.setMethod(PaymentMethod.BANK_TRANSFER));
+        });
+        renterBookings.cancel(renterId, code());
+        var pending = workflow.getWorkflow(renterId, code());
+        assertThat(pending.paymentStatus()).isEqualTo("REFUND_PENDING");
+        refunds.completeRefund(providerId, pending.refunds().getFirst().paymentTransactionId(),
+                new MockMultipartFile("file", "refund.pdf", "application/pdf", "%PDF-1.4 evidence".getBytes()), null, null);
+        var completed = workflow.getWorkflow(renterId, code());
+        var receipt = completed.refunds().getFirst();
+        assertThat(receipt.receiptStatus()).isEqualTo("WAITING");
+        assertThat(java.time.Duration.between(receipt.receiptWaitingAt(), receipt.receiptDeadline()).toHours()).isEqualTo(72);
+        assertThatThrownBy(() -> receipts.respond(providerId, receipt.id(), true)).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        receipts.confirmExpired();
+        assertThat(workflow.getWorkflow(renterId, code()).refunds().getFirst().receiptStatus()).isEqualTo("WAITING");
+        receipts.respond(renterId, receipt.id(), false);
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.finance.entity.RefundRequest.class, receipt.id()).setReceiptDeadline(Instant.now().minusSeconds(1)));
+        receipts.confirmExpired();
+        assertThat(workflow.getWorkflow(renterId, code()).refunds().getFirst().receiptStatus()).isEqualTo("REPORTED_NOT_RECEIVED");
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.finance.entity.RefundRequest.class, receipt.id()).setReceiptStatus("WAITING"));
+        receipts.confirmExpired();
+        var automatic = workflow.getWorkflow(renterId, code()).refunds().getFirst();
+        assertThat(automatic.receiptStatus()).isEqualTo("AUTO_CONFIRMED");
+        assertThat(automatic.receiptConfirmedBy()).isNull();
+        assertThat(automatic.receiptAutoConfirmedAt()).isNotNull();
+        receipts.confirmExpired();
+        assertThat(workflow.getWorkflow(renterId, code()).refunds().getFirst().receiptAutoConfirmedAt()).isEqualTo(automatic.receiptAutoConfirmedAt());
+        assertThatThrownBy(() -> receipts.respond(renterId, receipt.id(), true)).isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThatThrownBy(() -> receipts.respond(renterId, receipt.id(), false)).isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThat(automatic.proofAvailable()).isTrue();
+        var storedProof = refunds.getProof(renterId, automatic.paymentTransactionId());
+        assertThat(storedProof.contentType()).isEqualTo("application/pdf");
+        assertThat(storedProof.content()).containsExactly("%PDF-1.4 evidence".getBytes());
+        assertThatThrownBy(() -> refunds.getProof(adminId + 999999, automatic.paymentTransactionId())).isInstanceOf(RuntimeException.class);
+        assertThat(completed.refundedAmount()).isEqualByComparingTo(completed.confirmedPaid().multiply(new BigDecimal("0.5")));
+        assertThat(completed.paymentStatus()).isEqualTo("REFUNDED");
+        tx.executeWithoutResult(s -> disputes.open(em.find(Booking.class, bookingId), em.find(User.class, renterId),
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.DEPOSIT_REFUND, null,
+                "Please review the cancellation refund policy", List.of()));
+        var reviewed = workflow.getWorkflow(renterId, code());
+        assertThat(reviewed.paymentStatus()).isEqualTo("REFUNDED");
+        assertThat(reviewed.settlementStatus()).isEqualTo("DISPUTED");
+        assertThat(reviewed.nextAction()).contains("xử lý riêng").doesNotContain("quyết toán");
+    }
+
     @Test void noDriverRenterRejectsAlternativeThenCancellationReservesFullRefundWithoutClaimingPaid() {
         long[] driver = ready();
         tx.executeWithoutResult(s -> em.find(Driver.class, driver[0]).setActivityStatus(DriverActivityStatus.OFFLINE));
@@ -449,6 +502,7 @@ class EndUserWorkflowIntegrationTest {
     @Autowired PaymentTransactionRepository ledger;
     @Autowired BookingRepository bookings;
     @Autowired RefundRequestRepository requests;
+    @Autowired com.fptufa26.ecomotion.finance.service.implement.RefundReceiptService receipts;
     @Autowired BookingPolicySnapshotRepository snapshots;
     @Autowired com.fptufa26.ecomotion.finance.config.VnpayConfig config;
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;

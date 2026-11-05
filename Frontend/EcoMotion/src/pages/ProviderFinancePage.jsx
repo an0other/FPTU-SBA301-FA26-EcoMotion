@@ -126,6 +126,7 @@ export default function ProviderFinancePage() {
   // Form States for Confirmation
   const [receivedAmountInput, setReceivedAmountInput] = useState('')
   const [bankRefInput, setBankRefInput] = useState('')
+  const [confirmationId, setConfirmationId] = useState(null)
   const [confirmNoteInput, setConfirmNoteInput] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
 
@@ -319,6 +320,7 @@ export default function ProviderFinancePage() {
   // Handle Confirm Payment
   const handleOpenConfirmModal = (pr) => {
     setConfirmModalData(pr)
+    setConfirmationId(crypto.randomUUID())
     setReceivedAmountInput(String(pr.amount || pr.remainingAmount || ''))
     setBankRefInput('')
     setConfirmNoteInput('')
@@ -335,6 +337,7 @@ export default function ProviderFinancePage() {
       setIsConfirming(true)
       const payload = {
         receivedAmount: Number(receivedAmountInput),
+        confirmationId,
         bankTransactionRef: bankRefInput.trim() || undefined,
         note: confirmNoteInput.trim() || undefined,
       }
@@ -1023,6 +1026,8 @@ export default function ProviderFinancePage() {
                   <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
                     <th className="px-4 py-3">Mã hoàn tiền</th>
                     <th className="px-4 py-3">Mã đơn thuê</th>
+                    <th className="px-4 py-3">Tên chủ tài khoản</th>
+                    <th className="px-4 py-3">Ngân hàng / Số tài khoản</th>
                     <th className="px-4 py-3 text-right">Số tiền hoàn</th>
                     <th className="px-4 py-3">Lý do hoàn tiền</th>
                     <th className="px-4 py-3">Trạng thái</th>
@@ -1033,7 +1038,7 @@ export default function ProviderFinancePage() {
                 <tbody className="divide-y divide-slate-100">
                   {loading && refunds.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                      <td colSpan={9} className="py-12 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
                           <span className="text-xs font-medium">Đang tải danh sách hoàn tiền...</span>
@@ -1042,7 +1047,7 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : refunds.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="assignment_return" className="text-3xl text-slate-300" />
                           <span>Chưa có yêu cầu hoàn tiền nào được ghi nhận</span>
@@ -1062,6 +1067,11 @@ export default function ProviderFinancePage() {
                           <td className="px-4 py-3 font-mono font-semibold text-brand-800">
                             {ref.bookingCode || '—'}
                           </td>
+                          <td className="px-4 py-3 font-medium text-slate-800">{ref.recipientAccountHolder || 'Chưa cung cấp'}</td>
+                          <td className="px-4 py-3 text-slate-700">
+                            <span className="block">{ref.recipientBankName || 'Chưa cung cấp ngân hàng'}</span>
+                            <span className="mt-1 block font-mono tabular-nums">{ref.recipientAccountNumber || 'Chưa cung cấp số tài khoản'}</span>
+                          </td>
                           <td className="px-4 py-3 text-right font-mono font-bold text-purple-900">
                             {formatVnd(ref.amount)}
                           </td>
@@ -1075,6 +1085,10 @@ export default function ProviderFinancePage() {
                           </td>
                           <td className="px-4 py-3 text-slate-500 font-mono text-[11px]">
                             {formatDateTime(ref.createdAt)}
+                            {ref.receiptStatus === 'WAITING' && <p className="mt-1 text-amber-800">Chờ khách xác nhận đến {formatDateTime(ref.receiptDeadline)}</p>}
+                            {ref.receiptStatus === 'CONFIRMED' && <p className="mt-1 text-emerald-800">Khách đã nhận: {formatDateTime(ref.receiptConfirmedAt)}</p>}
+                            {ref.receiptStatus === 'AUTO_CONFIRMED' && <p className="mt-1 text-slate-700">Tự động xác nhận: {formatDateTime(ref.receiptAutoConfirmedAt)}</p>}
+                            {ref.receiptStatus === 'REPORTED_NOT_RECEIVED' && <p className="mt-1 font-semibold text-red-700">Khách báo chưa nhận tiền. Cần đối soát; đã dừng tự động xác nhận.</p>}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {canReview && (ref.status === 'UNDER_REVIEW' || ref.status === 'FAILED') ? (

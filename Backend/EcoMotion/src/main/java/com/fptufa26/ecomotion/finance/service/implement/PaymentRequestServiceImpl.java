@@ -602,6 +602,19 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (!booking.getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền xác nhận thanh toán này");
         }
+        String confirmationId = request.confirmationId() == null || request.confirmationId().isBlank()
+                ? null : request.confirmationId().trim();
+        if (confirmationId != null) {
+            var previous = entityManager.createQuery("select t from PaymentTransaction t where t.manualConfirmationId=:key", PaymentTransaction.class)
+                    .setParameter("key", confirmationId).getResultStream().findFirst();
+            if (previous.isPresent()) {
+                PaymentTransaction paid = previous.get();
+                if (paid.getPaymentRequest() == null || !paid.getPaymentRequest().getId().equals(paymentRequestId)
+                        || request.receivedAmount() != null && paid.getAmount().compareTo(request.receivedAmount()) != 0)
+                    throw new ConflictException("Yêu cầu xác nhận đã được dùng cho khoản thanh toán khác. Vui lòng tải lại.");
+                return toResponse(pr);
+            }
+        }
         if (pr.getPaymentType() != PaymentRequestType.DEPOSIT
                 && pr.getPaymentType() != PaymentRequestType.FINAL_BALANCE
                 && pr.getPaymentType() != PaymentRequestType.MONTHLY_INSTALLMENT) {
@@ -643,19 +656,16 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 ? pr.getReceivingBankAccount()
                 : resolveActiveBankAccount(provider);
         pr.setReceivingBankAccount(receivingAccount);
-        if (bankRef == null && (request.note() == null || request.note().isBlank())) {
-            throw new InvalidPaymentOperationException(
-                    "Cần mã giao dịch ngân hàng hoặc ghi chú xác minh thủ công");
-        }
         if (bankRef != null && bookingPaymentLedgerService
                 .gatewayReferenceExists(receivingAccount.getId(), bankRef)) {
             throw new BankAccountConflictException("Giao dịch ngân hàng này đã được đối soát trước đó");
         }
-        if (bankRef == null && bookingPaymentLedgerService.listTransactions(booking.getId()).stream().anyMatch(t ->
+        String note = request.note() == null || request.note().isBlank() ? null : request.note().trim();
+        if (confirmationId == null && bankRef == null && bookingPaymentLedgerService.listTransactions(booking.getId()).stream().anyMatch(t ->
                 t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
                         && t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(paymentRequestId)
-                        && t.getAmount().compareTo(receivedAmount) == 0 && request.note().trim().equals(t.getProcessingNote()))) {
-            throw new InvalidPaymentOperationException("Khoản tiền này đã được ghi nhận; cần mã ngân hàng để phân biệt khoản chuyển khác");
+                        && t.getAmount().compareTo(receivedAmount) == 0 && java.util.Objects.equals(note, t.getProcessingNote()))) {
+            throw new InvalidPaymentOperationException("Khoản xác nhận này đã được ghi nhận. Vui lòng tải lại thông tin thanh toán.");
         }
 
         BigDecimal appliedAmount = receivedAmount.min(neededAmount);
@@ -669,11 +679,12 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         tx.setAmount(receivedAmount);
         tx.setAppliedAmount(appliedAmount);
         tx.setTransactionCode(paymentCodeGenerator.generatePaymentCode("VQ"));
+        tx.setManualConfirmationId(confirmationId);
         tx.setStatus(PaymentStatus.PAID);
         tx.setPaidAt(clock.instant());
         tx.setGatewayRef(bankRef);
         tx.setReceivingBankAccount(receivingAccount);
-        tx.setProcessingNote(request.note() == null ? null : request.note().trim());
+        tx.setProcessingNote(note);
         tx.setVerificationMethod(PaymentVerificationMethod.PROVIDER_CONFIRMED);
         tx.setConfirmedBy(provider.getUser());
         tx.setPaymentRequest(pr);

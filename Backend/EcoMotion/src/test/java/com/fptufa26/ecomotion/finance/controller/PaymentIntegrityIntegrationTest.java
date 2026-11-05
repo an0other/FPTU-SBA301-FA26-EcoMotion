@@ -112,6 +112,60 @@ class PaymentIntegrityIntegrationTest {
     @Autowired JwtService jwt;
     @Autowired BookingService bookingService;
     @Autowired RefundEventService refundEvents;
+    @Autowired com.fptufa26.ecomotion.finance.service.RefundService refundService;
+    @Autowired com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService riskService;
+
+    @Test void optionalMetadataSupportsDistinctPartialPaymentsAndIdempotentRetries() {
+        var first=new ConfirmPaymentRequest(new BigDecimal("10000"),null,null,"optional-first-"+bookingId);
+        payments.confirmPayment(requestId,providerId,first);
+        payments.confirmPayment(requestId,providerId,first);
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        payments.confirmPayment(requestId,providerId,new ConfirmPaymentRequest(new BigDecimal("10000"),null,null,"optional-second-"+bookingId));
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(2);
+        assertThat(requests.findById(requestId).orElseThrow().getPaidAmount()).isEqualByComparingTo("20000");
+    }
+
+    @Test void cancellationPersistsRecipientAndOwnerCanUpdateOnlyOpenRefunds() {
+        String code=legacyDeposit("DAILY",48);
+        var account=new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank","NGUYEN VAN TEST","0123456789");
+        bookingService.cancel(renterId,code,account);
+        var refund=refundService.listRefundsForProvider(providerId).stream().filter(r -> r.bookingCode().equals(code)).findFirst().orElseThrow();
+        assertThat(refund.recipientAccountHolder()).isEqualTo(account.accountHolder());
+        assertThat(refund.recipientAccountNumber()).isEqualTo(account.accountNumber());
+        String stored=tx.execute(s -> (String)em.createNativeQuery("select recipient_account_number from refund_request where id=?")
+                .setParameter(1,refund.id()).getSingleResult());
+        assertThat(stored).isNotEqualTo(account.accountNumber());
+        assertThatThrownBy(() -> bookingService.updateRefundAccount(outsiderId,code,account))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.NotFoundException.class);
+        var changed=new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("ACB","NGUYEN VAN TEST","9988776655");
+        bookingService.updateRefundAccount(renterId,code,changed);
+        assertThat(refundService.listRefundsForProvider(providerId).stream().filter(r -> r.id().equals(refund.id())).findFirst().orElseThrow().recipientAccountNumber()).isEqualTo("9988776655");
+        tx.executeWithoutResult(s -> em.find(com.fptufa26.ecomotion.finance.entity.RefundRequest.class,refund.id()).setStatus(RefundStatus.REFUNDED));
+        assertThatThrownBy(() -> bookingService.updateRefundAccount(renterId,code,account)).isInstanceOf(ConflictException.class);
+    }
+
+    @Test void cancelledBookingHasNoOperationalRiskEvenWithOlderActiveTrip() {
+        String code=legacyDeposit("DAILY",48);
+        tx.executeWithoutResult(s -> {
+            Booking current=em.find(Booking.class,bookingId);
+            Booking older=new Booking();older.setBookingCode("OLDER-"+bookingId);older.setVehicle(current.getVehicle());
+            older.setRenter(current.getRenter());older.setPlan(current.getPlan());older.setStatus(BookingStatus.IN_PROGRESS);
+            older.setPickupTime(Instant.now().minusSeconds(3600));older.setPickupAddress("Earlier pickup");
+            older.setPassengerCount(1);older.setTotalAmount(new BigDecimal("100000"));older.setActualStartAt(Instant.now().minusSeconds(3600));em.persist(older);
+        });
+        assertThat(riskService.assessForRenter(renterId,code).atRisk()).isTrue();
+        bookingService.cancel(renterId,code);
+        assertThat(riskService.assessForRenter(renterId,code).atRisk()).isFalse();
+    }
+
+    @Test void manualPaymentDoesNotRequireBankReferenceOrNote() {
+        payments.confirmPayment(requestId, providerId, new ConfirmPaymentRequest(new BigDecimal("30000"), null, null));
+        assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        PaymentTransaction payment=ledger.findByBooking_Id(bookingId).getFirst();
+        assertThat(payment.getGatewayRef()).isNull();
+        assertThat(payment.getProcessingNote()).isNull();
+        assertThat(payment.getPaidAt()).isNotNull();
+    }
 
     @Test void cancellationRetryReturnsThePersistedCappedRefund() {
         String code=legacyDeposit("DAILY",48);
