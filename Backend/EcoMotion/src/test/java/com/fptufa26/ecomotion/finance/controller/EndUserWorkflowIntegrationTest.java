@@ -123,7 +123,7 @@ class EndUserWorkflowIntegrationTest {
         ready();
         tx.executeWithoutResult(s -> {
             var b = em.find(Booking.class, bookingId); b.setPickupTime(Instant.now().plusSeconds(3600));
-            ledger.findByBooking_Id(bookingId).forEach(t -> { t.setMethod(PaymentMethod.BANK_TRANSFER); t.setAmount(new BigDecimal("540000")); });
+            ledger.findByBooking_Id(bookingId).forEach(t -> { t.setMethod(PaymentMethod.BANK_TRANSFER); t.setAmount(new BigDecimal("540000")); t.setAppliedAmount(new BigDecimal("540000")); });
         });
         renterBookings.cancel(renterId, code());
         return renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
@@ -222,7 +222,7 @@ class EndUserWorkflowIntegrationTest {
         });
     }
 
-    @Autowired com.fptufa26.ecomotion.common.service.NotificationStreamService notificationStream;
+    @Autowired com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService notificationStream;
 
     @Test void disputeEventsAreDeliveredOnlyAfterCommit() throws Exception {
         tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW));
