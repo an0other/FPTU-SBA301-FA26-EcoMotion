@@ -927,8 +927,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (!candidate.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền thao tác trên yêu cầu thanh toán của nhà cung cấp khác");
         }
-        if (pr.getStatus() == PaymentRequestStatus.EXPIRED || pr.getStatus() == PaymentRequestStatus.VOIDED
-                || pr.getStatus() == PaymentRequestStatus.CONFIRMED) {
+        if (candidate.getStatus() == PaymentRequestStatus.EXPIRED || candidate.getStatus() == PaymentRequestStatus.VOIDED
+                || candidate.getStatus() == PaymentRequestStatus.CONFIRMED) {
             throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã hết hạn hoặc không còn hiệu lực");
         }
 
