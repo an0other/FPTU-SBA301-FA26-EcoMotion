@@ -13,6 +13,10 @@ public record ConfirmPaymentRequest(
         String bankTransactionRef,
 
         @Size(max = 500, message = "Ghi chú tối đa 500 ký tự")
-        String note
+        String note,
+        @Size(max = 64) String confirmationId
 ) {
+    public ConfirmPaymentRequest(BigDecimal receivedAmount, String bankTransactionRef, String note) {
+        this(receivedAmount, bankTransactionRef, note, null);
+    }
 }

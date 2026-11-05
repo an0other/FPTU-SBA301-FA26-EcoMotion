@@ -11,8 +11,8 @@ export function RefundProofModal({ refund, onClose, onSuccess }) {
   const submit = async (event) => {
     event.preventDefault()
     if (busy) return
-    if (!file || !reference.trim()) {
-      setError('Cần biên lai và mã giao dịch ngân hàng.')
+    if (!file) {
+      setError('Vui lòng tải biên lai hoàn tiền.')
       return
     }
     if (
@@ -69,6 +69,11 @@ export function RefundProofModal({ refund, onClose, onSuccess }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {refund.recipientAccountNumber && <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-800">
+            <p className="font-semibold">Tài khoản nhận hoàn</p>
+            <p>{refund.recipientAccountHolder}</p>
+            <p>{refund.recipientBankName} · <span className="tabular-nums">{refund.recipientAccountNumber}</span></p>
+          </div>}
           <label className="block text-xs font-semibold text-slate-700">
             Biên lai
             <input
@@ -81,9 +86,8 @@ export function RefundProofModal({ refund, onClose, onSuccess }) {
           </label>
 
           <label className="block text-xs font-semibold text-slate-700">
-            Mã giao dịch
+            Mã giao dịch ngân hàng (tùy chọn)
             <input
-              required
               maxLength={100}
               value={reference}
               onChange={(e) => setReference(e.target.value)}
@@ -93,7 +97,7 @@ export function RefundProofModal({ refund, onClose, onSuccess }) {
           </label>
 
           <label className="block text-xs font-semibold text-slate-700">
-            Ghi chú
+            Ghi chú (tùy chọn)
             <textarea
               rows={3}
               maxLength={500}

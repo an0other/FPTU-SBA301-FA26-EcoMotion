@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { readErrorMessage } from '../../services/apiClient';
 import { CancelBookingModal } from './CancelBookingModal';
-import { bookingStatusMeta } from '../../utils/bookingStatus';
+import { bookingStatusMeta, renterCanSeeDriver } from '../../utils/bookingStatus';
 import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
@@ -25,6 +25,7 @@ export const BookingDetail = ({
   onCompleteBooking,
   onConfirmStart,
   onOpenDispute,
+  onAcceptCharge,
   onUploadDisputeEvidence,
   onEditRequest,
   trackingData,
@@ -160,7 +161,7 @@ export const BookingDetail = ({
           </div>
         </div>
         {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
-        {operationalRisk?.atRisk && (
+        {operationalRisk?.atRisk && !['CANCELLED', 'CANCELLATION_REVIEW', 'REJECTED', 'COMPLETED'].includes(booking.status) && (
           <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">Nguy cơ xe về trễ</p>
             <p className="mt-1">{operationalRisk.message}</p>
@@ -299,8 +300,14 @@ export const BookingDetail = ({
 
           {booking.status === 'CANCELLATION_REVIEW' && (
             <div className="p-5 bg-orange-50 border border-orange-200 rounded-[16px]">
-              <h2 className="text-base font-bold text-orange-900">Đang đối soát yêu cầu huỷ</h2>
-              <p className="text-xs text-orange-800 mt-1">Biên lai đã được gửi nên hệ thống cần kiểm tra khoản tiền trước khi huỷ hoặc hoàn tiền.</p>
+              <h2 className="text-base font-bold text-orange-900">
+                {booking.depositCollected ? 'Đơn đã hủy, nhà xe đang chuyển hoàn' : 'Đang đối soát yêu cầu huỷ'}
+              </h2>
+              <p className="text-xs text-orange-800 mt-1">
+                {booking.depositCollected
+                  ? 'Tiền cọc đã được ghi nhận. Nhà xe đang chuyển khoản hoàn, không cần kiểm tra lại biên lai cọc.'
+                  : 'Biên lai đã được gửi nên hệ thống cần kiểm tra khoản tiền trước khi huỷ hoặc hoàn tiền.'}
+              </p>
             </div>
           )}
 
@@ -354,18 +361,14 @@ export const BookingDetail = ({
                 <h2 className="text-base font-bold text-[#14221A]">
                   {booking.driverReplacementRequired
                     ? 'Đang phân công lại tài xế'
-                    : booking.driver?.name
-                      ? 'Chuyến xe đã được xác nhận'
-                      : 'Đang tìm tài xế'}
+                    : 'Đang tìm tài xế'}
                 </h2>
                 <p className="text-xs text-gray-600 mt-1">
                   {booking.driverReplacementRequired
                     ? 'Hệ thống hoặc nhà xe đang sắp xếp tài xế thay thế phù hợp cho chuyến đi.'
                     : booking.upfront
                       ? 'Lịch xe đã khóa. Bạn tự lái theo hợp đồng.'
-                      : booking.driver?.name
-                        ? `Lịch xe đã khóa thành công. Tài xế ${booking.driver.name} sẽ đón bạn đúng giờ.`
-                        : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
+                      : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
                 </p>
               </div>
               {booking.canCancel ? <button
@@ -384,9 +387,7 @@ export const BookingDetail = ({
               <div>
                 <h2 className="text-base font-bold text-blue-900">Đã phân công tài xế - Chờ xác nhận</h2>
                 <p className="text-xs text-blue-700 mt-1">
-                  {booking.driver?.name
-                    ? `Tài xế ${booking.driver.name} đã được phân công và đang xác nhận nhận chuyến.`
-                    : 'Tài xế đã được phân công và đang kiểm tra chuyến đi.'}
+                  Nhà xe đã gửi yêu cầu cho tài xế. Tên và số điện thoại chỉ hiện sau khi tài xế nhận chuyến.
                 </p>
               </div>
               {booking.canCancel ? <button
@@ -534,11 +535,17 @@ export const BookingDetail = ({
             </div>
             <PickupLocationCard pickupAddress={booking.pickupAddress}
               pickupLatitude={booking.pickupLatitude} pickupLongitude={booking.pickupLongitude}
-              driverNote={booking.driverNote} />
+              driverNote={booking.driverNote}
+              originLatitude={booking.dispatchOriginLatitude}
+              originLongitude={booking.dispatchOriginLongitude}
+              distanceKm={booking.distanceKm}
+              freeRadiusKm={booking.freeRadiusKm}
+              chargeableKm={booking.chargeableKm}
+              outOfRadiusRate={booking.outOfRadiusRate}
+              pickupFee={booking.pickupFee} />
           </div>
 
-          {/* CARD: DRIVER (if assigned) */}
-          {booking.driver && (
+          {booking.driver && renterCanSeeDriver(booking.status) && (
             <div className="bg-white p-5 flex flex-col gap-3 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
               <h3 className="text-sm font-bold text-[#14221A]">Tài xế chuyên trách</h3>
               <div className="flex items-center gap-4">
@@ -578,6 +585,7 @@ export const BookingDetail = ({
                     <th className="py-2.5 px-3 font-semibold">Mô tả</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Cách tính</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Thành tiền</th>
+                    <th className="py-2.5 px-3 font-semibold">Xác nhận</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E6EBE8]">
@@ -588,6 +596,11 @@ export const BookingDetail = ({
                       <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">{charge.formula}</td>
                       <td className="py-3 px-3 text-right font-bold font-mono text-[#14221A]">
                         {charge.amount.toLocaleString('vi-VN')} đ
+                      </td>
+                      <td className="py-3 px-3 text-[#6D7A72]">
+                        {charge.confirmationStatus === 'PENDING' ? (
+                          <button type="button" className="rounded-lg border border-[#14221A] px-2 py-1 text-[11px] font-semibold text-[#14221A]" onClick={() => onAcceptCharge?.(charge.chargeId)}>Chấp nhận</button>
+                        ) : charge.confirmationStatus === 'DISPUTED' ? 'Đang tranh chấp' : 'Đã nhận'}
                       </td>
                     </tr>
                   ))}
@@ -799,13 +812,16 @@ export const BookingDetail = ({
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
         refundExplanation={booking.refundExplanation}
-        onConfirmCancel={async () => {
+        refundAmount={booking.refundAmount}
+        requiresBankAccount={booking.refundRequiresBankAccount}
+        onConfirmCancel={async account => {
           setActionError('');
           try {
-            await onCancelBooking(booking.id);
+            await onCancelBooking(booking.id, account);
             setIsCancelModalOpen(false);
           } catch (err) {
             setActionError(readErrorMessage(err));
+            throw err;
           }
         }}
       />

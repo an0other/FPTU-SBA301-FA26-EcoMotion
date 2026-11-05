@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.finance.entity;
 
+import com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter;
+import jakarta.persistence.Convert;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.finance.enums.RefundStatus;
@@ -50,6 +52,16 @@ public class RefundRequest {
     @Column(nullable = false, length = 500)
     private String reason;
 
+    @Column(name = "recipient_bank_name", length = 150)
+    private String recipientBankName;
+
+    @Column(name = "recipient_account_holder", length = 150)
+    private String recipientAccountHolder;
+
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "recipient_account_number", length = 255)
+    private String recipientAccountNumber;
+
     @Column(name = "evidence_url", length = 500)
     private String evidenceUrl;
 
@@ -70,6 +82,46 @@ public class RefundRequest {
 
     @Column(name = "gateway_refund_ref", length = 100)
     private String gatewayRefundRef;
+
+    @Column(name = "source_event_id", length = 120, unique = true)
+    private String sourceEventId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_payment_transaction_id")
+    private PaymentTransaction sourcePaymentTransaction;
+
+    @Column(name = "vnp_request_id", length = 32)
+    private String vnpRequestId;
+
+    @Column(name = "refund_transaction_no", length = 40)
+    private String refundTransactionNo;
+
+    @Column(name = "vnp_response_code", length = 10)
+    private String vnpResponseCode;
+
+    @Column(name = "vnp_transaction_status", length = 10)
+    private String vnpTransactionStatus;
+
+    @Column(name = "receipt_status")
+    private String receiptStatus;
+
+    @Column(name = "receipt_waiting_at")
+    private Instant receiptWaitingAt;
+
+    @Column(name = "receipt_deadline")
+    private Instant receiptDeadline;
+
+    @Column(name = "receipt_confirmed_at")
+    private Instant receiptConfirmedAt;
+
+    @Column(name = "receipt_confirmed_by")
+    private Long receiptConfirmedBy;
+
+    @Column(name = "receipt_reported_at")
+    private Instant receiptReportedAt;
+
+    @Column(name = "receipt_auto_confirmed_at")
+    private Instant receiptAutoConfirmedAt;
 
     @Version
     @Column(name = "version")

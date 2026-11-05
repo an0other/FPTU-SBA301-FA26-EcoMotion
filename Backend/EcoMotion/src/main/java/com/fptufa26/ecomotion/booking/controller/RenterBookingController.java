@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.booking.controller;
 
+import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
 import com.fptufa26.ecomotion.booking.dto.request.PickupQuoteRequest;
@@ -149,8 +150,17 @@ public class RenterBookingController {
     @PostMapping("/{bookingCode}/cancel")
     public ApiResponse<CancelBookingResponse> cancel(
             @AuthenticationPrincipal SecurityUser user,
-            @PathVariable String bookingCode) {
-        return ApiResponse.success(bookingService.cancel(user.getUserId(), bookingCode));
+            @PathVariable String bookingCode,
+            @Valid @RequestBody(required = false) RefundAccountRequest account) {
+        return ApiResponse.success(bookingService.cancel(user.getUserId(), bookingCode, account));
+    }
+
+    @PatchMapping("/{bookingCode}/refund-account")
+    public ApiResponse<Void> updateRefundAccount(@AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            @Valid @RequestBody RefundAccountRequest account) {
+        bookingService.updateRefundAccount(user.getUserId(), bookingCode, account);
+        return ApiResponse.success(null);
     }
 
     @PostMapping("/{bookingCode}/confirm-end")
@@ -173,6 +183,14 @@ public class RenterBookingController {
             @PathVariable String bookingCode,
             @Valid @RequestBody OpenDisputeRequest request) {
         return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
+    }
+
+    @PostMapping("/{bookingCode}/charges/{chargeId}/accept")
+    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse> acceptCharge(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode,
+            @PathVariable Long chargeId) {
+        return ApiResponse.success(bookingService.acceptCharge(user.getUserId(), bookingCode, chargeId));
     }
 
     @PostMapping(value = "/{bookingCode}/disputes/upload-evidence", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

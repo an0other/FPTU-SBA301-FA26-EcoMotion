@@ -1,5 +1,8 @@
 package com.fptufa26.ecomotion.booking.service;
 
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.ParameterizedTest;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.DriverAssignment;
 import com.fptufa26.ecomotion.booking.enums.AssignmentStatus;
@@ -36,7 +39,7 @@ import java.util.concurrent.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 @EnabledIfSystemProperty(named = "tv5.postgres", matches = "true")
 class Tv5PostgresConcurrencyTest {
@@ -213,6 +216,47 @@ class Tv5PostgresConcurrencyTest {
         assertThat(ended.getActualStartAt()).isNotNull(); assertThat(ended.getActualEndAt()).isNotNull();
     }
 
+    @Test void cancellationWithoutRequestIsSerializedAndCreatesOneRefund() throws Exception {
+        String code=tx.execute(s -> {
+            Booking b=em.find(Booking.class,first);
+            b.setPickupTime(Instant.now().plusSeconds(172800));
+            var snap=em.createQuery("select p from BookingPolicySnapshot p where p.booking.id=:id",com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot.class)
+                    .setParameter("id",first).getSingleResult();
+            snap.setDepositRatio(new BigDecimal("0.3"));snap.setDepositAmount(new BigDecimal("30000"));
+            var payment=new com.fptufa26.ecomotion.booking.entity.PaymentTransaction();payment.setBooking(b);
+            payment.setType(com.fptufa26.ecomotion.booking.enums.PaymentType.DEPOSIT_PAY);
+            payment.setDirection(com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN);
+            payment.setStatus(com.fptufa26.ecomotion.booking.enums.PaymentStatus.PAID);
+            payment.setMethod(com.fptufa26.ecomotion.booking.enums.PaymentMethod.BANK_TRANSFER);
+            payment.setAmount(new BigDecimal("30000"));payment.setPaidAt(Instant.now());em.persist(payment);
+            return b.getBookingCode();
+        });
+        assertThat(race(() -> renterBookings.cancel(renterUser,code), () -> renterBookings.cancel(renterUser,code))).containsOnly(true);
+        assertThat(bookings.findById(first).orElseThrow().getStatus()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        Long count=tx.execute(s -> em.createQuery("select count(r) from RefundRequest r where r.booking.id=:id",Long.class)
+                .setParameter("id",first).getSingleResult());
+        assertThat(count).isEqualTo(1L);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans={true,false})
+    void sequentialEndWorksInEitherOrderAndRetryPreservesTime(boolean renterFirst) {
+        tx.executeWithoutResult(s -> {
+            Booking b=em.find(Booking.class,first);b.setDriver(em.find(Driver.class,driver));
+            b.setStatus(BookingStatus.IN_PROGRESS);b.setActualStartAt(Instant.now().minusSeconds(3600));
+        });
+        String code=bookings.findById(first).orElseThrow().getBookingCode();
+        if(renterFirst) {renterBookings.confirmEnd(renterUser,code);trips.finishTrip(driverUser,code);}
+        else {trips.finishTrip(driverUser,code);renterBookings.confirmEnd(renterUser,code);}
+        Booking firstEnd=bookings.findById(first).orElseThrow();
+        assertThat(firstEnd.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+        renterBookings.confirmEnd(renterUser,code);trips.finishTrip(driverUser,code);
+        Booking retry=bookings.findById(first).orElseThrow();
+        assertThat(retry.getActualEndAt()).isEqualTo(firstEnd.getActualEndAt());
+        assertThat(retry.getRenterEndConfirmedAt()).isEqualTo(firstEnd.getRenterEndConfirmedAt());
+        assertThat(retry.getDriverEndConfirmedAt()).isEqualTo(firstEnd.getDriverEndConfirmedAt());
+    }
+
     @Test
     void expiredConfirmCannotBeatTimeout() throws Exception {
         optimization.manualAssign(first, driver, provider);
@@ -327,7 +371,7 @@ class Tv5PostgresConcurrencyTest {
         });
         var request = new com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest(
                 com.fptufa26.ecomotion.booking.enums.ChargeType.OVERTIME, "Overtime evidence", 2,
-                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE, "https://example.test/proof.png");
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE, "https://example.test/proof.png", "overtime-repeat");
         var charge = providerBookings.addCharge(providerUser, bookings.findById(first).orElseThrow().getBookingCode(), request);
         assertThat(charge.amount()).isEqualByComparingTo("240000");
         assertThat(providerBookings.addCharge(providerUser, bookings.findById(first).orElseThrow().getBookingCode(), request).id()).isEqualTo(charge.id());

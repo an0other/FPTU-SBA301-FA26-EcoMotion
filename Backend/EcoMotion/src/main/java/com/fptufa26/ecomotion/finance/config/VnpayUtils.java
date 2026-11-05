@@ -61,6 +61,22 @@ public final class VnpayUtils {
         return sb.toString();
     }
 
+    public static String refundRequestData(String requestId, String version, String tmnCode, String transactionType,
+                                           String txnRef, String amount, String transactionNo, String transactionDate,
+                                           String createBy, String createDate, String ipAddr, String orderInfo) {
+        return String.join("|", requestId, version, "refund", tmnCode, transactionType, txnRef, amount,
+                transactionNo, transactionDate, createBy, createDate, ipAddr, orderInfo);
+    }
+
+    public static String refundResponseData(Map<String, String> response) {
+        return java.util.stream.Stream.of(
+                        "vnp_ResponseId", "vnp_Command", "vnp_ResponseCode", "vnp_Message", "vnp_TmnCode",
+                        "vnp_TxnRef", "vnp_Amount", "vnp_OrderInfo", "vnp_BankCode", "vnp_PayDate",
+                        "vnp_TransactionNo", "vnp_TransactionType", "vnp_TransactionStatus")
+                .map(key -> response.get(key) == null ? "" : response.get(key))
+                .collect(java.util.stream.Collectors.joining("|"));
+    }
+
     public static String buildQueryUrl(Map<String, String> fields) {
         List<String> fieldNames = new ArrayList<>(fields.keySet());
         Collections.sort(fieldNames);

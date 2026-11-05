@@ -8,6 +8,7 @@ import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.RefundProofResponse;
 import com.fptufa26.ecomotion.finance.dto.response.RefundResponse;
 import com.fptufa26.ecomotion.finance.service.RefundService;
+import com.fptufa26.ecomotion.finance.service.implement.RefundReceiptService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -36,6 +37,21 @@ import java.util.List;
 public class RefundController {
 
     private final RefundService refundService;
+    private final RefundReceiptService receipts;
+
+    @PostMapping("/api/refunds/{refundId}/received")
+    @PreAuthorize("hasRole('RENTER')")
+    public ApiResponse<Void> received(@AuthenticationPrincipal SecurityUser principal, @PathVariable Long refundId) {
+        receipts.respond(principal.getUserId(), refundId, true);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/api/refunds/{refundId}/not-received")
+    @PreAuthorize("hasRole('RENTER')")
+    public ApiResponse<Void> notReceived(@AuthenticationPrincipal SecurityUser principal, @PathVariable Long refundId) {
+        receipts.respond(principal.getUserId(), refundId, false);
+        return ApiResponse.success(null);
+    }
 
     @PostMapping({"/api/v1/refunds", "/api/refunds"})
     @Operation(summary = "Submit a new refund request for a booking")
@@ -79,7 +95,7 @@ public class RefundController {
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file,
-            @RequestParam String bankReference,
+            @RequestParam(required = false) String bankReference,
             @RequestParam(required = false) String note) {
         return ApiResponse.success(refundService.completeRefund(principal.getUserId(), id, file, bankReference, note));
     }

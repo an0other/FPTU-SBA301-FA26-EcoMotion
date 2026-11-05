@@ -29,6 +29,13 @@ public record AddChargeRequest(
         BigDecimal amount,
 
         @Size(max = 500, message = "Đường dẫn bằng chứng tối đa 500 ký tự")
-        String evidenceUrl
+        String evidenceUrl,
+
+        @Size(max = 64, message = "Mã yêu cầu tối đa 64 ký tự")
+        String clientRequestId
 ) {
+    public AddChargeRequest(ChargeType chargeType, String description, Integer quantity, BigDecimal unitPrice,
+                            BigDecimal appliedRate, BigDecimal amount, String evidenceUrl) {
+        this(chargeType, description, quantity, unitPrice, appliedRate, amount, evidenceUrl, null);
+    }
 }

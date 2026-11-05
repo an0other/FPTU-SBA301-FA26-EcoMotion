@@ -126,7 +126,7 @@ class Tv5FinancialSafetyIntegrationTest {
         long id = refunds.createRefundRequest(renterId, request("100000", "full")).id();
         var approve = new ReviewRefundRequest("APPROVE", null);
         assertThat(race(() -> refunds.reviewRefundRequest(providerId, id, approve), () -> refunds.reviewRefundRequest(adminId, id, approve)))
-                .containsExactlyInAnyOrder(true, false);
+                .containsOnly(true);
         assertThat(ledger.findByBooking_Id(bookingId).stream().filter(t -> t.getType() == PaymentType.REFUND)).hasSize(1);
     }
 
@@ -245,6 +245,11 @@ class Tv5FinancialSafetyIntegrationTest {
     }
 
     @Test void duplicateBankReferenceCannotCompleteAnotherRefundAndOtherObligationsKeepCancellationInReview() {
+        tx.executeWithoutResult(status -> ledger.findByBooking_Id(bookingId).forEach(payment -> {
+            if (payment.getDirection() == PaymentDirection.IN) {
+                payment.setMethod(PaymentMethod.BANK_TRANSFER);
+            }
+        }));
         long first = refunds.createRefundRequest(renterId, request("30000", "first")).id();
         long second = refunds.createRefundRequest(renterId, request("30000", "second")).id();
         var approve = new ReviewRefundRequest("APPROVE", null);

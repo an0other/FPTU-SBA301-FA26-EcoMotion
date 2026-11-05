@@ -92,6 +92,21 @@ public class BookingPolicySnapshot {
     @Column(name = "hourly_to_daily_threshold_minutes")
     private Integer hourlyToDailyThresholdMinutes;
 
+    @Column(name = "dispatch_origin_latitude", precision = 9, scale = 6)
+    private BigDecimal dispatchOriginLatitude;
+
+    @Column(name = "dispatch_origin_longitude", precision = 9, scale = 6)
+    private BigDecimal dispatchOriginLongitude;
+
+    @Column(name = "distance_km", precision = 10, scale = 3)
+    private BigDecimal distanceKm;
+
+    @Column(name = "distance_source", length = 20)
+    private String distanceSource;
+
+    @Column(name = "pickup_fee", precision = 14, scale = 2)
+    private BigDecimal pickupFee;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

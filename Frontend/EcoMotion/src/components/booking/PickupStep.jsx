@@ -25,6 +25,9 @@ export const PickupStep = ({
   const [requestError, setRequestError] = useState('')
   const located = hasValidPickup(pickup)
   const minimumPassengers = 1
+  const vehicleOrigin = pickupQuote?.originLatitude != null && pickupQuote?.originLongitude != null
+    ? { latitude: Number(pickupQuote.originLatitude), longitude: Number(pickupQuote.originLongitude) }
+    : null
 
   const handleNextClick = () => {
     if (!hasValidPickup(pickup)) {
@@ -70,7 +73,24 @@ export const PickupStep = ({
           )}
         </div>
         <p className="text-[11px] tabular-nums text-[#14221A]/45">{(pickup.address ?? '').length}/500 ký tự</p>
-        <PickupMap value={pickup} onChange={(next) => { setPickup(next); setErrorMsg(null) }} onError={setRequestError} />
+        <PickupMap
+          value={pickup}
+          origin={vehicleOrigin}
+          onChange={(next) => { setPickup(next); setErrorMsg(null) }}
+          onError={setRequestError}
+        />
+        {vehicleOrigin ? (
+          <p className="text-xs text-[#3D4A42]">
+            <span className="mr-3 inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#1d4ed8]" />
+              Vị trí xe
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#15803d]" />
+              Điểm đón
+            </span>
+          </p>
+        ) : null}
         <div aria-live="polite" aria-atomic="true">
           {quotePending ? <p className="text-sm text-[#3D4A42]">Đang tính khoảng cách và phí đón...</p> : null}
           {quoteError ? <p className="text-sm text-red-700">{quoteError}</p> : null}

@@ -1,63 +1,56 @@
-export const CancelBookingModal = ({
-  bookingCode,
-  isOpen,
-  onClose,
-  onConfirmCancel,
-  refundExplanation,
-}) => {
-  if (!isOpen) return null;
+import { useState } from 'react'
+import { formatCurrency } from '../../utils/formatCurrency'
+import { RefundAccountFields } from './RefundAccountFields'
+
+export const CancelBookingModal = ({ bookingCode, isOpen, onClose, onConfirmCancel, refundExplanation,
+  refundAmount = 0, requiresBankAccount = false }) => {
+  const [account, setAccount] = useState({ bankName: '', accountHolder: '', accountNumber: '' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  if (!isOpen) return null
+
+  async function submit(event) {
+    event.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await onConfirmCancel(requiresBankAccount ? account : undefined)
+    } catch (err) {
+      setError(err.message || 'Chưa hủy được đơn. Vui lòng thử lại.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full rounded-lg p-5 flex flex-col relative shadow-md border border-slate-200 max-w-[440px]"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-[#FEE4E2]">
-            <span className="material-symbols-outlined text-[22px] text-[#B42318]">warning</span>
+    <div onClick={() => !busy && onClose()} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <form onSubmit={submit} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true"
+        aria-labelledby="cancel-booking-title" className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-lg sm:p-8">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-700">
+            <span className="material-symbols-outlined" aria-hidden="true">warning</span>
           </div>
-          <button
-            aria-label="Đóng"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#F3F4F6] text-[#14221A] hover:bg-gray-200 flex items-center justify-center transition-colors cursor-pointer"
-            type="button"
-          >
-            <span className="material-symbols-outlined text-[18px]">close</span>
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Đóng" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50">
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
-
-        <h3 className="text-xl font-semibold text-[#14221A] leading-tight mb-2">Huỷ đơn này?</h3>
-
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E8F6EE] text-[#15803D] font-mono text-xs font-semibold w-max mb-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#15803D]"></span>
-          {bookingCode}
+        <h2 id="cancel-booking-title" className="text-xl font-semibold text-slate-900">Huỷ đơn này?</h2>
+        <p className="mt-2 text-sm font-semibold text-emerald-800">{bookingCode}</p>
+        <p className="mt-3 text-sm leading-6 text-slate-700">{refundExplanation || 'Đơn sẽ được hủy theo yêu cầu của bạn.'}</p>
+        {refundAmount > 0 && <p className="mt-3 text-sm text-slate-700">Số tiền dự kiến hoàn: <strong className="tabular-nums text-slate-900">{formatCurrency(refundAmount)}</strong></p>}
+        {requiresBankAccount && <section className="mt-5 space-y-3 border-t border-slate-200 pt-4">
+          <h3 className="text-sm font-semibold text-slate-900">Tài khoản nhận hoàn</h3>
+          <p className="text-xs leading-5 text-slate-600">Nhà xe sẽ chuyển khoản vào tài khoản bạn cung cấp dưới đây.</p>
+          <RefundAccountFields value={account} onChange={setAccount} disabled={busy}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&>label:first-child]:sm:col-span-2" />
+        </section>}
+        {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+        <div className="mt-6 flex items-center gap-3">
+          <button type="button" onClick={onClose} disabled={busy} className="min-h-11 flex-1 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Giữ đơn</button>
+          <button type="submit" disabled={busy} className="min-h-11 flex-1 rounded-lg bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">{busy ? 'Đang hủy...' : 'Xác nhận huỷ'}</button>
         </div>
-
-        <p className="text-sm text-[#14221A]/70 mb-5 leading-relaxed">
-          {refundExplanation || 'Lý do được ghi là khách tự huỷ.'}
-        </p>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 h-[40px] rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-            type="button"
-          >
-            Giữ đơn
-          </button>
-          <button
-            onClick={() => onConfirmCancel(bookingCode)}
-            className="flex-1 h-[44px] rounded-[12px] bg-[#B42318] text-white text-sm font-semibold hover:bg-red-700 transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-98"
-            type="button"
-          >
-            Xác nhận huỷ
-          </button>
-        </div>
-      </div>
+      </form>
     </div>
-  );
-};
+  )
+}

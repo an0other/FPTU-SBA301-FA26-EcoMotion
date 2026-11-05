@@ -6,6 +6,7 @@ public record RefundPreviewResponse(
         boolean cancellable,
         BigDecimal ratio,
         BigDecimal amount,
-        String explanation
+        String explanation,
+        boolean requiresBankAccount
 ) {
 }

@@ -34,6 +34,7 @@ import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.user.enums.ProviderStatus;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.time.Duration;
 
+@Slf4j
 @Component
 @Profile("dev")
 @RequiredArgsConstructor
@@ -85,8 +87,11 @@ public class RenterReviewDataSeeder {
                 .findByBookingCodeAndRenter_User_Id(
                         SOURCE_BOOKING_CODE,
                         renterUser.getId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Run R12 seed before R16 seed"));
+                .orElse(null);
+        if (source == null) {
+            log.warn("Skipped {}: source demo booking {} is unavailable", BOOKING_CODE, SOURCE_BOOKING_CODE);
+            return;
+        }
 
         Vehicle vehicle = source.getVehicle();
         RentalPlan plan = source.getPlan();

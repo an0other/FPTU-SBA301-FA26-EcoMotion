@@ -742,7 +742,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 pr.getConfirmedAt(),
                 pr.getRejectionReason(),
                 pr.getIssueNote(),
-                evidenceResponses
+                evidenceResponses,
+                pr.getBooking().getStatus()
         );
     }
 
@@ -758,7 +759,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 charge.isWaived(),
                 charge.getEvidenceUrl(),
                 charge.getCreatedBy() != null ? charge.getCreatedBy().getFullName() : null,
-                charge.getCreatedAt()
+                charge.getCreatedAt(),
+                charge.getConfirmationStatus()
         );
     }
 
