@@ -11,8 +11,8 @@ import com.fptufa26.ecomotion.booking.repository.BookingPolicySnapshotRepository
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.service.BookingContractService;
 import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
-import com.fptufa26.ecomotion.common.storage.FileStorageException;
-import com.fptufa26.ecomotion.common.storage.DocumentStorageService;
+import com.fptufa26.ecomotion.common.storage.exception.FileStorageException;
+import com.fptufa26.ecomotion.common.storage.service.DocumentStorageService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;

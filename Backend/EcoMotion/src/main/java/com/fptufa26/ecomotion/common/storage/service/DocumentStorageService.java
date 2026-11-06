@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.common.storage;
+package com.fptufa26.ecomotion.common.storage.service;
 
 public interface DocumentStorageService {
 

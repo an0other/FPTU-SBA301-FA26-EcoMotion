@@ -1,7 +1,7 @@
 package com.fptufa26.ecomotion.common.storage.controller;
 
-import com.fptufa26.ecomotion.common.storage.FileStorageException;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.exception.FileStorageException;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;

@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.finance.controller;
 
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
+
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -41,7 +43,7 @@ class EndUserWorkflowIntegrationTest {
     @MockitoBean
     com.fptufa26.ecomotion.notification.external.service.ExternalNotificationDispatcherService external;
     @MockitoBean
-    com.fptufa26.ecomotion.common.storage.FileStorageService storage;
+    FileStorageService storage;
     @DynamicPropertySource
     static void database(org.springframework.test.context.DynamicPropertyRegistry registry) {
         if (!Boolean.getBoolean("tv5.workflow.postgres")) return;
