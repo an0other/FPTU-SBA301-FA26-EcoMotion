@@ -8,6 +8,15 @@ import { providerFinanceService, SUPPORTED_BANKS } from '../services/providerFin
 import { providerBookingService } from '../services/providerBookingService'
 import { PaymentEvidenceImage } from '../components/payments/PaymentEvidenceImage'
 import { HoldCountdown } from '../components/payments/HoldCountdown'
+import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS } from '../utils/paymentDisplay'
+
+// Loại yêu cầu thanh toán (paymentType của BE). Không suy từ mô tả.
+const REQUEST_TYPE_LABELS = {
+  DEPOSIT: 'Cọc',
+  FINAL_BALANCE: 'Quyết toán',
+  MONTHLY_INSTALLMENT: 'Trả góp tháng',
+  ADJUSTMENT: 'Điều chỉnh',
+}
 
 function formatVnd(amount) {
   if (amount == null || Number.isNaN(Number(amount))) return '0\u00A0₫'
@@ -709,26 +718,6 @@ export default function ProviderFinancePage() {
               Đối soát doanh thu, tiền đặt cọc VNPAY, phụ phí và quản lý hoàn tiền
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-amber-50 px-3 text-xs font-bold text-amber-800 border border-amber-200">
-              <span className="h-2 w-2 rounded-full bg-amber-500" />
-              <span>Cổng thanh toán: VNPAY Sandbox</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                fetchFinanceData()
-                fetchTransactions()
-                fetchPaymentRequests()
-              }}
-              disabled={loading}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-50"
-            >
-              <Icon name="refresh" className={`text-[18px] ${loading ? 'animate-spin' : ''}`} />
-              <span>Làm mới</span>
-            </button>
-          </div>
         </div>
 
         {error && (
@@ -962,7 +951,7 @@ export default function ProviderFinancePage() {
                 <tbody className="divide-y divide-slate-100">
                   {loading && transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-500">
+                      <td colSpan={9} className="py-12 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="progress_activity" className="animate-spin text-2xl text-brand-700" />
                           <span className="text-xs font-medium">Đang tải lịch sử giao dịch...</span>
@@ -994,11 +983,11 @@ export default function ProviderFinancePage() {
                             {tx.bookingCode || '—'}
                           </td>
                           <td className="px-4 py-3 text-slate-700 font-medium">
-                            {tx.type}
+                            {PAYMENT_TYPE_LABELS[tx.type] ?? tx.type ?? '—'}
                           </td>
                           <td className="px-4 py-3">
                             <span className="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 text-[10px]">
-                              {tx.method || '—'}{tx.verificationMethod === 'MOCK_SIMULATED' ? ' · MOCK/SANDBOX' : ''}
+                              {PAYMENT_METHOD_LABELS[tx.method] ?? tx.method ?? '—'}{tx.verificationMethod === 'MOCK_SIMULATED' ? ' · Sandbox' : ''}
                             </span>
                           </td>
                           <td className="px-4 py-3 font-mono text-slate-500 text-[11px]">
@@ -1176,23 +1165,21 @@ export default function ProviderFinancePage() {
                             <button
                               type="button"
                               onClick={() => handleViewBreakdown(pr.bookingCode)}
-                              className="block max-w-full truncate text-left hover:underline"
+                              className="block max-w-full break-all text-left hover:underline"
                               title={`${pr.bookingCode} — xem đối soát`}
                             >
                               {pr.bookingCode}
                             </button>
                           </td>
                           <td className="px-2.5 py-3 whitespace-nowrap font-medium text-slate-700">
-                            {pr.paymentType === 'DEPOSIT' ? 'Cọc' : 'Quyết toán'}
+                            {REQUEST_TYPE_LABELS[pr.paymentType] ?? pr.paymentType ?? '—'}
                           </td>
                           <td className="px-2.5 py-3 text-right whitespace-nowrap">
                             <span className="font-mono text-[13px] font-bold text-slate-900">{formatVnd(requestAmount)}</span>
                             {showPartialPaid ? (
-                              <span className="ml-1 text-[11px] font-semibold text-emerald-700" title={`Đã xác nhận ${formatVnd(paidAmount)}`}>
-                                (đã thu)
-                              </span>
-                            ) : paidAmount > 0 && paidAmount >= requestAmount ? (
-                              <span className="ml-1 text-[11px] font-semibold text-emerald-700">· đủ</span>
+                              <div className="text-[11px] font-semibold text-emerald-700" title={`Đã xác nhận ${formatVnd(paidAmount)}`}>
+                                đã thu {formatVnd(paidAmount)}
+                              </div>
                             ) : null}
                           </td>
                           <td className="px-2.5 py-3 text-right font-mono text-[13px] font-semibold text-slate-700 whitespace-nowrap">
@@ -1201,7 +1188,7 @@ export default function ProviderFinancePage() {
                             )}
                           </td>
                           <td className="px-2.5 py-3 font-mono text-xs font-semibold text-slate-600">
-                            <span className="block truncate" title={pr.transferReference || undefined}>
+                            <span className="block break-all" title={pr.transferReference || undefined}>
                               {pr.transferReference || '—'}
                             </span>
                           </td>

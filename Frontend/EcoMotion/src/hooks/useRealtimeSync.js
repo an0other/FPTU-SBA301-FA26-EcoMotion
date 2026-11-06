@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { getAccessToken, subscribeAccessToken } from '../utils/tokenStore.js'
+import { subscribeNotificationStream } from '../services/notificationStream.js'
 
 export const TV5_REALTIME_EVENTS = Object.fromEntries([
   'BOOKING_CONFIRMED', 'BOOKING_CHANGED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED',
@@ -7,6 +7,8 @@ export const TV5_REALTIME_EVENTS = Object.fromEntries([
   'DRIVER_ARRIVED', 'DRIVER_STATUS_CHANGED', 'TRIP_STARTED', 'TRIP_COMPLETED',
   'DRIVER_INCIDENT', 'INCIDENT_RESOLVED', 'TRIP_END_CONFIRMATION_CHANGED', 'DISPUTE_OPENED', 'DISPUTE_UPDATED', 'CHARGES_CHANGED', 'PAYMENT_VERIFIED', 'PAYMENT_RECONCILIATION_REQUIRED', 'REFUND_UPDATED', 'OPERATIONAL_PROPOSAL_CHANGED',
 ].map(name => [name, name]))
+
+const REALTIME_EVENT_NAMES = new Set(Object.values(TV5_REALTIME_EVENTS))
 
 export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 15000, enabled = true } = {}) {
   const [isConnected, setIsConnected] = useState(false)
@@ -17,8 +19,6 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
   const pending = useRef(false)
   const queued = useRef(false)
   const active = useRef(enabled)
-  const [token, setToken] = useState(getAccessToken)
-  useEffect(() => subscribeAccessToken(setToken), [])
   useEffect(() => {
     active.current = enabled
     return () => { active.current = false; queued.current = false }
@@ -54,20 +54,31 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
     }
   }, [enabled, pollIntervalMs, triggerSync])
   useEffect(() => {
-    if (!enabled || !token || typeof EventSource === 'undefined') return
-    const baseUrl = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
-    const source = new EventSource(`${baseUrl}/v1/notifications/stream?token=${encodeURIComponent(token)}`)
-    source.onopen = () => { setIsConnected(true); setSseAvailable(true); triggerSync().catch(() => {}) }
-    source.onerror = () => { setIsConnected(false); setSseAvailable(false) }
-    const receive = event => {
+    if (!enabled) return undefined
+    // Một kết nối SSE dùng chung cho cả tab; hook chỉ đăng ký listener và hủy khi unmount.
+    return subscribeNotificationStream((event) => {
+      if (event.type === 'status') {
+        if (event.status === 'open') {
+          setIsConnected(true)
+          setSseAvailable(true)
+        } else if (event.status === 'reconnecting' || event.status === 'auth-failed') {
+          setIsConnected(false)
+          setSseAvailable(false)
+        } else {
+          setIsConnected(false)
+        }
+        return
+      }
+      if (event.type === 'open') {
+        triggerSync().catch(() => {})
+        return
+      }
+      if (event.type !== 'message' && !REALTIME_EVENT_NAMES.has(event.type)) return
       let data
       try { data = JSON.parse(event.data) } catch { return }
       handlersRef.current[event.type]?.(data)
       triggerSync().catch(() => {})
-    }
-    Object.values(TV5_REALTIME_EVENTS).forEach(name => source.addEventListener(name, receive))
-    source.onmessage = receive
-    return () => { source.close() }
-  }, [enabled, triggerSync, token])
+    })
+  }, [enabled, triggerSync])
   return { isConnected, sseAvailable, lastSyncedAt, triggerSync }
 }

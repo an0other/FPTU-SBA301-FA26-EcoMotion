@@ -7,7 +7,6 @@ import com.fptufa26.ecomotion.booking.dto.response.BookingSummaryResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.DriverSnippetResponse;
 import com.fptufa26.ecomotion.booking.dto.response.RefundPreviewResponse;
@@ -186,8 +185,6 @@ public interface BookingMapper {
                                            boolean canCancel,
                                            boolean canEditRequest,
                                            boolean canPay,
-                                           boolean canConfirmStart,
-                                           boolean canConfirmEnd,
                                            List<DisputeCategory> disputeCategories,
                                            Instant holdExpiresAt) {
         Vehicle vehicle = booking.getVehicle();
@@ -248,8 +245,6 @@ public interface BookingMapper {
                 canCancel,
                 canEditRequest,
                 canPay,
-                canConfirmStart,
-                canConfirmEnd,
                 disputeCategories,
                 providerName,
                 holdExpiresAt,
@@ -286,14 +281,4 @@ public interface BookingMapper {
     @Mapping(target = "cancelledAt", source = "booking.cancelledAt")
     @Mapping(target = "refundAmount", source = "refundAmount")
     CancelBookingResponse toCancel(Booking booking, BigDecimal refundAmount);
-
-    default ConfirmEndResponse toConfirmEnd(Booking booking) {
-        return new ConfirmEndResponse(
-                booking.getBookingCode(),
-                booking.getStatus(),
-                booking.getRenterConfirmedAt(),
-                booking.getDriverEndConfirmedAt(),
-                booking.getActualEndAt(),
-                booking.getStatus() == BookingStatus.COMPLETED);
-    }
 }

@@ -101,9 +101,4 @@ public class NotificationStreamServiceImpl implements NotificationStreamService 
             }
         });
     }
-
-    @Override
-    public void broadcastEvent(String eventType, Object payload) {
-        activeEmitters.keySet().forEach(userId -> sendEventToUser(userId, eventType, payload));
-    }
 }

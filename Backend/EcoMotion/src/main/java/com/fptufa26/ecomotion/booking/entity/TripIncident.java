@@ -63,8 +63,41 @@ public class TripIncident {
     @Column(name = "location_longitude")
     private Double locationLongitude;
 
+    // Lưu danh sách URL dạng JSON trong cột hiện có (không đổi schema). Dữ liệu cũ là một URL hoặc URL cách nhau
+    // bằng dấu phẩy vẫn được đọc đúng qua getEvidenceUrlList(). Xem IncidentEvidenceUrls.
     @Column(name = "evidence_urls", length = 2000)
     private String evidenceUrls;
+
+    public java.util.List<String> getEvidenceUrlList() {
+        if (evidenceUrls == null || evidenceUrls.isBlank()) {
+            return java.util.List.of();
+        }
+        String raw = evidenceUrls.trim();
+        try {
+            if (raw.startsWith("[")) {
+                return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                        raw, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {});
+            }
+        } catch (Exception ignored) {
+            // Rơi xuống nhánh tách chuỗi thường bên dưới.
+        }
+        return java.util.Arrays.stream(raw.split("[,;\\n\\r]+"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    public void setEvidenceUrlList(java.util.List<String> urls) {
+        if (urls == null || urls.isEmpty()) {
+            this.evidenceUrls = null;
+            return;
+        }
+        try {
+            this.evidenceUrls = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(urls);
+        } catch (Exception e) {
+            throw new IllegalStateException("Không ghi được danh sách ảnh minh chứng", e);
+        }
+    }
 
     @Column(name = "resolution_note", length = 1000)
     private String resolutionNote;

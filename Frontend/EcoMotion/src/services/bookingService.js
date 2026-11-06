@@ -60,16 +60,6 @@ export async function updateRefundAccount(bookingCode, account) {
   return data.data
 }
 
-export async function confirmTripEnd(bookingCode) {
-  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/confirm-end`)
-  return data.data
-}
-
-export async function confirmTripStart(bookingCode) {
-  const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/confirm-start`)
-  return data.data
-}
-
 export async function acceptCharge(bookingCode, chargeId) {
   const { data } = await apiClient.post(`/renter/bookings/${bookingPath(bookingCode)}/charges/${chargeId}/accept`)
   return data.data
@@ -103,7 +93,6 @@ export const bookingService = {
   createBooking,
   updateBookingRequestDetails,
   cancelMyBooking,
-  confirmTripEnd,
   acceptCharge,
   openDispute,
   uploadDisputeEvidence,
@@ -132,11 +121,6 @@ export const bookingService = {
   async rejectBooking(bookingCode, payload) {
     const { data } = await apiClient.patch(`/provider/bookings/${bookingPath(bookingCode)}/reject`, payload)
     return data.data || data
-  },
-
-  async getAvailableDrivers(bookingId) {
-    const { data } = await apiClient.get(`/provider/bookings/${encodeURIComponent(bookingId)}/assign-candidates`)
-    return (data.data || data).map(driver => ({ ...driver, id: driver.driverId, available: driver.eligible }))
   },
 
   async assignDriver(bookingCode, driverId, mode = 'MANUAL') {

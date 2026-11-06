@@ -65,7 +65,7 @@ export const RequestSubmitted = ({
 
   useEffect(() => {
     if (!holdExpired) refreshedAfterExpiry.current = false
-  }, [booking.holdExpiresAt, booking.canPay, booking.status])
+  }, [booking.holdExpiresAt, booking.canPay, booking.status, holdExpired])
 
   const showReissue = holdExpired && !cancelled && !awaitingProvider && typeof onReissueDeposit === 'function'
   const orderStatusMeta = bookingStatusMeta(booking.status)

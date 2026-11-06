@@ -48,7 +48,6 @@ export default function CustomerPaymentPage() {
   const [currentTime, setCurrentTime] = useState(() => Date.now())
   const [payMethod, setPayMethod] = useState('vietqr')
   const [paymentCreating, setPaymentCreating] = useState(false)
-  const [checkingStatus, setCheckingStatus] = useState(false)
   const [inlineError, setInlineError] = useState(null)
   const [dismissedLoadError, setDismissedLoadError] = useState(null)
   const [submittingProof, setSubmittingProof] = useState(false)
@@ -162,18 +161,6 @@ export default function CustomerPaymentPage() {
     if (!text) return
     navigator.clipboard.writeText(text)
     setToast({ message: `Đã sao chép ${label}`, type: 'success' })
-  }
-
-  const handleCheckStatus = async () => {
-    setCheckingStatus(true)
-    try {
-      await fetchPaymentRequests(true)
-      setToast({ message: 'Đã cập nhật trạng thái mới nhất', type: 'success' })
-    } catch {
-      setToast({ message: 'Không thể kiểm tra trạng thái lúc này', type: 'error' })
-    } finally {
-      setCheckingStatus(false)
-    }
   }
 
   const handlePayWithVnpay = async () => {
@@ -609,17 +596,7 @@ export default function CustomerPaymentPage() {
                 {paymentCreating ? <Icon name="sync" className="animate-spin text-lg" /> : <Icon name="account_balance" className="text-lg" />}
                 {paymentCreating ? 'Đang kết nối VNPAY...' : 'Tiếp tục với VNPAY'}
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleCheckStatus}
-                disabled={checkingStatus || requestExpired}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-6 py-3 text-sm font-bold text-white shadow-xs hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand-500/40"
-              >
-                <Icon name="refresh" className={`text-lg ${checkingStatus ? 'animate-spin' : ''}`} />
-                {checkingStatus ? 'Đang kiểm tra đối soát...' : 'Kiểm tra trạng thái thanh toán'}
-              </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

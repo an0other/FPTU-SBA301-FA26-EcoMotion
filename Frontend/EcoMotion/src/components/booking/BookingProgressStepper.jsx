@@ -1,12 +1,10 @@
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
-import { cancelReasonPresentation, renterCanSeeDriver } from '../../utils/bookingStatus'
+import { cancelReasonPresentation } from '../../utils/bookingStatus'
 import {
   STEP_STATUS,
   isTerminalBooking,
-  checkPickupTimeAnomaly,
-  isOverduePickup,
   getActiveFinancialMetrics,
   evaluateActiveWorkflowSteps,
   evaluateRefundWorkflow,
@@ -58,6 +56,9 @@ function StepIndicator({ step, isLast }) {
           <span className="text-[11px] text-slate-500 max-w-[120px] truncate leading-tight mt-0.5" title={description}>
             {description}
           </span>
+          {step.at ? (
+            <span className="text-[10px] text-slate-400 leading-tight mt-0.5">{formatBookingWhen(step.at)}</span>
+          ) : null}
         </div>
       </div>
       {!isLast && (
@@ -240,10 +241,6 @@ export default function BookingProgressStepper({
   const isCancelled = isTerminalBooking(status)
   const financialMetrics = getActiveFinancialMetrics(workflow)
 
-  // Pickup time checks
-  const pickupAnomaly = checkPickupTimeAnomaly(booking.pickupTime, booking.createdAt)
-  const isOverdue = isOverduePickup(booking.pickupTime, status)
-
   // When booking is terminal (cancelled/rejected/cancellation_review)
   if (isCancelled) {
     const refundData = evaluateRefundWorkflow(workflow, booking)
@@ -262,24 +259,6 @@ export default function BookingProgressStepper({
 
   // Active Booking Workflow
   const steps = evaluateActiveWorkflowSteps(workflow, booking)
-  const currentStep = steps.find((s) => s.state === STEP_STATUS.CURRENT || s.state === STEP_STATUS.WARNING) || steps[0]
-
-  const isDriverPhase = currentStep?.id === 'DISPATCH' ||
-    Boolean(workflow?.needsDriver) ||
-    ['CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED'].includes(status)
-
-  const isDriverConfirmed = Boolean(
-    booking.driverConfirmedAt ||
-    status === 'DRIVER_CONFIRMED' ||
-    booking.executionStatus === 'CONFIRMED' ||
-    workflow?.driverStatus === 'ACCEPTED'
-  )
-
-  const isDriverRejected = Boolean(
-    workflow?.driverStatus === 'REJECTED' ||
-    (booking.driverFeedback && booking.driverFeedback.length > 0 && !booking.driverName)
-  )
-
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
       {/* Header */}
@@ -321,144 +300,7 @@ export default function BookingProgressStepper({
       </div>
 
       {/* Active Phase & Next Action Guidance Box */}
-      <div className="rounded-xl border border-brand-100 bg-brand-50/40 p-4 space-y-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-brand-600 animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-900">
-              Giai đoạn hiện tại: {currentStep.label} ({currentStep.description})
-            </span>
-          </div>
-
-          {/* Timing indicators if applicable */}
-          {provider && workflow?.assignmentExpiresAt && workflow?.driverStatus === 'PENDING_RESPONSE' && (
-            <span className="text-[11px] font-medium text-slate-600 bg-white/80 px-2 py-0.5 rounded border border-slate-200">
-              Tài xế cần phản hồi trước: <strong>{formatBookingWhen(workflow.assignmentExpiresAt)}</strong>
-            </span>
-          )}
-        </div>
-
-        {/* Next action description */}
-        <p className="text-xs text-slate-800 leading-relaxed font-medium">
-          {workflow?.nextAction || 'Theo dõi tiến độ từ nhà xe và tài xế.'}
-        </p>
-
-        {!provider && renterCanSeeDriver(status) && (booking.driverName || booking.driver?.fullName) && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
-            <div className="min-w-0">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">Tài xế đã nhận chuyến</span>
-              <strong className="block text-sm text-slate-900">{booking.driverName || booking.driver?.fullName}</strong>
-              {(booking.driverPhone || booking.driver?.phone) && (
-                <span className="block font-mono text-xs text-slate-600">{booking.driverPhone || booking.driver?.phone}</span>
-              )}
-            </div>
-            {(booking.driverPhone || booking.driver?.phone) && (
-              <a
-                href={`tel:${booking.driverPhone || booking.driver?.phone}`}
-                className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white"
-              >
-                <Icon name="call" className="text-[14px]" />
-                Gọi tài xế
-              </a>
-            )}
-          </div>
-        )}
-
-        {/* Anomaly / Overdue Warnings */}
-        {provider && pickupAnomaly && (
-          <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800 flex items-start gap-2">
-            <Icon name="error_outline" className="text-base shrink-0 mt-0.5 text-rose-600" />
-            <div>
-              <strong className="block">Cảnh báo thời gian: {pickupAnomaly.message}</strong>
-              <span className="text-[11px]">
-                Giờ đón khách được đặt là {formatBookingWhen(pickupAnomaly.pickupTime)}, trước thời điểm đơn được khởi tạo ({formatBookingWhen(pickupAnomaly.createdAt)}). Nhà xe cần kiểm tra và gửi đề xuất dời giờ đón.
-              </span>
-            </div>
-          </div>
-        )}
-
-        {provider && isOverdue && !pickupAnomaly && (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-900 flex items-start gap-2">
-            <Icon name="schedule" className="text-base shrink-0 mt-0.5 text-amber-600" />
-            <div>
-              <strong className="block">Đã quá giờ đón dự kiến ({formatBookingWhen(booking.pickupTime)})</strong>
-              <span className="text-[11px]">
-                Thời gian đón khách theo lịch đã trôi qua nhưng chuyến đi chưa bắt đầu. Hãy liên hệ với khách thuê hoặc điều phối phương án xử lý khẩn.
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Driver Phase Operational Details: Trạng thái phân công, Cảnh báo chưa có tài xế, Hướng dẫn xử lý khi hết tài xế */}
-        {provider && isDriverPhase && (
-          <div className="space-y-2.5 pt-2.5 border-t border-brand-200/60 text-xs">
-            {/* Trạng thái phân công */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-slate-700">Trạng thái phân công:</span>
-              {booking.driverName ? (
-                isDriverConfirmed ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
-                    <Icon name="check_circle" className="text-[14px] text-emerald-600" />
-                    Tài xế đã nhận chuyến ({booking.driverName})
-                  </span>
-                ) : isDriverRejected ? (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2.5 py-0.5 text-xs font-bold text-rose-800 border border-rose-200">
-                    <Icon name="cancel" className="text-[14px] text-rose-600" />
-                    Tài xế đã từ chối ({booking.driverName})
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-800 border border-blue-200">
-                    <Icon name="schedule" className="text-[14px] text-blue-600" />
-                    Chờ tài xế xác nhận ({booking.driverName})
-                  </span>
-                )
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-800 border border-amber-200">
-                  <Icon name="warning" className="text-[14px] text-amber-600" />
-                  Chưa phân công tài xế
-                </span>
-              )}
-            </div>
-
-            {!provider && !booking.driverName && <p className="text-sm text-slate-700">Nhà xe đang bố trí tài xế cho chuyến của bạn. Thông tin tài xế sẽ được cập nhật tại đây khi có phân công.</p>}
-            {/* Cảnh báo nếu chưa có tài xế */}
-            {provider && !booking.driverName && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-amber-900 flex items-start gap-2.5">
-                <Icon name="warning" className="text-[18px] text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="block font-semibold">Chưa có tài xế phụ trách đơn thuê</strong>
-                  <p className="text-[11px] text-amber-800 mt-0.5 leading-normal">
-                    Đơn thuê chưa được chỉ định tài xế. Vui lòng sử dụng nút <strong>&quot;Phân công tài xế&quot;</strong> ở góc trên bên phải màn hình để thực hiện điều phối trước giờ đón khách.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Hướng dẫn xử lý nếu hết tài xế phù hợp */}
-            {provider && !booking.driverName && (
-              <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-slate-700 flex items-start gap-2.5">
-                <Icon name="help_outline" className="text-[18px] text-slate-500 shrink-0 mt-0.5" />
-                <div>
-                  <span className="block font-semibold text-[11px] text-slate-900">Hướng dẫn khi không có tài xế phù hợp:</span>
-                  <p className="text-[11px] text-slate-600 mt-1 leading-normal">
-                    Nếu tất cả tài xế trong đội xe đều đang bận hoặc vi phạm thời gian nghỉ giữa chuyến (buffer time &ge; 30 phút), nhà xe có thể:
-                    <br />• Nhấn nút <strong>&quot;Phân công tài xế&quot;</strong> ở góc trên để dùng tính năng <em>Gợi ý thông minh</em> hoặc <em>Tự động phân công</em>.
-                    <br />• Gửi đề xuất <strong>Dời giờ đón</strong> hoặc <strong>Đổi xe</strong> cho khách thuê ở phần Phương án vận hành bên dưới.
-                    <br />• Liên hệ thỏa thuận với khách thuê hoặc hỗ trợ hủy đơn theo đúng quy định nếu không thể bố trí phục vụ.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Thông tin thời gian phản hồi khi đang chờ tài xế */}
-            {provider && booking.driverName && !isDriverConfirmed && !isDriverRejected && (
-              <p className="text-[11px] text-slate-600 pt-0.5">
-                Yêu cầu đã được gửi tới tài xế. Tài xế có 15 phút để phản hồi nhận chuyến. Nhà xe có thể sử dụng nút <strong>&quot;Điều phối lại tài xế&quot;</strong> ở góc trên nếu tài xế không phản hồi kịp thời.
-              </p>
-            )}
-          </div>
-        )}
-
+      <div className="space-y-2.5">
         {/* Other Provider Quick Actions (Accept / Deny for PENDING, Add charge for extra charges) */}
         {provider && onAction && (status === 'PENDING' || status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION') && (
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-brand-200/60">
@@ -492,7 +334,7 @@ export default function BookingProgressStepper({
                   <Icon name="add_card" className="text-[16px]" />
                   <span>Thêm phụ phí</span>
                 </button>
-                {booking.providerConfirmedAt && (booking.renterConfirmedAt || workflow?.endConfirmations?.[0]?.confirmationMethod === 'AUTO') && (
+                {booking.providerConfirmedAt && booking.actualEndAt && (
                   <button
                     type="button"
                     onClick={() => onAction('FINALIZE_SETTLEMENT')}

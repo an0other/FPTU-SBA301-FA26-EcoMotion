@@ -289,10 +289,6 @@ export function cardAction(actionKind, depositPaymentStatus) {
       }
     case 'PAY_SETTLEMENT':
       return { kind: 'PAY_SETTLEMENT', label: 'Thanh toán quyết toán' }
-    case 'CONFIRM_START':
-      return { kind: 'CONFIRM_START', label: 'Xác nhận bắt đầu' }
-    case 'CONFIRM_END':
-      return { kind: 'CONFIRM_END', label: 'Xác nhận kết thúc' }
     default:
       return null
   }

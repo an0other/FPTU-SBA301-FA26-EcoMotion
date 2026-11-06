@@ -24,7 +24,12 @@ export function useProviderBookingDetail(idOrCode) {
   }, [idOrCode])
   useEffect(() => {
     const timer = setTimeout(refetch, 0)
-    return () => { clearTimeout(timer); ++sequence.current }
+    return () => {
+      clearTimeout(timer)
+      // This ref is a numeric request generation, not a rendered DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      ++sequence.current
+    }
   }, [refetch])
   const loaded = state.key === idOrCode
   return { booking: loaded ? state.booking : null, operationalRisk: loaded ? state.operationalRisk : null,

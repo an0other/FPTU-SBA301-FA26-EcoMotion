@@ -4,6 +4,4 @@ public enum BookingActionKind {
     NONE,
     PAY_DEPOSIT,
     PAY_SETTLEMENT,
-    CONFIRM_START,
-    CONFIRM_END
 }

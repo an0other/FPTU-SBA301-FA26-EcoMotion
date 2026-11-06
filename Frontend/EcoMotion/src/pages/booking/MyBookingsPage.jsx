@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { useRealtimeSync } from '../../hooks/useRealtimeSync'
+import { TV5_REALTIME_EVENTS, useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MyBookingsList } from '../../components/booking/MyBookingsList'
+import Toast from '../../components/Toast'
 import { readErrorMessage } from '../../services/apiClient'
-import { confirmTripEnd, confirmTripStart, listMyBookings } from '../../services/bookingService'
+import { listMyBookings } from '../../services/bookingService'
 import { BOOKING_FILTERS, BOOKING_SORTS } from '../../utils/bookingStatus'
 
 const PAGE_SIZE = 10
@@ -69,6 +70,7 @@ export function MyBookingsPage() {
   const [pageInfo, setPageInfo] = useState({ total: 0, hasMore: false })
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
+  const [tripNotice, setTripNotice] = useState('')
   const [pendingActionId, setPendingActionId] = useState('')
 
   const queryKey = useMemo(
@@ -118,7 +120,13 @@ export function MyBookingsPage() {
     setPageInfo({ total: result.total, hasMore: result.hasMore })
   }), [activeFilter, keyword, sort, page])
 
-  useRealtimeSync({ onResync: refreshList })
+  useRealtimeSync({
+    handlers: {
+      [TV5_REALTIME_EVENTS.TRIP_STARTED]: () => setTripNotice('Tài xế đã bắt đầu chuyến đi.'),
+      [TV5_REALTIME_EVENTS.TRIP_COMPLETED]: () => setTripNotice('Tài xế đã kết thúc chuyến đi.'),
+    },
+    onResync: refreshList,
+  })
 
   const runCardAction = async (booking, action) => {
     setActionError('')
@@ -127,11 +135,6 @@ export function MyBookingsPage() {
       if (action === 'PAY_DEPOSIT' || action === 'PAY_SETTLEMENT') {
         navigate(`/renter/bookings/${booking.id}/payment`)
         return
-      }
-      if (action === 'CONFIRM_START') {
-        await confirmTripStart(booking.id)
-      } else if (action === 'CONFIRM_END') {
-        await confirmTripEnd(booking.id)
       }
       await refreshList()
     } catch (err) {
@@ -142,6 +145,7 @@ export function MyBookingsPage() {
   }
 
   return (
+    <>
     <MyBookingsList
       bookings={bookings}
       loading={!bookings}
@@ -170,5 +174,7 @@ export function MyBookingsPage() {
       onCardAction={runCardAction}
       onBookCar={() => navigate('/')}
     />
+    {tripNotice && <Toast message={tripNotice} type="success" onClose={() => setTripNotice('')} />}
+    </>
   )
 }

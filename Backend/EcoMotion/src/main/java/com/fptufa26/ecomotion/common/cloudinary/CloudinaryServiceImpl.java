@@ -241,5 +241,18 @@ public class CloudinaryServiceImpl implements CloudinaryService {
                 throw new IllegalArgumentException("Không cho phép tải lên file thực thi");
             }
         }
+
+        // Content-Type do client khai báo chỉ là gợi ý: nội dung thật phải khớp chữ ký ảnh được hỗ trợ.
+        String declared = contentType.toLowerCase();
+        String expected = "image/jpg".equals(declared) ? "image/jpeg" : declared;
+        String detected;
+        try (java.io.InputStream in = file.getInputStream()) {
+            detected = ImageSignature.detect(in.readNBytes(ImageSignature.HEAD_BYTES));
+        } catch (java.io.IOException ex) {
+            throw new IllegalArgumentException("Không đọc được tệp ảnh, vui lòng thử lại");
+        }
+        if (!expected.equals(detected)) {
+            throw new IllegalArgumentException("Tệp không phải ảnh JPEG, PNG hoặc WEBP hợp lệ (nội dung không khớp định dạng khai báo)");
+        }
     }
 }

@@ -1,11 +1,6 @@
 import apiClient from './apiClient.js'
 
 export const providerBookingService = {
-  async tripTransition(bookingCode, action) {
-    const code = encodeURIComponent(String(bookingCode).trim().toUpperCase())
-    const { data } = await apiClient.post(`/provider/bookings/${code}/trip/${action}`)
-    return data?.data
-  },
   async listBookings(status) {
     const params = {}
     if (status && status !== 'ALL') params.status = status
@@ -96,13 +91,13 @@ export const providerBookingService = {
     return data?.data
   },
 
-  async getAvailableDrivers(bookingId) {
-    if (bookingId) {
-      const candidates = await this.getAssignmentCandidates(bookingId)
-      return candidates.map(driver => ({ ...driver, id: driver.driverId }))
-    }
-    const { data } = await apiClient.get('/provider/drivers/available')
-    return data?.data ?? []
+  // Danh sách tài xế cho một đơn cụ thể: backend kiểm tra đơn thuộc Provider hiện tại
+  // và chỉ trả tài xế của Provider đó (xem DriverOptimizationServiceImpl.evaluateCandidates).
+  async getAvailableDrivers(bookingCode) {
+    const code = String(bookingCode ?? '').trim()
+    if (!code) throw new Error('Thiếu mã đơn thuê để tải danh sách tài xế.')
+    const candidates = await this.getAssignmentCandidates(code)
+    return candidates.map(driver => ({ ...driver, id: driver.driverId }))
   },
 
   async getAssignmentCandidates(idOrCode) {

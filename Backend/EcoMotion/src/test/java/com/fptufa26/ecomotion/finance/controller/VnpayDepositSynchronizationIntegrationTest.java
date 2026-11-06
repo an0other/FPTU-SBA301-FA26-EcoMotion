@@ -390,8 +390,13 @@ class VnpayDepositSynchronizationIntegrationTest {
         try {
             config.setReconciliationEnabled(true); config.setQueryInterval(java.time.Duration.ZERO);
             config.setApiUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/query");
-            assertThat(vnpay.processCallback(params).status()).isEqualTo("PENDING_VERIFICATION");
+            // D1: Return URL hỏi QueryDR phía server khi còn PENDING; kết quả đã xác thực được áp dụng ngay.
+            assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+            assertDepositApplied();
+            // Đối soát định kỳ và callback lặp không được ghi thêm lần nữa.
             reconciliation.reconcilePending(); assertDepositApplied();
+            assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+            assertDepositApplied();
         } finally { config.setReconciliationEnabled(false); config.setApiUrl(previousUrl); config.setQueryInterval(previousInterval); server.stop(0); }
     }
 
@@ -400,6 +405,22 @@ class VnpayDepositSynchronizationIntegrationTest {
         var params = attempt(); tx.executeWithoutResult(s -> schedule.release(bookingId)); vnpay.processIpn(params);
         var state = workflow.getWorkflow(renterId, code());
         assertThat(state.paymentStatus()).isEqualTo("RECONCILIATION_REQUIRED"); assertThat(state.confirmedPaid()).isZero();
+    }
+
+    @Test
+    void lateVerifiedSuccessIsKeptForReconciliationWithoutAutomaticRefundOrDuplicateRows() {
+        // D2: không hoàn tiền tự động. Tiền đã thu được ghi nhận (PAID, appliedAmount = 0) và chuyển đối soát.
+        var params = attempt(); tx.executeWithoutResult(s -> schedule.release(bookingId));
+        vnpay.processIpn(params);
+        vnpay.processIpn(params);
+        var rows = ledger.findByBooking_Id(bookingId);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.getFirst().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(rows.getFirst().getAppliedAmount()).isZero();
+        assertThat(rows.getFirst().getProcessingNote()).startsWith("RECONCILIATION_REQUIRED");
+        Long refunds = (Long) em.createQuery("select count(r) from RefundRequest r where r.booking.id = :b")
+                .setParameter("b", bookingId).getSingleResult();
+        assertThat(refunds).isZero();
     }
 
     @Test

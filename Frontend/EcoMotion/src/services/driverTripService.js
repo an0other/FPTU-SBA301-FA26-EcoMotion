@@ -17,10 +17,12 @@ export function createDriverTripService(client = apiClient) {
       )
     },
 
+    // Banner chỉ hiện chuyến đang thực sự diễn ra (IN_PROGRESS). Không lấy item đầu tiên của view ACTIVE
+    // vì nó có thể là chuyến DRIVER_ARRIVED, khiến chuyến IN_PROGRESS bị bỏ sót.
     async getActiveTrip() {
-      const { data } = await client.get('/v1/driver/trips', { params: { view: 'ACTIVE', size: 1 } })
+      const { data } = await client.get('/v1/driver/trips', { params: { view: 'ACTIVE', size: 20 } })
       const items = data?.data?.items || []
-      return items.length > 0 ? items[0] : null
+      return items.find((item) => item?.status === 'IN_PROGRESS') || null
     },
 
     async getTripDetail(tripIdOrCode) {
@@ -89,13 +91,15 @@ export function createDriverTripService(client = apiClient) {
       return data?.data ?? []
     },
 
-    async uploadEvidence(tripId, evidencePayload) {
+    async uploadEvidence(tripId, evidencePayload, options = {}) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const isFormData = typeof FormData !== 'undefined' && evidencePayload instanceof FormData
       const endpoint = isFormData
         ? `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence/upload`
         : `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence`
-      const { data } = await client.post(endpoint, evidencePayload)
+      // options có thể chứa onUploadProgress (tiến trình upload); các lời gọi cũ không truyền options.
+      const config = options.onUploadProgress ? { onUploadProgress: options.onUploadProgress } : undefined
+      const { data } = await client.post(endpoint, evidencePayload, config)
       return data?.data
     },
 

@@ -222,6 +222,8 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   // 4. TRIP EXECUTION STEP
   let tripState = STEP_STATUS.PENDING
   let tripDescription = 'Chờ tài xế đón'
+  // Mốc thời gian lấy từ BE (actualStartAt/actualEndAt/actualArrivedAt); không suy đoán từ trạng thái.
+  let tripAt = null
 
   const isTripEnded = tripStatus === 'ENDED'
     || Boolean(booking.actualEndAt)
@@ -230,18 +232,18 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
   if (isTripEnded) {
     tripState = STEP_STATUS.COMPLETED
     tripDescription = 'Đã hoàn thành chuyến'
+    tripAt = booking.actualEndAt || null
   } else if (status === 'IN_PROGRESS' || tripStatus === 'IN_PROGRESS' || Boolean(booking.actualStartAt)) {
     tripState = STEP_STATUS.CURRENT
     tripDescription = 'Đang di chuyển'
-  } else if (status === 'AWAITING_START_CONFIRMATION') {
+    tripAt = booking.actualStartAt || null
+  } else if (status === 'AWAITING_START_CONFIRMATION' || status === 'AWAITING_END_CONFIRMATION') {
+    // Trạng thái legacy: Renter không còn xác nhận; chỉ phản ánh việc đang đồng bộ dữ liệu.
     tripState = STEP_STATUS.CURRENT
-    tripDescription = 'Chờ xác nhận bắt đầu'
+    tripDescription = 'Đang đồng bộ trạng thái chuyến'
   } else if (status === 'DRIVER_ARRIVED') {
     tripState = STEP_STATUS.CURRENT
     tripDescription = 'Tài xế đã đến điểm đón'
-  } else if (status === 'AWAITING_END_CONFIRMATION') {
-    tripState = STEP_STATUS.CURRENT
-    tripDescription = 'Chờ xác nhận kết thúc'
   } else if (driverState === STEP_STATUS.COMPLETED) {
     tripState = STEP_STATUS.PENDING
     tripDescription = 'Sẵn sàng khởi hành'
@@ -295,6 +297,7 @@ export function evaluateActiveWorkflowSteps(workflow = {}, booking = {}) {
       label: 'Chuyến đi',
       state: tripState,
       description: tripDescription,
+      at: tripAt,
       icon: 'directions_car',
     },
     {

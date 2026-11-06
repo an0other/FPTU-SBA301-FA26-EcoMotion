@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
@@ -109,7 +109,7 @@ export default function ProviderVehicleHubPage() {
   const [depositPolicyInfo, setDepositPolicyInfo] = useState(null)
   const [savingDepositPolicy, setSavingDepositPolicy] = useState(false)
 
-  async function fetchVehicleData() {
+  const fetchVehicleData = useCallback(async () => {
     try {
       setLoading(true)
       const [data, plateHistory] = await Promise.all([
@@ -198,7 +198,7 @@ export default function ProviderVehicleHubPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
 
   function openUploadDocModal(docType, existingDoc = null) {
     setDocModal({
@@ -288,7 +288,7 @@ export default function ProviderVehicleHubPage() {
     }
   }
 
-  async function fetchDashboardSummary() {
+  const fetchDashboardSummary = useCallback(async () => {
     try {
       const summary = await providerService.getDashboardSummary()
       if (summary) {
@@ -299,7 +299,7 @@ export default function ProviderVehicleHubPage() {
       }
     } catch {
     }
-  }
+  }, [])
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -307,7 +307,7 @@ export default function ProviderVehicleHubPage() {
       fetchDashboardSummary()
     }, 0)
     return () => window.clearTimeout(timerId)
-  }, [id])
+  }, [fetchVehicleData, fetchDashboardSummary])
 
   function handleTabChange(tabKey) {
     const newParams = new URLSearchParams(searchParams)
@@ -2301,4 +2301,3 @@ export default function ProviderVehicleHubPage() {
     </div>
   )
 }
-

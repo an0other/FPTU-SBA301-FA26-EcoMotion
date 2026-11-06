@@ -76,7 +76,7 @@ public class TripIncidentServiceImpl implements TripIncidentService {
         incident.setStatus(TripIncidentStatus.OPEN);
         incident.setLocationLatitude(request.latitude());
         incident.setLocationLongitude(request.longitude());
-        incident.setEvidenceUrls(request.evidenceUrls() != null ? request.evidenceUrls().trim() : null);
+        incident.setEvidenceUrlList(com.fptufa26.ecomotion.booking.service.IncidentEvidenceUrls.normalize(request.evidenceUrls()));
         incident.setCreatedBy(driver.getUser());
         incident.setCreatedAt(now);
 

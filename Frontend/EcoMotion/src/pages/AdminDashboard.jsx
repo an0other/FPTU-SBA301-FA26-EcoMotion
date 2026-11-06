@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { adminService } from '../services/adminService'
@@ -51,11 +51,7 @@ export default function AdminDashboard() {
     }
   }, [profileDropdownOpen])
 
-  useEffect(() => {
-    loadStats()
-  }, [])
-
-  async function loadStats(monthKey = selectedMonthKey) {
+  const loadStats = useCallback(async (monthKey = 'ALL') => {
     setLoadingStats(true)
     try {
       let year = null
@@ -72,7 +68,15 @@ export default function AdminDashboard() {
     } finally {
       setLoadingStats(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) loadStats('ALL')
+    })
+    return () => { cancelled = true }
+  }, [loadStats])
 
   function handleMonthChange(newMonthKey) {
     setSelectedMonthKey(newMonthKey)

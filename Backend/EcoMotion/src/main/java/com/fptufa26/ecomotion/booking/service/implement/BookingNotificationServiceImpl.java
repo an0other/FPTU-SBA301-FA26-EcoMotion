@@ -32,13 +32,7 @@ public class BookingNotificationServiceImpl implements BookingNotificationServic
 
     @Override
     public void changed(Booking booking, String event) {
-        java.util.Map<String, Object> payload = new java.util.HashMap<>();
-        payload.put("bookingId", booking.getId());
-        payload.put("bookingCode", booking.getBookingCode());
-        payload.put("driverId", booking.getDriver() == null ? null : booking.getDriver().getId());
-        payload.put("status", booking.getStatus().name());
-        payload.put("version", booking.getVersion());
-        payload.put("occurredAt", java.time.Instant.now().toString());
+        java.util.Map<String, Object> payload = payload(booking);
         // The stream already defers delivery until commit. Scheduling it again from
         // afterCommit registers a callback too late and silently loses the event.
         stream.sendEventToProvider(booking.getVehicle().getProvider().getId(), event, payload);
@@ -46,6 +40,54 @@ public class BookingNotificationServiceImpl implements BookingNotificationServic
             stream.sendEventToUser(booking.getRenter().getUser().getId(), event, payload);
         if (booking.getDriver() != null && booking.getDriver().getUser() != null)
             stream.sendEventToUser(booking.getDriver().getUser().getId(), event, payload);
+    }
+
+    @Override
+    public void tripStarted(Booking booking) {
+        tripEvent(booking, "TRIP_STARTED");
+    }
+
+    @Override
+    public void tripEnded(Booking booking) {
+        tripEvent(booking, "TRIP_COMPLETED");
+    }
+
+    private void tripEvent(Booking booking, String renterEvent) {
+        java.util.Map<String, Object> payload = payload(booking);
+        payload.put("actualStartAt", booking.getActualStartAt() == null ? null : booking.getActualStartAt().toString());
+        payload.put("actualEndAt", booking.getActualEndAt() == null ? null : booking.getActualEndAt().toString());
+        // Provider và Tài xế chỉ cần đồng bộ lại booking; Renter nhận đúng một sự kiện nghiệp vụ.
+        stream.sendEventToProvider(booking.getVehicle().getProvider().getId(), "BOOKING_CHANGED", payload);
+        if (booking.getDriver() != null && booking.getDriver().getUser() != null)
+            stream.sendEventToUser(booking.getDriver().getUser().getId(), "BOOKING_CHANGED", payload);
+        if (booking.getRenter() != null && booking.getRenter().getUser() != null)
+            stream.sendEventToUser(booking.getRenter().getUser().getId(), renterEvent, payload);
+    }
+
+    @Override
+    public void driverAssigned(Booking booking) {
+        java.util.Map<String, Object> payload = payload(booking);
+        // Mỗi bên chỉ nhận một event: Provider và Renter cập nhật booking, Tài xế mới nhận phân công.
+        stream.sendEventToProvider(booking.getVehicle().getProvider().getId(), "BOOKING_CHANGED", payload);
+        if (booking.getRenter() != null && booking.getRenter().getUser() != null)
+            stream.sendEventToUser(booking.getRenter().getUser().getId(), "BOOKING_CHANGED", payload);
+        if (booking.getDriver() != null && booking.getDriver().getUser() != null) {
+            java.util.Map<String, Object> driverPayload = new java.util.HashMap<>(payload);
+            driverPayload.put("pickupTime", booking.getPickupTime() == null ? null : booking.getPickupTime().toString());
+            driverPayload.put("assignedAt", booking.getAssignedAt() == null ? null : booking.getAssignedAt().toString());
+            stream.sendEventToUser(booking.getDriver().getUser().getId(), "DRIVER_ASSIGNED", driverPayload);
+        }
+    }
+
+    private java.util.Map<String, Object> payload(Booking booking) {
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("bookingId", booking.getId());
+        payload.put("bookingCode", booking.getBookingCode());
+        payload.put("driverId", booking.getDriver() == null ? null : booking.getDriver().getId());
+        payload.put("status", booking.getStatus().name());
+        payload.put("version", booking.getVersion());
+        payload.put("occurredAt", java.time.Instant.now().toString());
+        return payload;
     }
 
     private void schedule(Booking booking, BigDecimal depositAmount, boolean depositPaid) {

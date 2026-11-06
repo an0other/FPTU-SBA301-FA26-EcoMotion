@@ -24,8 +24,6 @@ export const BookingDetail = ({
   onGoToCarPage,
   onPayDeposit,
   onCancelBooking,
-  onCompleteBooking,
-  onConfirmStart,
   onOpenDispute,
   onAcceptCharge,
   onUploadDisputeEvidence,
@@ -230,57 +228,22 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION'].includes(booking.status) && (
-            <div className="p-5 text-white bg-cyan-700 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-bold">Tài xế đã đến điểm đón</h2>
-                <p className="text-xs sm:text-sm text-white/90 mt-1">Chuyến chỉ bắt đầu sau khi cả bạn và tài xế cùng xác nhận.</p>
-              </div>
-              {booking.canConfirmStart ? <button
-                onClick={async () => {
-                  setActionError('');
-                  try {
-                    await onConfirmStart(booking.id);
-                  } catch (err) {
-                    setActionError(readErrorMessage(err));
-                  }
-                }}
-                type="button"
-                className="px-5 py-2.5 bg-white text-cyan-800 font-bold text-sm rounded-[12px]"
-              >Xác nhận bắt đầu chuyến</button> : <p className="text-sm font-medium">Đã xác nhận, đang chờ tài xế</p>}
+          {booking.status === 'DRIVER_ARRIVED' && (
+            <div className="p-5 text-white bg-cyan-700 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
+              <h2 className="text-base font-bold">Tài xế đã đến điểm đón</h2>
+              <p className="text-xs sm:text-sm text-white/90 mt-1">Tài xế sẽ bắt đầu chuyến đi. Bạn không cần xác nhận; hệ thống sẽ thông báo khi chuyến bắt đầu.</p>
             </div>
           )}
 
-          {['IN_PROGRESS', 'AWAITING_END_CONFIRMATION', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking.status) && (
-            <div className="p-5 text-white bg-[#15803D] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-base font-bold text-white">
-                  {booking.status === 'IN_PROGRESS' ? 'Chuyến đang diễn ra' : 'Đang xác nhận kết thúc chuyến'}
-                </h2>
-                <p className="text-xs sm:text-sm text-white/90">
-                  {booking.actualStartTime
-                    ? `Bắt đầu thực tế: ${booking.actualStartTime}`
-                    : 'Chưa có giờ bắt đầu thực tế'}
-                </p>
-              </div>
-              {booking.canConfirmEnd ? (
-                <button
-                  onClick={async () => {
-                    setActionError('');
-                    try {
-                      await onCompleteBooking(booking.id);
-                    } catch (err) {
-                      setActionError(readErrorMessage(err));
-                    }
-                  }}
-                  type="button"
-                  className="px-5 py-2.5 bg-white text-[#15803D] font-bold text-sm rounded-[12px] shadow-xs hover:bg-emerald-50 transition-all cursor-pointer active:scale-95 shrink-0"
-                >
-                  Xác nhận kết thúc chuyến
-                </button>
-              ) : (
-                <p className="text-sm font-medium text-white">Đang chờ phía nhà cung cấp xác nhận</p>
-              )}
+          {['IN_PROGRESS', 'AWAITING_EXTRA_CHARGE_CONFIRMATION'].includes(booking.status) && (
+            <div className="p-5 text-white bg-[#15803D] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col gap-1">
+              <h2 className="text-base font-bold text-white">
+                {booking.status === 'IN_PROGRESS' ? 'Chuyến đang diễn ra' : 'Tài xế đã kết thúc chuyến đi'}
+              </h2>
+              <p className="text-xs sm:text-sm text-white/90">
+                {booking.actualStartTime ? `Bắt đầu thực tế: ${booking.actualStartTime}` : 'Chưa có giờ bắt đầu thực tế'}
+                {booking.status !== 'IN_PROGRESS' && booking.formattedActualEnd ? ` · Kết thúc thực tế: ${booking.formattedActualEnd}` : ''}
+              </p>
             </div>
           )}
 
@@ -465,7 +428,7 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(booking.status) && (
+          {['DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(booking.status) && (
             <div className="bg-white p-5 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>

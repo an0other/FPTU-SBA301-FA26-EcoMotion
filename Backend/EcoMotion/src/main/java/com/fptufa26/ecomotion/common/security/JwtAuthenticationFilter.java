@@ -55,6 +55,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    // Chỉ nhận JWT qua header Authorization. Không đọc query string: token trên URL dễ lộ qua log và proxy.
     private String resolveToken(HttpServletRequest request) {
         String header = request.getHeader(HEADER);
         if (header != null && header.startsWith(PREFIX)) {
@@ -62,10 +63,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (!token.isEmpty()) {
                 return token;
             }
-        }
-        String queryToken = request.getParameter("token");
-        if (queryToken != null && !queryToken.trim().isEmpty()) {
-            return queryToken.trim();
         }
         return null;
     }

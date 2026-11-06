@@ -37,11 +37,11 @@ export default function VehicleDetailModal({
   onPreviewDoc,
   onSelectProvider,
 }) {
-  if (!vehicle) return null
-
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+
+  if (!vehicle) return null
 
   const images = vehicle.imageUrls && vehicle.imageUrls.length > 0 ? vehicle.imageUrls : []
 

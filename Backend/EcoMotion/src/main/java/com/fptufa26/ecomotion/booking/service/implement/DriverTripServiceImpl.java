@@ -337,6 +337,9 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.COMPLETED || booking.getDriverEndConfirmedAt() != null) {
             throw new InvalidTripTransitionException("Không thể bắt đầu chuyến đi đã hoàn thành");
         }
+        if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getActualStartAt() != null) {
+            throw new InvalidTripTransitionException("Chuyến đi đã bắt đầu");
+        }
         if (booking.isDriverReplacementRequired()) {
             throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
         }
@@ -346,18 +349,15 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getActualArrivedAt() == null && booking.getStatus() != BookingStatus.DRIVER_ARRIVED) {
             throw new InvalidTripTransitionException("Tài xế phải báo đã đến điểm đón trước khi bắt đầu chuyến");
         }
-        if (booking.getDriverStartConfirmedAt() != null) {
-            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
-        }
 
         Instant now = clock.instant();
         try {
-            TripTransitions.confirmStart(booking, TripTransitions.Actor.DRIVER, now);
+            TripTransitions.start(booking, now);
         } catch (ConflictException ex) {
             throw new InvalidTripTransitionException(ex.getMessage());
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
-        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
+        bookingNotificationService.tripStarted(saved);
 
         driverStatusService.updateStatusTimestamp(driver.getId());
 
@@ -413,23 +413,22 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getStatus() == BookingStatus.CANCELLED || booking.getCancelledAt() != null) {
             throw new InvalidTripTransitionException("Không thể kết thúc chuyến đi đã bị hủy");
         }
-        if (booking.getDriverEndConfirmedAt() != null) {
-            return toDetailResponse(booking, getCoverUrl(booking), getLatestLocationForBooking(booking.getId()));
+        if (booking.getDriverEndConfirmedAt() != null || booking.getActualEndAt() != null) {
+            throw new InvalidTripTransitionException("Chuyến đi đã kết thúc");
         }
-        if ((booking.getStatus() != BookingStatus.IN_PROGRESS && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION)
-                || booking.getActualStartAt() == null) {
-            throw new InvalidTripTransitionException("Chỉ có thể kết thúc chuyến đi đang thực hiện (IN_PROGRESS)");
+        if (booking.getStatus() != BookingStatus.IN_PROGRESS || booking.getActualStartAt() == null) {
+            throw new InvalidTripTransitionException("Chỉ có thể kết thúc chuyến đi đang diễn ra (IN_PROGRESS)");
         }
 
         Instant now = clock.instant();
         try {
-            TripTransitions.confirmEnd(booking, TripTransitions.Actor.DRIVER, now);
+            TripTransitions.end(booking, now);
         } catch (ConflictException ex) {
             throw new InvalidTripTransitionException(ex.getMessage());
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
-        endConfirmations.reported(saved, currentUserId);
-        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
+        endConfirmations.driverEnded(saved, currentUserId);
+        bookingNotificationService.tripEnded(saved);
 
         driverStatusService.updateStatusTimestamp(driver.getId());
 

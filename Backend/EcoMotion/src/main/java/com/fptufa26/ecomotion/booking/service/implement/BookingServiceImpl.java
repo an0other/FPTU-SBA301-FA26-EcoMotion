@@ -20,8 +20,6 @@ import com.fptufa26.ecomotion.booking.dto.response.BookingRequestDetailsResponse
 import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ConfirmStartResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.RefundPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TimelineStepResponse;
@@ -52,7 +50,6 @@ import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
 import com.fptufa26.ecomotion.booking.service.DepositRefundRules;
 import com.fptufa26.ecomotion.common.exception.BadRequestException;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
-import com.fptufa26.ecomotion.booking.service.TripTransitions;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -198,12 +195,6 @@ public class BookingServiceImpl implements BookingService {
     private static final Set<BookingStatus> DEPOSIT_PAYABLE_STATUSES = EnumSet.of(
             BookingStatus.AWAITING_DEPOSIT, BookingStatus.ACCEPTED);
 
-    private static final Set<BookingStatus> CONFIRM_START_STATUSES = EnumSet.of(
-            BookingStatus.DRIVER_ARRIVED, BookingStatus.AWAITING_START_CONFIRMATION);
-
-    private static final Set<BookingStatus> CONFIRM_END_STATUSES = EnumSet.of(
-            BookingStatus.IN_PROGRESS,
-            BookingStatus.AWAITING_END_CONFIRMATION);
     private static final Set<BookingStatus> CHARGE_DISPUTE = EnumSet.of(
             BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
             BookingStatus.AWAITING_FINAL_PAYMENT);
@@ -565,9 +556,7 @@ public class BookingServiceImpl implements BookingService {
             Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
         return builder.or(
                 payableDepositPredicate(root, query, builder, now),
-                payableSettlementPredicate(root, query, builder, now),
-                confirmStartPredicate(root, builder),
-                confirmEndPredicate(root, builder));
+                payableSettlementPredicate(root, query, builder, now));
     }
 
     private Predicate payableDepositPredicate(
@@ -597,19 +586,6 @@ public class BookingServiceImpl implements BookingService {
                                 root, query, builder, now, PaymentRequestType.FINAL_BALANCE)),
                         builder.not(builder.exists(anyPaymentRequestExists(
                                 root, query, builder, PaymentRequestType.FINAL_BALANCE)))));
-    }
-
-    private Predicate confirmStartPredicate(Root<Booking> root, CriteriaBuilder builder) {
-        return builder.and(
-                root.get("status").in(CONFIRM_START_STATUSES),
-                builder.isNull(root.get("renterStartConfirmedAt")));
-    }
-
-    private Predicate confirmEndPredicate(Root<Booking> root, CriteriaBuilder builder) {
-        return builder.and(
-                root.get("status").in(CONFIRM_END_STATUSES),
-                builder.or(builder.isNull(root.get("endConfirmationMethod")), builder.notEqual(root.get("endConfirmationMethod"), "AUTO")),
-                builder.isNull(root.get("renterEndConfirmedAt")));
     }
 
     private Subquery<Long> currentPaymentRequestExists(
@@ -865,70 +841,6 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public ConfirmStartResponse confirmStart(Long userId, String bookingCode) {
-        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
-                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
-        if (!TripTransitions.confirmStart(booking, TripTransitions.Actor.RENTER, clock.instant())) {
-            return toConfirmStart(booking);
-        }
-        bookingRepository.saveAndFlush(booking);
-        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
-        if (booking.getDriver() != null) {
-            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
-        }
-        return toConfirmStart(booking);
-    }
-
-    @Override
-    @Transactional
-    public ConfirmEndResponse confirmEnd(Long userId, String bookingCode) {
-        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
-                .orElseThrow(() -> new NotFoundException("Không tìm thấy đơn thuê của bạn"));
-        if ("AUTO".equals(booking.getEndConfirmationMethod())) return bookingMapper.toConfirmEnd(booking);
-        if ((booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null)
-                && (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT || booking.getStatus() == BookingStatus.COMPLETED)) {
-            return bookingMapper.toConfirmEnd(booking);
-        }
-        if (booking.getStatus() != BookingStatus.IN_PROGRESS
-                && booking.getStatus() != BookingStatus.AWAITING_END_CONFIRMATION
-                && booking.getStatus() != BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) {
-            throw new ConflictException("Chuyến đi chưa ở trạng thái cho phép xác nhận kết thúc");
-        }
-        if (booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null) {
-            return bookingMapper.toConfirmEnd(booking);
-        }
-        if ("AUTO".equals(booking.getEndConfirmationMethod())) return bookingMapper.toConfirmEnd(booking);
-        Instant effectiveEnd = endConfirmations.manual(booking, userId);
-        Instant now = clock.instant();
-        booking.setEndConfirmationMethod("RENTER");
-        booking.setRenterEndConfirmedAt(now);
-        booking.setRenterConfirmedAt(now);
-        if (booking.getDriverEndConfirmedAt() != null || booking.getProviderConfirmedAt() != null) {
-            booking.setActualEndAt(effectiveEnd == null ? now : effectiveEnd);
-            booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
-        } else {
-            booking.setStatus(BookingStatus.AWAITING_END_CONFIRMATION);
-        }
-        bookingRepository.saveAndFlush(booking);
-        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
-        if (booking.getDriver() != null) {
-            driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
-        }
-        return bookingMapper.toConfirmEnd(booking);
-    }
-
-    private ConfirmStartResponse toConfirmStart(Booking booking) {
-        return new ConfirmStartResponse(
-                booking.getBookingCode(),
-                booking.getStatus(),
-                booking.getRenterStartConfirmedAt(),
-                booking.getDriverStartConfirmedAt(),
-                booking.getActualStartAt(),
-                booking.getStatus() == BookingStatus.IN_PROGRESS);
-    }
-
-    @Override
-    @Transactional
     public DisputeOpenedResponse openDispute(Long userId, String bookingCode, OpenDisputeRequest request) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
@@ -1021,8 +933,6 @@ public class BookingServiceImpl implements BookingService {
                 CANCELLABLE.contains(booking.getStatus()),
                 canEdit,
                 canPay(booking),
-                canConfirmStart(booking),
-                canConfirmEnd(booking),
                 disputeCategories(booking, chargeRows),
                 holdExpiresAt(booking));
     }
@@ -1155,13 +1065,7 @@ public class BookingServiceImpl implements BookingService {
             steps.add(new TimelineStepResponse("Kết thúc thực tế", booking.getActualEndAt(), null, true, false));
         }
         if (booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.COMPLETED
-                || booking.getRenterConfirmedAt() != null) {
-            steps.add(new TimelineStepResponse(
-                    "Bạn đã xác nhận kết thúc",
-                    booking.getRenterConfirmedAt(),
-                    null,
-                    booking.getRenterConfirmedAt() != null,
-                    false));
+                || booking.getProviderConfirmedAt() != null) {
             steps.add(new TimelineStepResponse(
                     "Phía nhà cung cấp đã xác nhận",
                     booking.getProviderConfirmedAt(),
@@ -1296,12 +1200,6 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private BookingActionKind actionKind(Booking booking) {
-        if (canConfirmStart(booking)) {
-            return BookingActionKind.CONFIRM_START;
-        }
-        if (canConfirmEnd(booking)) {
-            return BookingActionKind.CONFIRM_END;
-        }
         if (!canPay(booking)) {
             return BookingActionKind.NONE;
         }
@@ -1309,16 +1207,6 @@ public class BookingServiceImpl implements BookingService {
             return BookingActionKind.PAY_SETTLEMENT;
         }
         return BookingActionKind.PAY_DEPOSIT;
-    }
-
-    private boolean canConfirmStart(Booking booking) {
-        return CONFIRM_START_STATUSES.contains(booking.getStatus())
-                && booking.getRenterStartConfirmedAt() == null;
-    }
-
-    private boolean canConfirmEnd(Booking booking) {
-        return CONFIRM_END_STATUSES.contains(booking.getStatus()) && !booking.isEndAccepted()
-                && endConfirmations.history(booking.getId()).stream().findFirst().map(h -> !"PAUSED".equals(h.state())).orElse(true);
     }
 
     private static final Set<PaymentRequestStatus> DEPOSIT_HOLD_COUNTDOWN_STATUSES = Set.of(

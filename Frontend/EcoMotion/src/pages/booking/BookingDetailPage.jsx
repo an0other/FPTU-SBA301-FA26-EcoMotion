@@ -1,10 +1,11 @@
-import { useRealtimeSync } from '../../hooks/useRealtimeSync'
+import { TV5_REALTIME_EVENTS, useRealtimeSync } from '../../hooks/useRealtimeSync'
+import Toast from '../../components/Toast'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { acceptCharge, cancelMyBooking, confirmTripEnd, confirmTripStart, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
+import { acceptCharge, cancelMyBooking, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
@@ -63,8 +64,6 @@ function toCard(detail) {
     actualEndAt: detail.actualEndAt,
     formattedActualStart: formatWhen(detail.actualStartAt),
     formattedActualEnd: formatWhen(detail.actualEndAt),
-    canConfirmStart: detail.canConfirmStart,
-    canConfirmEnd: detail.canConfirmEnd,
     canCancel: detail.canCancel,
     canEditRequest: detail.canEditRequest,
     canPay: detail.canPay,
@@ -139,7 +138,8 @@ export function BookingDetailPage() {
   const [error, setError] = useState('')
   const [workflow, setWorkflow] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
-  const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
+  const [tripNotice, setTripNotice] = useState('')
+  const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
   const { trackingData, loading: trackingLoading, error: trackingError, refetch: refetchTracking } = useRenterTripTracking(
     bookingCode,
     trackingEnabled,
@@ -166,9 +166,20 @@ export function BookingDetailPage() {
   }, [bookingCode])
   useEffect(() => {
     const timer = setTimeout(refreshDetail, 0)
-    return () => { clearTimeout(timer); ++sequence.current }
+    return () => {
+      clearTimeout(timer)
+      // This ref is a numeric request generation, not a rendered DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      ++sequence.current
+    }
   }, [refreshDetail])
-  useRealtimeSync({ onResync: refreshDetail })
+  useRealtimeSync({
+    handlers: {
+      [TV5_REALTIME_EVENTS.TRIP_STARTED]: () => setTripNotice('Tài xế đã bắt đầu chuyến đi.'),
+      [TV5_REALTIME_EVENTS.TRIP_COMPLETED]: () => setTripNotice('Tài xế đã kết thúc chuyến đi.'),
+    },
+    onResync: refreshDetail,
+  })
 
   if (!detail || detail.bookingCode?.toUpperCase() !== bookingCode?.toUpperCase()) {
     return <p className="max-w-3xl mx-auto px-6 py-16 text-sm text-[#14221A]">{error || 'Đang tải đơn...'}</p>
@@ -182,6 +193,7 @@ export function BookingDetailPage() {
     <>
       {error && <p role="alert" className="mx-auto max-w-5xl p-4 text-sm text-red-800">Không thể cập nhật trạng thái: {error}. Dữ liệu đang hiển thị có thể đã cũ.</p>}
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
+      {tripNotice && <Toast message={tripNotice} type="success" onClose={() => setTripNotice('')} />}
       <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>
       <BookingDetail
         booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
@@ -193,14 +205,6 @@ export function BookingDetailPage() {
         onCancelBooking={async (_code, account) => {
           const updated = await cancelMyBooking(booking.id, account)
           navigate(`/renter/bookings/${updated.bookingCode}`, { replace: true })
-          await refreshDetail()
-        }}
-        onCompleteBooking={async () => {
-          await confirmTripEnd(booking.id)
-          await refreshDetail()
-        }}
-        onConfirmStart={async () => {
-          await confirmTripStart(booking.id)
           await refreshDetail()
         }}
         onAcceptCharge={async (chargeId) => {
@@ -223,4 +227,3 @@ export function BookingDetailPage() {
     </>
   )
 }
-

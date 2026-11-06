@@ -41,6 +41,21 @@ public class TripEndConfirmationService {
         histories.save(h);
     }
 
+    /** Tài xế kết thúc chuyến là kết thúc chốt: ghi lịch sử đã xác nhận, không mở cửa sổ phản đối của Renter. */
+    @Transactional
+    public void driverEnded(Booking booking, Long driverUserId) {
+        var h = new TripEndConfirmation();
+        h.setBooking(booking);
+        h.setReportedBy(driverUserId);
+        h.setReportedAt(booking.getDriverEndConfirmedAt());
+        h.setDeadline(booking.getDriverEndConfirmedAt());
+        h.setState("CONFIRMED");
+        h.setConfirmationMethod("DRIVER");
+        h.setConfirmedAt(booking.getDriverEndConfirmedAt());
+        h.setConfirmedBy(driverUserId);
+        histories.save(h);
+    }
+
     @Transactional
     public Instant manual(Booking booking, Long userId) {
         if (disputes.findByBooking_Id(booking.getId()).stream().anyMatch(d -> d.getCategory()==DisputeCategory.TRIP_NOT_CONFIRMED

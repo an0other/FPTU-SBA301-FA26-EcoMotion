@@ -13,8 +13,6 @@ import com.fptufa26.ecomotion.booking.dto.response.BookingRequestDetailsResponse
 import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ConfirmStartResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
@@ -161,20 +159,6 @@ public class RenterBookingController {
             @Valid @RequestBody RefundAccountRequest account) {
         bookingService.updateRefundAccount(user.getUserId(), bookingCode, account);
         return ApiResponse.success(null);
-    }
-
-    @PostMapping("/{bookingCode}/confirm-end")
-    public ApiResponse<ConfirmEndResponse> confirmEnd(
-            @AuthenticationPrincipal SecurityUser user,
-            @PathVariable String bookingCode) {
-        return ApiResponse.success(bookingService.confirmEnd(user.getUserId(), bookingCode));
-    }
-
-    @PostMapping("/{bookingCode}/confirm-start")
-    public ApiResponse<ConfirmStartResponse> confirmStart(
-            @AuthenticationPrincipal SecurityUser user,
-            @PathVariable String bookingCode) {
-        return ApiResponse.success(bookingService.confirmStart(user.getUserId(), bookingCode));
     }
 
     @PostMapping("/{bookingCode}/disputes")
