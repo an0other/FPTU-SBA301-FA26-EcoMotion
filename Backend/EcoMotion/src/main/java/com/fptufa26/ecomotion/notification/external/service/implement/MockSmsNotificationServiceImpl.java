@@ -47,14 +47,14 @@ public class MockSmsNotificationServiceImpl implements OtpExternalNotificationSe
     }
 
     private NotificationResult sendBooking(BookingNotificationRequest request, boolean depositPaid) {
-        if (request == null || request.channel() != channel() || !validator.validate(request).isEmpty()
-                || !request.recipient().matches("^0\\d{9,10}$")) {
+        if (request == null || !validator.validate(request).isEmpty()
+                || request.phone() == null || !request.phone().matches("^0\\d{9,10}$")) {
             return new NotificationResult(false, "A valid booking SMS notification request is required");
         }
         String content = "EcoMotion: %s. Ma don: %s. Xe: %s. Tien coc: %s VND."
                 .formatted(depositPaid ? "Da nhan du tien coc" : "Da tao don thue, vui long thanh toan coc",
                         request.bookingCode(), request.vehicleName(), request.depositAmount().toPlainString());
-        log.info("Mock SMS notification to {}: {}", request.recipient(), content);
+        log.info("Mock SMS notification to {}: {}", request.phone(), content);
         return new NotificationResult(true, null);
     }
 }
