@@ -52,9 +52,9 @@ public class LoggingEmailNotificationServiceImpl implements OtpExternalNotificat
     }
 
     private NotificationResult logBooking(BookingNotificationRequest request, boolean depositPaid) {
-        if (request == null || request.channel() != channel()
+        if (request == null
                 || !validator.validate(request).isEmpty()
-                || !validator.validate(new EmailAddress(request.recipient())).isEmpty()) {
+                || !validator.validate(new EmailAddress(request.email())).isEmpty()) {
             return new NotificationResult(false, "A valid booking email notification request is required");
         }
         log.info("Simulated booking email notification: bookingCode={}, depositPaid={}", request.bookingCode(), depositPaid);

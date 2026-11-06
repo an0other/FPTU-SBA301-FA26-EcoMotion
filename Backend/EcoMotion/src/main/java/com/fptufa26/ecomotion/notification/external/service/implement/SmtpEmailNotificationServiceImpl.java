@@ -79,9 +79,9 @@ public class SmtpEmailNotificationServiceImpl implements OtpExternalNotification
     }
 
     private NotificationResult sendBooking(BookingNotificationRequest request, boolean depositPaid) {
-        if (request == null || request.channel() != channel()
+        if (request == null
                 || !validator.validate(request).isEmpty()
-                || !validator.validate(new EmailAddress(request.recipient())).isEmpty()) {
+                || !validator.validate(new EmailAddress(request.email())).isEmpty()) {
             return new NotificationResult(false, "A valid booking email notification request is required");
         }
         String pickupTime = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
@@ -90,7 +90,7 @@ public class SmtpEmailNotificationServiceImpl implements OtpExternalNotification
                 .format(request.depositAmount());
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
-        message.setTo(request.recipient());
+        message.setTo(request.email());
         message.setSubject("EcoMotion - " + (depositPaid ? "Đã nhận tiền cọc " : "Đã tạo đơn thuê ") + request.bookingCode());
         message.setText("""
                 %s

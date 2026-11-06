@@ -8,6 +8,7 @@ import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
 import com.fptufa26.ecomotion.notification.external.service.ExternalNotificationDispatcherService;
 import com.fptufa26.ecomotion.notification.external.service.ExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.service.OtpExternalNotificationService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class ExternalNotificationDispatcherServiceImpl implements ExternalNotificationDispatcherService {
 
@@ -68,14 +70,28 @@ public class ExternalNotificationDispatcherServiceImpl implements ExternalNotifi
     }
 
     private NotificationResult sendBooking(BookingNotificationRequest request, boolean depositPaid) {
-        if (request == null || request.channel() == null) {
-            return new NotificationResult(false, "Notification channel is required");
+        if (request == null) {
+            return new NotificationResult(false, "Booking notification request is required");
         }
-        ExternalNotificationService service = services.get(request.channel());
-        if (!fallbackOrder.contains(request.channel()) || !(service instanceof BookingExternalNotificationService bookingService)) {
-            return unsupported(request.channel());
+        NotificationResult result = new NotificationResult(false, "No booking notification service available");
+        for (NotificationChannel channel : fallbackOrder) {
+            if (!(services.get(channel) instanceof BookingExternalNotificationService bookingService)) {
+                continue;
+            }
+            try {
+                result = depositPaid ? bookingService.sendDepositPaid(request) : bookingService.sendBookingPlaced(request);
+                if (result.success()) {
+                    return result;
+                }
+                log.warn("Booking notification failed for {} via {} (depositPaid={}): {}",
+                        request.bookingCode(), channel, depositPaid, result.errorMessage());
+            } catch (RuntimeException ex) {
+                log.warn("Booking notification failed for {} via {} (depositPaid={})",
+                        request.bookingCode(), channel, depositPaid, ex);
+                result = new NotificationResult(false, "Could not send booking notification via " + channel);
+            }
         }
-        return depositPaid ? bookingService.sendDepositPaid(request) : bookingService.sendBookingPlaced(request);
+        return result;
     }
 
     private NotificationResult unsupported(NotificationChannel channel) {
