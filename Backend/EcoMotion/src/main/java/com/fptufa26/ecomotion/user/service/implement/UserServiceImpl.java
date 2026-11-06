@@ -52,6 +52,14 @@ public class UserServiceImpl implements UserService {
     private final EntityManager entityManager;
 
     @Override
+    public Long resetPassword(String email, String rawPassword) {
+        User user = findByEmail(email).orElseThrow(() -> new NotFoundException("User not found"));
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        userRepository.saveAndFlush(user);
+        return user.getUserId();
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Optional<User> findByEmail(String email) {
         if (email == null || email.isBlank()) {

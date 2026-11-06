@@ -2,6 +2,16 @@ import apiClient, { refreshAccessToken } from './apiClient'
 import { getAccessToken, setAccessToken } from '../utils/tokenStore'
 
 export const authService = {
+  async forgotPassword(email) {
+    const { data } = await apiClient.post('/auth/forgot-password', { email })
+    return data
+  },
+
+  async resetPassword(payload) {
+    const { data } = await apiClient.post('/auth/reset-password', payload)
+    return data
+  },
+
   async login(email, password, rememberMe = false, captchaToken = '') {
     const { data } = await apiClient.post('/auth/login', { email, password, rememberMe, captchaToken })
     return data
