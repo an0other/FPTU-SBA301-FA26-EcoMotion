@@ -1,4 +1,6 @@
-package com.fptufa26.ecomotion.common.storage;
+package com.fptufa26.ecomotion.common.storage.util;
+
+import com.fptufa26.ecomotion.common.storage.exception.FileStorageException;
 
 import java.util.Locale;
 import java.util.Set;

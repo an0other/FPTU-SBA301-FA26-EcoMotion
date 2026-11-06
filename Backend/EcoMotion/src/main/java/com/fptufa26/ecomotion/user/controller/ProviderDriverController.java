@@ -4,7 +4,7 @@ import com.fptufa26.ecomotion.booking.dto.response.AvailableDriverResponse;
 import com.fptufa26.ecomotion.booking.service.ProviderBookingService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.user.dto.request.CreateDriverByProviderRequest;
 import com.fptufa26.ecomotion.user.dto.request.ToggleDriverStatusRequest;
 import com.fptufa26.ecomotion.user.dto.request.UpdateDriverByProviderRequest;

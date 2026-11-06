@@ -42,7 +42,7 @@ import com.fptufa26.ecomotion.finance.exception.MissingBankAccountException;
 import com.fptufa26.ecomotion.finance.exception.PaymentRequestNotFoundException;
 import com.fptufa26.ecomotion.finance.repository.PaymentEvidenceRepository;
 import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.finance.service.PaymentCodeGenerator;

@@ -1,4 +1,5 @@
 package com.fptufa26.ecomotion.booking.service.implement;
+import com.fptufa26.ecomotion.booking.policy.BookingStartPolicy;
 import com.fptufa26.ecomotion.booking.dto.request.*;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse.Window;
 import com.fptufa26.ecomotion.schedule.dto.response.OccupiedScheduleWindow;
@@ -31,7 +32,7 @@ class RentalPricingServiceTest {
         when(deposit.resolve(eq(vehicle),any())).thenAnswer(inv ->
                 new VehicleDepositPolicyService.DepositQuote(BigDecimal.ZERO,BigDecimal.ZERO,BigDecimal.ZERO));
         var service=new RentalPricingServiceImpl(plans,catalog,deposit,schedule,
-                Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC));
+                Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), new BookingStartPolicy(Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), 3));
         when(schedule.occupiedWindows(anyLong(),any(),any())).thenReturn(List.of(
                 new OccupiedScheduleWindow(start.plus(Duration.ofHours(75)),start.plus(Duration.ofHours(100)),ScheduleType.BOOKED)));
         var quote=service.quote(new RentalQuoteRequest(1L,start,start.plus(Duration.ofHours(74))));

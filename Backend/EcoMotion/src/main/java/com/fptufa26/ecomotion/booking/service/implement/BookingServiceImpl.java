@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import com.fptufa26.ecomotion.booking.policy.BookingStartPolicy;
+
 import java.time.format.DateTimeFormatter;
 import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
 import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
@@ -152,6 +154,7 @@ public class BookingServiceImpl implements BookingService {
     private final DriverAvailabilityService driverAvailabilityService;
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
     private final Clock clock;
+    private final BookingStartPolicy bookingStartPolicy;
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
     private final RefundEventService refundEventService;
@@ -313,6 +316,7 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Số lượng hành khách vượt quá số chỗ ngồi khả dụng của xe (tối đa " + passengerLimit + " khách)");
         }
 
+        bookingStartPolicy.validate(request.pickupTime());
         Instant start = request.pickupTime();
         if (start.isBefore(clock.instant().plus(MINIMUM_BOOKING_LEAD_TIME))) {
             throw new ConflictException("Đơn thuê phải được tạo trước giờ nhận xe ít nhất 3 giờ");
@@ -722,6 +726,7 @@ public class BookingServiceImpl implements BookingService {
         if (!canEditRequest(booking)) {
             throw new ConflictException("Booking request details can no longer be edited");
         }
+        bookingStartPolicy.validate(request.pickupTime());
         if (!request.pickupTime().isAfter(Instant.now())) {
             throw new ConflictException("Thời gian đón phải ở tương lai");
         }

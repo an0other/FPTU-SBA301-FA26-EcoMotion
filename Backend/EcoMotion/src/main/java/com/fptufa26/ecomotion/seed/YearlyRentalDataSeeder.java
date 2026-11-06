@@ -10,7 +10,7 @@ import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
 import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 import com.fptufa26.ecomotion.booking.enums.PaymentType;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
 import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;

@@ -2,7 +2,7 @@ package com.fptufa26.ecomotion.vehicle.controller;
 
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.vehicle.dto.request.CreateVehicleRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateRentalPlansRequest;
 import com.fptufa26.ecomotion.vehicle.dto.request.UpdateVehicleDocumentRequest;
@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.vehicle.dto.response.VehicleLicensePlateHistoryResponse;
 import java.io.IOException;
 import java.util.Map;

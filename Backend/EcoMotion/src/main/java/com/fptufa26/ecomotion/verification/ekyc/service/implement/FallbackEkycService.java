@@ -1,9 +1,9 @@
-package com.fptufa26.ecomotion.verification.ekyc.implement;
+package com.fptufa26.ecomotion.verification.ekyc.service.implement;
 
-import com.fptufa26.ecomotion.verification.ekyc.EkycProvider;
-import com.fptufa26.ecomotion.verification.ekyc.EkycService;
-import com.fptufa26.ecomotion.verification.ekyc.EkycService.FaceMatchResult;
-import com.fptufa26.ecomotion.verification.ekyc.EkycService.OcrResult;
+import com.fptufa26.ecomotion.verification.ekyc.service.EkycProvider;
+import com.fptufa26.ecomotion.verification.ekyc.service.EkycService;
+import com.fptufa26.ecomotion.verification.ekyc.service.EkycService.FaceMatchResult;
+import com.fptufa26.ecomotion.verification.ekyc.service.EkycService.OcrResult;
 import com.fptufa26.ecomotion.verification.ekyc.exception.EkycFailedException;
 import com.fptufa26.ecomotion.verification.ekyc.exception.EkycProviderUnavailableException;
 import lombok.extern.slf4j.Slf4j;

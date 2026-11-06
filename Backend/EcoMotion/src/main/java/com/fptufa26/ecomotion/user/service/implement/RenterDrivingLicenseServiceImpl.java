@@ -1,7 +1,7 @@
 package com.fptufa26.ecomotion.user.service.implement;
 
-import com.fptufa26.ecomotion.common.storage.FileStorageException;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.exception.FileStorageException;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.user.dto.request.UpdateDrivingLicenseRequest;
 import com.fptufa26.ecomotion.user.dto.response.DrivingLicenseClassOptionResponse;
 import com.fptufa26.ecomotion.user.dto.response.DrivingLicenseImage;

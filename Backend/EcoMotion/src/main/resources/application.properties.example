@@ -296,3 +296,5 @@ app.vnpay.query-interval=${VNPAY_QUERY_INTERVAL:60s}
 app.finance.sandbox-payout-enabled=${SANDBOX_PAYOUT_ENABLED:false}
 app.vnpay.reconciliation-batch-size=${VNPAY_RECONCILIATION_BATCH_SIZE:25}
 app.vnpay.reconciliation-delay-ms=${VNPAY_RECONCILIATION_DELAY_MS:60000}
+
+booking.max-advance-months=${BOOKING_MAX_ADVANCE_MONTHS:3}

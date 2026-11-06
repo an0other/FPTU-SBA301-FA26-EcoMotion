@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.verification.ekyc;
+package com.fptufa26.ecomotion.verification.ekyc.util;
 
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;

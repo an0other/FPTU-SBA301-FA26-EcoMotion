@@ -1,6 +1,6 @@
-package com.fptufa26.ecomotion.verification.ekyc;
+package com.fptufa26.ecomotion.verification.ekyc.util;
 
-import com.fptufa26.ecomotion.verification.ekyc.EkycService.FaceMatchResult;
+import com.fptufa26.ecomotion.verification.ekyc.service.EkycService.FaceMatchResult;
 import com.fptufa26.ecomotion.verification.ekyc.exception.EkycFailedException;
 
 public final class FaceMatchRule {

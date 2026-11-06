@@ -1,9 +1,11 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import com.fptufa26.ecomotion.booking.policy.BookingStartPolicy;
 import com.fptufa26.ecomotion.booking.dto.request.*;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse.*;
 import com.fptufa26.ecomotion.booking.service.*;
+import com.fptufa26.ecomotion.booking.util.RentalPriceOptimizer;
 import com.fptufa26.ecomotion.common.exception.*;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.entity.*;
@@ -25,6 +27,7 @@ public class RentalPricingServiceImpl implements RentalPricingService {
     private final VehicleDepositPolicyService depositPolicy;
     private final ScheduleService scheduleService;
     private final Clock clock;
+    private final BookingStartPolicy bookingStartPolicy;
 
     public static int validateHours(Instant start, Instant end) {
         if (start == null || end == null || !start.equals(start.truncatedTo(ChronoUnit.HOURS))
@@ -43,6 +46,7 @@ public class RentalPricingServiceImpl implements RentalPricingService {
     }
 
     @Override public RentalQuoteResponse quote(RentalQuoteRequest request) {
+        bookingStartPolicy.validate(request.pickupTime());
         int hours = validateHours(request.pickupTime(), request.requestedEndAt());
         if (request.pickupTime().isBefore(clock.instant().plus(Duration.ofHours(3))))
             throw new BadRequestException("Đặt xe trước giờ nhận ít nhất 3 giờ");

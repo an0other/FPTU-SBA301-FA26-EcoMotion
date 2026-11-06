@@ -12,7 +12,7 @@ import com.fptufa26.ecomotion.booking.service.BookingService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
-import com.fptufa26.ecomotion.common.storage.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest;
 import com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest;
 import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;

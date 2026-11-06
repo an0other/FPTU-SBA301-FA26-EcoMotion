@@ -1,8 +1,8 @@
-package com.fptufa26.ecomotion.common.storage.implement;
+package com.fptufa26.ecomotion.common.storage.service.implement;
 
-import com.fptufa26.ecomotion.common.storage.DocumentStorageObjectPath;
-import com.fptufa26.ecomotion.common.storage.DocumentStorageService;
-import com.fptufa26.ecomotion.common.storage.FileStorageException;
+import com.fptufa26.ecomotion.common.storage.util.DocumentStorageObjectPath;
+import com.fptufa26.ecomotion.common.storage.service.DocumentStorageService;
+import com.fptufa26.ecomotion.common.storage.exception.FileStorageException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;

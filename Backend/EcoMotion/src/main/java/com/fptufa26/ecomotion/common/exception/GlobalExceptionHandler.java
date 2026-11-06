@@ -29,7 +29,7 @@ import com.fptufa26.ecomotion.booking.exception.InvalidTripTransitionException;
 import com.fptufa26.ecomotion.booking.exception.SettledChargeException;
 import com.fptufa26.ecomotion.booking.exception.TripConflictException;
 import com.fptufa26.ecomotion.booking.exception.VehicleUnavailableException;
-import com.fptufa26.ecomotion.common.storage.FileStorageException;
+import com.fptufa26.ecomotion.common.storage.exception.FileStorageException;
 import com.fptufa26.ecomotion.finance.exception.BankAccountConflictException;
 import com.fptufa26.ecomotion.finance.exception.InvalidAccountHolderNameException;
 import com.fptufa26.ecomotion.finance.exception.InvalidAccountNumberException;

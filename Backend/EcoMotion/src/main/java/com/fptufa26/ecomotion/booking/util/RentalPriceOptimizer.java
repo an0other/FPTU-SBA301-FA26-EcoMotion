@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.booking.service;
+package com.fptufa26.ecomotion.booking.util;
 
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse.Item;
 import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
