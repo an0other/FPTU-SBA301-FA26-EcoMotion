@@ -106,7 +106,16 @@ export default function VehicleMap({ draftOrigin, selectedOrigin, vehicles, sele
     map.on('click', (event) => { if (map.__vietmapReady) onPick({ latitude: event.latlng.lat, longitude: event.latlng.lng }) })
     mapRef.current = map
     markersRef.current = L.layerGroup().addTo(map)
+
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize()
+    })
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
     return () => {
+      resizeObserver.disconnect()
       detach()
       retryBasemapRef.current = null
       map.remove()

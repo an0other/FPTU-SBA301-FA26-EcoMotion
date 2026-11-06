@@ -66,12 +66,13 @@ export default function PaymentSuccessPage() {
               ? 'Giao dịch đã được cổng thanh toán xác minh và máy chủ ghi nhận.'
               : 'Khoản chuyển khoản đã được xác nhận thủ công và máy chủ ghi nhận.'}</p>
             <dl className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-left text-sm space-y-4" aria-label="Biên lai thanh toán">
-              <div><dt>Mã đơn thuê</dt><dd className="font-mono break-all">{receipt.bookingCode}</dd></div>
-              <div><dt>Mã thanh toán nội bộ</dt><dd className="font-mono break-all">{receipt.transactionCode || '—'}</dd></div>
-              {receipt.vnpTransactionNo && <div><dt>Mã giao dịch VNPay</dt><dd className="break-all">{receipt.vnpTransactionNo}</dd></div>}
-              <div><dt>Số tiền thanh toán</dt><dd className="text-lg font-bold">{formatPaymentMoney(receipt.amount)}</dd></div>
-              <div><dt>Phương thức</dt><dd>{receipt.paymentMethod === 'VNPAY' ? 'Cổng thanh toán VNPay' : 'Chuyển khoản ngân hàng'}</dd></div>
-              <div><dt>Thời gian thanh toán</dt><dd>{formatPaymentDate(receipt.paidAt)}</dd></div>
+              <div className="flex justify-between items-center"><dt className="text-slate-500">Mã đơn hàng</dt><dd className="font-mono font-bold break-all text-slate-900">{receipt.bookingCode}</dd></div>
+              {receipt.transactionCode && <div className="flex justify-between items-center"><dt className="text-slate-500">Mã thanh toán nội bộ</dt><dd className="font-mono font-bold text-brand-700">{receipt.transactionCode}</dd></div>}
+              {receipt.vnpTransactionNo && <div className="flex justify-between items-center"><dt className="text-slate-500">Mã giao dịch VNPAY</dt><dd className="font-mono break-all text-slate-900">{receipt.vnpTransactionNo}</dd></div>}
+              <div className="flex justify-between items-center"><dt className="text-slate-500">Số tiền đã thanh toán</dt><dd className="text-lg font-bold text-emerald-700">{formatPaymentMoney(receipt.amount)}</dd></div>
+              <div className="flex justify-between items-center"><dt className="text-slate-500">Trạng thái</dt><dd className="inline-flex items-center gap-1.5 font-bold text-emerald-700"><span className="h-2 w-2 rounded-full bg-emerald-500"></span>Đã thanh toán</dd></div>
+              <div className="flex justify-between items-center"><dt className="text-slate-500">Phương thức</dt><dd className="font-medium text-slate-800">{receipt.paymentMethod === 'VNPAY' ? 'Cổng thanh toán VNPAY' : 'Chuyển khoản ngân hàng'}</dd></div>
+              <div className="flex justify-between items-center"><dt className="text-slate-500">Thời gian thanh toán</dt><dd className="font-medium text-slate-800">{formatPaymentDate(receipt.paidAt)}</dd></div>
             </dl>
           </>
         )}

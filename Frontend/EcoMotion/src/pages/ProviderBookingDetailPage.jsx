@@ -100,6 +100,21 @@ export default function ProviderBookingDetailPage() {
   const [showAddChargeModal, setShowAddChargeModal] = useState(false)
   const [toast, setToast] = useState({ message: '', type: 'success' })
   const [finalizing, setFinalizing] = useState(false)
+  const [tripActionBusy, setTripActionBusy] = useState(false)
+
+  const handleTripAction = async (action) => {
+    if (tripActionBusy) return
+    setTripActionBusy(true)
+    try {
+      await providerBookingService.tripTransition(bookingCode, action)
+      await refetch()
+      setToast({ message: action === 'start' ? 'Đã bắt đầu chuyến đi.' : 'Đã kết thúc chuyến đi, chờ quyết toán.', type: 'success' })
+    } catch (err) {
+      setToast({ message: err?.response?.data?.message || 'Không thể cập nhật chuyến đi.', type: 'error' })
+    } finally {
+      setTripActionBusy(false)
+    }
+  }
 
   // Incident & Evidence state
   const [incidents, setIncidents] = useState([])
@@ -339,6 +354,13 @@ export default function ProviderBookingDetailPage() {
           type={toast.type}
           onClose={() => setToast({ message: '', type: 'success' })}
         />
+
+        {isProviderRole && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(booking.status) && (
+          <button type="button" disabled={tripActionBusy} onClick={() => handleTripAction(booking.actualStartAt ? 'end' : 'start')}
+            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {tripActionBusy ? 'Đang xử lý...' : booking.actualStartAt ? 'Kết thúc chuyến' : 'Bắt đầu chuyến'}
+          </button>
+        )}
 
         {/* 1. Breadcrumb & Navigation */}
         <nav aria-label="Đường dẫn trang" className="flex items-center gap-2 text-xs text-slate-500">

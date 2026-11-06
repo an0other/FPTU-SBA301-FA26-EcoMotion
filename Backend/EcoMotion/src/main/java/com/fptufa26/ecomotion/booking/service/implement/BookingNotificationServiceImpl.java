@@ -40,9 +40,13 @@ public class BookingNotificationServiceImpl implements BookingNotificationServic
         payload.put("status", booking.getStatus().name());
         payload.put("version", booking.getVersion());
         payload.put("occurredAt", java.time.Instant.now().toString());
+        // The stream already defers delivery until commit. Scheduling it again from
+        // afterCommit registers a callback too late and silently loses the event.
         stream.sendEventToProvider(booking.getVehicle().getProvider().getId(), event, payload);
-        if (booking.getRenter() != null && booking.getRenter().getUser() != null) stream.sendEventToUser(booking.getRenter().getUser().getId(), event, payload);
-        if (booking.getDriver() != null && booking.getDriver().getUser() != null) stream.sendEventToUser(booking.getDriver().getUser().getId(), event, payload);
+        if (booking.getRenter() != null && booking.getRenter().getUser() != null)
+            stream.sendEventToUser(booking.getRenter().getUser().getId(), event, payload);
+        if (booking.getDriver() != null && booking.getDriver().getUser() != null)
+            stream.sendEventToUser(booking.getDriver().getUser().getId(), event, payload);
     }
 
     private void schedule(Booking booking, BigDecimal depositAmount, boolean depositPaid) {

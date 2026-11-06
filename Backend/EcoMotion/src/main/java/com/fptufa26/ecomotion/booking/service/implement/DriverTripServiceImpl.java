@@ -13,6 +13,7 @@ import com.fptufa26.ecomotion.booking.enums.TripView;
 import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.exception.InvalidTripTransitionException;
 import com.fptufa26.ecomotion.booking.exception.TripConflictException;
+import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.booking.dto.request.DriverRejectRequest;
 import com.fptufa26.ecomotion.booking.dto.request.IncidentReportRequest;
 import com.fptufa26.ecomotion.booking.dto.request.TripEvidenceRequest;
@@ -28,6 +29,7 @@ import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.booking.service.DriverTripService;
 import com.fptufa26.ecomotion.booking.service.MapGeocodingService;
 import com.fptufa26.ecomotion.booking.service.TripIncidentService;
+import com.fptufa26.ecomotion.booking.service.TripTransitions;
 import com.fptufa26.ecomotion.booking.specification.BookingSpecification;
 import com.fptufa26.ecomotion.common.config.ClockConfig;
 import com.fptufa26.ecomotion.common.response.PageResponse;
@@ -69,8 +71,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
-import com.fptufa26.ecomotion.booking.enums.TripIncidentStatus;
-import com.fptufa26.ecomotion.booking.enums.TripIncidentUrgency;
 
 @Service
 @RequiredArgsConstructor
@@ -351,12 +351,10 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
 
         Instant now = clock.instant();
-        booking.setDriverStartConfirmedAt(now);
-        if (booking.getRenterStartConfirmedAt() != null) {
-            booking.setActualStartAt(now);
-            booking.setStatus(BookingStatus.IN_PROGRESS);
-        } else {
-            booking.setStatus(BookingStatus.AWAITING_START_CONFIRMATION);
+        try {
+            TripTransitions.confirmStart(booking, TripTransitions.Actor.DRIVER, now);
+        } catch (ConflictException ex) {
+            throw new InvalidTripTransitionException(ex.getMessage());
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
         bookingNotificationService.changed(booking, "BOOKING_CHANGED");
@@ -424,14 +422,10 @@ public class DriverTripServiceImpl implements DriverTripService {
         }
 
         Instant now = clock.instant();
-        booking.setDriverEndConfirmedAt(now);
-        boolean renterEnded = booking.getRenterEndConfirmedAt() != null || booking.getRenterConfirmedAt() != null;
-        if (renterEnded && booking.getActualEndAt() == null) booking.setActualEndAt(now);
-        booking.setStatus(renterEnded
-                ? BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION
-                : BookingStatus.AWAITING_END_CONFIRMATION);
-        if (booking.getProviderConfirmedAt() == null) {
-            booking.setProviderConfirmedAt(now);
+        try {
+            TripTransitions.confirmEnd(booking, TripTransitions.Actor.DRIVER, now);
+        } catch (ConflictException ex) {
+            throw new InvalidTripTransitionException(ex.getMessage());
         }
         Booking saved = bookingRepository.saveAndFlush(booking);
         endConfirmations.reported(saved, currentUserId);
@@ -1084,7 +1078,11 @@ public class DriverTripServiceImpl implements DriverTripService {
                 booking.getPricingItems().stream().map(item ->
                         new RentalQuoteResponse.Item(
                                 item.getPlanId(), item.getPlanType(), item.getSlotLengthMinutes(),
-                                item.getUnitPrice(), item.getQuantity())).toList()
+                                item.getUnitPrice(), item.getQuantity())).toList(),
+                booking.getDriverStartConfirmedAt(),
+                booking.getRenterStartConfirmedAt(),
+                booking.getDriverEndConfirmedAt(),
+                booking.getRenterEndConfirmedAt()
         );
     }
 

@@ -149,13 +149,22 @@ public class ProviderBookingController {
         return ApiResponse.success(providerBookingService.getCharges(principal.getUserId(), bookingCodeOrId));
     }
 
-    @PostMapping("/{bookingCodeOrId}/charges")
+    @PostMapping(value = "/{bookingCodeOrId}/charges", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Add an extra charge to a booking")
     public ApiResponse<BookingChargeResponse> addCharge(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable String bookingCodeOrId,
             @Valid @RequestBody AddChargeRequest request) {
         return ApiResponse.success(providerBookingService.addCharge(principal.getUserId(), bookingCodeOrId, request));
+    }
+
+    @PostMapping(value = "/{bookingCodeOrId}/charges", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<BookingChargeResponse> addChargeWithEvidence(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCodeOrId,
+            @Valid @org.springframework.web.bind.annotation.RequestPart("request") AddChargeRequest request,
+            @org.springframework.web.bind.annotation.RequestPart("files") List<MultipartFile> files) {
+        return ApiResponse.success(providerBookingService.addChargeWithEvidence(principal.getUserId(), bookingCodeOrId, request, files));
     }
 
     @PostMapping("/{bookingCodeOrId}/charges/{chargeId}/withdraw")

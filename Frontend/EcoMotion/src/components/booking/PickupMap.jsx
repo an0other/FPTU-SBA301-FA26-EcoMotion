@@ -67,7 +67,21 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
     const detach = attachVietmap(map, { onLoad: () => setMapError(''), onError: message => setMapError(message) })
     if (!readOnly) map.on('click', (event) => { if (map.__vietmapReady) selectPoint(event.latlng.lat, event.latlng.lng) })
     mapRef.current = map
-    return () => { detach(); map.remove(); mapRef.current = null; markerRef.current = null; originLayerRef.current = null }
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize()
+    })
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+      detach()
+      map.remove()
+      mapRef.current = null
+      markerRef.current = null
+      originLayerRef.current = null
+    }
   }, [onError, readOnly, selectPoint])
 
   useEffect(() => {
@@ -160,7 +174,7 @@ export function PickupMap({ value, onChange, onError, readOnly = false, origin =
             </button>
           </div>
           {suggestions.length ? (
-            <div className="absolute z-[1000] mt-1 max-h-48 w-full overflow-auto rounded-xl border bg-white shadow-lg">
+            <div className="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-xl border bg-white shadow-lg">
               {suggestions.map((item, index) => (
                 <button key={`${item.latitude}-${item.longitude}-${index}`} type="button"
                   onClick={() => selectPoint(item.latitude, item.longitude, item.displayName || item.address)}

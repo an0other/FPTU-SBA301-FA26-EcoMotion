@@ -1,6 +1,11 @@
 import apiClient from './apiClient.js'
 
 export const providerBookingService = {
+  async tripTransition(bookingCode, action) {
+    const code = encodeURIComponent(String(bookingCode).trim().toUpperCase())
+    const { data } = await apiClient.post(`/provider/bookings/${code}/trip/${action}`)
+    return data?.data
+  },
   async listBookings(status) {
     const params = {}
     if (status && status !== 'ALL') params.status = status
@@ -74,6 +79,15 @@ export const providerBookingService = {
 
   async addCharge(bookingCode, chargeData) {
     const { data } = await apiClient.post(`/provider/bookings/${encodeURIComponent(String(bookingCode).trim().toUpperCase())}/charges`, chargeData)
+    return data?.data
+  },
+
+  async addChargeWithEvidence(bookingCode, chargeData, files) {
+    const form = new FormData()
+    form.append('request', new Blob([JSON.stringify(chargeData)], { type: 'application/json' }))
+    files.forEach((file) => form.append('files', file))
+    const code = encodeURIComponent(String(bookingCode).trim().toUpperCase())
+    const { data } = await apiClient.post(`/provider/bookings/${code}/charges`, form, { timeout: 120000 })
     return data?.data
   },
 

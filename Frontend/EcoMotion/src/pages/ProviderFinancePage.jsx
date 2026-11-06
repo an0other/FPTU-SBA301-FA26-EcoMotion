@@ -49,8 +49,8 @@ const TX_STATUS_CONFIG = {
 }
 
 const REQUEST_STATUS_CONFIG = {
-  PENDING: { label: 'Chờ thanh toán', bg: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
-  PROOF_SUBMITTED: { label: 'Chờ đối soát biên lai', bg: 'bg-blue-50 text-blue-800 border-blue-200', dot: 'bg-blue-500' },
+  PENDING: { label: 'Chờ khách chuyển khoản', bg: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  PROOF_SUBMITTED: { label: 'Chờ Provider xác nhận', bg: 'bg-blue-50 text-blue-800 border-blue-200', dot: 'bg-blue-500' },
   PARTIALLY_PAID: { label: 'Thanh toán một phần', bg: 'bg-orange-50 text-orange-800 border-orange-200', dot: 'bg-orange-500' },
   CONFIRMED: { label: 'Đã xác nhận đủ', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500' },
   REJECTED: { label: 'Từ chối biên lai', bg: 'bg-red-50 text-red-800 border-red-200', dot: 'bg-red-500' },
@@ -353,6 +353,7 @@ export default function ProviderFinancePage() {
   const [confirmationId, setConfirmationId] = useState(null)
   const [confirmNoteInput, setConfirmNoteInput] = useState('')
   const [isConfirming, setIsConfirming] = useState(false)
+  const confirmingPayment = useRef(false)
 
   // Form States for Reject & Issue
   const [rejectReasonInput, setRejectReasonInput] = useState('')
@@ -460,16 +461,19 @@ export default function ProviderFinancePage() {
   })
 
   useEffect(() => {
+    const sequence = financeSequence
     const timer = setTimeout(fetchFinanceData, 0)
-    return () => { clearTimeout(timer); ++financeSequence.current }
+    return () => { clearTimeout(timer); ++sequence.current }
   }, [fetchFinanceData])
   useEffect(() => {
+    const sequence = txSequence
     const timer = setTimeout(fetchTransactions, 0)
-    return () => { clearTimeout(timer); ++txSequence.current }
+    return () => { clearTimeout(timer); ++sequence.current }
   }, [fetchTransactions])
   useEffect(() => {
+    const sequence = paymentSequence
     const timer = setTimeout(fetchPaymentRequests, 0)
-    return () => { clearTimeout(timer); ++paymentSequence.current }
+    return () => { clearTimeout(timer); ++sequence.current }
   }, [fetchPaymentRequests])
 
   // Handle Review Refund
@@ -556,6 +560,7 @@ export default function ProviderFinancePage() {
     e.preventDefault()
     if (!confirmModalData || isConfirming) return
 
+    confirmingPayment.current = true
     try {
       setIsConfirming(true)
       const payload = {
@@ -574,6 +579,7 @@ export default function ProviderFinancePage() {
       console.error('Failed to confirm payment:', err)
       setToast({ message: err.message || 'Xác nhận nhận tiền thất bại.', type: 'error' })
     } finally {
+      confirmingPayment.current = false
       setIsConfirming(false)
     }
   }
@@ -1075,8 +1081,8 @@ export default function ProviderFinancePage() {
                     className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3.5 pr-9 text-xs font-medium text-slate-800 hover:border-slate-300 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none transition"
                   >
                     <option value="ALL">Tất cả trạng thái</option>
-                    <option value="PENDING">Chờ thanh toán</option>
-                    <option value="PROOF_SUBMITTED">Chờ đối soát biên lai</option>
+                    <option value="PENDING">Chờ khách chuyển khoản</option>
+                    <option value="PROOF_SUBMITTED">Chờ Provider xác nhận</option>
                     <option value="PARTIALLY_PAID">Thanh toán một phần</option>
                     <option value="CONFIRMED">Đã xác nhận đủ</option>
                     <option value="REVIEW_REQUIRED">Cần đối soát</option>
@@ -1145,12 +1151,13 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : (
                     paymentRequests.map((pr) => {
-                      const statusMeta = REQUEST_STATUS_CONFIG[pr.status] || {
+                      const hasProof = pr.evidences && pr.evidences.length > 0
+                      const effectiveStatus = (hasProof && pr.status === 'PENDING') ? 'PROOF_SUBMITTED' : pr.status
+                      const statusMeta = REQUEST_STATUS_CONFIG[effectiveStatus] || {
                         label: pr.status,
                         bg: 'bg-slate-100 text-slate-700 border-slate-200',
                         dot: 'bg-slate-400',
                       }
-                      const hasProof = pr.evidences && pr.evidences.length > 0
                       const remaining = Number(pr.remainingAmount ?? Math.max(0, Number(pr.amount || 0) - Number(pr.paidAmount || 0)))
                       const cancelling = pr.bookingStatus === 'CANCELLATION_REVIEW' || pr.bookingStatus === 'CANCELLED'
                       const stillCollecting = !cancelling && (
@@ -1751,6 +1758,7 @@ export default function ProviderFinancePage() {
               <button
                 type="button"
                 onClick={() => setConfirmModalData(null)}
+                disabled={isConfirming}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
               >
                 <Icon name="close" className="text-lg" />
@@ -1808,6 +1816,7 @@ export default function ProviderFinancePage() {
                 <button
                   type="button"
                   onClick={() => setConfirmModalData(null)}
+                  disabled={isConfirming}
                   className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Hủy bỏ

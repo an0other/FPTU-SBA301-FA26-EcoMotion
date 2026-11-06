@@ -8,7 +8,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
   const [resolution, setResolution] = useState('CHANGE_VEHICLE')
   const [vehicleId, setVehicleId] = useState('')
   const [pickup, setPickup] = useState('')
-  const [reason, setReason] = useState(risk?.message || 'Chưa có tài xế phù hợp, cần thống nhất phương án với khách thuê.')
+  const [reason, setReason] = useState(risk?.userMessage || 'Chưa có tài xế phù hợp, cần thống nhất phương án với khách thuê.')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')

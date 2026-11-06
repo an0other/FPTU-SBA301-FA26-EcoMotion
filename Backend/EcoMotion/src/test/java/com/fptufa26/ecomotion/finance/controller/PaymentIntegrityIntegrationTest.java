@@ -23,9 +23,11 @@ import com.fptufa26.ecomotion.dispute.entity.Dispute;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import com.fptufa26.ecomotion.finance.dto.request.ConfirmPaymentRequest;
+import com.fptufa26.ecomotion.finance.entity.PaymentEvidence;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
 import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
+import com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentReceiptStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
@@ -156,6 +158,61 @@ class PaymentIntegrityIntegrationTest {
         assertThat(riskService.assessForRenter(renterId,code).atRisk()).isTrue();
         bookingService.cancel(renterId,code);
         assertThat(riskService.assessForRenter(renterId,code).atRisk()).isFalse();
+    }
+
+    @Test void operationalRiskDoesNotDiscloseAnotherRentersBooking() throws Exception {
+        String code = legacyDeposit("DAILY", 48);
+        String otherCode = "PRIVATE-" + bookingId;
+        long otherRenterId = tx.execute(s -> {
+            Booking current = em.find(Booking.class, bookingId);
+            Renter otherRenter = new Renter(); otherRenter.setUser(user(Role.RENTER)); em.persist(otherRenter);
+            Booking older = new Booking(); older.setBookingCode(otherCode); older.setVehicle(current.getVehicle());
+            older.setRenter(otherRenter); older.setPlan(current.getPlan()); older.setStatus(BookingStatus.IN_PROGRESS);
+            older.setPickupTime(Instant.now().minusSeconds(3600)); older.setPickupAddress("Private pickup");
+            older.setPassengerCount(1); older.setTotalAmount(new BigDecimal("100000"));
+            older.setActualStartAt(Instant.now().minusSeconds(3600)); em.persist(older);
+            return otherRenter.getUser().getId();
+        });
+        String renterToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, renterId)));
+        String otherToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, otherRenterId)));
+        String providerToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, providerId)));
+        String outsiderToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, outsiderId)));
+
+        String risk = mvc.perform(get("/api/renter/bookings/{code}/operational-risk", code)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.atRisk").value(true))
+                .andExpect(jsonPath("$.data.riskType").value("VEHICLE_BUSY"))
+                .andExpect(jsonPath("$.data.blockingBookingCode").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(risk).doesNotContain(otherCode, "Private pickup", "customerId", "driverId", "bookingId");
+        String list = mvc.perform(get("/api/renter/bookings").header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(list).contains("riskMessage").doesNotContain(otherCode, "Private pickup");
+        String detail = mvc.perform(get("/api/renter/bookings/{code}", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(detail).doesNotContain(otherCode, "Private pickup");
+        mvc.perform(get("/api/renter/bookings/{code}", otherCode).header(HttpHeaders.AUTHORIZATION, "Bearer " + renterToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/renter/bookings/{code}/operational-risk", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/provider/bookings/{code}/operational-risk", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.atRisk").value(true));
+        mvc.perform(get("/api/provider/bookings/{code}/operational-risk", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + outsiderToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/provider/bookings/{code}/assign-candidates", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + outsiderToken))
+                .andExpect(status().isNotFound());
+        long driverUserId = tx.execute(s -> {
+            var driver = new com.fptufa26.ecomotion.user.entity.Driver();
+            driver.setUser(user(Role.DRIVER)); driver.setProvider(em.find(Booking.class, bookingId).getVehicle().getProvider());
+            driver.setLicenseNo("LIC" + bookingId); driver.setLicenseClass("B2");
+            driver.setLicenseExpiry(java.time.LocalDate.of(2040, 1, 1));
+            driver.setPortraitUrl("portrait"); driver.setLicenseImageUrl("license");
+            driver.setStatus(com.fptufa26.ecomotion.user.enums.DriverStatus.APPROVED); em.persist(driver);
+            return driver.getUser().getId();
+        });
+        String driverToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, driverUserId)));
+        mvc.perform(get("/api/driver/trips/{code}", code).header(HttpHeaders.AUTHORIZATION, "Bearer " + driverToken))
+                .andExpect(status().isForbidden());
     }
 
     @Test void manualPaymentDoesNotRequireBankReferenceOrNote() {
@@ -388,9 +445,37 @@ class PaymentIntegrityIntegrationTest {
     @Test
     void invalidAmountAndWrongProviderDoNotRecordMoney() {
         assertThatThrownBy(() -> confirm("0", "INVALID")).isInstanceOf(InvalidPaymentOperationException.class);
+        assertThatThrownBy(() -> confirm("-1", "NEGATIVE")).isInstanceOf(InvalidPaymentOperationException.class);
+        assertThatThrownBy(() -> confirm("30001", "EXCEEDS-REMAINING")).isInstanceOf(InvalidPaymentOperationException.class);
         assertThatThrownBy(() -> payments.confirmPayment(requestId, outsiderId,
                 new ConfirmPaymentRequest(new BigDecimal("30000"), "OTHER", null))).isInstanceOf(AccessDeniedException.class);
         assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();
+    }
+
+    @Test
+    void providerRejectsManualRequestWithReasonWithoutRecordingPayment() {
+        tx.executeWithoutResult(s -> {
+            PaymentRequest pr = em.find(PaymentRequest.class, requestId);
+            pr.setStatus(PaymentRequestStatus.PROOF_SUBMITTED);
+            PaymentEvidence evidence = new PaymentEvidence();
+            evidence.setPaymentRequest(pr);
+            evidence.setStatus(PaymentEvidenceStatus.PENDING);
+            evidence.setProofImageUrl("test.jpg");
+            evidence.setTransferredAmount(new BigDecimal("30000"));
+            evidence.setCreatedAt(Instant.now());
+            evidence.setSubmittedBy(pr.getBooking().getRenter().getUser());
+            em.persist(evidence);
+            pr.getEvidences().add(evidence);
+        });
+        assertThatThrownBy(() -> payments.rejectPayment(requestId, providerId,
+                new com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest("   ")))
+                .isInstanceOf(InvalidPaymentOperationException.class);
+        var result = payments.rejectPayment(requestId, providerId,
+                new com.fptufa26.ecomotion.finance.dto.request.RejectPaymentRequest("Không tìm thấy giao dịch"));
+        assertThat(result.status()).isEqualTo(PaymentRequestStatus.REJECTED);
+        assertThat(result.rejectionReason()).isEqualTo("Không tìm thấy giao dịch");
+        assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
     }
 
     @Test
@@ -447,8 +532,7 @@ class PaymentIntegrityIntegrationTest {
 
     @Test
     void duplicateConfirmationAndReconciliationReplayNeverRecordTwice() {
-        tx.executeWithoutResult(s -> em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.EXPIRED));
-        confirm("30000", "LATE-" + requestId);
+        confirm("30000", "FIRST-" + requestId);
         assertThatThrownBy(() -> confirm("30000", "ANOTHER-" + requestId)).isInstanceOf(ConflictException.class);
         assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
     }

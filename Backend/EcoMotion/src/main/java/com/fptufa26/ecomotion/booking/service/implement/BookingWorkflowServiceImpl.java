@@ -290,9 +290,9 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                         : "Thanh toán cọc trước khi hết thời gian giữ lịch.";
             case DRIVER_ASSIGNED -> "Đã gửi yêu cầu cho tài xế, đang chờ phản hồi. Phân công chưa phải tài xế đã chấp nhận.";
             case DRIVER_CONFIRMED -> "Tài xế đã xác nhận. Theo dõi giờ đón và liên hệ khi cần.";
-            case DRIVER_ARRIVED, AWAITING_START_CONFIRMATION -> "Tài xế đã đến. Hai bên cần xác nhận bắt đầu chuyến.";
+            case DRIVER_ARRIVED, AWAITING_START_CONFIRMATION -> "Tài xế đã đến. Nhà cung cấp hoặc tài xế có thể bắt đầu chuyến.";
             case IN_PROGRESS -> "Chuyến đang diễn ra. Xác nhận kết thúc khi hai bên đã hoàn thành hành trình.";
-            case AWAITING_END_CONFIRMATION -> "Một bên đã báo kết thúc. Chờ bên còn lại xác nhận; đơn chưa hoàn tất tài chính.";
+            case AWAITING_END_CONFIRMATION -> "Nhà cung cấp hoặc tài xế có thể kết thúc chuyến; quyết toán được xử lý sau.";
             case AWAITING_EXTRA_CHARGE_CONFIRMATION -> provider ? "Kiểm tra bằng chứng, bổ sung phụ phí hợp lệ rồi chốt quyết toán." : "Kiểm tra các phụ phí; gửi tranh chấp nếu không đồng ý trước khi quyết toán.";
             case AWAITING_FINAL_PAYMENT -> "Chi phí đã chốt. Thanh toán phần còn lại để hoàn tất đơn.";
             case COMPLETED -> "Đơn đã hoàn tất theo trạng thái máy chủ. Bạn có thể xem lại chi phí và lịch sử thanh toán.";

@@ -1,4 +1,4 @@
-﻿import { useRealtimeSync } from '../../hooks/useRealtimeSync'
+import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPricing'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -49,6 +49,9 @@ function toCard(detail) {
   const label = planLabel(detail.planType)
   return {
     id: detail.bookingCode,
+    bookingCode: detail.bookingCode,
+    renterName: detail.renterName,
+    providerName: detail.providerName,
     vehicleId: detail.vehicleId,
     status: detail.status,
     planType: detail.planType,
@@ -56,6 +59,10 @@ function toCard(detail) {
     upfront: detail.planType === 'YEARLY',
     createdAt: formatWhen(detail.createdAt),
     actualStartTime: formatWhen(detail.actualStartAt),
+    actualStartAt: detail.actualStartAt,
+    actualEndAt: detail.actualEndAt,
+    formattedActualStart: formatWhen(detail.actualStartAt),
+    formattedActualEnd: formatWhen(detail.actualEndAt),
     canConfirmStart: detail.canConfirmStart,
     canConfirmEnd: detail.canConfirmEnd,
     canCancel: detail.canCancel,
@@ -76,6 +83,7 @@ function toCard(detail) {
       amount: Number(charge.effectiveAmount ?? charge.amount),
       isWaived: Boolean(charge.isWaived),
       confirmationStatus: charge.confirmationStatus,
+      evidenceUrl: charge.evidenceUrl,
     })),
     driver: detail.driver
       ? {
@@ -127,9 +135,9 @@ export function BookingDetailPage() {
   const { bookingCode } = useParams()
   const navigate = useNavigate()
   const [detail, setDetail] = useState(null)
+  const [operationalRisk, setOperationalRisk] = useState(null)
   const [error, setError] = useState('')
   const [workflow, setWorkflow] = useState(null)
-  const [operationalRisk, setOperationalRisk] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
   const { trackingData, loading: trackingLoading, error: trackingError, refetch: refetchTracking } = useRenterTripTracking(
@@ -142,7 +150,9 @@ export function BookingDetailPage() {
     const id = ++sequence.current
     try {
       const [row, progress, risk] = await Promise.allSettled([
-        getMyBooking(bookingCode), bookingWorkflowService.get(bookingCode), getMyBookingOperationalRisk(bookingCode),
+        getMyBooking(bookingCode),
+        bookingWorkflowService.get(bookingCode),
+        getMyBookingOperationalRisk(bookingCode),
       ])
       if (id !== sequence.current) return
       if (row.status === 'rejected') throw row.reason

@@ -218,7 +218,9 @@ export default function CustomerPaymentPage() {
       await fetchPaymentRequests(true)
       setCurrentTime(Date.now())
       setToast({
-        message: 'Đã gửi biên lai. Hệ thống gia hạn giữ chỗ; nhà xe sẽ đối soát và xác nhận cọc.',
+        message: selectedRequest.paymentType === 'FINAL_BALANCE'
+          ? 'Đã gửi biên lai quyết toán. Nhà xe sẽ đối soát và xác nhận hoàn tất đơn.'
+          : 'Đã gửi biên lai. Hệ thống gia hạn giữ chỗ; nhà xe sẽ đối soát và xác nhận cọc.',
         type: 'success',
       })
     } catch (err) {
@@ -289,14 +291,15 @@ export default function CustomerPaymentPage() {
   }
 
   const isDeposit = selectedRequest.paymentType === 'DEPOSIT'
+  const isFinalBalance = selectedRequest.paymentType === 'FINAL_BALANCE'
+  const isMonthlyInstallment = selectedRequest.paymentType === 'MONTHLY_INSTALLMENT'
   const awaitingProvider = isDepositAwaitingProvider(selectedRequest?.status)
   const requestExpired = isPaymentRequestExpired(selectedRequest)
   const countdownExpiresAt = awaitingProvider
     ? (selectedRequest.reconciliationDeadline || selectedRequest.expiresAt)
     : selectedRequest.expiresAt
-  const canSubmitProof = isDeposit && ['PENDING', 'REJECTED', 'PARTIALLY_PAID', 'EXPIRED'].includes(selectedRequest.status)
-  const isFinalBalance = selectedRequest.paymentType === 'FINAL_BALANCE'
-  const isMonthlyInstallment = selectedRequest.paymentType === 'MONTHLY_INSTALLMENT'
+  const canSubmitProof = (isDeposit || isFinalBalance || isMonthlyInstallment)
+    && ['PENDING', 'REJECTED', 'PARTIALLY_PAID', 'EXPIRED'].includes(selectedRequest.status)
   const paymentTitle = isMonthlyInstallment
     ? 'Thanh toán kỳ thuê tháng'
     : isDeposit
@@ -539,7 +542,9 @@ export default function CustomerPaymentPage() {
                 <div>
                   <strong className="block font-bold">Đã gửi biên lai — chờ nhà xe xác nhận</strong>
                   <p className="mt-0.5 text-blue-900">
-                    Lịch xe vẫn được giữ trong thời gian đối soát. Nút「Kiểm tra trạng thái」chỉ cập nhật trạng thái; không thay cho gửi biên lai.
+                    {isFinalBalance
+                      ? 'Nhà xe đang đối soát biên lai chuyển khoản quyết toán để xác nhận hoàn tất đơn thuê.'
+                      : 'Lịch xe vẫn được giữ trong thời gian đối soát. Nút「Kiểm tra trạng thái」chỉ cập nhật trạng thái; không thay cho gửi biên lai.'}
                   </p>
                 </div>
               </div>
@@ -549,7 +554,9 @@ export default function CustomerPaymentPage() {
                 <div>
                   <strong className="block font-bold">Sau khi chuyển khoản</strong>
                   <p className="mt-0.5 text-emerald-800">
-                    Gửi ảnh biên lai bên dưới để gia hạn giữ chỗ và chuyển sang bước nhà xe đối soát. Chỉ bấm「Kiểm tra trạng thái」nếu nhà xe đã xác nhận trên hệ thống.
+                    {isFinalBalance
+                      ? 'Gửi ảnh biên lai bên dưới để chuyển sang bước nhà xe đối soát và xác nhận tất toán đơn thuê.'
+                      : 'Gửi ảnh biên lai bên dưới để gia hạn giữ chỗ và chuyển sang bước nhà xe đối soát. Chỉ bấm「Kiểm tra trạng thái」nếu nhà xe đã xác nhận trên hệ thống.'}
                   </p>
                 </div>
               </div>
@@ -559,6 +566,7 @@ export default function CustomerPaymentPage() {
               <DepositProofForm
                 disabled={requestExpired}
                 busy={submittingProof}
+                isFinalBalance={isFinalBalance}
                 onSubmit={handleSubmitProof}
               />
             ) : null}

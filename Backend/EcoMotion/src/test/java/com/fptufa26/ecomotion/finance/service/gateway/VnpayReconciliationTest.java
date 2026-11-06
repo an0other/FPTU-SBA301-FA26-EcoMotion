@@ -16,6 +16,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VnpayReconciliationTest {
     private final String secret = "TEST_SECRET";
 
+    @Test
+    void defaultQueryIntervalPreservesGatewayReconciliationThrottle() {
+        assertThat(new VnpayConfig().getQueryInterval()).isEqualTo(Duration.ofSeconds(60));
+    }
+
     private Map<String, String> response(String txnStatus) {
         Map<String, String> response = new HashMap<>();
         response.put("vnp_ResponseId", "response-id");
