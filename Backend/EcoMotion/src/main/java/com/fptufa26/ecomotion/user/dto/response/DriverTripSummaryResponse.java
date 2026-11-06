@@ -7,6 +7,8 @@ public record DriverTripSummaryResponse(
         String vehicleName,
         String pickupAddress,
         Instant pickupTime,
-        String status
+        String status,
+        // Hạn phản hồi của yêu cầu DRIVER_ASSIGNED (null với các trạng thái khác). Dùng cho đếm ngược trên UI.
+        Instant assignmentExpiresAt
 ) {
 }

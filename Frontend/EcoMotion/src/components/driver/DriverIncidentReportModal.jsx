@@ -1,5 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { driverTripService } from '../../services/driverTripService'
+import {
+  INCIDENT_PHOTO_MAX_COUNT,
+  buildIncidentPhotoForm,
+  createIncidentPhotoUploader,
+} from '../../utils/incidentPhotoUpload'
+import IncidentPhotoUpload from './IncidentPhotoUpload'
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
@@ -22,15 +28,36 @@ const URGENCY_LEVELS = [
   { value: 'CRITICAL', label: 'Khẩn cấp (Cần ứng cứu ngay)', color: 'border-red-500 text-red-900 font-bold bg-red-50' },
 ]
 
+const tripIdOf = (trip) => trip?.tripId || trip?.bookingCode
+
 export default function DriverIncidentReportModal({ trip, currentCoords, isOpen, onClose, onSuccess }) {
   const [incidentType, setIncidentType] = useState('TRAFFIC_JAM')
   const [urgency, setUrgency] = useState('MEDIUM')
   const [description, setDescription] = useState('')
-  const [evidenceUrls, setEvidenceUrls] = useState('')
+  const [photos, setPhotos] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  // Mã chuyến đi kèm từng ảnh khi thêm (context), nên thử lại vẫn gửi đúng chuyến.
+  const [uploader] = useState(() => createIncidentPhotoUploader({
+    upload: (file, onProgress, tripId) => driverTripService.uploadEvidence(tripId, buildIncidentPhotoForm(file), {
+      onUploadProgress: (event) => onProgress(event.total ? Math.round((event.loaded * 100) / event.total) : 0),
+    }),
+    onChange: setPhotos,
+    maxCount: INCIDENT_PHOTO_MAX_COUNT,
+  }))
+
+  // Giải phóng URL xem trước khi unmount.
+  useEffect(() => () => uploader.dispose(), [uploader])
+
+  const close = () => {
+    uploader.dispose()
+    onClose?.()
+  }
+
   if (!isOpen || !trip) return null
+
+  const anyUploading = photos.some((photo) => photo.status === 'uploading')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -38,23 +65,26 @@ export default function DriverIncidentReportModal({ trip, currentCoords, isOpen,
       setError('Vui lòng mô tả chi tiết sự cố.')
       return
     }
+    if (!uploader.canSubmit()) {
+      setError('Ảnh đang tải lên hoặc có ảnh lỗi. Vui lòng đợi tải xong, hoặc thử lại / xóa ảnh lỗi trước khi gửi.')
+      return
+    }
 
     setLoading(true)
     setError(null)
     try {
-      const tripId = trip.tripId || trip.bookingCode
       const payload = {
         incidentType,
         urgency,
         description: description.trim(),
-        evidenceUrls: evidenceUrls.trim() || undefined,
+        evidenceUrls: uploader.evidenceUrls(),
         latitude: currentCoords?.latitude || undefined,
         longitude: currentCoords?.longitude || undefined,
       }
 
-      await driverTripService.reportIncident(tripId, payload)
+      await driverTripService.reportIncident(tripIdOf(trip), payload)
       onSuccess?.('Đã gửi báo cáo sự cố thành công! Chủ xe và điều phối đã nhận được cảnh báo.')
-      onClose()
+      close()
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Không thể gửi báo cáo sự cố. Vui lòng thử lại.')
     } finally {
@@ -72,7 +102,7 @@ export default function DriverIncidentReportModal({ trip, currentCoords, isOpen,
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             disabled={loading}
             className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
@@ -85,13 +115,12 @@ export default function DriverIncidentReportModal({ trip, currentCoords, isOpen,
         </p>
 
         {error && (
-          <div className="mb-3 rounded-lg bg-red-50 p-2.5 text-xs text-red-800 border border-red-200">
+          <div role="alert" className="mb-3 rounded-lg bg-red-50 p-2.5 text-xs text-red-800 border border-red-200">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          {/* Incident Type Grid */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Phân loại sự cố <span className="text-red-500">*</span>
@@ -115,7 +144,6 @@ export default function DriverIncidentReportModal({ trip, currentCoords, isOpen,
             </div>
           </div>
 
-          {/* Urgency */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Mức độ nghiêm trọng <span className="text-red-500">*</span>
@@ -136,7 +164,6 @@ export default function DriverIncidentReportModal({ trip, currentCoords, isOpen,
             </div>
           </div>
 
-          {/* Description */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Mô tả chi tiết tình huống <span className="text-red-500">*</span>
@@ -151,24 +178,19 @@ export default function DriverIncidentReportModal({ trip, currentCoords, isOpen,
             />
           </div>
 
-          {/* Evidence URL */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Đường dẫn ảnh hiện trường / biên bản (tùy chọn)
-            </label>
-            <input
-              type="url"
-              value={evidenceUrls}
-              onChange={(e) => setEvidenceUrls(e.target.value)}
-              placeholder="https://..."
-              className="w-full rounded-xl border border-slate-200 p-2 text-xs text-slate-800 placeholder-slate-400 focus:border-red-500 focus:outline-none"
-            />
-          </div>
+          <IncidentPhotoUpload
+            items={photos}
+            maxCount={INCIDENT_PHOTO_MAX_COUNT}
+            disabled={loading}
+            onAdd={(files) => uploader.add(files, tripIdOf(trip))}
+            onRemove={(id) => uploader.remove(id)}
+            onRetry={(id) => uploader.retry(id)}
+          />
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               disabled={loading}
               className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
@@ -176,11 +198,13 @@ export default function DriverIncidentReportModal({ trip, currentCoords, isOpen,
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || anyUploading}
               className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 transition disabled:opacity-50"
             >
               {loading && <Icon name="sync" className="animate-spin text-[16px]" />}
-              <span>{loading ? 'Đang gửi...' : 'Gửi báo cáo sự cố'}</span>
+              <span>
+                {loading ? 'Đang gửi...' : anyUploading ? 'Đang tải ảnh...' : 'Gửi báo cáo sự cố'}
+              </span>
             </button>
           </div>
         </form>

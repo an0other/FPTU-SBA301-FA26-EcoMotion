@@ -20,6 +20,17 @@ import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 import { paymentStatusLabel } from '../utils/bookingStatus'
+import { CHARGE_TYPE_LABELS, formatChargeQuantity, PAYMENT_TYPE_LABELS } from '../utils/paymentDisplay'
+
+// Trạng thái giao dịch của BE (PaymentStatus) hiển thị bằng tiếng Việt.
+const TRANSACTION_STATUS_LABELS = {
+  PAID: 'Đã ghi nhận',
+  PENDING: 'Đang xử lý',
+  FAILED: 'Thất bại',
+}
+import { getTripConfirmationView } from '../utils/tripConfirmationStatus'
+import { assignmentSnapshot, shouldAnnounceDriverAssigned } from '../utils/driverAssignmentAnnouncement'
+import { normalizeEvidenceUrls } from '../utils/incidentPhotoUpload'
 
 function Icon({ name, className = '' }) {
   return (
@@ -35,6 +46,17 @@ function Icon({ name, className = '' }) {
 function formatVnd(amount) {
   if (amount == null) return '0 ₫'
   return Number(amount).toLocaleString('vi-VN') + ' ₫'
+}
+
+const CHARGE_STATUS_BADGE = {
+  PENDING: { label: 'Chờ xác nhận', cls: 'border-amber-300 bg-amber-50 text-amber-800' },
+  ACCEPTED: { label: 'Đã xác nhận', cls: 'border-emerald-300 bg-emerald-50 text-emerald-800' },
+  DISPUTED: { label: 'Đang khiếu nại', cls: 'border-red-300 bg-red-50 text-red-800' },
+}
+
+// BE ghi mô tả phụ phí kiểu "4 × 1 giờ (150000.00đ)"; hiển thị số tiền theo định dạng VND.
+function formatChargeNote(text) {
+  return String(text).replace(/(\d+(?:\.\d+)?)\s*đ/g, (_, amount) => formatVnd(amount))
 }
 
 function formatDateTime(isoString) {
@@ -64,6 +86,8 @@ const URGENCY_STYLES = {
   MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300 font-medium',
   LOW: 'bg-blue-100 text-blue-800 border-blue-200 font-medium',
 }
+
+const URGENCY_LABELS = { LOW: 'Thấp', MEDIUM: 'Trung bình', HIGH: 'Cao', CRITICAL: 'Khẩn cấp' }
 
 const INCIDENT_TYPE_LABELS = {
   ACCIDENT: 'Tai nạn giao thông',
@@ -99,22 +123,21 @@ export default function ProviderBookingDetailPage() {
   const [isOpeningAssignModal, setIsOpeningAssignModal] = useState(false)
   const [showAddChargeModal, setShowAddChargeModal] = useState(false)
   const [toast, setToast] = useState({ message: '', type: 'success' })
-  const [finalizing, setFinalizing] = useState(false)
-  const [tripActionBusy, setTripActionBusy] = useState(false)
 
-  const handleTripAction = async (action) => {
-    if (tripActionBusy) return
-    setTripActionBusy(true)
-    try {
-      await providerBookingService.tripTransition(bookingCode, action)
-      await refetch()
-      setToast({ message: action === 'start' ? 'Đã bắt đầu chuyến đi.' : 'Đã kết thúc chuyến đi, chờ quyết toán.', type: 'success' })
-    } catch (err) {
-      setToast({ message: err?.response?.data?.message || 'Không thể cập nhật chuyến đi.', type: 'error' })
-    } finally {
-      setTripActionBusy(false)
+  // Toast "đã phân công" chỉ khi driverId trong dữ liệu booking đã xác nhận đổi sang tài xế khác trong cùng đơn.
+  // Không dựa vào BOOKING_CHANGED, và refetch lặp (SSE reconnect, polling) với cùng driverId không báo lại.
+  const assignmentSeenRef = useRef(null)
+  useEffect(() => {
+    const next = assignmentSnapshot(booking)
+    if (!next) return
+    const previous = assignmentSeenRef.current
+    assignmentSeenRef.current = next
+    if (shouldAnnounceDriverAssigned(previous, next)) {
+      setToast({ message: 'Tài xế đã được phân công cho chuyến xe.', type: 'info' })
     }
-  }
+  }, [booking])
+  // Chặn chốt quyết toán lặp (bấm đúp); ref để không render lại khi đổi cờ.
+  const finalizingRef = useRef(false)
 
   // Incident & Evidence state
   const [incidents, setIncidents] = useState([])
@@ -183,7 +206,12 @@ export default function ProviderBookingDetailPage() {
   useEffect(() => {
     if (bookingCode) {
       const timer = setTimeout(fetchIncidentsAndEvidence, 0)
-      return () => { clearTimeout(timer); ++incidentSequence.current }
+      return () => {
+        clearTimeout(timer)
+        // This ref is a numeric request generation, not a rendered DOM ref.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        ++incidentSequence.current
+      }
     }
   }, [bookingCode, fetchIncidentsAndEvidence])
 
@@ -206,9 +234,6 @@ export default function ProviderBookingDetailPage() {
     handlers: {
       [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
         setToast({ message: 'Thanh toán đã được máy chủ xác minh. Đang cập nhật đơn thuê.', type: 'success' })
-      },
-      [TV5_REALTIME_EVENTS.DRIVER_ASSIGNED]: () => {
-        setToast({ message: 'Tài xế đã được phân công cho chuyến xe.', type: 'info' })
       },
       [TV5_REALTIME_EVENTS.DRIVER_CONFIRMED]: () => {
         setToast({ message: 'Tài xế đã xác nhận tiếp nhận chuyến!', type: 'success' })
@@ -261,7 +286,8 @@ export default function ProviderBookingDetailPage() {
   }
 
   const handleFinalizeSettlement = async () => {
-    setFinalizing(true)
+    if (finalizingRef.current) return
+    finalizingRef.current = true
     try {
       const result = await providerBookingService.finalizeSettlement(booking.bookingCode)
       setToast({
@@ -274,7 +300,7 @@ export default function ProviderBookingDetailPage() {
     } catch (err) {
       setToast({ message: err?.response?.data?.message || err?.message || 'Không thể chốt quyết toán', type: 'error' })
     } finally {
-      setFinalizing(false)
+      finalizingRef.current = false
     }
   }
 
@@ -345,6 +371,7 @@ export default function ProviderBookingDetailPage() {
     : (booking.vehicleImageUrl ? [booking.vehicleImageUrl] : [])
 
   const activeIncidents = incidents.filter((inc) => inc.status !== 'RESOLVED' && inc.status !== 'CANCELLED')
+  const tripView = getTripConfirmationView(booking)
 
   return (
     <ProviderLayout active="Đơn thuê">
@@ -354,13 +381,6 @@ export default function ProviderBookingDetailPage() {
           type={toast.type}
           onClose={() => setToast({ message: '', type: 'success' })}
         />
-
-        {isProviderRole && ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(booking.status) && (
-          <button type="button" disabled={tripActionBusy} onClick={() => handleTripAction(booking.actualStartAt ? 'end' : 'start')}
-            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            {tripActionBusy ? 'Đang xử lý...' : booking.actualStartAt ? 'Kết thúc chuyến' : 'Bắt đầu chuyến'}
-          </button>
-        )}
 
         {/* 1. Breadcrumb & Navigation */}
         <nav aria-label="Đường dẫn trang" className="flex items-center gap-2 text-xs text-slate-500">
@@ -404,6 +424,23 @@ export default function ProviderBookingDetailPage() {
             <p className="text-xs text-slate-500">
               Khởi tạo lúc: {formatDateTime(booking.createdAt)} • Cập nhật cuối: {formatDateTime(booking.updatedAt)}
             </p>
+            {tripView && (
+              <div className="space-y-0.5">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-brand-900">
+                  <Icon name="directions_car" className="text-[16px] text-brand-700" />
+                  <span>{tripView.title}</span>
+                </p>
+                {tripView.parties && (
+                  <p className="pl-[22px] text-[11px] text-slate-600">
+                    {tripView.parties.map((party) => (
+                      <span key={party.label} className="mr-3">
+                        {party.label}: {party.confirmedAt ? `đã xác nhận ${formatDateTime(party.confirmedAt)}` : 'chưa xác nhận'}
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Action Button Strip */}
@@ -444,66 +481,42 @@ export default function ProviderBookingDetailPage() {
               </button>
             )}
 
-            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && (
-              <button
-                type="button"
-                onClick={() => setShowAddChargeModal(true)}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 text-xs font-bold text-indigo-900 hover:bg-indigo-100 transition shadow-2xs"
-              >
-                <Icon name="add_card" className="text-[18px]" />
-                <span>Thêm phụ phí</span>
-              </button>
-            )}
-
-            {booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' &&
-              booking.providerConfirmedAt && (booking.renterConfirmedAt || workflow?.endConfirmations?.[0]?.confirmationMethod === 'AUTO') && (
-              <button
-                type="button"
-                onClick={handleFinalizeSettlement}
-                disabled={finalizing}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-purple-700 px-4 text-xs font-bold text-white shadow-2xs hover:bg-purple-800 disabled:opacity-50"
-              >
-                <Icon name="price_check" className="text-[18px]" />
-                <span>{finalizing ? 'Đang chốt...' : 'Chốt quyết toán'}</span>
-              </button>
-            )}
           </div>
         </header>
 
         {/* Urgent Incident Alert Banner if active incidents exist */}
         {activeIncidents.length > 0 && (
-          <div className="rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <Icon name="warning" className="text-2xl text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="text-sm font-bold text-red-900">
-                    Cảnh báo sự cố chuyến đi đang chờ xử lý ({activeIncidents.length})
-                  </h3>
-                  <div className="mt-1 space-y-1 text-xs text-red-800">
-                    {activeIncidents.map((inc) => (
-                      <div key={inc.id} className="flex items-center gap-2">
-                        <span className="font-bold">
-                          [{INCIDENT_TYPE_LABELS[inc.incidentType] || inc.incidentType}]
-                        </span>
-                        <span>{inc.description}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] border ${URGENCY_STYLES[inc.urgency] || 'bg-slate-100'}`}>
-                          {inc.urgency}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setResolvingIncident(activeIncidents[0])}
-                className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-red-700"
-              >
-                Xử lý sự cố ngay
-              </button>
+          <section aria-label="Sự cố đang chờ xử lý" className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-red-900">
+              <Icon name="warning" className="text-lg text-red-600" />
+              <span>Sự cố đang chờ xử lý</span>
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">{activeIncidents.length}</span>
             </div>
-          </div>
+            <ul className="mt-3 divide-y divide-red-100 overflow-hidden rounded-lg border border-red-100 bg-white">
+              {activeIncidents.map((inc) => (
+                <li key={inc.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900">
+                        {INCIDENT_TYPE_LABELS[inc.incidentType] || inc.incidentType}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 text-[11px] ${URGENCY_STYLES[inc.urgency] || 'border-slate-200 bg-slate-100 text-slate-700'}`}>
+                        {URGENCY_LABELS[inc.urgency] ?? inc.urgency}
+                      </span>
+                    </div>
+                    {inc.description && <p className="mt-0.5 text-xs text-slate-600">{inc.description}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setResolvingIncident(inc)}
+                    className="h-9 shrink-0 rounded-lg border border-red-300 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  >
+                    Xử lý
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {/* 3. Tiến trình đơn thuê / Thông tin cần xử lý */}
@@ -915,7 +928,8 @@ export default function ProviderBookingDetailPage() {
               </div>
 
               {booking.charges && booking.charges.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <div className="space-y-3">
+                <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
                   <table className="w-full min-w-[500px] border-collapse text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
@@ -931,15 +945,18 @@ export default function ProviderBookingDetailPage() {
                       {booking.charges.map((c) => (
                         <tr key={c.id} className="hover:bg-slate-50/50">
                           <td className="px-3.5 py-2.5 font-semibold text-slate-800">
-                            <div>{c.description}</div>
-                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded inline-block mt-0.5">
-                              {c.chargeType}
-                            </span>
+                            <div>{CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}</div>
+                            {c.description && (
+                              <div className="mt-0.5 text-[11px] font-normal text-slate-500">{formatChargeNote(c.description)}</div>
+                            )}
                           </td>
-                          <td className="px-3.5 py-2.5 text-slate-600">{c.quantity ?? '1'}</td>
+                          <td className="px-3.5 py-2.5 text-slate-600">{formatChargeQuantity(c)}</td>
                           <td className="px-3.5 py-2.5 text-right font-mono text-slate-600">{formatVnd(c.unitPrice)}</td>
                           <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">{formatVnd(c.amount)}</td>
                           <td className="px-3.5 py-2.5">
+                            <span className={`mb-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${CHARGE_STATUS_BADGE[c.confirmationStatus]?.cls ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                              {CHARGE_STATUS_BADGE[c.confirmationStatus]?.label ?? c.confirmationStatus ?? 'Không rõ'}
+                            </span>
                             {c.confirmationStatus === 'PENDING' && (
                               <button type="button" className="text-[11px] font-semibold text-slate-700 underline" onClick={async () => {
                                 await providerBookingService.withdrawCharge(booking.bookingCode, c.id)
@@ -949,8 +966,8 @@ export default function ProviderBookingDetailPage() {
                           </td>
                           <td className="px-3.5 py-2.5 text-slate-500">
                             {c.evidenceUrl ? (
-                              <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline">
-                                Xem link
+                              <a href={c.evidenceUrl} target="_blank" rel="noreferrer" aria-label="Mở ảnh minh chứng phụ phí ở kích thước lớn" className="inline-block">
+                                <img src={c.evidenceUrl} alt="Ảnh minh chứng phụ phí" className="h-12 w-12 rounded-lg border border-slate-200 object-cover" />
                               </a>
                             ) : (
                               '—'
@@ -959,7 +976,71 @@ export default function ProviderBookingDetailPage() {
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t border-slate-200 bg-slate-50">
+                        <td colSpan={3} className="px-3.5 py-2.5 text-right text-xs font-bold text-slate-700">Tổng các khoản trong bảng</td>
+                        <td className="px-3.5 py-2.5 text-right font-mono text-sm font-bold text-slate-900">
+                          {formatVnd(booking.charges.reduce((sum, c) => sum + Number(c.amount || 0), 0))}
+                        </td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
                   </table>
+                </div>
+
+                {/* Mobile: mỗi khoản phụ phí là một card, không cuộn ngang */}
+                <div className="space-y-3 md:hidden">
+                  {booking.charges.map((c) => (
+                    <div key={`m-${c.id}`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900">{CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}</p>
+                          {c.description && (
+                            <p className="mt-0.5 text-[11px] text-slate-500">{formatChargeNote(c.description)}</p>
+                          )}
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${CHARGE_STATUS_BADGE[c.confirmationStatus]?.cls ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                          {CHARGE_STATUS_BADGE[c.confirmationStatus]?.label ?? c.confirmationStatus ?? 'Không rõ'}
+                        </span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase text-slate-500">Số lượng</dt>
+                          <dd className="mt-0.5 font-semibold text-slate-800">{formatChargeQuantity(c)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase text-slate-500">Đơn giá</dt>
+                          <dd className="mt-0.5 font-mono text-slate-700">{formatVnd(c.unitPrice)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase text-slate-500">Thành tiền</dt>
+                          <dd className="mt-0.5 font-mono font-bold text-slate-900">{formatVnd(c.amount)}</dd>
+                        </div>
+                      </dl>
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                        {c.evidenceUrl ? (
+                          <a href={c.evidenceUrl} target="_blank" rel="noreferrer" aria-label="Mở ảnh minh chứng phụ phí ở kích thước lớn" className="inline-block">
+                            <img src={c.evidenceUrl} alt="Ảnh minh chứng phụ phí" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-400">Chưa có minh chứng</span>
+                        )}
+                        {c.confirmationStatus === 'PENDING' && (
+                          <button type="button" className="min-h-10 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700" onClick={async () => {
+                            await providerBookingService.withdrawCharge(booking.bookingCode, c.id)
+                            window.location.reload()
+                          }}>Rút phụ phí</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                    <span className="text-xs font-bold text-slate-700">Tổng các khoản trong bảng</span>
+                    <span className="font-mono text-sm font-bold text-slate-900">
+                      {formatVnd(booking.charges.reduce((sum, c) => sum + Number(c.amount || 0), 0))}
+                    </span>
+                  </div>
+                </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">
@@ -997,16 +1078,25 @@ export default function ProviderBookingDetailPage() {
 
                       <p className="text-slate-700 leading-relaxed">{inc.description}</p>
 
-                      {inc.evidenceUrls && (
-                        <div className="text-[11px]">
-                          <a
-                            href={inc.evidenceUrls}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-brand-700 underline font-medium"
-                          >
-                            Xem ảnh minh chứng sự cố
-                          </a>
+                      {normalizeEvidenceUrls(inc.evidenceUrls).length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold text-slate-600">
+                            Ảnh minh chứng sự cố ({normalizeEvidenceUrls(inc.evidenceUrls).length})
+                          </p>
+                          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label="Ảnh minh chứng sự cố">
+                            {normalizeEvidenceUrls(inc.evidenceUrls).map((url, index) => (
+                              <li key={url}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedEvidenceImage(url)}
+                                  className="block aspect-[4/3] w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                                  aria-label={`Xem ảnh minh chứng ${index + 1}`}
+                                >
+                                  <img src={url} alt={`Minh chứng sự cố ${index + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       )}
 
@@ -1109,7 +1199,7 @@ export default function ProviderBookingDetailPage() {
                     <div key={tx.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 flex justify-between items-center">
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-slate-900">{tx.type}</span>
+                          <span className="font-semibold text-slate-900">{PAYMENT_TYPE_LABELS[tx.type] ?? tx.type}</span>
                           {tx.transactionCode && (
                             <span className="font-mono text-[10px] font-bold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
                               {tx.transactionCode}
@@ -1120,7 +1210,9 @@ export default function ProviderBookingDetailPage() {
                       </div>
                       <div className="text-right">
                         <div className="font-mono font-bold text-slate-900">{formatVnd(tx.amount)}</div>
-                        <span className="text-[10px] text-emerald-700 font-semibold">{tx.status}</span>
+                        <span className={`text-[10px] font-semibold ${tx.status === 'FAILED' ? 'text-rose-700' : tx.status === 'PENDING' ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {TRANSACTION_STATUS_LABELS[tx.status] ?? tx.status}
+                        </span>
                       </div>
                     </div>
                   ))}

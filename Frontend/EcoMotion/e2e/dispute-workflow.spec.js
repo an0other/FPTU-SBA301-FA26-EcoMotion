@@ -117,10 +117,18 @@ test('new dispute SSE event refreshes the ruling without waiting for polling', a
   let resolved = false
   await page.addInitScript(() => {
     localStorage.setItem('ecomotion_access_token', 'dispute-event-test')
-    window.EventSource = class {
-      constructor() { this.listeners = {}; window.disputeStream = this }
-      addEventListener(name, handler) { this.listeners[name] = handler }
-      close() {}
+    // SSE dùng fetch + Authorization header (không còn EventSource). Thay stream bằng controller để test đẩy event.
+    const realFetch = window.fetch.bind(window)
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input.url
+      if (!url.includes('/v1/notifications/stream')) return realFetch(input, init)
+      const encoder = new TextEncoder()
+      const body = new ReadableStream({
+        start(controller) {
+          window.disputeStream = { push: (text) => controller.enqueue(encoder.encode(text)) }
+        },
+      })
+      return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))
     }
   })
   await page.route('**/api/**', async route => {
@@ -136,7 +144,7 @@ test('new dispute SSE event refreshes the ruling without waiting for polling', a
   const history = page.getByRole('region', { name: 'Lịch sử khiếu nại' })
   await expect(history.getByText('Đã gửi, chờ thụ lý', { exact: true })).toBeVisible()
   resolved = true
-  await page.evaluate(() => window.disputeStream.listeners.DISPUTE_UPDATED?.({ type: 'DISPUTE_UPDATED', data: '{"bookingCode":"DISP-SSE"}' }))
+  await page.evaluate(() => window.disputeStream.push('event: DISPUTE_UPDATED\ndata: {"bookingCode":"DISP-SSE"}\n\n'))
   await expect(history.getByText(/Kết luận mới từ admin/)).toBeVisible({ timeout: 3000 })
 })
 

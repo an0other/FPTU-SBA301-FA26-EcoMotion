@@ -6,6 +6,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.List;
+
 public record IncidentReportRequest(
         @NotNull(message = "Loại sự cố là bắt buộc")
         TripIncidentType incidentType,
@@ -21,7 +23,9 @@ public record IncidentReportRequest(
 
         Double longitude,
 
-        @Size(max = 2000, message = "Đường dẫn minh chứng không quá 2000 ký tự")
-        String evidenceUrls
+        // Danh sách URL ảnh do upload minh chứng trả về. Chấp nhận cả một chuỗi (client cũ); việc chuẩn hóa,
+        // giới hạn số lượng và https nằm ở IncidentEvidenceUrls.normalize.
+        @com.fasterxml.jackson.annotation.JsonFormat(with = com.fasterxml.jackson.annotation.JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+        List<String> evidenceUrls
 ) {
 }

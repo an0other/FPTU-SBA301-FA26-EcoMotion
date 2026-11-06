@@ -22,6 +22,18 @@ public interface DriverOptimizationService {
 
     Driver manualAssign(Long bookingId, Long driverId, Long providerId);
 
+    /**
+     * Bước ghi nhận phân công dùng chung cho Manual, Auto, Auto Suggest và tái phân công.
+     * Điều kiện: caller đã khóa Booking (findByIdForUpdate) và Driver (findDriverByIdForUpdate)
+     * và đã kiểm tra quyền sở hữu, eligibility, availability, buffer. Hàm này chỉ ghi trạng thái,
+     * lịch sử DriverAssignment, đồng bộ trạng thái Driver và gửi thông báo sau commit.
+     */
+    com.fptufa26.ecomotion.booking.entity.Booking commitAssignment(
+            com.fptufa26.ecomotion.booking.entity.Booking booking,
+            Driver driver,
+            com.fptufa26.ecomotion.booking.enums.AssignmentMode mode,
+            java.time.Instant now);
+
     void recallActiveAssignments(Long bookingId);
 
     com.fptufa26.ecomotion.booking.entity.DriverAssignment requireCurrentAssignment(

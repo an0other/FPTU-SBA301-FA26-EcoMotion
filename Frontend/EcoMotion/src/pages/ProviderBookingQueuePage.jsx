@@ -82,13 +82,6 @@ function Icon({ name, className = '' }) {
   )
 }
 
-function initialsOf(name) {
-  const parts = (name || '').trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
 export default function ProviderBookingQueuePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -345,15 +338,6 @@ export default function ProviderBookingQueuePage() {
             >
               <Icon name="download" className={`text-[18px] ${exporting ? 'animate-spin' : ''}`} />
               <span>{exporting ? 'Đang xuất...' : 'Xuất CSV'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => refetch()}
-              disabled={loading}
-              className="inline-flex h-10 sm:h-[42px] items-center justify-center gap-2 rounded-lg sm:rounded-xl border border-slate-200 bg-white px-3.5 sm:px-4 text-xs sm:text-[13px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 transition"
-            >
-              <Icon name="refresh" className={`text-[18px] ${loading ? 'animate-spin' : ''}`} />
-              <span>Làm mới</span>
             </button>
           </div>
         </div>
@@ -722,40 +706,44 @@ export default function ProviderBookingQueuePage() {
         {/* Area 4: Booking Table (Desktop: Exactly 8 columns) */}
         <div className="hidden sm:block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-xs">
+              <colgroup>
+                <col className="w-[24%]" />
+                <col className="w-[23%]" />
+                <col className="w-[18%]" />
+                <col className="w-[15%]" />
+                <col className="w-[10%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3.5">Mã đơn</th>
-                  <th className="px-4 py-3.5">Khách thuê</th>
-                  <th className="px-4 py-3.5">Xe</th>
-                  <th className="px-4 py-3.5">Thời gian thuê</th>
-                  <th className="px-4 py-3.5">Tài xế</th>
-                  <th className="px-4 py-3.5">Trạng thái</th>
-                  <th className="px-4 py-3.5 text-right">Tổng tiền</th>
-                  <th className="px-4 py-3.5 text-center">Thao tác</th>
+                <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3 text-left font-semibold">Đơn thuê</th>
+                  <th className="px-5 py-3 text-left font-semibold">Xe và lịch thuê</th>
+                  <th className="px-5 py-3 text-left font-semibold">Tài xế</th>
+                  <th className="px-5 py-3 text-left font-semibold">Trạng thái</th>
+                  <th className="px-5 py-3 text-right font-semibold">Tổng tiền</th>
+                  <th className="px-5 py-3 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center text-slate-500">
-                      <div className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <td colSpan={6} className="py-16 text-center text-slate-500">
+                      <div className="inline-flex items-center gap-2 text-sm font-medium">
                         <Icon name="sync" className="animate-spin text-xl text-emerald-700" />
-                        <span>Đang truy xuất danh sách đơn đặt xe...</span>
+                        <span>Đang tải danh sách đơn thuê…</span>
                       </div>
                     </td>
                   </tr>
                 ) : paginatedList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center text-slate-400">
+                    <td colSpan={6} className="py-16 text-center text-slate-400">
                       <Icon name="inbox" className="mx-auto mb-2 text-4xl text-slate-300" />
-                      <div className="text-sm font-semibold text-slate-700">
-                        Không tìm thấy đơn đặt xe nào
-                      </div>
+                      <div className="text-sm font-semibold text-slate-700">Không tìm thấy đơn thuê nào</div>
                       <p className="mt-1 text-xs text-slate-500">
                         {hasActiveFilters
                           ? 'Thử thay đổi từ khóa tìm kiếm hoặc đặt lại các bộ lọc hiện tại'
-                          : 'Hiện chưa có đơn đặt xe trong danh mục này'}
+                          : 'Hiện chưa có đơn thuê trong danh mục này'}
                       </p>
                       {hasActiveFilters && (
                         <button
@@ -782,229 +770,159 @@ export default function ProviderBookingQueuePage() {
                     const isPendingConfirmation = Boolean(
                       (item.driverId || item.driverName) && !isDriverConfirmed
                     )
+                    const paymentNote = {
+                      RECONCILIATION_REQUIRED: { label: 'Cần đối soát', cls: 'text-amber-800' },
+                      FAILED: { label: 'Thanh toán lỗi', cls: 'text-rose-700' },
+                      REFUND_PENDING: { label: 'Chờ hoàn tiền', cls: 'text-orange-800' },
+                    }[item.paymentStatus]
 
                     return (
                       <tr
                         key={item.bookingCode}
                         onClick={() => navigate(`/provider/bookings/${item.bookingCode}`)}
-                        className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                        className="group cursor-pointer transition-colors hover:bg-slate-50"
                       >
-                        {/* 1. Mã đơn */}
-                        <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                        {/* Đơn thuê: mã, copy, cảnh báo; dòng dưới là khách thuê */}
+                        <td className="px-5 py-4 align-top">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-xs font-bold text-slate-900">
-                              {item.bookingCode}
-                            </span>
+                            <span className="font-mono text-[13px] font-bold text-slate-900">{item.bookingCode}</span>
                             <button
                               type="button"
                               onClick={(e) => handleCopy(e, item.bookingCode)}
                               title="Sao chép mã đơn"
+                              aria-label={`Sao chép mã đơn ${item.bookingCode}`}
                               className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
                             >
                               <Icon
                                 name={copiedCode === item.bookingCode ? 'check' : 'content_copy'}
-                                className={`text-[15px] ${
-                                  copiedCode === item.bookingCode ? 'text-emerald-600' : ''
-                                }`}
+                                className={`text-[15px] ${copiedCode === item.bookingCode ? 'text-emerald-600' : ''}`}
                               />
                             </button>
                             {hasActiveIncident && (
-                              <span
-                                title="Đang có cảnh báo sự cố cần xử lý"
-                                className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-700 shrink-0"
-                              >
-                                <Icon name="warning" className="text-[13px]" />
+                              <span title="Đang có cảnh báo sự cố cần xử lý" className="inline-flex text-red-600">
+                                <Icon name="warning" className="text-[16px]" />
                               </span>
                             )}
                           </div>
-                        </td>
-
-                        {/* 2. Khách thuê */}
-                        <td className="px-4 py-3.5 align-middle">
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
-                              {initialsOf(item.renterName)}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="block truncate font-bold text-slate-900 max-w-[140px]">
-                                {item.renterName}
-                              </span>
-                              <span className="block text-[11px] text-slate-500 font-mono">
-                                {item.renterPhone || '—'}
-                              </span>
-                            </div>
+                          <div className="mt-1 truncate text-xs text-slate-600">
+                            {item.renterName}
+                            {item.renterPhone && <span className="font-mono text-slate-400"> · {item.renterPhone}</span>}
                           </div>
                         </td>
 
-                        {/* 3. Xe */}
-                        <td className="px-4 py-3.5 align-middle">
-                          <div className="font-semibold text-slate-900 truncate max-w-[160px]" title={item.vehicleName}>
+                        {/* Xe và lịch thuê */}
+                        <td className="px-5 py-4 align-top">
+                          <div className="truncate font-semibold text-slate-900" title={item.vehicleName}>
                             {item.vehicleName}
                           </div>
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 border border-slate-200 inline-block mt-0.5">
-                            {item.licensePlate}
-                          </span>
-                        </td>
-
-                        {/* 4. Thời gian thuê */}
-                        <td className="px-4 py-3.5 align-middle whitespace-nowrap">
-                          <div className="font-semibold text-slate-800">
-                            {formatPickupTime(item.pickupTime)}
+                          <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                            <span className="font-mono text-[11px] font-semibold text-slate-700">{item.licensePlate}</span>
+                            <span aria-hidden="true" className="text-slate-300">·</span>
+                            <span className="whitespace-nowrap">{formatPickupTime(item.pickupTime)}</span>
                           </div>
-                          <div className="text-[11px] text-slate-500">
+                          <div className="text-[11px] text-slate-400">
                             {item.rentalDuration || item.rentalType || 'Theo ngày'}
                           </div>
                         </td>
 
-                        {/* 5. Tài xế */}
-                        <td className="px-4 py-3.5 align-middle">
+                        {/* Tài xế */}
+                        <td className="px-5 py-4 align-top">
                           {item.driverReplacementRequired ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200 whitespace-nowrap">
-                              <Icon name="error" className="text-[12px]" />
-                              <span>Cần phân công lại</span>
-                            </span>
+                            <div className="text-xs font-semibold text-rose-700">Cần phân công lại</div>
                           ) : isUnassigned ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 border border-slate-200 whitespace-nowrap">
-                              <Icon name="person_search" className="text-[13px] text-slate-400" />
-                              <span>Chưa phân công</span>
-                            </span>
-                          ) : isPendingConfirmation ? (
-                            <div className="space-y-0.5">
-                              <div className="font-bold text-slate-900 flex items-center gap-1">
-                                <Icon name="person" className="text-[14px] text-blue-600 shrink-0" />
-                                <span className="truncate max-w-[130px]">{item.driverName}</span>
-                              </div>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800 border border-blue-200 whitespace-nowrap">
-                                <Icon name="hourglass_top" className="text-[11px]" />
-                                <span>Chờ tài xế nhận</span>
-                              </span>
-                            </div>
+                            <div className="text-xs text-slate-500">Chưa phân công</div>
                           ) : (
-                            <div className="space-y-0.5">
-                              <div className="font-bold text-slate-900 flex items-center gap-1">
-                                <Icon name="person" className="text-[14px] text-emerald-600 shrink-0" />
-                                <span className="truncate max-w-[130px]">{item.driverName}</span>
+                            <>
+                              <div className="truncate font-semibold text-slate-900" title={item.driverName}>
+                                {item.driverName}
                               </div>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 font-semibold border border-emerald-200 whitespace-nowrap">
-                                <Icon name="check_circle" className="text-[11px]" />
-                                <span>{isDriverConfirmed ? 'Tài xế đã nhận' : 'Đã phân công'}</span>
-                              </span>
-                            </div>
+                              <div className={`mt-1 text-xs ${isPendingConfirmation ? 'text-blue-700' : 'text-emerald-700'}`}>
+                                {isPendingConfirmation ? 'Chờ tài xế nhận' : 'Tài xế đã nhận'}
+                              </div>
+                            </>
                           )}
                         </td>
 
-                        {/* 6. Trạng thái */}
-                        <td className="px-4 py-3.5 align-middle">
+                        {/* Trạng thái đơn và ghi chú thanh toán */}
+                        <td className="px-5 py-4 align-top">
                           <BookingStatusBadge status={item.status} />
-                          {item.paymentStatus === 'RECONCILIATION_REQUIRED' && (
-                            <div className="mt-1">
-                              <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200 whitespace-nowrap">
-                                <Icon name="sync_problem" className="text-[11px]" />
-                                <span>Cần đối soát</span>
-                              </span>
-                            </div>
-                          )}
-                          {item.paymentStatus === 'FAILED' && (
-                            <div className="mt-1">
-                              <span className="inline-flex items-center gap-1 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 border border-rose-200 whitespace-nowrap">
-                                <Icon name="error" className="text-[11px]" />
-                                <span>Thanh toán lỗi</span>
-                              </span>
-                            </div>
-                          )}
-                          {item.paymentStatus === 'REFUND_PENDING' && (
-                            <div className="mt-1">
-                              <span className="inline-flex items-center gap-1 rounded bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800 border border-orange-200 whitespace-nowrap">
-                                <Icon name="currency_exchange" className="text-[11px]" />
-                                <span>Chờ hoàn tiền</span>
-                              </span>
-                            </div>
+                          {paymentNote && (
+                            <div className={`mt-1.5 text-[11px] font-semibold ${paymentNote.cls}`}>{paymentNote.label}</div>
                           )}
                         </td>
 
-                        {/* 7. Tổng tiền */}
-                        <td className="px-4 py-3.5 align-middle text-right whitespace-nowrap">
-                          <div className="font-mono font-bold text-slate-900 text-xs sm:text-[13px]">
+                        {/* Tổng tiền */}
+                        <td className="px-5 py-4 align-top text-right">
+                          <div className="font-mono text-sm font-bold text-slate-900 whitespace-nowrap">
                             {formatVnd(item.totalAmount)}
                           </div>
                           {(item.depositAmount || item.deposit) ? (
-                            <span className="text-[10px] text-slate-400 font-mono block">
-                              Cọc: {formatVnd(item.depositAmount || item.deposit)}
-                            </span>
+                            <div className="mt-1 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                              Cọc {formatVnd(item.depositAmount || item.deposit)}
+                            </div>
                           ) : null}
                         </td>
 
-                        {/* 8. Thao tác */}
-                        <td
-                          className="px-4 py-3.5 align-middle text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-center gap-1.5">
+                        {/* Thao tác: một nút chính theo trạng thái + menu phụ */}
+                        <td className="px-5 py-4 align-top text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
                             {item.status === 'PENDING' ? (
                               <button
                                 type="button"
                                 onClick={() => setAcceptModalBooking(item)}
-                                title="Duyệt đơn"
-                                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition whitespace-nowrap"
+                                className="inline-flex h-8 items-center justify-center rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800 transition"
                               >
-                                <Icon name="check" className="text-[16px]" />
-                                <span>Duyệt</span>
+                                Duyệt
                               </button>
                             ) : (item.status === 'CONFIRMED' && (isUnassigned || item.driverReplacementRequired)) ? (
                               <button
                                 type="button"
                                 onClick={() => setAssignModalBooking(item)}
-                                title="Phân công tài xế"
-                                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition whitespace-nowrap"
+                                className="inline-flex h-8 items-center justify-center rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800 transition"
                               >
-                                <Icon name="person_add" className="text-[16px]" />
-                                <span>Phân công</span>
+                                Phân công
                               </button>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => navigate(`/provider/bookings/${item.bookingCode}`)}
-                                title="Xem chi tiết"
-                                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition whitespace-nowrap"
+                                className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                               >
-                                <span>Xem</span>
-                                <Icon name="chevron_right" className="text-[16px]" />
+                                Xem
                               </button>
                             )}
 
-                            {/* 3-dots Menu */}
                             <div className="relative" data-action-menu>
                               <button
                                 type="button"
                                 onClick={() => setActionMenuCode(actionMenuCode === item.bookingCode ? null : item.bookingCode)}
                                 title="Thao tác khác"
                                 aria-label="Thao tác khác"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
                               >
-                                <Icon name="more_vert" className="text-[18px]" />
+                                <Icon name="more_horiz" className="text-[18px]" />
                               </button>
 
                               {actionMenuCode === item.bookingCode && (
-                                <div className="absolute right-0 top-full mt-1 w-44 z-30 rounded-xl border border-slate-200 bg-white py-1 shadow-lg text-left animate-in fade-in duration-150">
+                                <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 text-left shadow-md">
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setActionMenuCode(null)
                                       navigate(`/provider/bookings/${item.bookingCode}`)
                                     }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
                                   >
                                     <Icon name="visibility" className="text-[16px] text-slate-400" />
                                     <span>Xem chi tiết</span>
                                   </button>
-
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       setActionMenuCode(null)
                                       handleCopy(e, item.bookingCode)
                                     }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
                                   >
                                     <Icon name="content_copy" className="text-[16px] text-slate-400" />
                                     <span>Sao chép mã đơn</span>
@@ -1031,7 +949,7 @@ export default function ProviderBookingQueuePage() {
                                         setActionMenuCode(null)
                                         setAssignModalBooking(item)
                                       }}
-                                      className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
                                     >
                                       <Icon name="person_sync" className="text-[16px] text-slate-400" />
                                       <span>{item.driverId ? 'Đổi tài xế' : 'Phân công tài xế'}</span>

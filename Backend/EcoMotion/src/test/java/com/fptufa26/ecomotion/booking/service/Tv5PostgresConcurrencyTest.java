@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -202,16 +203,16 @@ class Tv5PostgresConcurrencyTest {
                 .filteredOn(a -> a.getStatus() == AssignmentStatus.PENDING_RESPONSE).isEmpty();
     }
     @Test
-    void startAndEndFromBothActorsAreSerialized() throws Exception {
+    void duplicateDriverStartAndEndAreSerializedSoOnlyOneSucceeds() throws Exception {
         optimization.manualAssign(first, driver, provider);
         tx.executeWithoutResult(status -> {
             Booking b = bookings.findByIdForUpdate(first).orElseThrow();
             b.setStatus(BookingStatus.DRIVER_ARRIVED); b.setDriverConfirmedAt(Instant.now()); b.setActualArrivedAt(Instant.now());
         });
         String code = tx.execute(status -> bookings.findById(first).orElseThrow().getBookingCode());
-        assertThat(race(() -> trips.startTrip(driverUser, code), () -> renterBookings.confirmStart(renterUser, code))).containsOnly(true);
+        assertThat(race(() -> trips.startTrip(driverUser, code), () -> trips.startTrip(driverUser, code))).containsExactlyInAnyOrder(true, false);
         assertThat(bookings.findById(first).orElseThrow().getStatus()).isEqualTo(BookingStatus.IN_PROGRESS);
-        assertThat(race(() -> trips.finishTrip(driverUser, code), () -> renterBookings.confirmEnd(renterUser, code))).containsOnly(true);
+        assertThat(race(() -> trips.finishTrip(driverUser, code), () -> trips.finishTrip(driverUser, code))).containsExactlyInAnyOrder(true, false);
         Booking ended = bookings.findById(first).orElseThrow();
         assertThat(ended.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         assertThat(ended.getActualStartAt()).isNotNull(); assertThat(ended.getActualEndAt()).isNotNull();
@@ -239,22 +240,19 @@ class Tv5PostgresConcurrencyTest {
         assertThat(count).isEqualTo(1L);
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans={true,false})
-    void sequentialEndWorksInEitherOrderAndRetryPreservesTime(boolean renterFirst) {
+    @Test
+    void secondDriverEndIsRejectedAndDoesNotRewriteTime() {
         tx.executeWithoutResult(s -> {
             Booking b=em.find(Booking.class,first);b.setDriver(em.find(Driver.class,driver));
             b.setStatus(BookingStatus.IN_PROGRESS);b.setActualStartAt(Instant.now().minusSeconds(3600));
         });
         String code=bookings.findById(first).orElseThrow().getBookingCode();
-        if(renterFirst) {renterBookings.confirmEnd(renterUser,code);trips.finishTrip(driverUser,code);}
-        else {trips.finishTrip(driverUser,code);renterBookings.confirmEnd(renterUser,code);}
+        trips.finishTrip(driverUser,code);
         Booking firstEnd=bookings.findById(first).orElseThrow();
         assertThat(firstEnd.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
-        renterBookings.confirmEnd(renterUser,code);trips.finishTrip(driverUser,code);
+        assertThatThrownBy(() -> trips.finishTrip(driverUser,code)).isInstanceOf(RuntimeException.class);
         Booking retry=bookings.findById(first).orElseThrow();
         assertThat(retry.getActualEndAt()).isEqualTo(firstEnd.getActualEndAt());
-        assertThat(retry.getRenterEndConfirmedAt()).isEqualTo(firstEnd.getRenterEndConfirmedAt());
         assertThat(retry.getDriverEndConfirmedAt()).isEqualTo(firstEnd.getDriverEndConfirmedAt());
     }
 

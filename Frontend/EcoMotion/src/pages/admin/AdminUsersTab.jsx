@@ -178,23 +178,27 @@ export default function AdminUsersTab({
 
   // Watch incoming navigation target from AdminDashboard / other tabs
   useEffect(() => {
-    if (initialFilter?.targetUserId || initialFilter?.targetUserEmail) {
-      openUserById(initialFilter.targetUserId, initialFilter.targetUserEmail)
-    } else if (initialFilter?.targetProviderId) {
-      openProviderById(initialFilter.targetProviderId)
-    } else if (initialFilter?.targetDriverId) {
-      openDriverById(initialFilter.targetDriverId)
-    } else if (initialFilter?.targetEkycUserId) {
-      openEkycByUserId(initialFilter.targetEkycUserId)
-    } else if (initialFilter?.subTab) {
-      setSubTab(initialFilter.subTab)
-      if (initialFilter.status) {
-        if (initialFilter.subTab === 'providers') setProviderStatus(initialFilter.status)
-        if (initialFilter.subTab === 'drivers') setDriverStatus(initialFilter.status)
-        if (initialFilter.subTab === 'ekyc') setEkycStatus(initialFilter.status)
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      if (initialFilter?.targetUserId || initialFilter?.targetUserEmail) {
+        openUserById(initialFilter.targetUserId, initialFilter.targetUserEmail)
+      } else if (initialFilter?.targetProviderId) {
+        openProviderById(initialFilter.targetProviderId)
+      } else if (initialFilter?.targetDriverId) {
+        openDriverById(initialFilter.targetDriverId)
+      } else if (initialFilter?.targetEkycUserId) {
+        openEkycByUserId(initialFilter.targetEkycUserId)
+      } else if (initialFilter?.subTab) {
+        setSubTab(initialFilter.subTab)
+        if (initialFilter.status) {
+          if (initialFilter.subTab === 'providers') setProviderStatus(initialFilter.status)
+          if (initialFilter.subTab === 'drivers') setDriverStatus(initialFilter.status)
+          if (initialFilter.subTab === 'ekyc') setEkycStatus(initialFilter.status)
+        }
       }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    })
+    return () => { cancelled = true }
   }, [
     initialFilter?.navKey,
     initialFilter?.targetUserId,
@@ -203,6 +207,7 @@ export default function AdminUsersTab({
     initialFilter?.targetDriverId,
     initialFilter?.targetEkycUserId,
     initialFilter?.subTab,
+    initialFilter?.status,
   ])
 
   // Handle User Status toggle (ACTIVE <-> LOCKED)

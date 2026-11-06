@@ -102,8 +102,10 @@ public class Booking {
     @Column(name = "end_confirmation_method", length = 30)
     private String endConfirmationMethod;
 
+    /** Chuyến đã được chốt kết thúc: Tài xế kết thúc là đủ; dữ liệu cũ do Renter xác nhận/AUTO vẫn được chấp nhận. */
     public boolean isEndAccepted() {
-        return renterEndConfirmedAt != null || renterConfirmedAt != null || "AUTO".equals(endConfirmationMethod);
+        return driverEndConfirmedAt != null || renterEndConfirmedAt != null || renterConfirmedAt != null
+                || "AUTO".equals(endConfirmationMethod);
     }
 
     @Column(name = "actual_end_at")

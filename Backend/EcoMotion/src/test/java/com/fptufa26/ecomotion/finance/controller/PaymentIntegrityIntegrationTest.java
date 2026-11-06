@@ -1,4 +1,4 @@
-package com.fptufa26.ecomotion.finance.controller;
+ package com.fptufa26.ecomotion.finance.controller;
 
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.finance.entity.RefundRequest;
@@ -108,6 +108,7 @@ class PaymentIntegrityIntegrationTest {
     @Autowired PaymentRequestRepository requests;
     @Autowired PaymentTransactionRepository ledger;
     @Autowired BookingRepository bookings;
+    @Autowired com.fptufa26.ecomotion.finance.repository.RefundRequestRepository refunds;
     @Autowired VehicleScheduleRepository schedules;
     @Autowired ScheduleService schedule;
     @Autowired MockMvc mvc;
@@ -285,27 +286,6 @@ class PaymentIntegrityIntegrationTest {
         bookingService.cancel(renterId, code);
     }
 
-    @Test void renterEndingFirstWaitsAndRetryDoesNotRewriteTime() {
-        String code = tx.execute(s -> {
-            Booking b=em.find(Booking.class,bookingId); b.setStatus(BookingStatus.IN_PROGRESS);
-            b.setActualStartAt(Instant.now().minusSeconds(3600)); return b.getBookingCode();
-        });
-        bookingService.confirmEnd(renterId,code);
-        Booking first=bookings.findById(bookingId).orElseThrow();
-        assertThat(first.getStatus()).isEqualTo(BookingStatus.AWAITING_END_CONFIRMATION);
-        bookingService.confirmEnd(renterId,code);
-        assertThat(bookings.findById(bookingId).orElseThrow().getRenterEndConfirmedAt()).isEqualTo(first.getRenterEndConfirmedAt());
-    }
-
-    @Test void completionRetryAfterSettlementDoesNotRegressOrFail() {
-        String code = tx.execute(s -> {
-            Booking b=em.find(Booking.class,bookingId); b.setStatus(BookingStatus.COMPLETED);
-            b.setRenterEndConfirmedAt(Instant.now().minusSeconds(60)); b.setDriverEndConfirmedAt(Instant.now().minusSeconds(60));
-            return b.getBookingCode();
-        });
-        bookingService.confirmEnd(renterId,code);
-        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.COMPLETED);
-    }
     TransactionTemplate tx;
     long bookingId;
     long requestId;
@@ -485,6 +465,24 @@ class PaymentIntegrityIntegrationTest {
         confirm("20000", "PARTIAL-2-" + requestId);
         assertThat(ledger.findByBooking_Id(bookingId)).hasSize(2).extracting(PaymentTransaction::getTransactionCode).doesNotHaveDuplicates();
         assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+    }
+
+    // ĐANG CHỜ QUYẾT ĐỊNH NGHIỆP VỤ: code hiện từ chối chuyển thừa (xem invalidAmountAndWrongProviderDoNotRecordMoney
+    // và docs/AUDIT_TV5 §5.7). Yêu cầu mới muốn ghi nhận đủ và hoàn phần thừa. Bật lại test khi đã chốt quy tắc.
+    @org.junit.jupiter.api.Disabled("Chờ quyết định nghiệp vụ: chuyển thừa bị chặn hay ghi nhận và hoàn phần thừa")
+    @Test
+    void overpaymentIsRecordedInFullAppliesOnlyObligationAndRefundsExcessExactlyOnce() {
+        // Renter chuyển 40.000đ cho nghĩa vụ 30.000đ: phải ghi đủ 40.000đ thực nhận,
+        // áp 30.000đ vào nghĩa vụ và tạo đúng một yêu cầu hoàn 10.000đ. Không được từ chối âm thầm.
+        confirm("40000", "OVER-" + requestId);
+        var txs = ledger.findByBooking_Id(bookingId);
+        assertThat(txs).hasSize(1);
+        assertThat(txs.getFirst().getAmount()).isEqualByComparingTo("40000");
+        assertThat(txs.getFirst().getAppliedAmount()).isEqualByComparingTo("30000");
+        assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        var refundRows = refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId);
+        assertThat(refundRows).hasSize(1);
+        assertThat(refundRows.getFirst().getAmount()).isEqualByComparingTo("10000");
     }
 
     @Test

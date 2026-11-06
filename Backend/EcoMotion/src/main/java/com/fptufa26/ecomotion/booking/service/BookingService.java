@@ -13,8 +13,6 @@ import com.fptufa26.ecomotion.booking.dto.response.BookingRequestDetailsResponse
 import com.fptufa26.ecomotion.booking.dto.response.CancelBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutPreviewResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CheckoutResultResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ConfirmEndResponse;
-import com.fptufa26.ecomotion.booking.dto.response.ConfirmStartResponse;
 import com.fptufa26.ecomotion.booking.dto.response.CreateBookingResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
@@ -64,10 +62,6 @@ public interface BookingService {
     CancelBookingResponse cancel(Long userId, String bookingCode, RefundAccountRequest account);
 
     void updateRefundAccount(Long userId, String bookingCode, RefundAccountRequest account);
-
-    ConfirmStartResponse confirmStart(Long userId, String bookingCode);
-
-    ConfirmEndResponse confirmEnd(Long userId, String bookingCode);
 
     DisputeOpenedResponse openDispute(Long userId, String bookingCode, OpenDisputeRequest request);
 

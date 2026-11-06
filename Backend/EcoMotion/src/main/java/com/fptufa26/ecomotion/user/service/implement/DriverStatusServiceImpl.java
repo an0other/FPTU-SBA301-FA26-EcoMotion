@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -164,19 +165,25 @@ public class DriverStatusServiceImpl implements DriverStatusService {
         DriverOperationalStatus opStatus = calculateOperationalStatus(driver);
         Instant now = clock.instant();
 
-        DriverTripSummaryResponse activeTrip = null;
-        if (opStatus == DriverOperationalStatus.ON_TRIP) {
-            activeTrip = bookingQueryService.findFirstByDriverIdAndStatus(driver.getId(), BookingStatus.IN_PROGRESS)
-                    .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(driver.getId(), BookingStatus.AWAITING_END_CONFIRMATION))
-                    .map(this::toTripSummary)
-                    .orElse(null);
-        }
+        // Chuyến đang thực hiện gồm cả giai đoạn chờ xác nhận bắt đầu. Tách khỏi ON_TRIP (luật phân công
+        // vẫn chỉ coi IN_PROGRESS/AWAITING_END là ON_TRIP) để UI không hiển thị chuyến đã bắt đầu như chuyến sắp tới.
+        Booking active = bookingQueryService.findFirstByDriverIdAndStatus(driver.getId(), BookingStatus.IN_PROGRESS)
+                .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(driver.getId(), BookingStatus.AWAITING_END_CONFIRMATION))
+                .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(driver.getId(), BookingStatus.AWAITING_START_CONFIRMATION))
+                .orElse(null);
+        DriverTripSummaryResponse activeTrip = active != null ? toTripSummary(active) : null;
 
-        DriverTripSummaryResponse nextTrip = null;
+        // Chuyến kế tiếp: ưu tiên chuyến đã xác nhận theo giờ đón; yêu cầu DRIVER_ASSIGNED chỉ hiển thị khi
+        // còn hạn phản hồi và không bao giờ che chuyến đang thực hiện.
         List<Booking> upcoming = bookingQueryService.findUpcomingDriverBookings(driver.getId(), UPCOMING_STATUSES, now);
-        if (!upcoming.isEmpty()) {
-            nextTrip = toTripSummary(upcoming.getFirst());
-        }
+        Booking nextBooking = upcoming.stream()
+                .filter(b -> active == null || !b.getId().equals(active.getId()))
+                .filter(b -> b.getStatus() != BookingStatus.DRIVER_ASSIGNED
+                        || (b.getAssignmentExpiresAt() != null && b.getAssignmentExpiresAt().isAfter(now)))
+                .min(Comparator.comparing((Booking b) -> b.getStatus() == BookingStatus.DRIVER_ASSIGNED ? 1 : 0)
+                        .thenComparing(Booking::getPickupTime, Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
+        DriverTripSummaryResponse nextTrip = nextBooking != null ? toTripSummary(nextBooking) : null;
 
         String fullName = driver.getUser() != null ? driver.getUser().getFullName() : "";
 
@@ -201,7 +208,8 @@ public class DriverStatusServiceImpl implements DriverStatusService {
                 vehicleName,
                 b.getPickupAddress(),
                 b.getPickupTime(),
-                b.getStatus() != null ? b.getStatus().name() : ""
+                b.getStatus() != null ? b.getStatus().name() : "",
+                b.getAssignmentExpiresAt()
         );
     }
 }

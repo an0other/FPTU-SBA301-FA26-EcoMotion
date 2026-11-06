@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import DriverLayout from '../components/driver/DriverLayout'
 import ActiveTripBanner from '../components/driver/ActiveTripBanner'
 import DriverTripCard from '../components/driver/DriverTripCard'
@@ -8,6 +8,7 @@ import Toast from '../components/Toast'
 import { useDriverSchedule } from '../hooks/useDriverSchedule'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { driverTripService } from '../services/driverTripService'
+import { groupTripsByPhase, TRIP_PHASES, vietnamDateOffset } from '../utils/driverTripPhase'
 import {
   STATUS_FILTER_OPTIONS,
   TRIP_VIEWS,
@@ -44,6 +45,14 @@ export default function DriverSchedulePage() {
   const [rejectingTrip, setRejectingTrip] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [toast, setToast] = useState({ message: '', type: 'success' })
+
+  // Chuyến đang diễn ra đã hiện ở banner phía trên thì không lặp lại trong danh sách.
+  const bannerBookingCode = activeTrip?.status === 'IN_PROGRESS' ? activeTrip.bookingCode : null
+  const phaseGroups = useMemo(
+    () => groupTripsByPhase(trips, { excludeBookingCodes: bannerBookingCode ? [bannerBookingCode] : [] }),
+    [trips, bannerBookingCode]
+  )
+  const visibleCount = phaseGroups.IN_PROGRESS.length + phaseGroups.UPCOMING.length + phaseGroups.COMPLETED.length
 
   // Realtime Sync Hook
   useRealtimeSync({
@@ -104,38 +113,36 @@ export default function DriverSchedulePage() {
             Theo dõi danh sách cuốc xe và tiếp nhận chuyến được phân công
           </p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => refetch()}
-          disabled={loading}
-          aria-label="Làm mới lịch trình"
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-50"
-        >
-          <Icon name="refresh" className={`text-[18px] ${loading ? 'animate-spin' : ''}`} />
-          <span>Làm mới</span>
-        </button>
       </div>
 
       {/* Active Trip Banner */}
       <ActiveTripBanner trip={activeTrip} />
 
       {/* View Tabs: TODAY | UPCOMING | HISTORY */}
-      <div className="mb-4 flex flex-wrap rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
+      <div
+        role="tablist"
+        aria-label="Chế độ xem lịch"
+        className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-2xs sm:flex"
+      >
         {Object.values(TRIP_VIEWS).map((item) => {
           const isActive = view === item.key
           return (
             <button
               key={item.key}
               type="button"
+              role="tab"
+              aria-selected={isActive}
               onClick={() => { setStatus('ALL'); setView(item.key) }}
-              className={`flex-1 h-10 rounded-lg text-xs font-bold transition ${
+              className={`h-10 flex-1 rounded-lg px-2 text-xs font-bold transition ${
                 isActive
                   ? 'bg-brand-700 text-white shadow-2xs'
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
               {item.label}
+              {isActive && !loading && total > 0 && (
+                <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-px text-[10px]">{total}</span>
+              )}
             </button>
           )
         })}
@@ -172,6 +179,27 @@ export default function DriverSchedulePage() {
           <label htmlFor="date-filter" className="mb-1.5 block text-xs font-semibold text-slate-600">
             Lọc theo ngày
           </label>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {[{ label: 'Hôm nay', days: 0 }, { label: 'Ngày mai', days: 1 }].map((chip) => {
+              const value = vietnamDateOffset(chip.days)
+              const active = dateDraft === value
+              return (
+                <button
+                  key={chip.label}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => { setDateDraft(value); setDate(value) }}
+                  className={`h-7 rounded-full border px-3 text-[11px] font-semibold transition ${
+                    active
+                      ? 'border-brand-700 bg-brand-700 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
+          </div>
           <div className="flex items-center gap-2">
             <input
               id="date-filter"
@@ -213,7 +241,7 @@ export default function DriverSchedulePage() {
       {/* Trip Cards List */}
       {loading ? (
         <TripListSkeleton />
-      ) : trips.length === 0 ? (
+      ) : visibleCount === 0 ? (
         <div className="my-8 rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
           <Icon name="event_busy" className="mx-auto mb-2 text-4xl text-slate-300" />
           <h3 className="text-sm font-bold text-slate-800">
@@ -246,16 +274,28 @@ export default function DriverSchedulePage() {
           )}
         </div>
       ) : (
-        <div className="space-y-3.5">
-          {trips.map((trip) => (
-            <DriverTripCard
-              key={trip.tripId || trip.bookingCode}
-              trip={trip}
-              onConfirm={handleConfirmTrip}
-              onReject={(t) => setRejectingTrip(t)}
-              actionLoading={actionLoading}
-            />
-          ))}
+        <div className="space-y-6">
+          {Object.values(TRIP_PHASES).map((phase) => {
+            const items = phaseGroups[phase.key]
+            if (items.length === 0) return null
+            return (
+              <section key={phase.key} aria-label={phase.label} className="space-y-3.5">
+                <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {phase.key === 'UPCOMING' && view === 'REQUESTS' ? 'Chờ bạn phản hồi' : phase.label}{' '}
+                  <span className="text-slate-400">({items.length})</span>
+                </h2>
+                {items.map((trip) => (
+                  <DriverTripCard
+                    key={trip.bookingCode || trip.tripId}
+                    trip={trip}
+                    onConfirm={handleConfirmTrip}
+                    onReject={(t) => setRejectingTrip(t)}
+                    actionLoading={actionLoading}
+                  />
+                ))}
+              </section>
+            )
+          })}
         </div>
       )}
 

@@ -62,26 +62,31 @@ export function SubmittedBookingPage() {
 
   useEffect(() => {
     let cancelled = false
-    refreshBooking()
-      .catch((err) => {
-        if (!cancelled) setError(readErrorMessage(err))
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
+    queueMicrotask(() => {
+      if (cancelled) return
+      refreshBooking()
+        .catch((err) => {
+          if (!cancelled) setError(readErrorMessage(err))
+        })
+        .finally(() => { if (!cancelled) setLoading(false) })
+    })
     return () => {
       cancelled = true
     }
   }, [bookingCode, retry, refreshBooking])
 
+  const keepPollingBooking = Boolean(booking) && (
+    OPEN_DEPOSIT_STATUSES.has(booking.status)
+    || isDepositAwaitingProvider(depositPaymentStatus)
+  )
+
   useEffect(() => {
-    if (!booking) return undefined
-    const keepPolling = OPEN_DEPOSIT_STATUSES.has(booking.status)
-      || isDepositAwaitingProvider(depositPaymentStatus)
-    if (!keepPolling) return undefined
+    if (!keepPollingBooking) return undefined
     const timer = window.setInterval(() => {
       refreshBooking().catch(() => {})
     }, 10_000)
     return () => window.clearInterval(timer)
-  }, [booking?.status, depositPaymentStatus, refreshBooking])
+  }, [keepPollingBooking, refreshBooking])
 
   const retryLoading = () => {
     setError('')

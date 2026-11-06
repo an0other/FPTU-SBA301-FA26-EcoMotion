@@ -70,7 +70,6 @@ export function PickupLocationCard({
   outOfRadiusRate,
   pickupFee,
 }) {
-  const hasPoint = pickupLatitude != null && pickupLongitude != null
   return (
     <div className="space-y-3">
       <PickupDistanceProof

@@ -1,9 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ReceiptDropzone } from './ReceiptDropzone'
 
 export function DepositProofForm({ disabled, busy, onSubmit, isFinalBalance = false }) {
   const [file, setFile] = useState(null)
+  const [fileError, setFileError] = useState('')
   const [transactionReference, setTransactionReference] = useState('')
   const [note, setNote] = useState('')
+
+  // Preview tạo từ file đang chọn; URL được thu hồi khi file đổi hoặc form unmount.
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file])
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+  }, [previewUrl])
+
+  // ReceiptDropzone trả về (file) khi hợp lệ, hoặc (null, thông báo lỗi tiếng Việt) khi sai định dạng/dung lượng.
+  const handleFile = (next, message) => {
+    setFileError(message || '')
+    setFile(next)
+  }
 
   const handleSubmit = (event) => {
     event.preventDefault()
@@ -24,14 +38,26 @@ export function DepositProofForm({ disabled, busy, onSubmit, isFinalBalance = fa
         </p>
       </div>
       <div>
-        <label className="block text-xs font-semibold text-slate-700">Ảnh biên lai (JPG, PNG, WebP) *</label>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
+        <ReceiptDropzone
+          file={file}
+          previewUrl={previewUrl}
+          onFile={handleFile}
+          error={fileError}
           disabled={disabled || busy}
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          className="mt-1 block w-full text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-700 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
         />
+        {file ? (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+            <span>Bấm vào khung ảnh để chọn ảnh khác.</span>
+            <button
+              type="button"
+              onClick={() => handleFile(null)}
+              disabled={disabled || busy}
+              className="min-h-9 rounded-lg border border-red-300 px-3 font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              Xóa ảnh đã chọn
+            </button>
+          </div>
+        ) : null}
       </div>
       <div>
         <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng (tuỳ chọn)</label>

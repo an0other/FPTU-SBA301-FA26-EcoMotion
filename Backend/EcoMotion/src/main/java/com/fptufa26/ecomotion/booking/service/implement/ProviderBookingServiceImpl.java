@@ -536,22 +536,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new ConflictException("Tài xế đã có chuyến khác trùng thời gian hoặc khoảng đệm");
         }
 
-        Instant now = clock.instant();
-        booking.setDriver(driver);
-        booking.setAssignedAt(now);
-        booking.setDriverConfirmedAt(null);
-        booking.setActualArrivedAt(null);
-        booking.setAssignmentExpiresAt(driverOptimizationService.assignmentDeadline());
-        if (replacingUnavailableDriver) {
-            booking.setDriverReplacementRequired(false);
-            booking.setDriverIssueResolvedAt(now);
-        }
-        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
-        booking.setAssignmentMode(mode == DriverAssignmentMode.AUTO ? AssignmentMode.AUTO_SUGGEST : AssignmentMode.MANUAL);
-        Booking saved = bookingRepository.saveAndFlush(booking);
-        bookingNotificationService.changed(booking, "DRIVER_ASSIGNED");
-        recordDriverAssignment(saved, driver, now);
-        driverStatusService.updateStatusTimestamp(driver.getId());
+        // Ghi nhận phân công dùng chung (lịch sử, reset cờ sự cố, đồng bộ Driver, thông báo sau commit).
+        Booking saved = driverOptimizationService.commitAssignment(booking, driver,
+                mode == DriverAssignmentMode.AUTO ? AssignmentMode.AUTO_SUGGEST : AssignmentMode.MANUAL, clock.instant());
 
         Map<Long, String> coverUrls = vehicleService.getCoverImageUrls(Set.of(saved.getVehicle().getId()));
         return toResponse(saved, coverUrls.get(saved.getVehicle().getId()));
@@ -798,7 +785,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new ConflictException("Đơn thuê chưa ở bước chốt quyết toán");
         }
         if (booking.getProviderConfirmedAt() == null || !booking.isEndAccepted()) {
-            throw new ConflictException("Cần xác nhận kết thúc từ cả tài xế và người thuê trước khi chốt quyết toán");
+            throw new ConflictException("Cần tài xế kết thúc chuyến trước khi chốt quyết toán");
         }
         if (disputeService.hasOpenDispute(booking.getId())) {
             throw new ConflictException("Không thể chốt quyết toán khi đơn thuê đang có tranh chấp");
@@ -1031,18 +1018,6 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             return "\"" + value.replace("\"", "\"\"") + "\"";
         }
         return value;
-    }
-
-    private void recordDriverAssignment(Booking booking, Driver driver, Instant now) {
-        driverOptimizationService.recallActiveAssignments(booking.getId());
-        DriverAssignment assignment = new DriverAssignment();
-        assignment.setBooking(booking);
-        assignment.setDriver(driver);
-        assignment.setStatus(AssignmentStatus.PENDING_RESPONSE);
-        assignment.setAssignedAt(now);
-        assignment.setExpiresAt(booking.getAssignmentExpiresAt());
-        assignment.setRoundNumber(booking.getReassignCount() != null ? booking.getReassignCount() + 1 : 1);
-        driverAssignmentRepository.save(assignment);
     }
 
     private Provider resolveProvider(Long currentUserId) {

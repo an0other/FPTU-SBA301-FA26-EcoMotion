@@ -264,7 +264,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
                     );
                 }
             }
-            case INCIDENT, INCIDENT_PROOF -> {
+            case INCIDENT -> {
                 if (status != BookingStatus.DRIVER_ARRIVED
                         && status != BookingStatus.IN_PROGRESS
                         && status != BookingStatus.COMPLETED) {
@@ -272,6 +272,10 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
                             "Ảnh sự cố chỉ được tải lên khi tài xế đã có mặt, đang thực hiện chuyến hoặc sau chuyến đi"
                     );
                 }
+            }
+            // Ảnh bằng chứng của báo cáo sự cố không phụ thuộc tiến độ chuyến: chỉ cần Driver được phân công
+            // (kiểm tra ở validateAndResolveAccess) và chuyến chưa bị hủy hoặc đang chờ xử lý (kiểm tra ở trên).
+            case INCIDENT_PROOF -> {
             }
             case VEHICLE_HANDOVER -> {
                 if (status != BookingStatus.DRIVER_ARRIVED

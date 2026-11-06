@@ -37,6 +37,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
@@ -86,6 +87,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     private final com.fptufa26.ecomotion.booking.config.OptimizationProperties optimizationProperties;
     private final com.fptufa26.ecomotion.booking.service.DriverSelectionService driverSelectionService;
     private final DriverAvailabilityService driverAvailabilityService;
+    private final com.fptufa26.ecomotion.user.service.DriverStatusService driverStatusService;
 
     @Override
     @Transactional(readOnly = true)
@@ -233,50 +235,69 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
             return new AutoAssignment(null, "INFEASIBLE");
         }
 
-        Instant now = clock.instant();
+        Booking committed = commitAssignment(booking, driver, AssignmentMode.FULL_AUTO, clock.instant());
+        log.info("Auto assigned driver {} to booking {} via OR-Tools. Expires at: {}",
+                driver.getId(), committed.getBookingCode(), committed.getAssignmentExpiresAt());
+
+        return new AutoAssignment(driver, suggestion.solverStatus());
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Booking commitAssignment(Booking booking, Driver driver, AssignmentMode mode, Instant now) {
+        // Self-invocation từ manualAssign/autoAssignWithResult bỏ qua proxy nên MANDATORY không chạy;
+        // kiểm tra tường minh để không bao giờ ghi phân công ngoài transaction.
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("commitAssignment phải chạy trong transaction đang mở");
+        }
+        boolean replacement = booking.isDriverReplacementRequired();
+        BookingStatus status = booking.getStatus();
+        // Chỉ phân công khi cọc đã xác nhận: CONFIRMED, hoặc đang được tái phân công (DRIVER_ASSIGNED sau timeout/từ chối),
+        // hoặc đang thay tài xế sự cố. Các trạng thái trước cọc không bao giờ được gán tài xế.
+        boolean depositConfirmed = status == BookingStatus.CONFIRMED
+                || status == BookingStatus.DRIVER_ASSIGNED
+                || replacement && (status == BookingStatus.DRIVER_CONFIRMED || status == BookingStatus.DRIVER_ARRIVED);
+        if (!depositConfirmed) {
+            throw new ConflictException("Chỉ có thể phân công tài xế sau khi khoản cọc đã được xác nhận");
+        }
+
+        Long driverId = driver.getId();
+        // Giữ thứ tự assignedAt khi tái phân công trong cùng mili giây; expiresAt luôn tính từ thời điểm thực.
+        Instant assignedAt = booking.getAssignedAt() != null && !now.isAfter(booking.getAssignedAt())
+                ? booking.getAssignedAt().plusMillis(1) : now;
         Instant expiresAt = now.plus(Duration.ofMinutes(optimizationProperties.getAssignmentTimeoutMinutes()));
 
-        if (booking.isDriverReplacementRequired()) {
+        if (replacement) {
             booking.setDriverReplacementRequired(false);
             booking.setDriverIssueResolvedAt(now);
         }
         booking.setDriver(driver);
         booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
-        booking.setAssignedAt(now);
+        booking.setAssignmentMode(mode);
+        booking.setAssignedAt(assignedAt);
         booking.setDriverConfirmedAt(null);
         booking.setActualArrivedAt(null);
         booking.setAssignmentExpiresAt(expiresAt);
+        // Booking đang được quản lý trong transaction (đã khóa), nên giữ nguyên tham chiếu như các luồng cũ.
+        Booking saved = booking;
         bookingRepository.saveAndFlush(booking);
-        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
 
-        recallActiveAssignments(booking.getId());
+        // Assignment cũ của chính Driver này không gửi DRIVER_REASSIGNED vì ngay sau đó Driver nhận DRIVER_ASSIGNED.
+        recallActiveAssignments(saved.getId(), driverId);
         DriverAssignment assignment = new DriverAssignment();
-        assignment.setBooking(booking);
+        assignment.setBooking(saved);
         assignment.setDriver(driver);
         assignment.setStatus(AssignmentStatus.PENDING_RESPONSE);
-        assignment.setAssignedAt(now);
+        assignment.setAssignedAt(assignedAt);
         assignment.setExpiresAt(expiresAt);
-        assignment.setRoundNumber(booking.getReassignCount() != null ? booking.getReassignCount() + 1 : 1);
+        assignment.setRoundNumber(saved.getReassignCount() != null ? saved.getReassignCount() + 1 : 1);
         driverAssignmentRepository.save(assignment);
 
-        driver.setStatusUpdatedAt(now);
-        userService.saveDriver(driver);
-
-        notificationStreamService.sendEventToUser(driver.getUser().getId(), "DRIVER_ASSIGNED", Map.of(
-                "bookingCode", booking.getBookingCode(),
-                "pickupTime", booking.getPickupTime().toString(),
-                "assignedAt", now.toString()
-        ));
-        notificationStreamService.sendEventToProvider(providerId, "DRIVER_ASSIGNED", Map.of(
-                "bookingCode", booking.getBookingCode(),
-                "driverId", driver.getId(),
-                "assignedAt", now.toString()
-        ));
-
-        log.info("Auto assigned driver {} to booking {} via OR-Tools. Expires at: {}",
-                driver.getId(), booking.getBookingCode(), expiresAt);
-
-        return new AutoAssignment(driver, suggestion.solverStatus());
+        // Đồng bộ trạng thái Driver cho cả Driver và Provider (DRIVER_STATUS_CHANGED), cùng khóa Driver đã giữ.
+        driverStatusService.updateStatusTimestamp(driverId);
+        // Sau commit: mỗi bên đúng một thông báo.
+        bookingNotificationService.driverAssigned(saved);
+        return saved;
     }
 
     @Override
@@ -312,42 +333,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
             throw new ConflictException(validated.ineligibilityReason());
         }
 
-        Instant now = clock.instant();
-        if (booking.getAssignedAt() != null && now.isBefore(booking.getAssignedAt().plusMillis(1))) now = booking.getAssignedAt().plusMillis(1);
-        Instant expiresAt = now.plus(Duration.ofMinutes(optimizationProperties.getAssignmentTimeoutMinutes()));
-
-        booking.setDriver(driver);
-        booking.setStatus(BookingStatus.DRIVER_ASSIGNED);
-        booking.setAssignedAt(now);
-        booking.setDriverConfirmedAt(null);
-        booking.setActualArrivedAt(null);
-        booking.setAssignmentExpiresAt(expiresAt);
-        bookingRepository.saveAndFlush(booking);
-        bookingNotificationService.changed(booking, "BOOKING_CHANGED");
-
-        recallActiveAssignments(booking.getId());
-        DriverAssignment assignment = new DriverAssignment();
-        assignment.setBooking(booking);
-        assignment.setDriver(driver);
-        assignment.setStatus(AssignmentStatus.PENDING_RESPONSE);
-        assignment.setAssignedAt(now);
-        assignment.setExpiresAt(expiresAt);
-        assignment.setRoundNumber(booking.getReassignCount() != null ? booking.getReassignCount() + 1 : 1);
-        driverAssignmentRepository.save(assignment);
-
-        driver.setStatusUpdatedAt(now);
-        userService.saveDriver(driver);
-
-        notificationStreamService.sendEventToUser(driver.getUser().getId(), "DRIVER_ASSIGNED", Map.of(
-                "bookingCode", booking.getBookingCode(),
-                "pickupTime", booking.getPickupTime().toString(),
-                "assignedAt", now.toString()
-        ));
-        notificationStreamService.sendEventToProvider(providerId, "DRIVER_ASSIGNED", Map.of(
-                "bookingCode", booking.getBookingCode(),
-                "driverId", driver.getId(),
-                "assignedAt", now.toString()
-        ));
+        commitAssignment(booking, driver, AssignmentMode.MANUAL, clock.instant());
 
         log.info("Manual assigned driver {} to booking {} by provider {}",
                 driver.getId(), booking.getBookingCode(), providerId);
@@ -390,12 +376,21 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     @Override
     @Transactional
     public void recallActiveAssignments(Long bookingId) {
+        recallActiveAssignments(bookingId, null);
+    }
+
+    /**
+     * Thu hồi assignment đang hiệu lực. Driver được chọn lại (newDriverId) không nhận DRIVER_REASSIGNED,
+     * vì họ sẽ nhận DRIVER_ASSIGNED ngay sau đó; lịch sử vẫn được ghi RECALLED.
+     */
+    private void recallActiveAssignments(Long bookingId, Long newDriverId) {
         driverAssignmentRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
                 .filter(a -> a.getStatus() == AssignmentStatus.PENDING_RESPONSE || a.getStatus() == AssignmentStatus.ACCEPTED)
                 .forEach(a -> {
                     a.setStatus(AssignmentStatus.RECALLED);
                     a.setRespondedAt(clock.instant());
                     driverAssignmentRepository.save(a);
+                    if (newDriverId != null && newDriverId.equals(a.getDriver().getId())) return;
                     notificationStreamService.sendEventToUser(a.getDriver().getUser().getId(), "DRIVER_REASSIGNED", java.util.Map.of("bookingCode", a.getBooking().getBookingCode()));
                 });
         driverAssignmentRepository.flush();

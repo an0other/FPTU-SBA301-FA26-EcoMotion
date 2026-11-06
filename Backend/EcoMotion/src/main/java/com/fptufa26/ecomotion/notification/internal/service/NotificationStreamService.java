@@ -13,6 +13,4 @@ public interface NotificationStreamService {
     void sendEventToUser(Long userId, String eventType, Object payload);
 
     void sendEventToProvider(Long providerId, String eventType, Object payload);
-
-    void broadcastEvent(String eventType, Object payload);
 }

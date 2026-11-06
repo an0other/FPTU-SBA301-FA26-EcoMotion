@@ -365,16 +365,12 @@ class Tv5FinancialSafetyIntegrationTest {
         });
         String code = bookings.findById(bookingId).orElseThrow().getBookingCode();
         trips.finishTrip(driverUser, code);
-        Booking waiting = bookings.findById(bookingId).orElseThrow();
-        assertThat(waiting.getStatus()).isEqualTo(BookingStatus.AWAITING_END_CONFIRMATION);
-        assertThat(waiting.getActualEndAt()).isNull();
-        Instant confirmation = waiting.getDriverEndConfirmedAt();
-        trips.finishTrip(driverUser, code);
-        assertThat(bookings.findById(bookingId).orElseThrow().getDriverEndConfirmedAt()).isEqualTo(confirmation);
-        renterBookings.confirmEnd(renterId, code);
         Booking ended = bookings.findById(bookingId).orElseThrow();
         assertThat(ended.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         assertThat(ended.getActualEndAt()).isNotNull();
+        Instant confirmation = ended.getDriverEndConfirmedAt();
+        assertThatThrownBy(() -> trips.finishTrip(driverUser, code)).isInstanceOf(RuntimeException.class);
+        assertThat(bookings.findById(bookingId).orElseThrow().getDriverEndConfirmedAt()).isEqualTo(confirmation);
     }
 
     @Test void vehicleChangeRevalidatesAssignedDriversLicenseAndRollsBackIncompatibleReplacement() {

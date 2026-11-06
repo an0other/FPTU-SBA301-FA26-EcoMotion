@@ -22,6 +22,7 @@ import {
   rentalTypeLabel,
 } from '../utils/driverTripUtils'
 import { getOptimizedImageUrl, EVIDENCE_TYPE_LABELS } from '../utils/cloudinaryUtils'
+import { formatBookingWhen } from '../utils/bookingDateTime'
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-rounded select-none ${className}`}>{name}</span>
@@ -126,6 +127,7 @@ export default function DriverTripDetailPage() {
         await driverTripService.arriveTrip(tripId)
         setToast({ message: 'Đã báo có mặt tại điểm đón khách!', type: 'success' })
       } else if (statusConfig.actionType === 'start') {
+        // Toast chỉ hiện sau khi backend trả về thành công; Driver là bên duy nhất bắt đầu chuyến.
         await driverTripService.startTrip(tripId)
         setToast({ message: 'Chuyến đi đã bắt đầu.', type: 'success' })
       } else if (statusConfig.actionType === 'finish') {
@@ -336,6 +338,20 @@ export default function DriverTripDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Thời gian thực tế: chỉ hiển thị khi backend đã ghi nhận */}
+          {(trip?.actualStartAt || trip?.actualEndAt) && (
+            <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 shadow-xs grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Bắt đầu thực tế</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{trip?.actualStartAt ? formatBookingWhen(trip.actualStartAt) : 'Chưa bắt đầu'}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Kết thúc thực tế</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{trip?.actualEndAt ? formatBookingWhen(trip.actualEndAt) : 'Chưa kết thúc'}</p>
+              </div>
+            </div>
+          )}
 
           {/* Evidence Gallery Card */}
           <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">

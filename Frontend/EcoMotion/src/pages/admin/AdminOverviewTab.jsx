@@ -79,7 +79,6 @@ function GrowthBadge({ rate, diff, isCurrency = false, label = '', size = 'sm' }
 
   const numRate = Number(rate)
   const isPositive = numRate > 0
-  const isNegative = numRate < 0
 
   if (numRate === 0) {
     return (
@@ -126,11 +125,12 @@ export default function AdminOverviewTab({
 }) {
   const [chartView, setChartView] = useState('both') // 'both' | 'donut' | 'bar'
   const [activeSegment, setActiveSegment] = useState(null)
+  const monthlySummaries = stats?.monthlySummaries
 
   // Derive month options from backend monthlySummaries or fallback
   const monthOptions = useMemo(() => {
-    if (stats?.monthlySummaries && stats.monthlySummaries.length > 0) {
-      return stats.monthlySummaries.map((m) => {
+    if (monthlySummaries && monthlySummaries.length > 0) {
+      return monthlySummaries.map((m) => {
         const key = `${m.year}-${String(m.month).padStart(2, '0')}`
         return {
           key,
@@ -141,12 +141,12 @@ export default function AdminOverviewTab({
       })
     }
     return generateFallbackMonths()
-  }, [stats?.monthlySummaries])
+  }, [monthlySummaries])
 
   // Chronological 6 months for trend chart (oldest to newest)
   const chronologicalMonths = useMemo(() => {
-    return [...(stats?.monthlySummaries || [])].reverse()
-  }, [stats?.monthlySummaries])
+    return [...(monthlySummaries || [])].reverse()
+  }, [monthlySummaries])
 
   const maxTrendGmv = useMemo(() => {
     if (!chronologicalMonths || chronologicalMonths.length === 0) return 1

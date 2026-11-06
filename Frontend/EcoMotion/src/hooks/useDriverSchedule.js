@@ -79,7 +79,12 @@ export function useDriverSchedule(initialOptions = {}) {
 
   useEffect(() => {
     const timer = setTimeout(fetchData, 0)
-    return () => { clearTimeout(timer); ++requestIdRef.current }
+    return () => {
+      clearTimeout(timer)
+      // This ref is a numeric request generation, not a rendered DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      ++requestIdRef.current
+    }
   }, [fetchData, user?.id])
 
   return {

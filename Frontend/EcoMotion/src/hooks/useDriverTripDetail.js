@@ -43,6 +43,8 @@ export function useDriverTripDetail(tripIdOrCode) {
     })
     return () => {
       active = false
+      // This ref is a numeric request generation, not a rendered DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       ++sequence.current
     }
   }, [fetchDetail, user?.id])

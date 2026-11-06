@@ -42,8 +42,6 @@ public record BookingDetailResponse(
         boolean canCancel,
         boolean canEditRequest,
         boolean canPay,
-        boolean canConfirmStart,
-        boolean canConfirmEnd,
         List<DisputeCategory> disputeCategories,
         String providerName,
         Instant holdExpiresAt,

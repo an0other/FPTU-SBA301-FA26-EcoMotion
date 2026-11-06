@@ -4,6 +4,14 @@ import { driverStatusService } from '../../services/driverStatusService'
 import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import DriverStatusBadge from './DriverStatusBadge'
 import { formatTripDateTime } from '../../utils/driverTripUtils'
+import {
+  DASHBOARD_MODE,
+  buildDriverDashboardView,
+  canConfirmAssignment,
+  countdownSeconds,
+  formatCountdown,
+  inTripStatusLabel,
+} from '../../utils/driverDashboardState'
 
 function Icon({ name, className = '' }) {
   return (
@@ -52,7 +60,9 @@ const ACTIVITY_MODES = [
   },
 ]
 
-function getOperationalDescription(operationalStatus, activityStatus) {
+const MODE_LABEL = { AVAILABLE: 'Sẵn sàng', UNAVAILABLE: 'Tạm nghỉ', OFFLINE: 'Ngoại tuyến' }
+
+function getOperationalDescription(operationalStatus) {
   switch (operationalStatus) {
     case 'ON_TRIP':
       return 'Bạn đang trong chuyến đi. Hệ thống tự động khóa chế độ nhận lịch cho tới khi kết thúc chuyến.'
@@ -74,6 +84,7 @@ export default function DriverAvailability() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [successToast, setSuccessToast] = useState('')
+  const [now, setNow] = useState(() => Date.now())
   const request = useRef(0)
 
   const refresh = useCallback(async () => {
@@ -102,9 +113,30 @@ export default function DriverAvailability() {
 
   useRealtimeSync({ onResync: refresh })
 
+  const view = buildDriverDashboardView(status, now)
+  const isInTrip = view.mode === DASHBOARD_MODE.IN_TRIP
+  const expiredRequestRef = useRef(null)
+
+  // Đồng hồ chỉ chạy khi có yêu cầu đang chờ. Mỗi giây chỉ đổi nhãn; khi tới hạn thì tải lại đúng một lần
+  // cho mỗi yêu cầu (khóa theo assignmentExpiresAt), không lặp gọi API.
+  useEffect(() => {
+    const next = status?.nextTrip
+    if (next?.status !== 'DRIVER_ASSIGNED') return undefined
+    const expiresAt = next.assignmentExpiresAt
+    const timer = setInterval(() => {
+      const tick = Date.now()
+      setNow(tick)
+      if (countdownSeconds(expiresAt, tick) === 0 && expiredRequestRef.current !== expiresAt) {
+        expiredRequestRef.current = expiresAt
+        refresh()
+      }
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [status, refresh])
+
   async function handleSelectMode(newMode) {
     if (saving || !status) return
-    if (status.operationalStatus === 'ON_TRIP') return
+    if (isInTrip || status.operationalStatus === 'ON_TRIP') return
     if (status.activityStatus === newMode) return
 
     setSaving(true)
@@ -114,7 +146,7 @@ export default function DriverAvailability() {
     try {
       await driverStatusService.updateStatus(newMode)
       await refresh()
-      setSuccessToast(`Đã chuyển sang chế độ "${newMode === 'AVAILABLE' ? 'Sẵn sàng' : newMode === 'UNAVAILABLE' ? 'Tạm nghỉ' : 'Ngoại tuyến'}"`)
+      setSuccessToast(`Đã chuyển sang chế độ "${MODE_LABEL[newMode] || newMode}"`)
       setTimeout(() => setSuccessToast(''), 3000)
     } catch (err) {
       await refresh()
@@ -124,9 +156,11 @@ export default function DriverAvailability() {
     }
   }
 
-  const isOnTrip = status?.operationalStatus === 'ON_TRIP'
   const activeMode = status?.activityStatus || 'AVAILABLE'
-  const operationalDesc = getOperationalDescription(status?.operationalStatus, status?.activityStatus)
+  const operationalDesc = isInTrip
+    ? 'Bạn đang thực hiện chuyến. Chế độ nhận lịch được ẩn cho tới khi kết thúc chuyến.'
+    : getOperationalDescription(status?.operationalStatus)
+  const badgeStatus = isInTrip ? 'ON_TRIP' : status?.operationalStatus
 
   return (
     <section
@@ -142,15 +176,12 @@ export default function DriverAvailability() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-sm font-bold tracking-tight text-slate-900">Trạng thái làm việc</h2>
-              <DriverStatusBadge status={status?.operationalStatus} />
+              <DriverStatusBadge status={badgeStatus} />
             </div>
-            <p className="mt-1 text-xs text-slate-600 leading-normal">
-              {operationalDesc}
-            </p>
+            <p className="mt-1 text-xs text-slate-600 leading-normal">{operationalDesc}</p>
           </div>
         </div>
 
-        {/* Trạng thái lưu hoặc thông báo nhanh */}
         {saving ? (
           <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
             <Icon name="progress_activity" className="text-[14px] animate-spin text-brand-600" />
@@ -164,194 +195,175 @@ export default function DriverAvailability() {
         ) : null}
       </div>
 
-      {/* VÙNG B: CHẾ ĐỘ NHẬN LỊCH MỚI (SEGMENTED BUTTONS) */}
-      <div className="pt-4 pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Chế độ nhận lịch mới
-          </span>
-          {isOnTrip ? (
-            <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80">
-              Khóa tùy chọn khi đang thực hiện chuyến
-            </span>
-          ) : (
-            <span className="text-[11px] text-slate-400 hidden sm:inline">
-              Chọn chế độ tiếp nhận yêu cầu phân công
-            </span>
-          )}
-        </div>
+      {/* VÙNG B: CHẾ ĐỘ NHẬN LỊCH MỚI — ẩn hoàn toàn khi đang thực hiện chuyến */}
+      {view.showAvailability && (
+        <div className="pt-4 pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Chế độ nhận lịch mới</span>
+            <span className="text-[11px] text-slate-400 hidden sm:inline">Chọn chế độ tiếp nhận yêu cầu phân công</span>
+          </div>
 
-        {/* Segmented Radio Cards */}
-        <div
-          role="radiogroup"
-          aria-label="Chế độ nhận lịch mới"
-          className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"
-        >
-          {ACTIVITY_MODES.map((mode) => {
-            const isSelected = activeMode === mode.value
-            const isDisabled = !status || saving || isOnTrip
+          <div role="radiogroup" aria-label="Chế độ nhận lịch mới" className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {ACTIVITY_MODES.map((mode) => {
+              const isSelected = activeMode === mode.value
+              const isDisabled = !status || saving
 
-            return (
-              <button
-                key={mode.value}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                aria-label={`${mode.label}: ${mode.description}`}
-                disabled={isDisabled}
-                onClick={() => handleSelectMode(mode.value)}
-                className={`relative flex items-center sm:items-start gap-3 rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                  isSelected ? mode.activeContainer : mode.inactiveContainer
-                } ${
-                  isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
-                }`}
-              >
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    isSelected ? 'bg-white shadow-2xs' : 'bg-slate-100'
-                  }`}
+              return (
+                <button
+                  key={mode.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={`${mode.label}: ${mode.description}`}
+                  disabled={isDisabled}
+                  onClick={() => handleSelectMode(mode.value)}
+                  className={`relative flex items-center sm:items-start gap-3 rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                    isSelected ? mode.activeContainer : mode.inactiveContainer
+                  } ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  <Icon
-                    name={mode.icon}
-                    className={`text-[20px] ${isSelected ? mode.activeIcon : mode.inactiveIcon}`}
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-bold leading-tight">{mode.label}</span>
-                    {isSelected && (
-                      <span className={`h-2 w-2 rounded-full ${mode.activeDot}`} aria-hidden="true" />
-                    )}
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isSelected ? 'bg-white shadow-2xs' : 'bg-slate-100'}`}>
+                    <Icon name={mode.icon} className={`text-[20px] ${isSelected ? mode.activeIcon : mode.inactiveIcon}`} />
                   </div>
-                  <p className="mt-0.5 text-[11px] text-slate-500 leading-snug">
-                    {mode.description}
-                  </p>
-                </div>
-              </button>
-            )
-          })}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold leading-tight">{mode.label}</span>
+                      {isSelected && <span className={`h-2 w-2 rounded-full ${mode.activeDot}`} aria-hidden="true" />}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-500 leading-snug">{mode.description}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* VÙNG C: THÔNG TIN CHUYẾN (TRIP INFO) */}
-      <div className="pt-3 border-t border-slate-100">
-        {status?.activeTrip ? (
-          /* Card chuyến đang thực hiện */
-          <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/60 via-white to-emerald-50/40 p-3.5 space-y-2">
+      {/* VÙNG C: CHUYẾN (theo ưu tiên: đang thực hiện > đã xác nhận > chờ xác nhận) */}
+      <div className={`${view.showAvailability ? 'pt-3 border-t border-slate-100' : 'pt-1'}`}>
+        {view.mode === DASHBOARD_MODE.IN_TRIP && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-900">
-                  Chuyến đang thực hiện
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-900">Chuyến đang thực hiện</span>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
+                  {inTripStatusLabel(view.trip.status)}
                 </span>
                 <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-emerald-200">
-                  #{status.activeTrip.bookingCode}
+                  #{view.trip.bookingCode}
                 </span>
               </div>
               <Link
-                to={`/driver/trips/${encodeURIComponent(status.activeTrip.bookingCode)}`}
+                to={`/driver/trips/${encodeURIComponent(view.trip.bookingCode)}`}
                 className="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1"
               >
-                <span>Xem chi tiết cuốc xe</span>
+                <span>Xem chi tiết chuyến</span>
                 <Icon name="arrow_forward" className="text-[14px]" />
               </Link>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
               <div className="flex items-start gap-1.5 text-slate-700">
                 <Icon name="schedule" className="text-[16px] text-emerald-600 shrink-0 mt-0.5" />
                 <div>
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Thời gian đón</span>
-                  <span>{formatTripDateTime(status.activeTrip.pickupTime)}</span>
+                  <span>{formatTripDateTime(view.trip.pickupTime)}</span>
                 </div>
               </div>
               <div className="flex items-start gap-1.5 text-slate-700">
                 <Icon name="navigation" className="text-[16px] text-emerald-600 shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Điểm đón khách</span>
-                  <p className="truncate" title={status.activeTrip.pickupAddress}>
-                    {status.activeTrip.pickupAddress || 'Đang cập nhật'}
-                  </p>
+                  <p className="truncate" title={view.trip.pickupAddress}>{view.trip.pickupAddress || 'Đang cập nhật'}</p>
                 </div>
               </div>
             </div>
           </div>
-        ) : status?.nextTrip ? (
-          /* Card chuyến tiếp theo */
-          <div className="rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50/50 via-white to-blue-50/30 p-3.5 space-y-2">
+        )}
+
+        {view.mode === DASHBOARD_MODE.PENDING_CONFIRMATION && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1 text-xs font-bold text-blue-950">
-                  <Icon name="event_upcoming" className="text-[18px] text-blue-600" />
-                  <span>Chuyến tiếp theo</span>
+                <span className="text-xs font-bold text-amber-950">Yêu cầu chuyến đi</span>
+                <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-amber-200">
+                  #{view.trip.bookingCode}
                 </span>
-                <Link
-                  to={`/driver/trips/${encodeURIComponent(status.nextTrip.bookingCode)}`}
-                  className="font-mono text-xs font-bold text-brand-800 hover:underline bg-white px-2 py-0.5 rounded border border-blue-200"
-                >
-                  #{status.nextTrip.bookingCode}
-                </Link>
-                {status.nextTrip.vehicleName && (
-                  <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-                    • {status.nextTrip.vehicleName}
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                  Chờ xác nhận · còn {formatCountdown(view.countdown)}
+                </span>
               </div>
-
-              {/* Status Badge of Next Trip */}
-              <div>
-                {status.nextTrip.status === 'DRIVER_ASSIGNED' ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                      <span>Chờ bạn phản hồi (15p)</span>
-                    </span>
-                    <Link
-                      to={`/driver/trips/${encodeURIComponent(status.nextTrip.bookingCode)}`}
-                      className="rounded-lg bg-brand-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-brand-800 transition shadow-2xs"
-                    >
-                      Xác nhận ngay
-                    </Link>
-                  </div>
-                ) : status.nextTrip.status === 'DRIVER_CONFIRMED' ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
-                    <Icon name="check" className="text-[13px]" />
-                    <span>Đã xác nhận chuyến</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800 border border-blue-200">
-                    <Icon name="schedule" className="text-[13px]" />
-                    <span>Đã lên lịch</span>
-                  </span>
-                )}
+              {canConfirmAssignment(view) && (
+                <Link
+                  to={`/driver/trips/${encodeURIComponent(view.trip.bookingCode)}`}
+                  className="rounded-lg bg-brand-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-brand-800 transition shadow-2xs"
+                >
+                  Mở để xác nhận
+                </Link>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+              <div className="flex items-start gap-1.5 text-slate-700">
+                <Icon name="schedule" className="text-[16px] text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Thời gian đón</span>
+                  <span>{formatTripDateTime(view.trip.pickupTime)}</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-1.5 text-slate-700">
+                <Icon name="pin_drop" className="text-[16px] text-amber-600 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Địa điểm đón</span>
+                  <p className="truncate" title={view.trip.pickupAddress}>{view.trip.pickupAddress || 'Đang cập nhật'}</p>
+                </div>
               </div>
             </div>
+          </div>
+        )}
 
+        {view.mode === DASHBOARD_MODE.UPCOMING_CONFIRMED && (
+          <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3.5 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-blue-950">Chuyến sắp tới</span>
+                <span className="font-mono text-xs font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-blue-200">
+                  #{view.trip.bookingCode}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
+                  <Icon name="check" className="text-[13px]" />
+                  <span>{view.trip.status === 'DRIVER_ARRIVED' ? 'Đã đến điểm đón' : 'Đã xác nhận'}</span>
+                </span>
+              </div>
+              <Link
+                to={`/driver/trips/${encodeURIComponent(view.trip.bookingCode)}`}
+                className="text-xs font-bold text-brand-800 hover:underline flex items-center gap-1"
+              >
+                <span>Xem chi tiết chuyến</span>
+                <Icon name="arrow_forward" className="text-[14px]" />
+              </Link>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
               <div className="flex items-start gap-1.5 text-slate-700">
                 <Icon name="schedule" className="text-[16px] text-blue-600 shrink-0 mt-0.5" />
                 <div>
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Thời gian đón</span>
-                  <span>{formatTripDateTime(status.nextTrip.pickupTime)}</span>
+                  <span>{formatTripDateTime(view.trip.pickupTime)}</span>
                 </div>
               </div>
               <div className="flex items-start gap-1.5 text-slate-700">
                 <Icon name="pin_drop" className="text-[16px] text-blue-600 shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Địa điểm đón</span>
-                  <p className="truncate" title={status.nextTrip.pickupAddress}>
-                    {status.nextTrip.pickupAddress || 'Đang cập nhật'}
-                  </p>
+                  <p className="truncate" title={view.trip.pickupAddress}>{view.trip.pickupAddress || 'Đang cập nhật'}</p>
                 </div>
               </div>
             </div>
           </div>
-        ) : (
-          /* Empty state khi không có chuyến */
+        )}
+
+        {view.mode === DASHBOARD_MODE.EMPTY && (
           <div className="flex items-center gap-2.5 text-xs text-slate-500 py-1">
             <Icon name="event_available" className="text-[18px] text-slate-400 shrink-0" />
             <span>Hiện tại bạn chưa có chuyến đi nào được lên lịch. Khi có phân công mới, thông tin cuốc xe sẽ hiển thị tại đây.</span>
@@ -359,21 +371,13 @@ export default function DriverAvailability() {
         )}
       </div>
 
-      {/* Thông báo lỗi & nút thử lại */}
       {error && (
-        <div
-          role="alert"
-          className="mt-3.5 text-xs text-rose-800 bg-rose-50 p-3 rounded-xl border border-rose-200 flex items-center justify-between gap-2"
-        >
+        <div role="alert" className="mt-3.5 text-xs text-rose-800 bg-rose-50 p-3 rounded-xl border border-rose-200 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Icon name="error" className="text-[18px] text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
-            onClick={refresh}
-            className="text-xs font-bold text-rose-700 hover:text-rose-900 underline shrink-0"
-          >
+          <button type="button" onClick={refresh} className="text-xs font-bold text-rose-700 hover:text-rose-900 underline shrink-0">
             Thử lại
           </button>
         </div>

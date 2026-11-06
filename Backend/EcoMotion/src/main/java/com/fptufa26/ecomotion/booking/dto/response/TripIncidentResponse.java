@@ -18,7 +18,7 @@ public record TripIncidentResponse(
         TripIncidentStatus status,
         Double locationLatitude,
         Double locationLongitude,
-        String evidenceUrls,
+        java.util.List<String> evidenceUrls,
         String resolutionNote,
         Instant createdAt,
         Instant resolvedAt
@@ -35,7 +35,7 @@ public record TripIncidentResponse(
                 incident.getStatus(),
                 incident.getLocationLatitude(),
                 incident.getLocationLongitude(),
-                incident.getEvidenceUrls(),
+                incident.getEvidenceUrlList(),
                 incident.getResolutionNote(),
                 incident.getCreatedAt(),
                 incident.getResolvedAt()

@@ -36,9 +36,13 @@ class DriverAssignmentEligibilityTest {
             new com.fptufa26.ecomotion.booking.service.implement.DriverAvailabilityServiceImpl(bookings,
                     snapshots, charges,
                     mock(com.fptufa26.ecomotion.user.service.DriverAssignmentService.class),
-                    Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC)));
+                    Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC)),
+            mock(com.fptufa26.ecomotion.user.service.DriverStatusService.class));
     Driver driver; Booking booking;
     @BeforeEach void setup() {
+        // Production gọi các luồng phân công trong @Transactional; mô phỏng transaction để guard của commitAssignment hợp lệ.
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
         Provider provider = new Provider(); provider.setId(1L);
         User user = new User(); user.setId(2L); user.setStatus(UserStatus.ACTIVE);
         driver = new Driver(); driver.setId(3L); driver.setProvider(provider); driver.setUser(user);
@@ -56,6 +60,11 @@ class DriverAssignmentEligibilityTest {
         when(users.findDriverByIdForUpdate(3L)).thenReturn(Optional.of(driver));
         when(users.findDriversByProviderId(1L)).thenReturn(List.of(driver));
     }
+    @org.junit.jupiter.api.AfterEach void closeTransaction() {
+        org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+    }
+
     @ParameterizedTest @EnumSource(value=DriverActivityStatus.class, names={"OFFLINE", "UNAVAILABLE"})
     void manualAndAutoRejectUnavailableDrivers(DriverActivityStatus status) {
         driver.setActivityStatus(status);

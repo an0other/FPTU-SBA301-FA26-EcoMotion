@@ -85,7 +85,6 @@ public class VnpayServiceImpl implements VnpayService {
     private final Clock clock;
     private final VnpayConfig vnpayConfig;
     private final PlatformTransactionManager transactionManager;
-    private final RefundEventService refundEventService;
 
     @Override
     @Transactional
@@ -187,7 +186,7 @@ public class VnpayServiceImpl implements VnpayService {
 
             // Business rule: Trip must be finished (TC02)
             if (booking.getActualEndAt() == null || booking.getProviderConfirmedAt() == null
-                    || booking.getRenterConfirmedAt() == null || booking.getCancelledAt() != null) {
+                    || !booking.isEndAccepted() || booking.getCancelledAt() != null) {
                 throw new InvalidPaymentOperationException("Chuyến đi chưa kết thúc, không thể thực hiện quyết toán số dư");
             }
 
@@ -623,7 +622,7 @@ public class VnpayServiceImpl implements VnpayService {
         } else if (transaction.getType() == PaymentType.SETTLEMENT) {
             if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT
                     || booking.getActualEndAt() == null || booking.getProviderConfirmedAt() == null
-                    || booking.getRenterConfirmedAt() == null
+                    || !booking.isEndAccepted()
                     || disputeService.hasActiveDispute(booking.getId())
                     || transaction.getAmount().compareTo(calculateFinalPayable(booking)) != 0) {
                 return recordPaymentForReconciliation(transaction, "Settlement no longer eligible or dispute is active");
@@ -677,20 +676,14 @@ public class VnpayServiceImpl implements VnpayService {
         paymentRequest
                 .filter(pr -> pr.getStatus() != PaymentRequestStatus.CONFIRMED)
                 .ifPresent(pr -> {
+                    // D2: tiền đã thu được ghi nhận và chuyển đối soát cho quản trị viên. Không hoàn tiền tự động,
+                    // và không cộng vào paidAmount vì appliedAmount = 0 cho khoản này.
                     transaction.setPaymentRequest(pr);
                     pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
-                    pr.setPaidAmount(pr.getPaidAmount().add(transaction.getAmount()));
                     pr.setIssueNote(transaction.getProcessingNote());
                     paymentRequestRepository.save(pr);
                 });
         bookingNotificationService.changed(transaction.getBooking(), "PAYMENT_RECONCILIATION_REQUIRED");
-        if (transaction.getVnpTxnRef() != null && transaction.getAmount() != null && transaction.getAmount().signum() > 0) {
-            User actor = transaction.getBooking().getRenter().getUser();
-            refundEventService.reserveOnTransaction(transaction.getBooking().getId(),
-                    "LATE_IPN:" + transaction.getVnpTxnRef(), transaction.getAmount(),
-                    "LATE_IPN hoàn giao dịch không giữ được lịch " + transaction.getVnpTxnRef(),
-                    actor, transaction.getId());
-        }
         return new VnpayIpnResponse("00", "Payment recorded, reconciliation required");
     }
 
@@ -719,30 +712,95 @@ public class VnpayServiceImpl implements VnpayService {
                 .orElseThrow(() -> new InvalidPaymentOperationException("Đơn thuê thiếu chính sách giá đã chốt, cần đối soát"));
     }
 
+    /**
+     * Return URL (D1-A): xác minh chữ ký và số tiền từ trình duyệt; nếu giao dịch còn PENDING thì hỏi lại VNPay
+     * bằng QueryDR phía server. Kết quả QueryDR đi qua cùng luồng đã xác thực như IPN. Không ghi SUCCESS từ tham số
+     * trình duyệt. Không để transaction DB mở trong lúc gọi HTTP tới VNPay.
+     */
     @Override
-    @Transactional(readOnly = true)
     public VnpayCallbackResultResponse processCallback(Map<String, String> params) {
+        TransactionTemplate readOnly = new TransactionTemplate(transactionManager);
+        readOnly.setReadOnly(true);
+        // Pha 1 (đọc): xác minh chữ ký, số tiền, trạng thái. Không gọi HTTP trong transaction này.
+        CallbackPrecheck precheck = readOnly.execute(status -> precheckCallback(params));
+        if (precheck.response() != null) return precheck.response();
+
+        // Pha 2 (HTTP): chỉ khi còn PENDING, hỏi VNPay bằng QueryDR phía server.
+        Optional<Map<String, String>> queried = paymentGatewayResolver.resolve(PaymentMethod.VNPAY)
+                .queryTransaction(precheck.txnRef(), precheck.createdAt(), clock.instant());
+        if (queried.isPresent()) {
+            Map<String, String> verifiedQuery = queried.get();
+            // Pha 3 (ghi): khóa booking và áp dụng kết quả QueryDR đã xác thực, giống IPN.
+            return new TransactionTemplate(transactionManager)
+                    .execute(status -> applyVerifiedQuery(precheck.txnRef(), verifiedQuery));
+        }
+        // VNPay chưa trả lời được: giữ PENDING_VERIFICATION, IPN hoặc đối soát định kỳ sẽ xử lý sau.
+        return readOnly.execute(status -> bookingQueryService.findTransactionByVnpTxnRef(precheck.txnRef())
+                .map(this::transactionResult)
+                .orElseGet(() -> invalidCallback("Giao dịch không tồn tại")));
+    }
+
+    private record CallbackPrecheck(VnpayCallbackResultResponse response, String txnRef, Instant createdAt) {}
+
+    private CallbackPrecheck precheckCallback(Map<String, String> params) {
         PaymentVerificationResult verification = paymentGatewayResolver.resolve(PaymentMethod.VNPAY).verifyCallback(params);
         if (!verification.validSignature()) {
-            return invalidCallback("Chữ ký hoặc thông tin merchant không hợp lệ");
+            return new CallbackPrecheck(invalidCallback("Chữ ký hoặc thông tin merchant không hợp lệ"), null, null);
         }
         String vnpTxnRef = verification.txnRef();
         if (vnpTxnRef == null || vnpTxnRef.isBlank()) {
-            return invalidCallback("Mã tham chiếu giao dịch không tồn tại");
+            return new CallbackPrecheck(invalidCallback("Mã tham chiếu giao dịch không tồn tại"), null, null);
         }
         PaymentTransaction candidate = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(null);
-        if (candidate == null) return invalidCallback("Giao dịch không tồn tại");
+        if (candidate == null) return new CallbackPrecheck(invalidCallback("Giao dịch không tồn tại"), null, null);
         try {
             String amount = params.get("vnp_Amount");
             if (amount == null || !amount.matches("[0-9]+")
                     || new BigDecimal(amount).compareTo(candidate.getAmount().movePointRight(2)) != 0) {
-                return invalidCallback("Số tiền giao dịch không khớp");
+                return new CallbackPrecheck(invalidCallback("Số tiền giao dịch không khớp"), null, null);
             }
         } catch (NumberFormatException ex) {
-            return invalidCallback("Số tiền giao dịch không hợp lệ");
+            return new CallbackPrecheck(invalidCallback("Số tiền giao dịch không hợp lệ"), null, null);
         }
+        if (candidate.getStatus() != PaymentStatus.PENDING) {
+            return new CallbackPrecheck(transactionResult(candidate), null, null);
+        }
+        return new CallbackPrecheck(null, vnpTxnRef, candidate.getCreatedAt());
+    }
 
-        return transactionResult(candidate);
+    // Chạy trong transaction riêng: khóa booking giống IPN rồi áp dụng kết quả QueryDR đã xác thực.
+    private VnpayCallbackResultResponse applyVerifiedQuery(String vnpTxnRef, Map<String, String> queried) {
+        PaymentTransaction candidate = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(null);
+        if (candidate == null) return invalidCallback("Giao dịch không tồn tại");
+        bookingQueryService.lockBookingForPayment(candidate.getBooking().getId());
+        PaymentTransaction transaction = bookingQueryService.findTransactionByVnpTxnRefForUpdate(vnpTxnRef).orElse(null);
+        if (transaction == null) return invalidCallback("Giao dịch không tồn tại");
+        if (transaction.getStatus() == PaymentStatus.PAID || transaction.getStatus() == PaymentStatus.FAILED) {
+            // Gọi lặp hoặc callback cũ: không tạo thêm bản ghi, chỉ trả trạng thái đã lưu.
+            return transactionResult(transaction);
+        }
+        boolean success = "00".equals(queried.get("vnp_ResponseCode"))
+                && "00".equals(queried.get("vnp_TransactionStatus"));
+        BigDecimal amount = BigDecimal.ZERO;
+        try {
+            amount = new BigDecimal(queried.getOrDefault("vnp_Amount", "0"))
+                    .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+        } catch (NumberFormatException ignored) {
+            // Số tiền không hợp lệ sẽ bị applyVerifiedPayment từ chối bằng "Invalid Amount".
+        }
+        PaymentVerificationResult verification = new PaymentVerificationResult(
+                true,
+                success,
+                vnpTxnRef,
+                queried.get("vnp_TransactionNo"),
+                queried.get("vnp_ResponseCode"),
+                amount,
+                queried.get("vnp_BankCode"),
+                null,
+                queried.get("vnp_PayDate"),
+                success ? "QueryDR xác nhận thành công" : "QueryDR xác nhận không thành công");
+        applyVerifiedPayment(transaction, verification, queried);
+        return transactionResult(transaction);
     }
 
     @Override

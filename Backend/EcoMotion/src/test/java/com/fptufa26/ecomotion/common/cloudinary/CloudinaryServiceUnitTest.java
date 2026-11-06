@@ -31,8 +31,10 @@ class CloudinaryServiceUnitTest {
     @Test
     @DisplayName("Throws CloudinaryInfrastructureException when credentials are mock or unconfigured, never returns fake URL")
     void uploadTripEvidence_unconfigured_throwsException() {
+        // Nội dung phải có chữ ký JPEG thật: file giả không còn qua được kiểm tra chữ ký ở validation.
         MockMultipartFile file = new MockMultipartFile(
-                "file", "test.jpg", "image/jpeg", "fake-image-bytes".getBytes()
+                "file", "test.jpg", "image/jpeg",
+                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 16, 0x4A, 0x46, 0x49, 0x46, 0, 1}
         );
 
         when(cloudinaryConfig.isMockOrDemo()).thenReturn(true);

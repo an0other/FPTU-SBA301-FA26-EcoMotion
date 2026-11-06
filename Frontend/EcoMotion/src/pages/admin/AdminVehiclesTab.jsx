@@ -53,10 +53,14 @@ export default function AdminVehiclesTab({
   }, [loadVehicles])
 
   useEffect(() => {
-    if (initialFilter?.targetVehicleId) {
-      setStatusFilter('ALL')
-      openDetailModal({ id: initialFilter.targetVehicleId })
-    }
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled && initialFilter?.targetVehicleId) {
+        setStatusFilter('ALL')
+        openDetailModal({ id: initialFilter.targetVehicleId })
+      }
+    })
+    return () => { cancelled = true }
   }, [initialFilter?.navKey, initialFilter?.targetVehicleId])
 
   function handleSearchSubmit(e) {

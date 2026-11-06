@@ -6,7 +6,6 @@ import { REFUND_WORKFLOW_LABELS, shouldShowRefundDetailsList } from '../../utils
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import BookingProgressStepper from './BookingProgressStepper'
 import DisputeHistory from './DisputeHistory'
-import TripEndPanel from './TripEndPanel'
 import RefundReceiptTimeline from './RefundReceiptTimeline'
 
 function Icon({ name, className = '' }) {
@@ -82,7 +81,6 @@ export default function BookingWorkflowSummary({
         onAction={onAction}
       />
 
-      <TripEndPanel workflow={workflow} provider={provider} onRefresh={onRefresh} />
       <DisputeHistory disputes={workflow?.disputes} />
 
       {/* Operational Proposal Card if pending / accepted / rejected */}
