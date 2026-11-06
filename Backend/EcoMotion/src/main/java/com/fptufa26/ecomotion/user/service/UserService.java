@@ -31,6 +31,8 @@ public interface UserService {
 
     boolean existsByEmail(String email);
 
+    Long resetPassword(String email, String rawPassword);
+
     boolean existsByPhone(String phone);
 
     User createUser(String email, String rawPassword, String fullName, String phone, Role role, UserStatus status);

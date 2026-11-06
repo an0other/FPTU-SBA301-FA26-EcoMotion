@@ -11,6 +11,7 @@ import CustomerPaymentPage from './pages/CustomerPaymentPage'
 import DriverSchedulePage from './pages/DriverSchedulePage'
 import DriverTripDetailPage from './pages/DriverTripDetailPage'
 import LoginPage from './pages/LoginPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import MePage from './pages/MePage'
 import PaymentHistoryPage from './pages/PaymentHistoryPage'
 import PaymentSuccessPage from './pages/PaymentSuccessPage'
@@ -65,6 +66,7 @@ export default function App() {
       <Route path="/renter" element={<Navigate to="/" replace />} />
 
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/activate" element={<ActivatePage />} />
       <Route

@@ -95,7 +95,9 @@ public class OtpServiceImpl implements OtpService {
             throw new OtpInvalidException();
         }
 
-        store.remove(storeKey);
+        if (!store.remove(storeKey, entry)) {
+            throw new OtpInvalidException();
+        }
         return new OtpVerificationResult(entry.getRecipient());
     }
 

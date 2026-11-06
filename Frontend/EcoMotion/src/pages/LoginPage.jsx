@@ -121,9 +121,9 @@ export default function LoginPage() {
             </button>
           </div>
           <div className="mt-1.5 flex justify-end">
-            <a href="#forgot" className="text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline">
+            <Link to="/forgot-password" className="text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline">
               Quên mật khẩu?
-            </a>
+            </Link>
           </div>
         </div>
 

@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.auth.controller;
 
 import com.fptufa26.ecomotion.auth.dto.request.LoginRequest;
 import com.fptufa26.ecomotion.auth.dto.request.RegisterRequest;
+import com.fptufa26.ecomotion.auth.dto.request.ResetPasswordRequest;
 import com.fptufa26.ecomotion.auth.dto.request.SendOtpRequest;
 import com.fptufa26.ecomotion.auth.dto.request.VerifyOtpRequest;
 import com.fptufa26.ecomotion.auth.dto.response.CurrentUserResponse;
@@ -11,6 +12,7 @@ import com.fptufa26.ecomotion.auth.dto.response.RegisterResponse;
 import com.fptufa26.ecomotion.auth.dto.response.SendOtpResponse;
 import com.fptufa26.ecomotion.auth.dto.response.VerifyOtpResponse;
 import com.fptufa26.ecomotion.auth.service.AuthService;
+import com.fptufa26.ecomotion.auth.service.PasswordResetService;
 import com.fptufa26.ecomotion.auth.service.RegistrationService;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import jakarta.servlet.http.Cookie;
@@ -31,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -38,6 +41,8 @@ public class AuthController {
 
     private final AuthService authService;
     private final RegistrationService registrationService;
+    private final PasswordResetService passwordResetService;
+    private final Duration resendCooldown;
     private final String cookieName;
     private final String cookiePath;
     private final boolean cookieSecure;
@@ -47,6 +52,8 @@ public class AuthController {
     public AuthController(
             AuthService authService,
             RegistrationService registrationService,
+            PasswordResetService passwordResetService,
+            @Value("${app.otp.resend-cooldown:60s}") Duration resendCooldown,
             @Value("${app.cookie.name:refresh_token}") String cookieName,
             @Value("${app.cookie.path:/api/auth}") String cookiePath,
             @Value("${app.cookie.secure:false}") boolean cookieSecure,
@@ -54,11 +61,26 @@ public class AuthController {
             @Value("${app.refresh-token.ttl-remember-me:7d}") Duration rememberMeCookieMaxAge) {
         this.authService = authService;
         this.registrationService = registrationService;
+        this.passwordResetService = passwordResetService;
+        this.resendCooldown = resendCooldown;
         this.cookieName = cookieName;
         this.cookiePath = cookiePath;
         this.cookieSecure = cookieSecure;
         this.cookieSameSite = cookieSameSite;
         this.rememberMeCookieMaxAge = rememberMeCookieMaxAge;
+    }
+
+    @PostMapping("/forgot-password")
+    public Map<String, Object> forgotPassword(@Valid @RequestBody SendOtpRequest request) {
+        passwordResetService.sendOtp(request.email());
+        return Map.of("message", "Nếu email đã được đăng ký, mã xác thực sẽ được gửi đến hộp thư của bạn.",
+                "resendCooldownSeconds", resendCooldown.toSeconds());
+    }
+
+    @PostMapping("/reset-password")
+    public Map<String, String> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.reset(request);
+        return Map.of("message", "Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.");
     }
 
     @PostMapping("/login")
