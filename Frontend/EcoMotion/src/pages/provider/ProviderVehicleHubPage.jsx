@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
+import { formatLicensePlateInput } from '../../utils/validation'
 
 const DOC_SPECS = [
   {
@@ -322,7 +323,8 @@ export default function ProviderVehicleHubPage() {
   const isPlateChanged = initialData && form.licensePlate.trim().toUpperCase() !== initialData.licensePlate.trim().toUpperCase()
 
   function handlePlateInput(e) {
-    setForm(prev => ({ ...prev, licensePlate: e.target.value.toUpperCase() }))
+    const formatted = formatLicensePlateInput(e.target.value, form.licensePlate)
+    setForm(prev => ({ ...prev, licensePlate: formatted }))
   }
 
   function resetPlate() {
