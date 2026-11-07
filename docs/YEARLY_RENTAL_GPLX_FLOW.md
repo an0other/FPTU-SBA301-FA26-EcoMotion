@@ -1,4 +1,4 @@
-> Chính sách demo đã mở rộng: B, B1, B2 được hỗ trợ, bỏ mốc ngày cấp 2025. Các mô tả chỉ hỗ trợ B hiện hành bên dưới là phạm vi cũ; điều kiện tuổi, hạn GPLX và số chỗ vẫn được kiểm tra.
+> Chính sách demo đã mở rộng: B, B1, B2 được hỗ trợ, bỏ mốc ngày cấp 2025. Chính sách theo commit `11ef8eb`; điều kiện tuổi, hạn GPLX và số chỗ vẫn được kiểm tra.
 
 > **Bộ demo hiện hành:** 3 renter + 1 provider, ghép các bước trên cùng booking; xem [danh sách đăng nhập và workflow](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md). Các mô tả seed lịch sử bên dưới không dùng cho demo mới.
 
@@ -16,7 +16,7 @@ The demo policy is based on the **Law on Road Traffic Order and Safety, No. 36/2
 - Official Government legal-document portal: [vanban.chinhphu.vn](https://vanban.chinhphu.vn/?pageid=27160) (search for `36/2024/QH15`).
 - Readable reference copy: [Law No. 36/2024/QH15](https://thuvienphapluat.vn/van-ban/Giao-thong-Van-tai/Luat-Trat-tu-an-toan-giao-thong-duong-bo-2024-so-36-2024-QH15-615463.aspx).
 
-This is a course-project policy, not legal advice or a complete legal eligibility determination. The vehicle model has a seat count but no gross vehicle weight or full vehicle-category fields, so the system cannot enforce all statutory conditions. It automatically supports only a class B read as issued on or after 1 January 2025. Older B1/B2 cards are displayed as not automatically supported; that does **not** mean those licenses are invalid. Their precise conversion, restrictions, and remaining term need individual review before expanding the policy.
+This is a course-project policy, not legal advice or a complete legal eligibility determination. The vehicle model has a seat count but no gross vehicle weight or full vehicle-category fields, so the system cannot enforce all statutory conditions. The demo automatically supports valid B/B1/B2 licenses under commit `11ef8eb`, without a 2025 issue-date cutoff (issue date does not determine eligibility). A finite expiry must cover today in Vietnam and the entire rental. The renter must be verified by OCR/QR and at least 18 at pickup; vehicles support at most nine seats including the driver. This is a demo product rule, not a complete legal determination for every B1/B2 license.
 
 ## Business rules implemented
 

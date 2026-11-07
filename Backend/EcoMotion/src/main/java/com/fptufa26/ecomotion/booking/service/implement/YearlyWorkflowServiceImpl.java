@@ -41,12 +41,22 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
     private final Clock clock;
     private final BigDecimal unit;
     private final BookingPaymentLedgerService ledger;
+    private final com.fptufa26.ecomotion.dispute.service.DisputeService disputes;
+    private final com.fptufa26.ecomotion.finance.service.FinancialAuditService audit;
+    private final com.fptufa26.ecomotion.user.service.UserService users;
+    private final com.fptufa26.ecomotion.finance.service.RefundEventService refunds;
+    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
 
     public YearlyWorkflowServiceImpl(BookingRepository bookings, YearlyWorkflowRepository workflows,
             YearlyIncidentRepository incidents, YearlyReplacementRepository replacements,
             YearlyHandoverRepository handovers, TripEvidenceService evidence, PaymentRequestService payments,
             ScheduleService schedules, VehicleService vehicles, BookingNotificationService notifications,
-            Clock clock, BookingPaymentLedgerService ledger, @Value("${booking.yearly.rounding-unit:100000}") BigDecimal unit) {
+            Clock clock, BookingPaymentLedgerService ledger,
+            com.fptufa26.ecomotion.dispute.service.DisputeService disputes,
+            com.fptufa26.ecomotion.finance.service.FinancialAuditService audit,
+            com.fptufa26.ecomotion.user.service.UserService users,
+            com.fptufa26.ecomotion.finance.service.RefundEventService refunds,
+            com.fptufa26.ecomotion.finance.service.CancellationClosureService closure, @Value("${booking.yearly.rounding-unit:100000}") BigDecimal unit) {
         this.bookings = bookings;
         this.workflows = workflows;
         this.incidents = incidents;
@@ -60,7 +70,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         this.clock = clock;
         if (unit == null || unit.signum() <= 0) throw new IllegalArgumentException("Invalid yearly rounding unit");
         this.unit = unit;
-        this.ledger = ledger;
+        this.ledger = ledger; this.disputes = disputes; this.audit = audit; this.users = users; this.refunds = refunds; this.closure = closure;
     }
 
     @Override
@@ -168,6 +178,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         Booking b = booking(userId, code, true, false);
         YearlyWorkflow s = active(b);
         version(s.getVersion(), r.version());
+        require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại chưa được giải quyết");
         require("RETURN_INSPECTED".equals(s.getStage()), "Chưa có biên bản nhận lại xe");
         vehicles.findVehicleByIdForUpdate(b.getVehicle().getId()).orElseThrow(() -> conflict("Không tìm thấy xe"));
         var end = s.getReturnedOn().atStartOfDay(ZONE).toInstant();
@@ -186,50 +197,13 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         Booking b = booking(userId, code, true, true);
         YearlyWorkflow s = state(b);
         version(s.getVersion(), r.version());
+        require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại chưa được giải quyết");
         require(Set.of("RETURNED", "SETTLEMENT_PROPOSED").contains(s.getStage()), "Không thể thay đổi quyết toán ở bước này");
         if (r.otherCharges().signum() > 0) {
             require(r.note() != null && !r.note().isBlank() && r.evidenceId() != null, "Phụ phí cần lý do và bằng chứng");
             photo(userId, b, r.evidenceId(), true);
         }
-        var cash = payments.yearlyCash(b.getId());
-        var months = YearlyRentalRules.installments(b.getTotalAmount(), s.getRoundingUnit());
-        int used = YearlyRentalRules.startedMonths(started(b), s.getReturnedOn());
-        int charged = used;
-        if ("PROVIDER_FAILURE".equals(s.getReturnMode())) {
-            require(s.getFailureOn() != null, "Thiếu ngày sự cố được chấp nhận");
-            charged = YearlyRentalRules.startedMonths(started(b), s.getFailureOn()) - 1;
-        }
-        if ("FULL_CONTRACT".equals(s.getReturnMode())) charged = 12;
-        LocalDate due = b.getPlannedEndAt().atZone(ZONE).toLocalDate();
-        if ("STANDARD".equals(s.getReturnMode())) require(!s.getReturnedOn().isBefore(due), "Trả trước hạn cần chọn trả sớm hoặc thanh toán đủ hợp đồng");
-        BigDecimal rent = months.subList(0, charged).stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal early = "EARLY".equals(s.getReturnMode())
-                ? YearlyRentalRules.earlyTerminationFee(b.getTotalAmount(), rent, s.getRoundingUnit()) : BigDecimal.ZERO;
-        BigDecimal late = YearlyRentalRules.lateFee(due, s.getReturnedOn(), s.getGraceDays(), s.getLateDailyRate());
-        long allowance = BigDecimal.valueOf(s.getAnnualKm()).multiply(BigDecimal.valueOf(used))
-                .divide(BigDecimal.valueOf(12), 0, RoundingMode.DOWN).longValueExact();
-        BigDecimal km = BigDecimal.valueOf(Math.max(0, s.getTotalKm() - allowance)).multiply(s.getExcessKmRate());
-        BigDecimal obligation = rent.add(early).add(late).add(km).add(r.otherCharges());
-        com.fptufa26.ecomotion.booking.policy.YearlySettlementMath.Result result;
-        try {
-            result = com.fptufa26.ecomotion.booking.policy.YearlySettlementMath.settle(obligation, cash.rentPaid(), cash.depositHeld(), r.depositDeduction());
-        } catch (IllegalArgumentException ex) {
-            throw conflict("Khoản khấu trừ vượt cọc hoặc bị tính trùng với tiền đã thanh toán");
-        }
-        s.setRentDue(rent);
-        s.setEarlyFee(early);
-        s.setLateFee(late);
-        s.setExcessKmFee(km);
-        s.setOtherCharges(r.otherCharges());
-        s.setSettlementEvidenceId(r.evidenceId());
-        s.setSettlementNote(r.note());
-        s.setRentPaid(cash.rentPaid());
-        s.setDepositHeld(cash.depositHeld());
-        s.setDepositDeduction(r.depositDeduction());
-        s.setBalanceDue(result.balanceDue());
-        s.setRentRefund(result.rentRefund());
-        s.setDepositRefund(result.depositRefund());
-        s.setStage("SETTLEMENT_PROPOSED");
+        calculateSettlement(b, s, r);
         return changed(b, s);
     }
 
@@ -238,6 +212,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         Booking b = booking(userId, code, true, false);
         YearlyWorkflow s = state(b);
         version(s.getVersion(), r.version());
+        require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại chưa được giải quyết");
         require("SETTLEMENT_PROPOSED".equals(s.getStage()), "Chưa có quyết toán để xác nhận");
         var cash = payments.yearlyCash(b.getId());
         require(cash.rentPaid().compareTo(s.getRentPaid()) == 0 && cash.depositHeld().compareTo(s.getDepositHeld()) == 0,
@@ -252,6 +227,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         Booking b = booking(userId, code, true, true);
         YearlyWorkflow s = state(b);
         version(s.getVersion(), r.version());
+        require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại chưa được giải quyết");
         require(Set.of("SETTLEMENT_ACCEPTED", "REFUND_TRANSFER_RECORDED").contains(s.getStage()), "Quyết toán chưa được xác nhận");
         require(payments.yearlyBalancePaid(b.getId(), s.getBalanceDue()), "Cần thanh toán khoản bổ sung trước khi hoàn cọc");
         require(s.getRentRefund().add(s.getDepositRefund()).signum() > 0, "Không có khoản cần hoàn");
@@ -267,6 +243,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         Booking b = booking(userId, code, true, false);
         YearlyWorkflow s = state(b);
         version(s.getVersion(), r.version());
+        require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại chưa được giải quyết");
         require("REFUND_TRANSFER_RECORDED".equals(s.getStage()), "Chưa có bằng chứng hoàn tiền");
         payments.recordYearlyRefund(b.getId(), s.getRentRefund(), s.getDepositRefund(), s.getRefundReference(),
                 photo(userId, b, s.getRefundEvidenceId(), false), userId);
@@ -279,6 +256,10 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         Booking b = booking(userId, code, true, true);
         YearlyWorkflow s = state(b);
         version(s.getVersion(), r.version());
+        require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại chưa được giải quyết");
+        require(!refunds.hasOpenRefunds(b.getId()), "Còn nghĩa vụ hoàn tiền chưa xử lý");
+        require(ledger.listTransactions(b.getId()).stream().noneMatch(tx -> tx.getStatus() == PaymentStatus.PENDING
+                || com.fptufa26.ecomotion.finance.service.RefundMath.unapplied(tx.getProcessingNote())), "Còn giao dịch đang đối soát");
         require(Set.of("SETTLEMENT_ACCEPTED", "REFUND_RECEIVED").contains(s.getStage()), "Chưa đủ bước quyết toán");
         require(s.getRentRefund().add(s.getDepositRefund()).signum() == 0 || "REFUND_RECEIVED".equals(s.getStage()), "Renter chưa xác nhận nhận tiền hoàn");
         require(payments.yearlyBalancePaid(b.getId(), s.getBalanceDue()), "Còn khoản thanh toán bổ sung");
@@ -496,6 +477,157 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         replacements.flush();
         notifications.changed(b, "BOOKING_CHANGED");
         return replacement(x);
+    }
+
+
+    private void calculateSettlement(Booking b, YearlyWorkflow s, Settlement r) {
+        var cash = payments.yearlyCash(b.getId());
+        var months = YearlyRentalRules.installments(b.getTotalAmount(), s.getRoundingUnit());
+        int used = YearlyRentalRules.startedMonths(started(b), s.getReturnedOn());
+        int charged = used;
+        if ("PROVIDER_FAILURE".equals(s.getReturnMode())) {
+            require(s.getFailureOn() != null, "Thiếu ngày sự cố được chấp nhận");
+            charged = YearlyRentalRules.startedMonths(started(b), s.getFailureOn()) - 1;
+        }
+        if ("FULL_CONTRACT".equals(s.getReturnMode())) charged = 12;
+        LocalDate due = b.getPlannedEndAt().atZone(ZONE).toLocalDate();
+        if ("STANDARD".equals(s.getReturnMode())) require(!s.getReturnedOn().isBefore(due), "Trả trước hạn cần chọn trả sớm hoặc thanh toán đủ hợp đồng");
+        BigDecimal rent = months.subList(0, charged).stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal early = "EARLY".equals(s.getReturnMode())
+                ? YearlyRentalRules.earlyTerminationFee(b.getTotalAmount(), rent, s.getRoundingUnit()) : BigDecimal.ZERO;
+        BigDecimal late = YearlyRentalRules.lateFee(due, s.getReturnedOn(), s.getGraceDays(), s.getLateDailyRate());
+        long allowance = BigDecimal.valueOf(s.getAnnualKm()).multiply(BigDecimal.valueOf(used))
+                .divide(BigDecimal.valueOf(12), 0, RoundingMode.DOWN).longValueExact();
+        BigDecimal km = BigDecimal.valueOf(Math.max(0, s.getTotalKm() - allowance)).multiply(s.getExcessKmRate());
+        BigDecimal obligation = rent.add(early).add(late).add(km).add(r.otherCharges());
+        com.fptufa26.ecomotion.booking.policy.YearlySettlementMath.Result result;
+        try {
+            result = com.fptufa26.ecomotion.booking.policy.YearlySettlementMath.settle(obligation, cash.rentPaid(), cash.depositHeld(), r.depositDeduction());
+        } catch (IllegalArgumentException ex) {
+            throw conflict("Khoản khấu trừ vượt cọc hoặc bị tính trùng với tiền đã thanh toán");
+        }
+        s.setRentDue(rent);
+        s.setEarlyFee(early);
+        s.setLateFee(late);
+        s.setExcessKmFee(km);
+        s.setOtherCharges(r.otherCharges());
+        s.setSettlementEvidenceId(r.evidenceId());
+        s.setSettlementNote(r.note());
+        s.setRentPaid(cash.rentPaid());
+        s.setDepositHeld(cash.depositHeld());
+        s.setDepositDeduction(r.depositDeduction());
+        s.setBalanceDue(result.balanceDue());
+        s.setRentRefund(result.rentRefund());
+        s.setDepositRefund(result.depositRefund());
+        s.setStage("SETTLEMENT_PROPOSED");
+    }
+
+    private Booking adminBooking(Long adminId, String code) {
+        requireAdmin(adminId);
+        var candidate = bookings.findByBookingCode(code.trim().toUpperCase(java.util.Locale.ROOT)).orElseThrow(() -> conflict("Không có hợp đồng"));
+        var b = ledger.requireBookingForUpdate(candidate.getId());
+        require(b.getPlan().getPlanType() == PlanType.YEARLY, "Chỉ áp dụng hợp đồng năm");
+        return b;
+    }
+
+    @Override
+    public View adminView(Long adminId, String code) {
+        var b = adminBooking(adminId, code);
+        return view(b, workflows.findById(b.getId()).orElseGet(() -> fresh(b)));
+    }
+
+    @Override
+    @Transactional(readOnly=true)
+    public List<ReviewCase> reviewCases(Long userId, String code) {
+        reviewHistory(userId, code);
+        var b = bookings.findByBookingCode(code.trim().toUpperCase(java.util.Locale.ROOT)).orElseThrow();
+        return disputes.getDisputesByBookingId(b.getId()).stream().map(d -> new ReviewCase(d.getId(), d.getCategory().name(),
+                d.getStatus().name(), d.getDescription(), d.getEvidenceUrlList(), d.getResolution())).toList();
+    }
+
+    private void requireAdmin(Long id) {
+        if (users.findById(id).filter(u -> u.getRole() == Role.ADMIN && u.getStatus() == com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE).isEmpty())
+            throw new AccessDeniedException("Chỉ admin đang hoạt động được phân xử");
+    }
+
+    @Override
+    public View disputeSettlement(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Complaint r) {
+        var b = booking(userId, code, true, false); var s = state(b);
+        if (audit.replay("YEARLY", b.getId(), r.requestId(), userId, r.toString())) return view(b, s);
+        version(s.getVersion(), r.version());
+        require(Set.of("RETURN_INSPECTED", "SETTLEMENT_PROPOSED").contains(s.getStage()), "Chỉ phản đối kiểm định hoặc quyết toán đang đề xuất");
+        var image = photo(userId, b, r.evidenceId(), false);
+        disputes.open(b, b.getRenter().getUser(), com.fptufa26.ecomotion.dispute.enums.DisputeCategory.YEARLY_SETTLEMENT, null,
+                r.note(), List.of(image));
+        audit.record("YEARLY", b.getId(), r.requestId(), userId, "DISPUTE", r.toString(), s.getStage());
+        return changed(b, s);
+    }
+
+    @Override
+    public View replyReview(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Reply r) {
+        var b = booking(userId, code, true, true); var s = state(b);
+        if (audit.replay("YEARLY", b.getId(), r.requestId(), userId, r.toString())) return view(b, s);
+        var d = disputes.getDisputeById(r.disputeId()).orElseThrow(() -> conflict("Không có khiếu nại"));
+        require(d.getBooking().getId().equals(b.getId()) && Set.of(com.fptufa26.ecomotion.dispute.enums.DisputeStatus.OPEN,
+                com.fptufa26.ecomotion.dispute.enums.DisputeStatus.IN_REVIEW).contains(d.getStatus()), "Khiếu nại không còn mở trên hợp đồng");
+        photo(userId, b, r.evidenceId(), true);
+        audit.record("YEARLY", b.getId(), r.requestId(), userId, "PROVIDER_REPLY", r.toString(), s.getStage());
+        return changed(b, s);
+    }
+
+    @Override
+    public View adjudicateSettlement(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.SettlementRuling r) {
+        var b = adminBooking(adminId, code); var s = state(b);
+        if (audit.replay("YEARLY", b.getId(), r.requestId(), adminId, r.toString())) return view(b, s);
+        version(s.getVersion(), r.version());
+        var d = disputes.getDisputeById(r.disputeId()).orElseThrow(() -> conflict("Không có khiếu nại"));
+        require(d.getBooking().getId().equals(b.getId()) && d.getCategory() == com.fptufa26.ecomotion.dispute.enums.DisputeCategory.YEARLY_SETTLEMENT,
+                "Hồ sơ không phải quyết toán năm của hợp đồng");
+        require(Set.of("RETURN_INSPECTED", "SETTLEMENT_PROPOSED").contains(s.getStage()), "Quyết toán đã được chốt");
+        require(!r.returnedOn().isBefore(started(b)) && !r.returnedOn().isAfter(today()) && r.finalKm() >= initialKm(b,s), "Ngày trả hoặc km không hợp lệ");
+        String before = s.getStage() + ":" + s.getFinalKm() + ":" + s.getReturnedOn() + ":" + s.getOtherCharges() + ":" + s.getDepositDeduction();
+        photo(b.getVehicle().getProvider().getUser().getId(), b, r.evidenceId(), true);
+        s.setReturnedOn(r.returnedOn()); s.setFinalKm(r.finalKm()); s.setReturnEvidenceId(r.evidenceId());
+        s.setTotalKm(Math.addExact(s.getCompletedKm(), r.finalKm() - initialKm(b,s)));
+        var end = r.returnedOn().atStartOfDay(ZONE).toInstant();
+        b.setActualEndAt(end.isBefore(b.getActualStartAt()) ? b.getActualStartAt() : end);
+        b.setProviderConfirmedAt(clock.instant()); b.setEndConfirmationMethod("ADMIN");
+        b.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+        schedules.release(b.getId()); schedules.markYearlyInspection(b,b.getVehicle(),r.returnedOn());
+        calculateSettlement(b,s,new Settlement(s.getVersion(),r.otherCharges(),r.depositDeduction(),r.note(),r.evidenceId()));
+        bookings.saveAndFlush(b);
+        workflows.saveAndFlush(s);
+        disputes.resolveYearlyReview(r.disputeId(),adminId,r.note());
+        require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại khác cần giải quyết trước");
+        payments.finalizeYearlyObligations(b.getId(),s.getBalanceDue()); s.setStage("SETTLEMENT_ACCEPTED");
+        audit.record("YEARLY",b.getId(),r.requestId(),adminId,"SETTLEMENT_RULING",r.toString(),before);
+        return changed(b,s);
+    }
+
+    @Override
+    public void adjudicateCancellation(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.CancellationRuling r) {
+        var b = adminBooking(adminId,code);
+        if (audit.replay("YEARLY",b.getId(),r.requestId(),adminId,r.toString())) return;
+        require(b.getCancelledAt()!=null && b.getActualStartAt()==null && b.getStatus()==BookingStatus.CANCELLATION_REVIEW,"Không phải hủy năm trước nhận xe");
+        var d=disputes.getDisputeById(r.disputeId()).orElseThrow(()->conflict("Không có hồ sơ"));
+        require(d.getBooking().getId().equals(b.getId()) && d.getCategory()==com.fptufa26.ecomotion.dispute.enums.DisputeCategory.YEARLY_CANCELLATION,"Sai hồ sơ hủy năm");
+        require(r.refundAmount().signum()>=0 && r.refundAmount().compareTo(refunds.remainingReceived(b.getId()))<=0,"Số hoàn vượt nguồn thực nhận");
+        require(ledger.listTransactions(b.getId()).stream().noneMatch(tx -> tx.getStatus()==PaymentStatus.PENDING
+                || com.fptufa26.ecomotion.finance.service.RefundMath.unapplied(tx.getProcessingNote())),"Cần đối soát giao dịch chưa rõ kết quả trước");
+        refunds.reserve(b.getId(),"YEARLY_CANCEL_RULING:"+r.disputeId(),r.refundAmount(),r.note(),users.findById(adminId).orElseThrow());
+        disputes.resolveYearlyReview(r.disputeId(),adminId,r.note());
+        audit.record("YEARLY",b.getId(),r.requestId(),adminId,"CANCELLATION_RULING",r.toString(),b.getStatus().name());
+        closure.reconcile(b.getId());
+    }
+
+    @Override
+    @Transactional(readOnly=true)
+    public List<com.fptufa26.ecomotion.finance.service.FinancialAuditService.Entry> reviewHistory(Long userId,String code) {
+        var u=users.findById(userId).orElseThrow(()->new AccessDeniedException("Không có tài khoản"));
+        Booking b;
+        if(u.getRole()==Role.ADMIN) { requireAdmin(userId); b=bookings.findByBookingCode(code.trim().toUpperCase(java.util.Locale.ROOT)).orElseThrow(); }
+        else b=booking(userId,code,false,null);
+        return audit.history("YEARLY",b.getId());
     }
 
     private Booking booking(Long userId, String code, boolean lock, Boolean provider) {

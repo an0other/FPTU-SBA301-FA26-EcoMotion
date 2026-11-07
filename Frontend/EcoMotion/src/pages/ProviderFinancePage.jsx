@@ -1,3 +1,4 @@
+import { BankReceiptReconciliationModal } from '../components/payments/BankReceiptReconciliationModal'
 import { canReviewRefund, refundReviewPayload } from '../utils/tv5Contracts'
 import { RefundProofModal } from '../components/payments/RefundProofModal'
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -180,7 +181,7 @@ function PaymentRequestActionsCell({
             type="button"
             onClick={onConfirm}
             className={`${financeActionBtn} bg-brand-700 font-bold text-white hover:bg-brand-800`}
-            title="Xác nhận biên lai / chuyển khoản khách đã gửi"
+            title="Xác nhận đã đối chiếu tiền thực nhận trong tài khoản ngân hàng"
           >
             Xác nhận
           </button>
@@ -351,6 +352,7 @@ export default function ProviderFinancePage() {
   const [toast, setToast] = useState({ message: '', type: 'success' })
 
   // Modals
+  const [bankReceiptRequest, setBankReceiptRequest] = useState(null)
   const [confirmModalData, setConfirmModalData] = useState(null)
   const [rejectModalData, setRejectModalData] = useState(null)
   const [reportIssueModalData, setReportIssueModalData] = useState(null)
@@ -1234,6 +1236,9 @@ export default function ProviderFinancePage() {
                               onOpenRefundsTab={() => setActiveTab('refunds')}
                               onDeclineTrip={handleOpenDeclineTripModal}
                             />
+                            <button type="button" onClick={() => setBankReceiptRequest(pr)} className="mt-2 w-full rounded-md border border-amber-200 px-2 py-1 text-xs font-semibold text-amber-800">
+                              Tiền nhận cần đối soát
+                            </button>
                           </td>
                         </tr>
                       )
@@ -1737,6 +1742,18 @@ export default function ProviderFinancePage() {
       {/* ======================================================== */}
       {/* MODAL 2: CONFIRM PAYMENT (SCREEN C)                      */}
       {/* ======================================================== */}
+      {bankReceiptRequest && <BankReceiptReconciliationModal
+        key={bankReceiptRequest.id}
+        request={bankReceiptRequest}
+        onClose={() => setBankReceiptRequest(null)}
+        onRecorded={() => {
+          setBankReceiptRequest(null)
+          setToast({ message: 'Đã lưu tiền thực nhận để đối soát; chưa phân bổ và chưa tạo hoàn tiền.', type: 'warning' })
+          fetchFinanceData()
+          fetchPaymentRequests()
+        }}
+      />}
+
       {confirmModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
@@ -1759,7 +1776,7 @@ export default function ProviderFinancePage() {
                 <div>Số trên QR: <span className="font-bold">{formatVnd(confirmModalData.amount)}</span></div>
                 <div>Đã ghi sổ: <span className="font-bold">{formatVnd(confirmModalData.paidAmount || 0)}</span></div>
                 <p className="pt-1 text-[11px] text-emerald-700/90">
-                  VietQR khóa đúng số tiền trên QR. Xác nhận sẽ ghi nhận{' '}
+                  VietQR điền sẵn số tiền. Chỉ xác nhận sau khi đối chiếu sao kê ngân hàng đúng số tiền sau:{' '}
                   <span className="font-bold">
                     {formatVnd(
                       confirmModalData.remainingAmount

@@ -6,6 +6,15 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface YearlyWorkflowService {
+    View adminView(Long adminId, String code);
+    List<ReviewCase> reviewCases(Long userId, String code);
+    record ReviewCase(Long id, String category, String status, String description, List<String> evidenceUrls, String resolution) {}
+    View disputeSettlement(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Complaint request);
+    View replyReview(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Reply request);
+    View adjudicateSettlement(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.SettlementRuling request);
+    void adjudicateCancellation(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.CancellationRuling request);
+    java.util.List<com.fptufa26.ecomotion.finance.service.FinancialAuditService.Entry> reviewHistory(Long userId, String code);
+
     View get(Long userId, String code);
     Preview preview(Long userId, String code, PreviewRequest request);
     View terms(Long userId, String code, Terms request);

@@ -46,7 +46,7 @@ import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.finance.service.PaymentCodeGenerator;
-import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
 import com.fptufa26.ecomotion.dispute.service.DisputeQueryService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -101,6 +101,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
+    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
     private final PaymentRequestRepository paymentRequestRepository;
     private final BookingNotificationService bookingNotificationService;
     private final PaymentEvidenceRepository paymentEvidenceRepository;
@@ -117,6 +118,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private final DisputeQueryService disputeQueryService;
     private final EntityManager entityManager;
     private final VehicleService vehicleService;
+    private final com.fptufa26.ecomotion.finance.service.FinancialAuditService financialAudit;
+    private final jakarta.validation.Validator validator;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -713,6 +717,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         ProviderBankAccount receivingAccount = pr.getReceivingBankAccount() != null
                 ? pr.getReceivingBankAccount()
                 : resolveActiveBankAccount(provider);
+        receivingAccount = providerBankAccountRepository.findByIdForUpdate(receivingAccount.getId()).orElseThrow();
         pr.setReceivingBankAccount(receivingAccount);
         if (bankRef != null && bookingPaymentLedgerService
                 .gatewayReferenceExists(receivingAccount.getId(), bankRef)) {
@@ -727,7 +732,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
 
         BigDecimal appliedAmount = receivedAmount.min(neededAmount);
-        BigDecimal excessAmount = receivedAmount.subtract(appliedAmount).max(BigDecimal.ZERO);
         PaymentTransaction tx = new PaymentTransaction();
         tx.setBooking(pr.getBooking());
         tx.setType(pr.isSecurityDeposit() ? PaymentType.SECURITY_DEPOSIT
@@ -802,10 +806,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         bookingPaymentLedgerService.saveTransaction(tx);
 
-        if (excessAmount.compareTo(BigDecimal.ZERO) > 0) {
-            createExcessRefund(pr, excessAmount, provider.getUser());
-        }
-
         pr.setPaidAmount(newPaidTotal);
         pr.setConfirmedBy(provider.getUser());
         pr.setConfirmedAt(clock.instant());
@@ -815,9 +815,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             pr.setStatus(PaymentRequestStatus.CONFIRMED);
         } else if (comparison < 0) {
             pr.setStatus(PaymentRequestStatus.PARTIALLY_PAID);
-        }
-        if (excessAmount.compareTo(BigDecimal.ZERO) > 0) {
-            pr.setIssueNote("Đã ghi nhận tiền chuyển thừa và tạo yêu cầu hoàn " + excessAmount + " VND");
         }
 
         // Mark latest evidence as accepted if present
@@ -835,6 +832,80 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 provider.getId(), paymentRequestId, receivedAmount);
 
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
+            com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request) {
+        Provider provider = resolveProvider(currentUserId);
+        if (request == null || !validator.validate(request).isEmpty()) {
+            throw new InvalidPaymentOperationException("Cần số tiền thực nhận, mã ngân hàng và xác minh sao kê hợp lệ");
+        }
+        PaymentRequest candidate = paymentRequestRepository.findById(paymentRequestId)
+                .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán"));
+        if (!candidate.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
+            throw new AccessDeniedException("Bạn không có quyền đối soát khoản tiền của nhà xe khác");
+        }
+        // Use the same booking -> request lock order as confirmation, refunds and gateway processing.
+        Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
+        entityManager.detach(candidate);
+        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId).orElseThrow();
+        entityManager.refresh(pr, LockModeType.PESSIMISTIC_WRITE);
+        String payload = objectMapper.writeValueAsString(request);
+        String key = request.reconciliationId().trim();
+        if (financialAudit.replay("BANK_RECEIPT", pr.getId(), key, currentUserId, payload)) {
+            return toResponse(pr);
+        }
+        // Resolve the original receiving account, not a newly configured account after checkout.
+        ProviderBankAccount receivingAccount = pr.getReceivingBankAccount();
+        if (receivingAccount == null) {
+            throw new InvalidPaymentOperationException("Thiếu tài khoản nhận đã chốt; cần đối chiếu trước khi ghi nhận");
+        }
+        receivingAccount = providerBankAccountRepository.findByIdForUpdate(receivingAccount.getId()).orElseThrow();
+        if (!receivingAccount.getProvider().getId().equals(provider.getId())) {
+            throw new AccessDeniedException("Tài khoản nhận không thuộc nhà xe");
+        }
+        String bankRef = request.bankTransactionRef().trim().toUpperCase(Locale.ROOT);
+        if (bookingPaymentLedgerService.gatewayReferenceExists(receivingAccount.getId(), bankRef)) {
+            throw new BankAccountConflictException("Giao dịch ngân hàng này đã được ghi nhận");
+        }
+        String previous = booking.getStatus() + "/" + pr.getStatus() + "/paid=" + pr.getPaidAmount();
+        PaymentTransaction receipt = new PaymentTransaction();
+        receipt.setBooking(booking);
+        receipt.setPaymentRequest(pr);
+        receipt.setType(pr.isSecurityDeposit() ? PaymentType.SECURITY_DEPOSIT
+                : pr.getPaymentType() == PaymentRequestType.DEPOSIT ? initialPaymentType(booking) : PaymentType.SETTLEMENT);
+        receipt.setDirection(PaymentDirection.IN);
+        receipt.setMethod(PaymentMethod.BANK_TRANSFER);
+        receipt.setStatus(PaymentStatus.PAID);
+        receipt.setAmount(request.receivedAmount());
+        receipt.setAppliedAmount(BigDecimal.ZERO);
+        receipt.setTransactionCode(paymentCodeGenerator.generatePaymentCode("VQ"));
+        receipt.setGatewayRef(bankRef);
+        receipt.setReceivingBankAccount(receivingAccount);
+        receipt.setVerificationMethod(PaymentVerificationMethod.PROVIDER_CONFIRMED);
+        receipt.setConfirmedBy(provider.getUser());
+        receipt.setPaidAt(request.receivedAt());
+        receipt.setBankCodeSnapshot(pr.getBankCodeSnapshot());
+        receipt.setBankNameSnapshot(pr.getBankNameSnapshot());
+        receipt.setBankAccountNoSnapshot(maskAccountNumber(pr.getAccountNumberSnapshot()));
+        receipt.setBankAccountHolderSnapshot(pr.getAccountHolderSnapshot());
+        receipt.setProcessingNote("RECONCILIATION_REQUIRED: BANK_STATEMENT " + request.bankStatementReference().trim());
+        bookingPaymentLedgerService.saveTransaction(receipt);
+        // PAID records actual cash, not settlement of the obligation. Preserve paidAmount and all prior allocations.
+        pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
+        pr.setIssueNote("Đã ghi nhận tiền thực nhận theo sao kê; chưa phân bổ, không tự hoàn. Mã ngân hàng: " + bankRef);
+        pr.setUpdatedAt(clock.instant());
+        if (Set.of(BookingStatus.PENDING, BookingStatus.ACCEPTED, BookingStatus.AWAITING_DEPOSIT,
+                BookingStatus.CANCELLED, BookingStatus.REJECTED).contains(booking.getStatus())) {
+            booking.setStatus(BookingStatus.CANCELLATION_REVIEW);
+            scheduleService.release(booking.getId());
+            bookingPaymentLedgerService.saveBooking(booking);
+        }
+        financialAudit.record("BANK_RECEIPT", pr.getId(), key, currentUserId, "RECONCILIATION_REQUIRED", payload, previous);
+        bookingNotificationService.changed(booking, "PAYMENT_RECONCILIATION_REQUIRED");
+        return toResponse(paymentRequestRepository.save(pr));
     }
 
     private String prepareManualPaymentApplication(PaymentRequest request, Booking booking, boolean complete) {
@@ -951,7 +1022,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             paymentEvidenceRepository.save(latest);
         }
 
-        PaymentRequest saved = paymentRequestRepository.save(pr);
+        PaymentRequest saved = paymentRequestRepository.saveAndFlush(pr);
+        closure.reconcile(booking.getId());
         bookingNotificationService.changed(booking, "BOOKING_CHANGED");
         log.info("Provider {} rejected PaymentRequest #{} with reason: {}",
                 provider.getId(), paymentRequestId, request.reason());
@@ -1308,19 +1380,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         bookingNotificationService.depositPaid(booking, transaction.getPaymentRequest().getAmount());
         log.info("Booking {} transitioned to CONFIRMED and its schedule was locked after DEPOSIT confirmation",
                 booking.getBookingCode());
-    }
-
-    private void createExcessRefund(PaymentRequest request, BigDecimal excessAmount, User processor) {
-        PaymentTransaction source = bookingPaymentLedgerService.listTransactions(request.getBooking().getId()).stream()
-                .filter(tx -> tx.getPaymentRequest() != null && request.getId().equals(tx.getPaymentRequest().getId())
-                        && tx.getDirection() == PaymentDirection.IN && tx.getStatus() == PaymentStatus.PAID)
-                .reduce((first, second) -> second)
-                .orElse(null);
-        if (source == null) {
-            return;
-        }
-        refundEventService.reserveOnTransaction(request.getBooking().getId(), "EXCESS:" + source.getId(), excessAmount,
-                "Hoàn tiền chuyển thừa cho yêu cầu thanh toán #" + request.getId(), processor, source.getId());
     }
 
     @Override

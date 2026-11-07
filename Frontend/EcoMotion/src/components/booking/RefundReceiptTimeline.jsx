@@ -52,6 +52,7 @@ export default function RefundReceiptTimeline({ refund, provider, onRefresh }) {
   }
   return <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-xs text-slate-700">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    {refund.receiptStatus === 'ADMIN_VERIFIED' && <p className="font-semibold text-emerald-800">Quản trị viên đã xác minh chứng cứ chuyển tiền lúc {when(refund.receiptConfirmedAt)}. Đây là kết luận đối soát, không phải xác nhận trực tiếp của người thuê.</p>}
     <ol className="min-w-0 flex-1 space-y-2 border-l-2 border-emerald-200 pl-3" aria-label="Lịch sử xác nhận nhận tiền">
       <li>Nhà xe xác nhận chuyển hoàn: <strong>{when(refund.receiptWaitingAt)}</strong></li>
       <li>Hạn phản hồi của người thuê: <strong>{when(refund.receiptDeadline)}</strong> (72 giờ)</li>

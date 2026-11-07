@@ -11,6 +11,10 @@ import java.util.Optional;
 @Repository
 public interface ProviderBankAccountRepository extends JpaRepository<ProviderBankAccount, Long> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select a from ProviderBankAccount a where a.id = :id")
+    Optional<ProviderBankAccount> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
+
     Optional<ProviderBankAccount> findByProvider_IdAndStatus(Long providerId, BankAccountStatus status);
 
     List<ProviderBankAccount> findByProvider_IdOrderByCreatedAtDesc(Long providerId);

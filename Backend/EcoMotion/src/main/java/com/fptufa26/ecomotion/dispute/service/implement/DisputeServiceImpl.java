@@ -32,11 +32,29 @@ import jakarta.persistence.EntityManager;
 import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.user.enums.Role;
 import org.springframework.security.access.AccessDeniedException;
-import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
 
 @Service
 @RequiredArgsConstructor
 public class DisputeServiceImpl implements DisputeService {
+
+    @Override
+    @Transactional
+    public void resolveYearlyReview(Long disputeId, Long adminId, String resolution) {
+        var candidate = disputeRepository.findById(disputeId).orElseThrow(() -> new ResourceNotFoundException("Không có khiếu nại"));
+        var booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
+        var dispute = disputeRepository.findByIdForUpdate(disputeId).orElseThrow();
+        var admin = userService.findById(adminId).filter(u -> u.getRole() == Role.ADMIN
+                && u.getStatus() == com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE)
+                .orElseThrow(() -> new AccessDeniedException("Chỉ admin được phân xử"));
+        if (!java.util.Set.of(DisputeCategory.YEARLY_SETTLEMENT, DisputeCategory.YEARLY_CANCELLATION).contains(dispute.getCategory())
+                || !java.util.Set.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW).contains(dispute.getStatus())
+                || resolution == null || resolution.isBlank()) throw new ConflictException("Hồ sơ năm không còn chờ phân xử");
+        dispute.setStatus(DisputeStatus.RESOLVED); dispute.setResolution(resolution.trim());
+        dispute.setHandledBy(admin); dispute.setResolvedAt(clock.instant());
+        disputeRepository.saveAndFlush(dispute);
+        notifications.changed(booking, "DISPUTE_UPDATED");
+    }
 
     private final DisputeRepository disputeRepository;
     private final UserService userService;
@@ -130,6 +148,9 @@ public class DisputeServiceImpl implements DisputeService {
         if (status == null || status == DisputeStatus.OPEN || resolution == null || resolution.isBlank() || resolution.trim().length() > 1000)
             throw new ConflictException("Cần trạng thái thụ lý/phán quyết hợp lệ và kết luận từ 1 đến 1000 ký tự");
         String note = resolution.trim();
+        if (java.util.Set.of(DisputeCategory.YEARLY_SETTLEMENT, DisputeCategory.YEARLY_CANCELLATION).contains(dispute.getCategory())
+                && status != DisputeStatus.IN_REVIEW)
+            throw new ConflictException("Hồ sơ năm phải dùng phân xử tài chính năm để áp dụng kết quả");
         if(tripEndAction!=null && (dispute.getCategory()!=DisputeCategory.TRIP_NOT_CONFIRMED || status==DisputeStatus.IN_REVIEW))
             throw new ConflictException("Hành động kết thúc chỉ dùng khi phân xử khiếu nại kết thúc");
         if (dispute.getStatus() == DisputeStatus.RESOLVED || dispute.getStatus() == DisputeStatus.REJECTED) {

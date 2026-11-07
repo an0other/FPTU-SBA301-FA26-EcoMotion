@@ -117,6 +117,11 @@ export const providerFinanceService = {
     return data?.data
   },
 
+  async recordBankReceipt(paymentRequestId, payload) {
+    const { data } = await apiClient.post(`/provider/payment-requests/${paymentRequestId}/bank-reconciliation`, payload)
+    return data?.data
+  },
+
   async reportIssue(paymentRequestId, payload) {
     const { data } = await apiClient.post(`/provider/payment-requests/${paymentRequestId}/report-issue`, payload)
     return data?.data

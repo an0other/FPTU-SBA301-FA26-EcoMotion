@@ -75,6 +75,9 @@ public interface PaymentRequestService {
 
     PaymentRequestResponse confirmPayment(Long paymentRequestId, Long currentUserId, ConfirmPaymentRequest request);
 
+    PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
+            com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request);
+
     PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request);
 
     PaymentRequestResponse reportIssue(Long paymentRequestId, Long currentUserId, ReportIssueRequest request);

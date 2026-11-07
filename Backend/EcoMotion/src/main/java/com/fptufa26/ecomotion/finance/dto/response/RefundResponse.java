@@ -34,6 +34,7 @@ public record RefundResponse(
         Long receiptConfirmedBy,
         Instant receiptReportedAt,
         Instant receiptAutoConfirmedAt,
-        boolean proofAvailable
+        boolean proofAvailable,
+        Long version
 ) {
 }

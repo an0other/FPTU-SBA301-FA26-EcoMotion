@@ -181,6 +181,25 @@ class VnpayDepositSynchronizationIntegrationTest {
         sign(params); return params;
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"100", "96000001", "not-money"})
+    void signedWrongAmountCallbackAndIpnNeverConfirmOrCreateRefund(String amount) {
+        var params = attempt();
+        params.put("vnp_Amount", amount); sign(params);
+        assertThat(vnpay.processCallback(params).success()).isFalse();
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("04");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("04");
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        var payment = ledger.findByBooking_Id(bookingId).getFirst();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(payment.getAppliedAmount()).isZero();
+        assertThat(requests.findById(requestId).orElseThrow().getPaidAmount()).isZero();
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
+        long refunds = tx.execute(s -> em.createQuery("select count(r) from RefundRequest r where r.booking.id = :b", Long.class)
+                .setParameter("b", bookingId).getSingleResult());
+        assertThat(refunds).isZero();
+    }
+
     private void sign(java.util.Map<String, String> params) {
         params.remove("vnp_SecureHash"); params.put("vnp_SecureHash", com.fptufa26.ecomotion.finance.config.VnpayUtils.hmacSHA512(
                 config.getHashSecret(), com.fptufa26.ecomotion.finance.config.VnpayUtils.buildHashData(params)));
