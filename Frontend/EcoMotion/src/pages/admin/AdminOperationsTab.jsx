@@ -1,3 +1,4 @@
+import { AdminRefundReviewPanel } from '../../components/booking/FinancialReviewPanels'
 import { useState, useEffect } from 'react'
 import { adminService } from '../../services/adminService'
 import {
@@ -245,6 +246,7 @@ export default function AdminOperationsTab({
 
   return (
     <div className="space-y-6">
+      <AdminRefundReviewPanel />
       {/* Sub Navigation Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <div className="flex flex-wrap gap-2">
@@ -703,6 +705,7 @@ export default function AdminOperationsTab({
 
       <DisputeDetailModal
         dispute={resolvingDispute}
+          onChanged={loadData}
         error={message?.type === 'error' ? message.text : ''}
         onClose={() => setResolvingDispute(null)}
         onResolve={handleResolveDispute}

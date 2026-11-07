@@ -1,3 +1,4 @@
+import { AdminYearlyReviewPanel } from '../../../components/booking/FinancialReviewPanels'
 import { useState } from 'react'
 import { IconX, IconAlertTriangle, IconCheckCircle, IconShield, IconCar, IconUsers } from '../../../components/icons/Icons'
 
@@ -14,6 +15,7 @@ const DISPUTE_STATUS_BADGES = {
 }
 
 export default function DisputeDetailModal({ dispute, ...props }) {
+  if (dispute && ['YEARLY_SETTLEMENT', 'YEARLY_CANCELLATION'].includes(dispute.category)) return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><section role="dialog" aria-modal="true" aria-label="Phân xử hợp đồng năm" className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5"><button type="button" onClick={props.onClose} className="mb-3 rounded-lg border px-3 py-2">Đóng</button><p className="mb-3">{dispute.description}</p>{['OPEN', 'IN_REVIEW'].includes(dispute.status) ? <AdminYearlyReviewPanel dispute={dispute} onChanged={() => { props.onChanged?.(); props.onClose?.() }} /> : <p>{dispute.resolution}</p>}</section></div>
   return dispute ? <DisputeDetailForm key={dispute.id} dispute={dispute} {...props} /> : null
 }
 
