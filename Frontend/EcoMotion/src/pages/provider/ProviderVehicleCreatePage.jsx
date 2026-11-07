@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { providerService } from "../../services/providerService";
 import ProviderHeader from "../../components/provider/ProviderHeader";
 import Toast from "../../components/Toast";
+import { formatLicensePlateInput } from "../../utils/validation";
 
 const DEFAULT_COVER_IMAGE =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBbaQp-zgmEeeOXgITBoZMG_mcjykw9QLCVVMpxpETzMKWOKamELEhCdDXqwPVtL9zm5vOF2SlweeWygVXyZ2tA4s1juN6evzQAEWXkCkB-3K6P9MO7bJcwoh5d5bQLraMTZHHwFbqsBRK0fvMsCFq9tdvSzMkam9bV_EbMWD3qlBjHLp2u0T1nqp7jBbTKlsC-OK844n_DbPKYGhFWBhfKb6BMCy-DRHd4iSz2nmy1jHs274eOxg4y";
@@ -616,12 +617,7 @@ export default function ProviderVehicleCreatePage() {
                           required
                           maxLength={20}
                           value={form.licensePlate}
-                          onChange={(e) =>
-                            handleChange(
-                              "licensePlate",
-                              e.target.value.toUpperCase(),
-                            )
-                          }
+                          onChange={(e) => handleChange("licensePlate", formatLicensePlateInput(e.target.value, form.licensePlate))}
                           placeholder="51K-334.12"
                           className={`w-full h-12 pl-10 pr-4 bg-white font-mono font-bold text-lg text-[#0b1c30] rounded-xl border focus:outline-none shadow-xs tracking-widest uppercase transition-colors ${
                             isPlateValid === false
