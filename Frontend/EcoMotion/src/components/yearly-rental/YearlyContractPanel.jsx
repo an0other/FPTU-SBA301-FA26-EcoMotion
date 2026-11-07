@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { yearlyRentalService } from '../../services/yearlyRentalService'
 import { BOOKING_STATUS_LABELS } from '../../utils/paymentDisplay'
 import { BookingErrorDialog } from '../booking/BookingErrorDialog'
@@ -82,7 +81,7 @@ export default function YearlyContractPanel({ contract, onUploaded }) {
           {contract.bookingStatus === 'ACCEPTED'
             ? 'Đã được chấp nhận · chờ hợp đồng'
             : contract.bookingStatus === 'AWAITING_DEPOSIT'
-              ? 'Chờ thanh toán khoản trả trước'
+              ? 'Chờ thanh toán tiền bảo đảm và tháng đầu'
               : BOOKING_STATUS_LABELS[contract.bookingStatus] ?? contract.bookingStatus}
         </p>
 
@@ -148,12 +147,12 @@ export default function YearlyContractPanel({ contract, onUploaded }) {
       )}
 
       {contract.contractUploaded && contract.bookingStatus === 'AWAITING_DEPOSIT' && (
-        <Link
-          to={`/renter/bookings/${encodeURIComponent(contract.bookingCode)}/payment?yearly=true`}
+        <a
+          href="#yearly-payments"
           className="mt-4 inline-flex rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
         >
-          Thanh toán khoản trả trước
-        </Link>
+          Xem tiền bảo đảm và lịch thanh toán
+        </a>
       )}
 
       {error && (

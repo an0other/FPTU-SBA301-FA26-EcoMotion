@@ -23,16 +23,16 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/bookings/{bookingId}/evidences")
+@RequestMapping({"/api/bookings/{bookingId}/evidences", "/api/v1/bookings/{bookingId}/evidences"})
 @RequiredArgsConstructor
-@Tag(name = "Booking Evidences", description = "Trip evidence upload to Cloudinary and management APIs")
+@Tag(name = "Booking Evidences", description = "Local trip evidence upload and management APIs")
 public class BookingEvidenceController {
 
     private final TripEvidenceService tripEvidenceService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('DRIVER', 'PROVIDER', 'ADMIN')")
-    @Operation(summary = "Upload trip evidence file directly to Cloudinary and save metadata")
+    @PreAuthorize("hasAnyRole('DRIVER', 'PROVIDER', 'ADMIN', 'RENTER')")
+    @Operation(summary = "Upload trip evidence to local storage and save metadata")
     public ApiResponse<TripEvidenceResponse> uploadEvidence(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("bookingId") String bookingId,
@@ -52,7 +52,7 @@ public class BookingEvidenceController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('DRIVER', 'PROVIDER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('DRIVER', 'PROVIDER', 'ADMIN', 'RENTER')")
     @Operation(summary = "List all trip evidences for a booking")
     public ApiResponse<List<TripEvidenceResponse>> listEvidence(
             @AuthenticationPrincipal SecurityUser principal,
@@ -66,9 +66,21 @@ public class BookingEvidenceController {
         return ApiResponse.success(response);
     }
 
+    @GetMapping("/{evidenceId}/file")
+    @PreAuthorize("hasAnyRole('DRIVER', 'PROVIDER', 'ADMIN', 'RENTER')")
+    public org.springframework.http.ResponseEntity<byte[]> readEvidence(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingId, @PathVariable Long evidenceId) {
+        var file = tripEvidenceService.readEvidence(principal.getUserId(), principal.getRole(), bookingId, evidenceId);
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(file.content());
+    }
+
     @DeleteMapping("/{evidenceId}")
-    @PreAuthorize("hasAnyRole('DRIVER', 'PROVIDER', 'ADMIN')")
-    @Operation(summary = "Delete a trip evidence record and remove file from Cloudinary")
+    @PreAuthorize("hasAnyRole('DRIVER', 'PROVIDER', 'ADMIN', 'RENTER')")
+    @Operation(summary = "Delete a trip evidence record and remove local file")
     public ApiResponse<String> deleteEvidence(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("bookingId") String bookingId,

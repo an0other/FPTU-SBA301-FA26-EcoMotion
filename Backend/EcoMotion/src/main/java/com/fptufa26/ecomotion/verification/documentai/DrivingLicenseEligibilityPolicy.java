@@ -13,26 +13,22 @@ import java.util.Locale;
 
 public final class DrivingLicenseEligibilityPolicy {
 
-    public static final LocalDate CURRENT_CLASS_EFFECTIVE_DATE = LocalDate.of(2025, 1, 1);
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private DrivingLicenseEligibilityPolicy() {
     }
 
     public static List<DrivingLicenseClassOptionResponse> supportedClasses() {
-        return List.of(
-                new DrivingLicenseClassOptionResponse(
-                        "B",
-                        "B — ô tô chở người đến 8 chỗ (không kể chỗ người lái)",
-                        CURRENT_CLASS_EFFECTIVE_DATE,
-                        true,
-                        "Chính sách demo chỉ tự động hỗ trợ GPLX hạng B cấp từ ngày 01/01/2025. Chưa đối chiếu khối lượng xe."),
-                new DrivingLicenseClassOptionResponse(
-                        "B1/B2 (cũ)",
-                        "B1/B2 — hạng GPLX cũ",
-                        null,
-                        false,
-                        "GPLX cũ vẫn được sử dụng theo thời hạn ghi trên thẻ; hệ thống demo chưa tự động xử lý hạn chế và điều kiện chuyển đổi."));
+        return List.of("B", "B1", "B2").stream()
+                .map(code -> new DrivingLicenseClassOptionResponse(
+                        code, code + " — nhóm B trong chính sách demo", null, true,
+                        "Demo hỗ trợ B, B1 và B2; không giới hạn ngày cấp từ 2025. Vẫn kiểm tra hạn GPLX, tuổi và số chỗ xe."))
+                .toList();
+    }
+
+    private static boolean isSupportedClass(String licenseClass) {
+        return licenseClass != null
+                && List.of("B", "B1", "B2").contains(licenseClass.trim().toUpperCase(Locale.ROOT));
     }
 
     public static boolean isEligibleForYearlyRental(
@@ -40,10 +36,7 @@ public final class DrivingLicenseEligibilityPolicy {
             LocalDate issueDate,
             LocalDate expiryDate,
             boolean expiryUnlimited) {
-        return licenseClass != null
-                && "B".equals(licenseClass.trim().toUpperCase(Locale.ROOT))
-                && issueDate != null
-                && !issueDate.isBefore(CURRENT_CLASS_EFFECTIVE_DATE)
+        return isSupportedClass(licenseClass)
                 && !expiryUnlimited
                 && expiryDate != null
                 && !expiryDate.isBefore(LocalDate.now(VIETNAM_ZONE));
@@ -57,12 +50,8 @@ public final class DrivingLicenseEligibilityPolicy {
         if (licenseClass == null || licenseClass.isBlank()) {
             return "Chưa đọc được hạng GPLX.";
         }
-        if (!"B".equals(licenseClass.trim().toUpperCase(Locale.ROOT))) {
-            // return "Bản demo chỉ tự động hỗ trợ GPLX hạng B hiện hành. GPLX hạng cũ cần được đối chiếu riêng.";
-            return "";
-        }
-        if (issueDate == null || issueDate.isBefore(CURRENT_CLASS_EFFECTIVE_DATE)) {
-            return "Hạng B hiện hành có hiệu lực từ 01/01/2025; vui lòng kiểm tra ngày cấp hoặc đổi/cấp lại trên GPLX.";
+        if (!isSupportedClass(licenseClass)) {
+            return "Chính sách demo hỗ trợ GPLX nhóm B: B, B1 và B2.";
         }
         if (expiryUnlimited || expiryDate == null) {
             return "Chưa đọc được ngày hết hạn để xác nhận GPLX còn hiệu lực trong toàn bộ thời hạn thuê.";

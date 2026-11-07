@@ -146,6 +146,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         PaymentRequest pr = new PaymentRequest();
         pr.setBooking(booking);
         pr.setPaymentType(PaymentRequestType.DEPOSIT);
+        pr.setSecurityDeposit(booking.getPlan().getPlanType() == PlanType.YEARLY);
         pr.setAmount(depositAmount);
         pr.setPaidAmount(BigDecimal.ZERO);
         pr.setCurrency("VND");
@@ -174,6 +175,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         pr.setExpiresAt(expiresAt);
 
         PaymentRequest saved = paymentRequestRepository.save(pr);
+        if (saved.isSecurityDeposit()) createYearlyInstallmentRequests(booking, saved);
         log.info("Created DEPOSIT PaymentRequest #{} for Booking {} with transferRef={}",
                 saved.getId(), booking.getBookingCode(), transferRef);
         return saved;
@@ -232,6 +234,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     @Transactional
     public PaymentRequest createFinalBalancePaymentRequest(Long bookingId) {
         Booking booking = bookingPaymentLedgerService.requireBooking(bookingId);
+        if (paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit).isPresent()) {
+            throw new InvalidPaymentOperationException("Dùng API quyết toán gói năm cho hợp đồng có cọc riêng");
+        }
 
         // Check if FINAL_BALANCE request already exists
         Optional<PaymentRequest> existingOpt = paymentRequestRepository.findByBooking_IdAndPaymentType(
@@ -439,6 +445,10 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     private void validatePayableStage(PaymentRequest request) {
         BookingStatus bookingStatus = request.getBooking().getStatus();
+        if (request.getPaymentType() == PaymentRequestType.MONTHLY_INSTALLMENT && request.getInstallmentNumber() > 1
+                && bookingStatus == BookingStatus.AWAITING_DEPOSIT) {
+            throw new InvalidPaymentOperationException("Hoàn tất tiền bảo đảm và tháng đầu trước khi trả trước các tháng sau");
+        }
         boolean valid = request.getPaymentType() == PaymentRequestType.DEPOSIT
                 ? bookingStatus == BookingStatus.ACCEPTED
                 || bookingStatus == BookingStatus.AWAITING_DEPOSIT
@@ -446,8 +456,12 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 && request.getBooking().getCancelReason() == CancelReason.DEPOSIT_TIMEOUT)
                 : request.getPaymentType() == PaymentRequestType.MONTHLY_INSTALLMENT
                 ? request.getBooking().getPlan().getPlanType() == PlanType.YEARLY
-                && bookingStatus == BookingStatus.IN_PROGRESS
-                : request.getPaymentType() == PaymentRequestType.FINAL_BALANCE
+                && (bookingStatus == BookingStatus.IN_PROGRESS
+                    || request.getInstallmentNumber() > 0
+                    && (bookingStatus == BookingStatus.AWAITING_DEPOSIT || bookingStatus == BookingStatus.CONFIRMED))
+                : (request.getPaymentType() == PaymentRequestType.FINAL_BALANCE
+                    || request.getPaymentType() == PaymentRequestType.ADJUSTMENT
+                    && request.getBooking().getPlan().getPlanType() == PlanType.YEARLY)
                 && bookingStatus == BookingStatus.AWAITING_FINAL_PAYMENT;
         if (valid && request.getPaymentType() == PaymentRequestType.DEPOSIT
                 && request.getBooking().getPlan().getPlanType() == PlanType.YEARLY) {
@@ -716,7 +730,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         BigDecimal excessAmount = receivedAmount.subtract(appliedAmount).max(BigDecimal.ZERO);
         PaymentTransaction tx = new PaymentTransaction();
         tx.setBooking(pr.getBooking());
-        tx.setType(pr.getPaymentType() == PaymentRequestType.DEPOSIT
+        tx.setType(pr.isSecurityDeposit() ? PaymentType.SECURITY_DEPOSIT
+                : pr.getPaymentType() == PaymentRequestType.DEPOSIT
                 ? initialPaymentType(pr.getBooking()) : PaymentType.SETTLEMENT);
         tx.setDirection(PaymentDirection.IN);
         tx.setMethod(PaymentMethod.BANK_TRANSFER);
@@ -765,9 +780,17 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         if (comparison >= 0) {
             if (pr.getPaymentType() == PaymentRequestType.DEPOSIT) {
-                booking.setStatus(BookingStatus.CONFIRMED);
+                if (!pr.isSecurityDeposit() || yearlyFirstMonthPaid(booking.getId())) {
+                    booking.setStatus(BookingStatus.CONFIRMED);
+                }
                 bookingPaymentLedgerService.saveBooking(booking);
                 bookingNotificationService.depositPaid(booking, pr.getAmount());
+            } else if (pr.getPaymentType() == PaymentRequestType.MONTHLY_INSTALLMENT
+                    && pr.getInstallmentNumber() == 1
+                    && booking.getStatus() == BookingStatus.AWAITING_DEPOSIT
+                    && yearlySecurityDepositPaid(booking.getId())) {
+                booking.setStatus(BookingStatus.CONFIRMED);
+                bookingPaymentLedgerService.saveBooking(booking);
             } else if (pr.getPaymentType() == PaymentRequestType.FINAL_BALANCE) {
                 if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
                     throw new InvalidPaymentOperationException("Đơn thuê chưa ở bước thanh toán quyết toán");
@@ -834,17 +857,32 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             if (vehicle == null || vehicle.getStatus() != VehicleStatus.APPROVED) {
                 return "Xe không còn đủ điều kiện phục vụ booking";
             }
-            boolean validHold = complete ? scheduleService.confirmUnexpiredHold(booking.getId(), clock.instant())
+            boolean activateHold = complete && (!request.isSecurityDeposit() || yearlyFirstMonthPaid(booking.getId()));
+            boolean validHold = activateHold ? scheduleService.confirmUnexpiredHold(booking.getId(), clock.instant())
                     : scheduleService.hasUnexpiredHold(booking.getId(), clock.instant());
             if (!validHold) {
                 return "Hold đã hết hạn, không tồn tại hoặc lịch xe đã bị đơn khác chiếm";
             }
         } else if (request.getPaymentType() == PaymentRequestType.MONTHLY_INSTALLMENT) {
+            boolean beforeHandover = request.getInstallmentNumber() > 0
+                    && (booking.getStatus() == BookingStatus.AWAITING_DEPOSIT || booking.getStatus() == BookingStatus.CONFIRMED)
+                    && hasYearlyContract(booking);
+            if (beforeHandover && booking.getStatus() == BookingStatus.AWAITING_DEPOSIT) {
+                if (request.getInstallmentNumber() > 1) return "Chưa hoàn tất tiền bảo đảm và tháng đầu";
+                boolean activateHold = complete && request.getInstallmentNumber() == 1 && yearlySecurityDepositPaid(booking.getId());
+                boolean validHold = activateHold ? scheduleService.confirmUnexpiredHold(booking.getId(), clock.instant())
+                        : scheduleService.hasUnexpiredHold(booking.getId(), clock.instant());
+                if (!validHold) return "Hold đã hết hạn; cần đối soát tiền thuê trước bàn giao";
+            }
             if (booking.getPlan().getPlanType() != PlanType.YEARLY
-                    || booking.getStatus() != BookingStatus.IN_PROGRESS
-                    || booking.getActualStartAt() == null
+                    || !beforeHandover && (booking.getStatus() != BookingStatus.IN_PROGRESS || booking.getActualStartAt() == null)
                     || booking.getCancelledAt() != null) {
                 return "Booking không còn đủ điều kiện xác nhận kỳ thanh toán gói năm";
+            }
+        } else if (request.getPaymentType() == PaymentRequestType.ADJUSTMENT
+                && yearlySecurityDepositPaid(booking.getId())) {
+            if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT || booking.getActualEndAt() == null || !booking.isEndAccepted()) {
+                return "Chưa xác nhận nhận lại xe và quyết toán gói năm";
             }
         } else if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT || booking.getActualEndAt() == null
                 || booking.getCancelledAt() != null || booking.getProviderConfirmedAt() == null || !booking.isEndAccepted()) {
@@ -968,6 +1006,12 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         PaymentRequest pr = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
+
+        if (pr.isSecurityDeposit() || pr.getInstallmentNumber() > 0
+                || paymentRequestRepository.findByBooking_IdAndPaymentType(pr.getBooking().getId(), PaymentRequestType.DEPOSIT)
+                    .filter(PaymentRequest::isSecurityDeposit).isPresent()) {
+            throw new InvalidPaymentOperationException("Hợp đồng năm mới dùng xác nhận tiền thực nhận từ provider, không mô phỏng thanh toán");
+        }
 
         String scenario = request.scenario() != null ? request.scenario().trim().toUpperCase(Locale.ROOT) : "SUCCESS";
         BigDecimal amount = (request.simulatedAmount() != null && request.simulatedAmount().compareTo(BigDecimal.ZERO) > 0)
@@ -1279,6 +1323,194 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 "Hoàn tiền chuyển thừa cho yêu cầu thanh toán #" + request.getId(), processor, source.getId());
     }
 
+    @Override
+    public boolean yearlyInitialPaymentsComplete(Long bookingId) {
+        return yearlySecurityDepositPaid(bookingId) && yearlyFirstMonthPaid(bookingId);
+    }
+
+    @Override
+    @Transactional
+    public void rebaseYearlyInstallments(Long bookingId, java.time.LocalDate start) {
+        bookingPaymentLedgerService.requireBookingForUpdate(bookingId);
+        var rows = paymentRequestRepository.findByBooking_IdAndPaymentTypeOrderByInstallmentNumberAsc(
+                bookingId, PaymentRequestType.MONTHLY_INSTALLMENT);
+        if (rows.size() != 12 || rows.stream().anyMatch(r -> r.getInstallmentNumber() < 1 || r.getInstallmentNumber() > 12)) {
+            throw new InvalidPaymentOperationException("Hợp đồng chưa có đủ 12 kỳ thuê mới");
+        }
+        for (PaymentRequest row : rows) {
+            row.setPeriodStart(start.plusMonths(row.getInstallmentNumber() - 1));
+            row.setPeriodEnd(start.plusMonths(row.getInstallmentNumber()));
+        }
+    }
+
+    @Override
+    public List<YearlyPaymentItem> yearlyPayments(Long userId, String bookingCode) {
+        String normalizedCode = normalizeBookingCode(bookingCode);
+        getPaymentRequestsByBookingCode(normalizedCode, userId);
+        var rows = paymentRequestRepository.findByBooking_BookingCodeOrderByCreatedAtDesc(normalizedCode);
+        if (rows.stream().anyMatch(r -> r.getBooking().getPlan().getPlanType() != PlanType.YEARLY)) {
+            throw new InvalidPaymentOperationException("Chỉ áp dụng cho gói năm");
+        }
+        var today = java.time.LocalDate.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
+        return rows.stream().sorted(java.util.Comparator.comparingInt((PaymentRequest r) ->
+                r.isSecurityDeposit() ? -1 : r.getInstallmentNumber() > 0 ? r.getInstallmentNumber() : 13))
+                .map(r -> {
+                    var dueOn = r.getPeriodStart() == null ? null : r.getPeriodStart().minusDays(1);
+                    var remaining = r.getAmount().subtract(r.getPaidAmount()).max(BigDecimal.ZERO);
+                    boolean overdue = dueOn != null && today.isAfter(dueOn) && remaining.signum() > 0
+                            && r.getStatus() != PaymentRequestStatus.VOIDED;
+                    return new YearlyPaymentItem(r.getId(), r.isSecurityDeposit() ? "SECURITY_DEPOSIT" : r.getPaymentType().name(),
+                            r.getInstallmentNumber(), r.getPeriodStart(), r.getPeriodEnd(), r.getAmount(),
+                            r.getPaidAmount(), r.getStatus().name(), r.getTransferReference(), dueOn, overdue, remaining);
+                }).toList();
+    }
+
+    @Override
+    public YearlyCash yearlyCash(Long bookingId) {
+        var rows = paymentRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId);
+        if (refundEventService.hasOpenRefunds(bookingId)
+                || rows.stream().anyMatch(r -> r.getStatus() == PaymentRequestStatus.REVIEW_REQUIRED)
+                || bookingPaymentLedgerService.listTransactions(bookingId).stream().anyMatch(t ->
+                    t.getStatus() == PaymentStatus.PENDING || t.getProcessingNote() != null
+                    && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))) {
+            throw new InvalidPaymentOperationException("Còn tiền chờ đối soát, chưa thể chốt quyết toán");
+        }
+        BigDecimal rent = rows.stream().filter(r -> r.getInstallmentNumber() > 0)
+                .map(PaymentRequest::getPaidAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal deposit = rows.stream().filter(PaymentRequest::isSecurityDeposit)
+                .map(PaymentRequest::getPaidAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new YearlyCash(rent, deposit);
+    }
+
+    @Override
+    @Transactional
+    public void finalizeYearlyObligations(Long bookingId, BigDecimal balance) {
+        Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(bookingId);
+        if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT || booking.getActualEndAt() == null
+                || balance == null || balance.signum() < 0) {
+            throw new InvalidPaymentOperationException("Chưa đủ điều kiện quyết toán gói năm");
+        }
+        var deposit = paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit)
+                .orElseThrow(() -> new InvalidPaymentOperationException("Không phải hợp đồng năm mới"));
+        yearlyCash(bookingId);
+        for (PaymentRequest row : paymentRequestRepository.findByBooking_IdAndPaymentTypeOrderByInstallmentNumberAsc(
+                bookingId, PaymentRequestType.MONTHLY_INSTALLMENT)) {
+            if (row.getInstallmentNumber() > 0 && row.getStatus() != PaymentRequestStatus.CONFIRMED) row.setStatus(PaymentRequestStatus.VOIDED);
+        }
+        if (balance.signum() == 0) return;
+        var existing = paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, PaymentRequestType.ADJUSTMENT);
+        if (existing.isPresent()) {
+            if (existing.get().getAmount().compareTo(balance) != 0) throw new InvalidPaymentOperationException("Khoản bổ sung đã tồn tại với số tiền khác");
+            return;
+        }
+        PaymentRequest r = new PaymentRequest();
+        r.setBooking(booking);
+        r.setPaymentType(PaymentRequestType.ADJUSTMENT);
+        r.setAmount(balance);
+        r.setPaidAmount(BigDecimal.ZERO);
+        r.setStatus(PaymentRequestStatus.PENDING);
+        r.setCurrency("VND");
+        r.setPaymentCode(paymentCodeGenerator.generatePaymentCode("VQ"));
+        r.setTransferReference(booking.getBookingCode() + "-YFINAL-" + UUID.randomUUID());
+        r.setBankCodeSnapshot(deposit.getBankCodeSnapshot());
+        r.setBankNameSnapshot(deposit.getBankNameSnapshot());
+        r.setAccountNumberSnapshot(deposit.getAccountNumberSnapshot());
+        r.setAccountHolderSnapshot(deposit.getAccountHolderSnapshot());
+        r.setReceivingBankAccount(deposit.getReceivingBankAccount());
+        r.setCreatedAt(clock.instant());
+        r.setUpdatedAt(clock.instant());
+        paymentRequestRepository.save(r);
+    }
+
+    @Override
+    public boolean yearlyBalancePaid(Long bookingId, BigDecimal balance) {
+        yearlyCash(bookingId);
+        if (balance.signum() == 0) return true;
+        return paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, PaymentRequestType.ADJUSTMENT)
+                .filter(r -> r.getAmount().compareTo(balance) == 0 && r.getStatus() == PaymentRequestStatus.CONFIRMED).isPresent();
+    }
+
+    @Override
+    @Transactional
+    public void recordYearlyRefund(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long renterUserId) {
+        Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(bookingId);
+        if (!booking.getRenter().getUser().getUserId().equals(renterUserId) || booking.getActualEndAt() == null) {
+            throw new AccessDeniedException("Chỉ renter nhận lại tiền được xác nhận khoản hoàn");
+        }
+        for (PaymentType type : List.of(PaymentType.REFUND, PaymentType.SECURITY_DEPOSIT_REFUND)) {
+            BigDecimal amount = type == PaymentType.REFUND ? rent : deposit;
+            if (amount.signum() <= 0) continue;
+            String key = "YEARLY-REFUND-" + bookingId + "-" + type.name();
+            if (bookingPaymentLedgerService.listTransactions(bookingId).stream().anyMatch(t -> key.equals(t.getManualConfirmationId()))) continue;
+            PaymentTransaction tx = new PaymentTransaction();
+            tx.setBooking(booking);
+            tx.setType(type);
+            tx.setDirection(PaymentDirection.OUT);
+            tx.setMethod(PaymentMethod.BANK_TRANSFER);
+            tx.setAmount(amount);
+            tx.setAppliedAmount(type == PaymentType.REFUND ? amount : BigDecimal.ZERO);
+            tx.setStatus(PaymentStatus.PAID);
+            tx.setPaidAt(clock.instant());
+            tx.setTransactionCode(paymentCodeGenerator.generatePaymentCode("VQ"));
+            tx.setManualConfirmationId(key);
+            tx.setProcessingNote("YEARLY_DIRECT_REFUND: " + reference);
+            tx.setReceiptUrl(evidenceUrl);
+            tx.setVerificationMethod(PaymentVerificationMethod.RENTER_CONFIRMED);
+            tx.setConfirmedBy(booking.getRenter().getUser());
+            bookingPaymentLedgerService.saveTransaction(tx);
+        }
+    }
+
+    private void createYearlyInstallmentRequests(Booking booking, PaymentRequest deposit) {
+        BigDecimal unit = bookingPaymentLedgerService.yearlyRoundingUnit(booking.getId())
+                .orElseThrow(() -> new InvalidPaymentOperationException("Cần chốt điều khoản năm trước khi tạo lịch thanh toán"));
+        List<BigDecimal> amounts;
+        try {
+            amounts = com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.installments(booking.getTotalAmount(), unit);
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidPaymentOperationException("Giá năm không phù hợp với bước chia tiền tháng đã cấu hình");
+        }
+        java.time.LocalDate start = booking.getPickupTime().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate();
+        for (int i = 0; i < amounts.size(); i++) {
+            int number = i + 1;
+            if (paymentRequestRepository.findByBooking_IdAndPaymentTypeAndInstallmentNumber(
+                    booking.getId(), PaymentRequestType.MONTHLY_INSTALLMENT, number).isPresent()) continue;
+            PaymentRequest month = new PaymentRequest();
+            month.setBooking(booking);
+            month.setPaymentType(PaymentRequestType.MONTHLY_INSTALLMENT);
+            month.setInstallmentNumber(number);
+            month.setPeriodStart(start.plusMonths(i));
+            month.setPeriodEnd(start.plusMonths(i + 1));
+            month.setAmount(amounts.get(i));
+            month.setPaidAmount(BigDecimal.ZERO);
+            month.setCurrency("VND");
+            month.setPaymentCode(paymentCodeGenerator.generatePaymentCode("VQ"));
+            month.setTransferReference(booking.getBookingCode() + "-M" + number + "-" + UUID.randomUUID());
+            month.setBankCodeSnapshot(deposit.getBankCodeSnapshot());
+            month.setBankNameSnapshot(deposit.getBankNameSnapshot());
+            month.setAccountNumberSnapshot(deposit.getAccountNumberSnapshot());
+            month.setAccountHolderSnapshot(deposit.getAccountHolderSnapshot());
+            month.setReceivingBankAccount(deposit.getReceivingBankAccount());
+            month.setStatus(PaymentRequestStatus.PENDING);
+            month.setCreatedAt(clock.instant());
+            month.setUpdatedAt(clock.instant());
+            paymentRequestRepository.save(month);
+        }
+    }
+
+    private boolean yearlyFirstMonthPaid(Long bookingId) {
+        return paymentRequestRepository.findByBooking_IdAndPaymentTypeAndInstallmentNumber(
+                bookingId, PaymentRequestType.MONTHLY_INSTALLMENT, 1)
+                .filter(r -> r.getStatus() == PaymentRequestStatus.CONFIRMED).isPresent();
+    }
+
+    private boolean yearlySecurityDepositPaid(Long bookingId) {
+        return paymentRequestRepository.findByBooking_IdAndPaymentType(bookingId, PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit)
+                .filter(r -> r.getStatus() == PaymentRequestStatus.CONFIRMED).isPresent();
+    }
+
     private BigDecimal calculateDepositAmount(Booking booking) {
         BookingPolicySnapshot snapshot = bookingPaymentLedgerService.findSnapshot(booking.getId()).orElse(null);
         if (snapshot != null && snapshot.getDepositAmount() != null) {
@@ -1344,6 +1576,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactions(booking.getId());
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                 .map(t -> com.fptufa26.ecomotion.finance.service.RefundMath.appliedPortion(
                         t.getAmount(), t.getAppliedAmount(), t.getProcessingNote()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -1545,7 +1778,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     private String evidenceViewUrl(Long evidenceId, String storedPath) {
         if (isManagedEvidencePath(storedPath)) {
-            return "/api/v1/payment-evidences/" + evidenceId + "/file";
+            return "/api/payment-evidences/" + evidenceId + "/file";
         }
         // Legacy external URLs are intentionally not reflected to clients.
         return null;

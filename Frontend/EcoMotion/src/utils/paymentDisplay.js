@@ -1,4 +1,6 @@
 export const PAYMENT_TYPE_LABELS = {
+  SECURITY_DEPOSIT: 'Tiền bảo đảm',
+  SECURITY_DEPOSIT_REFUND: 'Hoàn tiền bảo đảm',
   DEPOSIT_PAY: 'Thanh toán cọc',
   UPFRONT_PAY: 'Trả trước gói năm',
   SETTLEMENT: 'Thanh toán tiền thuê / quyết toán',

@@ -146,3 +146,9 @@ export async function quoteRental(body) {
   const { data } = await apiClient.post('/renter/bookings/rental-quote', body)
   return data.data
 }
+
+
+export async function getBookingStartPolicy() {
+  const { data } = await apiClient.get('/renter/bookings/start-policy')
+  return data.data
+}

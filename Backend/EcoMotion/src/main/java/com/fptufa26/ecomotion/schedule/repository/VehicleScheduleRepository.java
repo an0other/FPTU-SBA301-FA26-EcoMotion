@@ -13,6 +13,13 @@ import java.util.List;
 
 @Repository
 public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule, Long> {
+    @Query("select count(x) > 0 from YearlyReplacement x, Booking b where b.id = x.bookingId and x.newVehicleId = :vehicleId and x.status in ('PROPOSED','ACCEPTED','HANDOVER_PROPOSED') and x.plannedOn < :endDay and b.plannedEndAt > :startAt and (:excluded is null or b.id <> :excluded)")
+    boolean hasYearlyReplacementReservation(@Param("vehicleId") Long vehicleId, @Param("excluded") Long excluded,
+            @Param("startAt") Instant startAt, @Param("endDay") java.time.LocalDate endDay);
+
+    @Query("select count(b) > 0 from Booking b where b.vehicle.id = :vehicleId and b.plan.planType = com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY and b.actualStartAt is not null and b.actualEndAt is null and (:excluded is null or b.id <> :excluded)")
+    boolean hasYearlyCustody(@Param("vehicleId") Long vehicleId, @Param("excluded") Long excluded);
+
 
     List<VehicleSchedule> findByBooking_Id(Long bookingId);
 

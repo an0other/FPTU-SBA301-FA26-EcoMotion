@@ -1,3 +1,9 @@
+> Chính sách demo đã mở rộng: B, B1, B2 được hỗ trợ, bỏ mốc ngày cấp 2025. Các mô tả chỉ hỗ trợ B hiện hành bên dưới là phạm vi cũ; điều kiện tuổi, hạn GPLX và số chỗ vẫn được kiểm tra.
+
+> **Bộ demo hiện hành:** 3 renter + 1 provider, ghép các bước trên cùng booking; xem [danh sách đăng nhập và workflow](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md). Các mô tả seed lịch sử bên dưới không dùng cho demo mới.
+
+> **Cập nhật 07/11/2026:** Phần seed/flow thuê năm trong tài liệu cũ này đã được thay bằng [hướng dẫn demo gói năm](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md). Dùng ba renter theo giai đoạn và booking chính EM-Y2-MONTHLY/EM-Y2-HAPPY-END, không dùng các mã EM-SEED-YEARLY-* để demo flow mới.
+
 # GPLX và quy trình thuê xe tự lái theo năm
 
 ## Căn cứ pháp lý và giới hạn
@@ -56,7 +62,7 @@ Chính sách bản demo được tham khảo từ **Luật Trật tự, an toàn
 
 ### Demo khoản thanh toán tháng của đơn đang chạy
 
-1. Đăng nhập `renter.yearly.active@ecomotion.vn` bằng mật khẩu dev `EcoMotion@123`.
+1. Đăng nhập `renter.yearly.monthly@ecomotion.vn` bằng mật khẩu dev `EcoMotion@123`.
 2. Mở **Đơn của tôi** → chọn `EM-SEED-YEARLY-ACTIVE`, hoặc truy cập `/renter/bookings/EM-SEED-YEARLY-ACTIVE`.
 3. Ở thẻ **Thanh toán và lịch sử kỳ thuê**, kiểm tra ba giao dịch tiền thuê đã ghi nhận và yêu cầu kỳ 4/12 sắp đến hạn.
 4. Chọn **Thanh toán kỳ này** → chọn **VNPAY Sandbox** → hoàn tất giao dịch trong sandbox. Có thể chọn VietQR nếu muốn demo xác nhận chuyển khoản từ phía nhà cung cấp.
@@ -84,9 +90,9 @@ Các tài khoản dưới đây dùng mật khẩu mặc định `EcoMotion@123`
 
 | Email | Tình huống |
 |---|---|
-| `renter.yearly.blocked@ecomotion.vn` | GPLX mẫu hạng A1 đã đọc nhưng không đủ điều kiện theo chính sách demo hạng B. |
-| `renter.yearly.active@ecomotion.vn` | Có đơn `EM-SEED-YEARLY-ACTIVE`, đang thuê; đã ghi nhận 3 kỳ tiền thuê tháng và có yêu cầu kỳ 4 sắp đến hạn. Tài khoản này cũng có đơn lịch sử `EM-SEED-YEARLY-HISTORY` đã hoàn tất với 12 giao dịch theo tháng. |
-| `renter.yearly.flow@ecomotion.vn` | GPLX mẫu hạng B đủ điều kiện và chưa có đơn gói năm để có thể demo luồng gửi yêu cầu mới. |
+| `renter.yearly.new@ecomotion.vn` | GPLX mẫu hạng A1 đã đọc nhưng không đủ điều kiện theo chính sách demo hạng B. |
+| `renter.yearly.monthly@ecomotion.vn` | Có đơn `EM-SEED-YEARLY-ACTIVE`, đang thuê; đã ghi nhận 3 kỳ tiền thuê tháng và có yêu cầu kỳ 4 sắp đến hạn. Tài khoản này cũng có đơn lịch sử `EM-SEED-YEARLY-HISTORY` đã hoàn tất với 12 giao dịch theo tháng. |
+| `renter.yearly.happy-end@ecomotion.vn` | GPLX mẫu hạng B đủ điều kiện và chưa có đơn gói năm để có thể demo luồng gửi yêu cầu mới. |
 
 Ảnh GPLX của các tài khoản là ảnh placeholder do seeder tạo, có đóng dấu “DEMO ONLY”; `licenseVerified` được đặt để dựng tình huống giao diện và **không** phải kết quả gọi DocumentAI hay xác minh giấy tờ thật. Không dùng các tài khoản hoặc dữ liệu này ngoài môi trường dev.
 

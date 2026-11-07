@@ -59,6 +59,12 @@ import org.springframework.web.multipart.MultipartFile;
 public class RenterBookingController {
 
     private final BookingService bookingService;
+    private final com.fptufa26.ecomotion.booking.policy.BookingStartPolicy bookingStartPolicy;
+
+    @GetMapping("/start-policy")
+    public ApiResponse<com.fptufa26.ecomotion.booking.policy.BookingStartPolicy.StartWindow> startPolicy() {
+        return ApiResponse.success(bookingStartPolicy.window());
+    }
 
     @PostMapping("/rental-quote")
     public ApiResponse<RentalQuoteResponse> quoteRental(

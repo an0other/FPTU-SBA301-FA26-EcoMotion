@@ -9,6 +9,9 @@ import java.util.List;
 import com.fptufa26.ecomotion.schedule.dto.response.OccupiedScheduleWindow;
 
 public interface ScheduleService {
+    void markYearlyInspection(Booking booking, Vehicle vehicle, java.time.LocalDate returnedOn);
+    void reopenYearlyVehicle(Long bookingId, Long vehicleId, java.time.LocalDate availableOn);
+
 
     boolean isRangeFree(Long vehicleId, Instant start, Instant end);
 

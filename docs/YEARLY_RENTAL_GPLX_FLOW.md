@@ -1,3 +1,9 @@
+> Chính sách demo đã mở rộng: B, B1, B2 được hỗ trợ, bỏ mốc ngày cấp 2025. Các mô tả chỉ hỗ trợ B hiện hành bên dưới là phạm vi cũ; điều kiện tuổi, hạn GPLX và số chỗ vẫn được kiểm tra.
+
+> **Bộ demo hiện hành:** 3 renter + 1 provider, ghép các bước trên cùng booking; xem [danh sách đăng nhập và workflow](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md). Các mô tả seed lịch sử bên dưới không dùng cho demo mới.
+
+> **Cập nhật 07/11/2026:** Phần seed/flow thuê năm trong tài liệu cũ này đã được thay bằng [hướng dẫn demo gói năm](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md). Dùng ba renter theo giai đoạn và booking chính EM-Y2-MONTHLY/EM-Y2-HAPPY-END, không dùng các mã EM-SEED-YEARLY-* để demo flow mới.
+
 # GPLX and yearly self-drive rental
 
 ## Legal references and limits
@@ -54,7 +60,7 @@ This is a course-project policy, not legal advice or a complete legal eligibilit
 
 ### Demo an installment for an active yearly booking
 
-1. Sign in as `renter.yearly.active@ecomotion.vn` with the dev password `EcoMotion@123`.
+1. Sign in as `renter.yearly.monthly@ecomotion.vn` with the dev password `EcoMotion@123`.
 2. Open **My bookings** → `EM-SEED-YEARLY-ACTIVE`, or navigate to `/renter/bookings/EM-SEED-YEARLY-ACTIVE`.
 3. In **Thanh toán và lịch sử kỳ thuê**, review the three recorded rent transactions and the pending 4th-of-12 installment.
 4. Choose **Thanh toán kỳ này** → **VNPAY Sandbox** and complete the sandbox payment. VietQR can also be used when demonstrating provider-confirmed bank transfer.
@@ -82,9 +88,9 @@ All three accounts use the default password `EcoMotion@123`:
 
 | Email | Scenario |
 |---|---|
-| `renter.yearly.blocked@ecomotion.vn` | Has a seeded class A1 license and is ineligible under the demo's class B policy. |
-| `renter.yearly.active@ecomotion.vn` | Has active booking `EM-SEED-YEARLY-ACTIVE`, with three paid monthly-rent transactions and a pending fourth installment request. The account also has completed booking `EM-SEED-YEARLY-HISTORY` with twelve monthly transactions. |
-| `renter.yearly.flow@ecomotion.vn` | Has a seeded eligible class B license and no yearly booking, ready to submit a new request. |
+| `renter.yearly.new@ecomotion.vn` | Has a seeded class A1 license and is ineligible under the demo's class B policy. |
+| `renter.yearly.monthly@ecomotion.vn` | Has active booking `EM-SEED-YEARLY-ACTIVE`, with three paid monthly-rent transactions and a pending fourth installment request. The account also has completed booking `EM-SEED-YEARLY-HISTORY` with twelve monthly transactions. |
+| `renter.yearly.happy-end@ecomotion.vn` | Has a seeded eligible class B license and no yearly booking, ready to submit a new request. |
 
 The license images are generated placeholders stamped “DEMO ONLY”. The seeder sets `licenseVerified` to create the UI scenario; these are not DocumentAI results and do not represent real license verification. Never use these accounts or data outside the dev environment.
 
