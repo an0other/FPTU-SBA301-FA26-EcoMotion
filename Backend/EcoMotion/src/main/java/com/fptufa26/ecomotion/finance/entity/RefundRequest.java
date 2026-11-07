@@ -93,6 +93,9 @@ public class RefundRequest {
     @Column(name = "vnp_request_id", length = 32)
     private String vnpRequestId;
 
+    @Column(name = "gateway_submitted_at")
+    private Instant gatewaySubmittedAt;
+
     @Column(name = "refund_transaction_no", length = 40)
     private String refundTransactionNo;
 

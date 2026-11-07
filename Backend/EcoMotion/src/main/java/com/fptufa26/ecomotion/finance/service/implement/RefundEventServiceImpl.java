@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.finance.service.implement;
 
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
+
 import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
@@ -17,7 +19,6 @@ import com.fptufa26.ecomotion.finance.config.VnpayConfig;
 import com.fptufa26.ecomotion.finance.repository.RefundRequestRepository;
 import com.fptufa26.ecomotion.finance.service.RefundMath;
 import com.fptufa26.ecomotion.finance.service.gateway.implement.VnpayPaymentGatewayStrategy;
-import com.fptufa26.ecomotion.finance.service.gateway.implement.VnpayPaymentGatewayStrategy.VnpayRefundCallResult;
 import com.fptufa26.ecomotion.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -39,7 +40,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class RefundEventService {
+public class RefundEventServiceImpl implements RefundEventService {
     @Transactional
     public int updateRecipientAccount(Long bookingId, RefundAccountRequest account) {
         ledger.requireBookingForUpdate(bookingId);
@@ -67,7 +68,8 @@ public class RefundEventService {
     @Transactional(readOnly = true)
     public boolean hasOpenRefunds(Long bookingId) {
         return refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
-                .anyMatch(r -> RefundMath.RESERVED.contains(r.getStatus()) && r.getStatus() != RefundStatus.REFUNDED);
+                .anyMatch(r -> RefundMath.RESERVED.contains(r.getStatus()) && r.getStatus() != RefundStatus.REFUNDED
+                        || "REPORTED_NOT_RECEIVED".equals(r.getReceiptStatus()));
     }
 
     private static final DateTimeFormatter VNP_DATE = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
@@ -80,6 +82,8 @@ public class RefundEventService {
     private final BookingNotificationService bookingNotificationService;
     private final Clock clock;
     private final ObjectProvider<RefundEventService> self;
+    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional
     public List<RefundRequest> reserve(Long bookingId, String sourceEventId, BigDecimal amount, String reason, User actor) {
@@ -251,16 +255,30 @@ public class RefundEventService {
         return created;
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void submitGateway(Long refundId) {
-        RefundRequest refund = refundRequestRepository.findById(refundId).orElse(null);
+        var s = self.getObject().prepareGateway(refundId);
+        if (s == null) return;
+        var result = vnpayPaymentGatewayStrategy.refund(s.requestId(), s.txnRef(), s.transactionNo(), s.payDate(),
+                s.type(), s.minor(), "ecomotion", s.orderInfo());
+        self.getObject().applyGateway(refundId, s.requestId(), new GatewayResult(result.timedOut(), result.checksumValid(),
+                result.responseCode(), result.transactionStatus(), result.refundTransactionNo(), result.txnRef(), result.amount()));
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public GatewaySubmission prepareGateway(Long refundId) {
+        Long bookingId = refundRequestRepository.findBookingIdById(refundId).orElse(null);
+        if (bookingId == null) return null;
+        ledger.requireBookingForUpdate(bookingId);
+        RefundRequest refund = refundRequestRepository.findByIdForUpdate(refundId).orElseThrow();
+        entityManager.refresh(refund, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (refund == null || refund.getStatus() != RefundStatus.PROCESSING || refund.getVnpRequestId() == null
-                || refund.getSourcePaymentTransaction() == null || !vnpayConfig.isRefundEnabled()) {
-            return;
+                || refund.getGatewaySubmittedAt() != null || refund.getSourcePaymentTransaction() == null || !vnpayConfig.isRefundEnabled()) {
+            return null;
         }
         PaymentTransaction source = refund.getSourcePaymentTransaction();
         if (source.getMethod() != PaymentMethod.VNPAY || source.getVnpTxnRef() == null) {
-            return;
+            return null;
         }
         BigDecimal already = refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(refund.getBooking().getId()).stream()
                 .filter(other -> other.getSourcePaymentTransaction() != null
@@ -279,9 +297,20 @@ public class RefundEventService {
         } catch (ArithmeticException ex) {
             throw new InvalidPaymentOperationException("Số tiền hoàn phải chẵn đến đồng để gửi sang VNPay");
         }
-        VnpayRefundCallResult result = vnpayPaymentGatewayStrategy.refund(
-                refund.getVnpRequestId(), source.getVnpTxnRef(), source.getVnpTransactionNo(), payDate, type, minor,
-                "ecomotion", "Refund " + refund.getSourceEventId());
+        refund.setGatewaySubmittedAt(clock.instant());
+        refundRequestRepository.saveAndFlush(refund);
+        return new GatewaySubmission(refund.getVnpRequestId(), source.getVnpTxnRef(), source.getVnpTransactionNo(), payDate,
+                type, minor, "Refund " + refund.getSourceEventId());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void applyGateway(Long refundId, String requestId, GatewayResult result) {
+        Long bookingId = refundRequestRepository.findBookingIdById(refundId).orElseThrow();
+        ledger.requireBookingForUpdate(bookingId);
+        var refund = refundRequestRepository.findByIdForUpdate(refundId).orElseThrow();
+        entityManager.refresh(refund, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if (refund.getStatus() != RefundStatus.PROCESSING || !Objects.equals(requestId, refund.getVnpRequestId())) return;
+        var source = refund.getSourcePaymentTransaction();
         boolean referenceOk = result.checksumValid() && !result.timedOut()
                 && (result.txnRef() == null || source.getVnpTxnRef().equals(result.txnRef()));
         RefundStatus mapped = RefundMath.mapGatewayResult(result.responseCode(), result.transactionStatus(),
@@ -306,20 +335,26 @@ public class RefundEventService {
             refund.getPaymentTransaction().setStatus(PaymentStatus.FAILED);
             ledger.saveTransaction(refund.getPaymentTransaction());
         }
-        refundRequestRepository.save(refund);
+        refundRequestRepository.saveAndFlush(refund);
+        closure.reconcile(refund.getBooking().getId());
+        bookingNotificationService.changed(refund.getBooking(), "REFUND_UPDATED");
     }
 
     @Transactional
     public RefundRequest releaseForFollowUp(Long refundId, User actor, boolean manual) {
-        RefundRequest refund = refundRequestRepository.findByIdForUpdate(refundId)
+        Long bookingId = refundRequestRepository.findBookingIdById(refundId)
                 .orElseThrow(() -> new ConflictException("Không tìm thấy yêu cầu hoàn tiền"));
-        ledger.requireBookingForUpdate(refund.getBooking().getId());
+        ledger.requireBookingForUpdate(bookingId);
+        RefundRequest refund = refundRequestRepository.findByIdForUpdate(refundId).orElseThrow();
+        entityManager.refresh(refund, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (refund.getStatus() != RefundStatus.UNDER_REVIEW && refund.getStatus() != RefundStatus.FAILED) {
             throw new ConflictException("Chỉ tiếp tục được yêu cầu đang đối soát hoặc đã thất bại được xác minh");
         }
         if (refund.getStatus() == RefundStatus.FAILED && refund.getVnpResponseCode() == null && refund.getVnpRequestId() != null) {
             throw new ConflictException("Kết quả hoàn tiền chưa được xác minh");
         }
+        if (refund.getGatewaySubmittedAt() != null && refund.getStatus() != RefundStatus.FAILED)
+            throw new ConflictException("Cần quản trị viên xác minh kết quả hoàn trước khi gửi lại");
         boolean hanging = refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(refund.getBooking().getId()).stream()
                 .filter(other -> !other.getId().equals(refund.getId()))
                 .filter(other -> refund.getSourcePaymentTransaction() == null || other.getSourcePaymentTransaction() == null
@@ -339,9 +374,10 @@ public class RefundEventService {
                 ledger.saveTransaction(refund.getPaymentTransaction());
             }
         } else {
-            if (refund.getVnpRequestId() == null) {
+            if (refund.getVnpRequestId() == null || refund.getStatus() == RefundStatus.FAILED) {
                 refund.setVnpRequestId(newRequestId());
             }
+            refund.setGatewaySubmittedAt(null);
             refund.setStatus(RefundStatus.PROCESSING);
             refundRequestRepository.save(refund);
             Long id = refund.getId();

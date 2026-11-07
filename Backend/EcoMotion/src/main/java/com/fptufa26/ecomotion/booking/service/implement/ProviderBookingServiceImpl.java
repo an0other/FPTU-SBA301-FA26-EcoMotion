@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
+
 import com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest;
 import com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest;
 import com.fptufa26.ecomotion.booking.dto.response.OperationalResolutionResponse;
@@ -114,7 +116,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final com.fptufa26.ecomotion.booking.repository.BookingChargeEvidenceRepository chargeEvidenceRepository;
     private final com.fptufa26.ecomotion.booking.service.ChargeEvidenceValidator chargeEvidenceValidator;
     private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
-    private final com.fptufa26.ecomotion.finance.service.implement.RefundEventService refundEventService;
+    private final com.fptufa26.ecomotion.finance.service.RefundEventService refundEventService;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final DriverAssignmentService driverAssignmentService;

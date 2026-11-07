@@ -90,6 +90,9 @@ class MixedRentalBookingIntegrationTest {
                 .content(objectMapper.writeValueAsString(body))).andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString()).get("data");
         var booking = bookingRepository.findByBookingCode(created.get("bookingCode").asText()).orElseThrow();
+        assertThat(booking.getStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.BookingStatus.AWAITING_DEPOSIT);
+        Instant originalHold = vehicleScheduleRepository.findByBooking_Id(booking.getId()).getFirst().getExpiresAt();
+        assertThat(Duration.between(booking.getCreatedAt(), originalHold).getSeconds()).isBetween(899L, 900L);
         mockMvc.perform(post("/api/renter/bookings/rental-quote")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
                 .content(quoteBody)).andExpect(status().isConflict())
@@ -112,6 +115,7 @@ class MixedRentalBookingIntegrationTest {
                 .andExpect(jsonPath("$.data.pricingItems").isNotEmpty())
                 .andExpect(jsonPath("$.data.endTime").value(option.get("plannedEndAt").asText()));
         Map<String,Object> edit = new HashMap<>(body);
+        assertThat(vehicleScheduleRepository.findByBooking_Id(booking.getId()).getFirst().getExpiresAt()).isEqualTo(originalHold);
         edit.put("pickupTime", "2026-12-08T01:00:00Z");
         mockMvc.perform(patch("/api/renter/bookings/" + booking.getBookingCode() + "/request-details")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
