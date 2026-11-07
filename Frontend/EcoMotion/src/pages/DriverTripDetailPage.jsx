@@ -1,3 +1,4 @@
+import EvidenceImage from '../components/booking/EvidenceImage'
 import { pricingDescription } from '../utils/rentalPricing'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
@@ -387,7 +388,7 @@ export default function DriverTripDetailPage() {
                       onClick={() => setLightboxImage(ev.imageUrl)}
                       className="aspect-[4/3] bg-slate-200 cursor-pointer overflow-hidden relative"
                     >
-                      <img
+                      <EvidenceImage
                         src={getOptimizedImageUrl(ev.imageUrl, { width: 350 })}
                         alt={ev.note || 'Evidence'}
                         className="h-full w-full object-cover group-hover:scale-105 transition duration-200"
@@ -574,7 +575,7 @@ export default function DriverTripDetailPage() {
                 <Icon name="close" className="text-lg" />
               </button>
             </div>
-            <img
+            <EvidenceImage
               src={lightboxImage}
               alt="Minh chứng phóng to"
               className="max-h-[85vh] w-auto object-contain"

@@ -1,3 +1,4 @@
+import EvidenceImage from '../components/booking/EvidenceImage'
 import { incidentResolutionPayload } from '../utils/tv5Contracts'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { pricingDescription } from '../utils/rentalPricing'
@@ -16,6 +17,7 @@ import { useProviderTripTracking } from '../hooks/useProviderTripTracking'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { providerBookingService } from '../services/providerBookingService'
 import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
+import YearlyWorkflowPanel from '../components/yearly-rental/YearlyWorkflowPanel'
 import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
@@ -163,7 +165,7 @@ export default function ProviderBookingDetailPage() {
   )
 
   const canAssignDriver = Boolean(
-    booking &&
+    booking && booking.planType !== 'YEARLY' &&
     isProviderRole &&
     !isTerminal &&
     !isPending &&
@@ -520,7 +522,7 @@ export default function ProviderBookingDetailPage() {
         )}
 
         {/* 3. Tiến trình đơn thuê / Thông tin cần xử lý */}
-        <section aria-label="Tiến trình và việc cần xử lý">
+        {booking.planType !== 'YEARLY' && <section aria-label="Tiến trình và việc cần xử lý">
           <BookingWorkflowSummary
             key={booking.bookingCode}
             workflow={workflow}
@@ -530,9 +532,11 @@ export default function ProviderBookingDetailPage() {
             provider
             onAction={handleProgressAction}
           />
-        </section>
+        </section>}
 
-        {workflow?.canProposeAlternative && (
+        {booking.planType === 'YEARLY' && <YearlyWorkflowPanel key={booking.bookingCode} role="provider" bookingCode={booking.bookingCode} bookingStatus={booking.status} onChanged={refetch} />}
+
+        {booking.planType !== 'YEARLY' && workflow?.canProposeAlternative && (
           operationalRisk?.atRisk || workflow.needsDriver || workflow.proposal
           || booking.status === 'AWAITING_DEPOSIT' || booking.status === 'ACCEPTED'
         ) && (
@@ -915,7 +919,7 @@ export default function ProviderBookingDetailPage() {
                   </h2>
                   <p className="text-xs text-slate-500">Các khoản phụ thu quá giờ, chờ đợi, bán kính ngoài</p>
                 </div>
-                {(booking.canAssignDriver || booking.canAutoAssignDriver) && (
+                {booking.planType !== 'YEARLY' && (booking.canAssignDriver || booking.canAutoAssignDriver) && (
                   <button
                     type="button"
                     onClick={() => setShowAddChargeModal(true)}
@@ -1141,7 +1145,7 @@ export default function ProviderBookingDetailPage() {
                         onClick={() => setSelectedEvidenceImage(ev.imageUrl)}
                         className="aspect-[4/3] bg-slate-200 cursor-pointer overflow-hidden relative"
                       >
-                        <img
+                        <EvidenceImage
                           src={getOptimizedImageUrl(ev.imageUrl, { width: 400 })}
                           alt={ev.note || 'Evidence'}
                           className="h-full w-full object-cover group-hover:scale-105 transition duration-200"
@@ -1352,7 +1356,7 @@ export default function ProviderBookingDetailPage() {
                 <Icon name="close" className="text-lg" />
               </button>
             </div>
-            <img
+            <EvidenceImage
               src={selectedEvidenceImage}
               alt="Minh chứng phóng to"
               className="max-h-[85vh] w-auto object-contain"

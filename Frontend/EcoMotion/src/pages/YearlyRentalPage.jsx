@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import DrivingLicenseForm from '../components/yearly-rental/DrivingLicenseForm'
-import YearlyContractPanel from '../components/yearly-rental/YearlyContractPanel'
+import YearlyWorkflowPanel from '../components/yearly-rental/YearlyWorkflowPanel'
 import YearlyBookingFlow from '../components/yearly-rental/YearlyBookingFlow'
 import { useYearlyRental } from '../hooks/useYearlyRental'
 import { BookingErrorDialog } from '../components/booking/BookingErrorDialog'
@@ -120,10 +120,12 @@ export default function YearlyRentalPage() {
             ) : contractState.error ? (
               <ErrorPanel onRetry={() => { setDismissedError(''); reloadContract() }} />
             ) : contractState.data ? (
-              <YearlyContractPanel
+              <YearlyWorkflowPanel
                 key={bookingCode}
-                contract={contractState.data}
-                onUploaded={() => {
+                role="renter"
+                bookingCode={bookingCode}
+                bookingStatus={contractState.data.bookingStatus}
+                onChanged={() => {
                   setMessage('Đã lưu hợp đồng.')
                   reloadContract()
                 }}

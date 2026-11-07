@@ -8,6 +8,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface TripEvidenceService {
+    record EvidenceFile(byte[] content, String contentType) {}
+    EvidenceFile readEvidence(Long userId, Role role, String code, Long id);
+
 
     TripEvidenceResponse uploadEvidence(
             Long currentUserId,

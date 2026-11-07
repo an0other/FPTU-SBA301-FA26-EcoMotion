@@ -77,7 +77,7 @@ export default function CustomerPaymentPage() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [bookingIdentifier])
+  }, [bookingIdentifier, navigate])
 
   useEffect(() => {
     if (bookingIdentifier) {
@@ -95,6 +95,10 @@ export default function CustomerPaymentPage() {
       bookingWorkflowService.get(bookingIdentifier).catch(() => null),
     ]).then(([detail, workflow]) => {
       if (cancelled || !detail) return
+      if (detail.planType === 'YEARLY') {
+        navigate('/renter/bookings/' + encodeURIComponent(bookingIdentifier), { replace: true })
+        return
+      }
       const hours = detail.endTime && detail.pickupTime
         ? (new Date(detail.endTime) - new Date(detail.pickupTime)) / 3600000
         : null
@@ -122,7 +126,7 @@ export default function CustomerPaymentPage() {
       if (!cancelled) setBookingSummary(null)
     })
     return () => { cancelled = true }
-  }, [bookingIdentifier])
+  }, [bookingIdentifier, navigate])
 
   // Auto-polling while request is pending or reviewing
   useEffect(() => {

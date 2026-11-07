@@ -92,6 +92,11 @@ public class VnpayServiceImpl implements VnpayService {
         Booking booking = bookingQueryService.lockBookingForPayment(resolveBooking(request.bookingCode()).getId());
 
         validateRenterAccess(booking, currentUserId);
+        if (paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit).isPresent()) {
+            throw new InvalidPaymentOperationException("Hợp đồng năm mới thanh toán trực tiếp cho provider; không dùng VNPAY");
+        }
+
 
         boolean isFinalPayment = "FINAL_PAYMENT".equalsIgnoreCase(request.paymentType())
                 || "FINAL_BALANCE".equalsIgnoreCase(request.paymentType())

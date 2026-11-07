@@ -194,8 +194,9 @@ export function BookingDetailPage() {
       {error && <p role="alert" className="mx-auto max-w-5xl p-4 text-sm text-red-800">Không thể cập nhật trạng thái: {error}. Dữ liệu đang hiển thị có thể đã cũ.</p>}
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
       {tripNotice && <Toast message={tripNotice} type="success" onClose={() => setTripNotice('')} />}
-      <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>
+      {detail.planType !== 'YEARLY' && <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>}
       <BookingDetail
+        onYearlyChanged={refreshDetail}
         booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
         workflow={workflow}
         operationalRisk={operationalRisk}

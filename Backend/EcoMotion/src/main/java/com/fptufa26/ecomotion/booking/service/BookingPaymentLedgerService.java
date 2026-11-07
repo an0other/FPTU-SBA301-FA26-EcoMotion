@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface BookingPaymentLedgerService {
+    Optional<java.math.BigDecimal> yearlyRoundingUnit(Long bookingId);
+
 
     Booking requireBooking(Long bookingId);
 

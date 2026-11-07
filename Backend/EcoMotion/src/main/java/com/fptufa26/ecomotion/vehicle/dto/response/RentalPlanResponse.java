@@ -11,4 +11,8 @@ public record RentalPlanResponse(
         BigDecimal slotPrice,
         BigDecimal upfrontAmount
 ) {
+    @com.fasterxml.jackson.annotation.JsonProperty("securityDepositAmount")
+    public BigDecimal securityDepositAmount() {
+        return planType == PlanType.YEARLY ? upfrontAmount : null;
+    }
 }

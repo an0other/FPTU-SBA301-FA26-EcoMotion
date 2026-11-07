@@ -31,9 +31,9 @@ Mật khẩu chung: `EcoMotion@123`.
 | Tài xế | `driver.nam@ecomotion.vn` | Thuộc nhà xe A |
 | Tài xế | `driver.cuong@ecomotion.vn` | Thuộc nhà xe A |
 | Tài xế | `driver.kiet@ecomotion.vn` | Thuộc nhà xe A |
-| Thuê năm đang chạy | `renter.yearly.active@ecomotion.vn` | Đơn `EM-SEED-YEARLY-ACTIVE`, kỳ tháng |
-| Thuê năm tạo mới | `renter.yearly.flow@ecomotion.vn` | Đi từ đầu luồng năm |
-| GPLX bị chặn | `renter.yearly.blocked@ecomotion.vn` | Case không đủ điều kiện |
+| Thuê năm đang chạy | `renter.yearly.monthly@ecomotion.vn` | Đơn EM-Y2-MONTHLY, thanh toán kỳ tiếp theo |
+| Thuê năm kết thúc | `renter.yearly.happy-end@ecomotion.vn` | Đơn EM-Y2-HAPPY-END, kiểm định và hoàn cọc |
+| Người mới thuê năm | `renter.yearly.new@ecomotion.vn` | Quét GPLX thật, đặt xe 51Y-00001 |
 | Nhà xe chờ duyệt | `provider.pending@ecomotion.vn` | `ProviderStatus` chưa APPROVED |
 | Người thuê eKYC chờ | `renter.pending@ecomotion.vn` | Tài khoản active, eKYC pending |
 | Tài xế chờ duyệt | `driver.pending@ecomotion.vn` | `DriverStatus` PENDING |
@@ -307,12 +307,12 @@ Nhà xe cũng có thể chọn hủy và hoàn mà không chờ khách đồng �
 
 Màn hình: `/renter/yearly-rental` và `/renter/bookings/:bookingCode/yearly-rental`. GPLX cũng xem được ở `/me`.
 
-Điều kiện demo: hạng B cấp từ 01/01/2025, còn hạn đến hết ngày kết thúc kỳ 365 ngày, người thuê đủ 18 tuổi vào ngày nhận xe, xe không quá số chỗ chính sách đang cho phép. Đây là kiểm tra trong đồ án, không phải xác thực với cơ quan nhà nước.
+Điều kiện demo: nhóm B (B, B1, B2), không giới hạn ngày cấp từ 2025, còn hạn đến hết ngày kết thúc kỳ 12 tháng theo lịch, người thuê đủ 18 tuổi vào ngày nhận xe, xe không quá số chỗ chính sách đang cho phép. Đây là kiểm tra trong đồ án, không phải xác thực với cơ quan nhà nước.
 
 ### Đường đúng
 
 1. Người thuê tải ảnh mặt trước và mặt sau GPLX. Dịch vụ DocumentAI đọc giấy. Đọc đạt thì `licenseVerified` bật và điền số, họ tên, hạng, ngày cấp, ngày hết hạn. Ảnh chỉ người đã đăng nhập đúng tài khoản xem được.
-2. Chọn một gói năm đang bật, đúng một kỳ 365 ngày. Giờ nhận xe phải cách lúc gửi ít nhất 3 giờ. Chọn điểm nhận và số khách không vượt chỗ còn lại sau chỗ lái.
+2. Chọn một gói năm đang bật, đúng một kỳ 12 tháng theo lịch. Giờ nhận xe phải cách lúc gửi ít nhất 3 giờ. Chọn điểm nhận và số khách không vượt chỗ còn lại sau chỗ lái.
 3. Gửi đơn: trạng thái `PENDING`, giữ chỗ 24 giờ. Chưa có yêu cầu thanh toán, chưa có tài xế.
 4. Nhà xe chấp nhận trong 24 giờ: đơn `ACCEPTED`, mở một cửa sổ 24 giờ để nộp hợp đồng.
 5. Người thuê tải PDF hợp đồng đã ký. Hệ thống kiểm tra lại GPLX. Hợp lệ thì đơn sang `AWAITING_DEPOSIT` và tạo yêu cầu trả trước.
@@ -508,3 +508,6 @@ flowchart TD
 - Máy trạng thái chuyến không liệt kê mọi trạng thái mà service thanh toán gán thẳng, ví dụ `CANCELLATION_REVIEW` khi đối soát. Khi hai bên lệch nhau, tin luồng service của từng việc hơn là chỉ nhìn bảng chuyển trạng thái của chuyến.
 
 Các file quyết định hành vi nếu cần đối chiếu: `DepositRefundRules`, `BookingServiceImpl`, `BookingHoldExpiryServiceImpl`, `PaymentRequestServiceImpl`, `VnpayServiceImpl`, `RefundEventService`, `ProviderBookingServiceImpl`, `DriverOptimizationServiceImpl`, `DisputeServiceImpl`, `VehicleServiceImpl`, `ProviderVehicleServiceImpl`.
+
+
+Gói năm có tài khoản riêng cho từng nhánh, được tạo cùng một lần seed; danh sách email, mã đơn và trình tự: [hướng dẫn demo năm](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).

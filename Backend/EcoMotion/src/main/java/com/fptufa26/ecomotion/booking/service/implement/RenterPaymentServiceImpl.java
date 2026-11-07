@@ -32,7 +32,6 @@ import java.util.List;
 import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RenterPaymentServiceImpl implements RenterPaymentService {
 
@@ -40,6 +39,24 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
     private final BookingRepository bookingRepository;
     private final BookingChargeRepository bookingChargeRepository;
     private final BookingPolicySnapshotRepository snapshotRepository;
+    private final com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository yearlyWorkflows;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RenterPaymentServiceImpl(PaymentTransactionRepository payments, BookingRepository bookings,
+            BookingChargeRepository charges, BookingPolicySnapshotRepository snapshots,
+            com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository yearlyWorkflows) {
+        this.paymentTransactionRepository = payments;
+        this.bookingRepository = bookings;
+        this.bookingChargeRepository = charges;
+        this.snapshotRepository = snapshots;
+        this.yearlyWorkflows = yearlyWorkflows;
+    }
+
+    public RenterPaymentServiceImpl(PaymentTransactionRepository payments, BookingRepository bookings,
+            BookingChargeRepository charges, BookingPolicySnapshotRepository snapshots) {
+        this(payments, bookings, charges, snapshots, null);
+    }
+
 
     @Override
     public PageResponse<PaymentHistoryResponse> getPaymentHistory(
@@ -189,7 +206,8 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(payment -> payment.getStatus() == PaymentStatus.PAID)
                 .filter(payment -> payment.getDirection() == PaymentDirection.IN)
-                .map(payment -> payment.getAppliedAmount() != null && payment.getAppliedAmount().signum() > 0
+                .filter(payment -> payment.getType() != PaymentType.SECURITY_DEPOSIT)
+                .map(payment -> payment.getAppliedAmount() != null
                         ? payment.getAppliedAmount()
                         : payment.getAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -199,6 +217,17 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 .filter(payment -> payment.getType() == PaymentType.REFUND)
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (yearly && yearlyWorkflows != null) {
+            var state = yearlyWorkflows.findById(booking.getId()).orElse(null);
+            boolean securityFlow = transactions.stream().anyMatch(t -> t.getType() == PaymentType.SECURITY_DEPOSIT);
+            if (securityFlow) depositRequired = snapshot.getDepositAmount();
+            if (state != null && java.util.Set.of("SETTLEMENT_ACCEPTED", "REFUND_TRANSFER_RECORDED", "REFUND_RECEIVED", "COMPLETED").contains(state.getStage())) {
+                recordedCost = state.getRentDue().add(state.getEarlyFee()).add(state.getLateFee())
+                        .add(state.getExcessKmFee()).add(state.getOtherCharges());
+                allocatedPayments = allocatedPayments.add(state.getDepositDeduction()).subtract(refundedAmount).max(BigDecimal.ZERO);
+            }
+        }
 
         BigDecimal netPaidAmount = paidAmount.subtract(refundedAmount).max(BigDecimal.ZERO);
 
@@ -239,7 +268,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
         return new BookingPaymentSummaryResponse(
                 recordedCost,
                 depositRequired,
-                yearly ? snapshot.getUpfrontAmount() : null,
+                yearly && transactions.stream().noneMatch(t -> t.getType() == PaymentType.SECURITY_DEPOSIT) ? snapshot.getUpfrontAmount() : null,
                 paidAmount,
                 refundedAmount,
                 netPaidAmount,

@@ -12,16 +12,22 @@ public class BookingStartPolicy {
     private final Clock clock;
     private final int maxAdvanceMonths;
 
-    public BookingStartPolicy(Clock clock, @Value("${booking.max-advance-months}") int maxAdvanceMonths) {
+    public BookingStartPolicy(Clock clock, @Value("${booking.max-advance-months:3}") int maxAdvanceMonths) {
         if (maxAdvanceMonths < 1) throw new IllegalArgumentException("booking.max-advance-months must be positive");
         this.clock = clock;
         this.maxAdvanceMonths = maxAdvanceMonths;
     }
 
-    public void validate(Instant pickupTime) {
+    public record StartWindow(int maxAdvanceMonths, Instant latestPickupTime) {}
+
+    public StartWindow window() {
         Instant latest = clock.instant().atZone(ZoneId.of("Asia/Ho_Chi_Minh"))
                 .plusMonths(maxAdvanceMonths).toInstant();
-        if (pickupTime != null && pickupTime.isAfter(latest)) {
+        return new StartWindow(maxAdvanceMonths, latest);
+    }
+
+    public void validate(Instant pickupTime) {
+        if (pickupTime != null && pickupTime.isAfter(window().latestPickupTime())) {
             throw new BadRequestException("Chỉ được đặt giờ nhận xe trong vòng " + maxAdvanceMonths + " tháng kể từ hiện tại");
         }
     }

@@ -126,6 +126,10 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     public OperationalResolutionResponse proposeAlternative(Long userId, String code, ResolveOperationalRiskRequest request) {
         Booking booking = booking(code, true);
         User user = participant(userId, booking);
+        if (booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+            throw new ConflictException("Gói năm dùng quy trình hợp đồng và đổi xe riêng");
+        }
+
         if (user.getRole() != Role.PROVIDER || !booking.getVehicle().getProvider().getUser().getId().equals(userId))
             throw new AccessDeniedException("Chỉ nhà xe quản lý đơn được gửi phương án");
         if (!MUTABLE.contains(booking.getStatus())) throw new ConflictException("Chỉ đề xuất thay đổi trước khi chuyến bắt đầu");

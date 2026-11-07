@@ -249,6 +249,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         List<PaymentTransaction> allTx = bookingPaymentLedgerService.listProviderTransactions(providerId);
         BigDecimal confirmedIncoming = allTx.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                 .filter(t -> t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
                 .filter(t -> t.getProcessingNote() == null || !t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))
                 .map(PaymentTransaction::getAmount)
@@ -373,11 +374,13 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactionsAscending(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                 .map(t -> t.getAppliedAmount() != null && t.getAppliedAmount().signum() > 0
                         ? t.getAppliedAmount()
                         : t.getAmount())
@@ -449,6 +452,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
             List<PaymentTransaction> txList = bookingPaymentLedgerService.listTransactions(b.getId());
             BigDecimal confirmedRev = txList.stream()
                     .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                     .map(PaymentTransaction::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
