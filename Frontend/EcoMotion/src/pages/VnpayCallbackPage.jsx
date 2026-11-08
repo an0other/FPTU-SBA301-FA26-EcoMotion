@@ -117,7 +117,7 @@ function Shell({ tone, icon, title, children }) {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-6 sm:p-7 shadow-xs text-center space-y-5" aria-live="polite">
-        <span className={`material-symbols-rounded inline-flex h-16 w-16 items-center justify-center rounded-full text-4xl ${TONE[tone]}`} aria-hidden="true">
+        <span className={`material-symbols-rounded inline-flex h-16 w-16 items-center justify-center rounded-full text-4xl leading-none ${TONE[tone]}`} aria-hidden="true">
           {icon}
         </span>
         <div className="space-y-2">
