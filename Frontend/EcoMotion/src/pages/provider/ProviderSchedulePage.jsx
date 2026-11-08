@@ -160,6 +160,10 @@ export default function ProviderSchedulePage() {
 
   const totalPages = Math.ceil(displayedSchedules.length / itemsPerPage) || 1
 
+  const eligibleVehicles = useMemo(() => {
+    return vehicles.filter((v) => v.status === 'APPROVED' || v.status === 'HIDDEN')
+  }, [vehicles])
+
   const toLocalIso = (d) => {
     if (!d) return ''
     const offset = d.getTimezoneOffset() * 60000
@@ -167,7 +171,7 @@ export default function ProviderSchedulePage() {
   }
 
   const handleOpenCreateModal = () => {
-    setFormVehicleId(vehicles.length > 0 ? vehicles[0].id : '')
+    setFormVehicleId(eligibleVehicles.length > 0 ? eligibleVehicles[0].id : '')
     setFormType('MAINTENANCE')
     const now = new Date()
     now.setMinutes(0, 0, 0)
@@ -805,6 +809,14 @@ export default function ProviderSchedulePage() {
             </div>
 
             <form onSubmit={handleCreateSchedule} className="p-6 space-y-4">
+              {eligibleVehicles.length === 0 && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2.5">
+                  <svg className="w-4 h-4 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Hiện tại bạn chưa có phương tiện nào đã qua kiểm duyệt (APPROVED/HIDDEN) để thực hiện chặn lịch.</span>
+                </div>
+              )}
               {formError && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
                   <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -821,14 +833,15 @@ export default function ProviderSchedulePage() {
                 <select
                   value={formVehicleId}
                   onChange={(e) => setFormVehicleId(e.target.value)}
+                  disabled={eligibleVehicles.length === 0}
                   className="w-full px-3.5 py-2.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800 cursor-pointer"
                 >
-                  {vehicles.length === 0 ? (
+                  {eligibleVehicles.length === 0 ? (
                     <option value="">Không có phương tiện khả dụng</option>
                   ) : (
-                    vehicles.map((v) => (
+                    eligibleVehicles.map((v) => (
                       <option key={v.id} value={v.id}>
-                        {v.licensePlate} • {v.brand} {v.model} ({v.seatCount} chỗ)
+                        {v.licensePlate} • {v.brand} {v.model} ({v.seatCount} chỗ){v.status === 'HIDDEN' ? ' [Tạm ẩn]' : ''}
                       </option>
                     ))
                   )}
@@ -954,7 +967,7 @@ export default function ProviderSchedulePage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || eligibleVehicles.length === 0}
                   className="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-xs disabled:opacity-50 transition-all cursor-pointer inline-flex items-center gap-2"
                 >
                   {submitting && (

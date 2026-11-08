@@ -13,7 +13,6 @@ public record ProviderFinanceSummaryResponse(
         long pendingBookingsCount,
         long completedBookingsCount,
         BigDecimal directReceived,
-        BigDecimal platformReceived,
         BigDecimal reconciliationRequiredAmount
 ) {
 }

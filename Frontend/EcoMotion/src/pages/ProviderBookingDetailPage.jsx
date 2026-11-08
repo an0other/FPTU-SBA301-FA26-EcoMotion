@@ -11,7 +11,7 @@ import AcceptBookingModal from '../components/provider/modals/AcceptBookingModal
 import DenyBookingModal from '../components/provider/modals/DenyBookingModal'
 import AssignDriverModal from '../components/provider/modals/AssignDriverModal'
 import AddChargeModal from '../components/provider/modals/AddChargeModal'
-import LiveMapViewer from '../components/map/LiveMapViewer'
+import VehicleTrackingStatus from '../components/map/VehicleTrackingStatus'
 import { useProviderBookingDetail } from '../hooks/useProviderBookingDetail'
 import { useProviderTripTracking } from '../hooks/useProviderTripTracking'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
@@ -615,6 +615,7 @@ export default function ProviderBookingDetailPage() {
               </div>
               {(booking.dispatchOriginLatitude != null || booking.distanceKm != null || booking.pickupFee != null) && (
                 <PickupDistanceProof
+                  showMap={false}
                   pickupAddress={booking.pickupAddress}
                   pickupLatitude={booking.pickupLatitude}
                   pickupLongitude={booking.pickupLongitude}
@@ -858,19 +859,12 @@ export default function ProviderBookingDetailPage() {
                   </button>
                 </div>
 
-                <LiveMapViewer
+                <VehicleTrackingStatus
                   vehicleLocation={trackingData?.latestLocation}
-                  pickupLocation={{
-                    latitude: trackingData?.pickupLatitude,
-                    longitude: trackingData?.pickupLongitude,
-                    address: booking.pickupAddress,
-                  }}
-                  vehicleInfo={{
-                    licensePlate: booking.licensePlate,
-                    name: booking.vehicleName,
-                    color: booking.color,
-                  }}
-                  height="340px"
+                  pickupAddress={booking.pickupAddress}
+                  pickupLatitude={trackingData?.pickupLatitude}
+                  pickupLongitude={trackingData?.pickupLongitude}
+                  licensePlate={booking.licensePlate}
                 />
 
                 {/* Timestamps */}

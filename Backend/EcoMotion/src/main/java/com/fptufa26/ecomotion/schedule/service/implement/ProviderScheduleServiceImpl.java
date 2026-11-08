@@ -14,6 +14,7 @@ import com.fptufa26.ecomotion.schedule.service.ProviderScheduleService;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
 import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -123,6 +124,13 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
         }
 
         Vehicle vehicle = vehicleCatalogService.requireOwnedByProvider(request.vehicleId(), provider.getId());
+
+        if (vehicle.getStatus() == VehicleStatus.PENDING) {
+            throw new BadRequestException("Phương tiện đang chờ Admin duyệt hồ sơ, chưa thể tạo lịch chặn hoặc bảo dưỡng");
+        }
+        if (vehicle.getStatus() == VehicleStatus.REJECTED) {
+            throw new BadRequestException("Phương tiện đã bị từ chối phê duyệt, không thể tạo lịch chặn hoặc bảo dưỡng");
+        }
 
         AvailabilityPolicy.Window protectedWindow =
                 AvailabilityPolicy.bufferedWindow(

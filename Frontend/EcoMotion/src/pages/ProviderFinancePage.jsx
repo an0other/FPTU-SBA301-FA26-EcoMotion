@@ -772,7 +772,7 @@ export default function ProviderFinancePage() {
           {/* Card 2: Tiền đặt cọc đã thu */}
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-1">
             <div className="flex items-center justify-between text-slate-500">
-              <span className="text-xs font-semibold">Nhà xe nhận trực tiếp</span>
+              <span className="text-xs font-semibold">Nhà xe nhận trực tiếp (CK &amp; VNPay)</span>
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
                 <Icon name="lock" className="text-lg" />
               </span>
@@ -785,27 +785,7 @@ export default function ProviderFinancePage() {
               </div>
             )}
             <div className="text-[11px] text-slate-500">
-              Tổng chuyển khoản đã xác nhận, trước hoàn tiền
-            </div>
-          </div>
-
-          {/* Card 3: Số tiền chưa đối soát / Chờ quyết toán */}
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs space-y-1">
-            <div className="flex items-center justify-between text-slate-500">
-              <span className="text-xs font-semibold">Nền tảng đã nhận</span>
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
-                <Icon name="hourglass_top" className="text-lg" />
-              </span>
-            </div>
-            {loading && !summary ? (
-              <div className="h-8 w-28 animate-pulse rounded bg-amber-100 my-0.5" />
-            ) : (
-              <div className="text-2xl font-bold font-mono text-amber-900">
-                {formatVnd(summary?.platformReceived ?? 0)}
-              </div>
-            )}
-            <div className="text-[11px] text-slate-500">
-              Tổng VNPay đã xác minh, trước hoàn tiền và chi trả
+              Chuyển khoản và VNPay đã xác nhận, trước hoàn tiền
             </div>
           </div>
 
@@ -1479,7 +1459,7 @@ export default function ProviderFinancePage() {
           <div className="rounded-lg border border-slate-200 bg-white shadow-xs p-5 space-y-4">
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">
               <h3 className="font-bold text-sm mb-1">Lịch sử chi trả từ máy chủ</h3>
-              <p>Chỉ tiền nền tảng thực thu mới được xét chi trả. Tiền khách chuyển trực tiếp nhà xe được theo dõi riêng ở Giao dịch. Admin quản lý lệnh chi trả; giao dịch MOCK/SANDBOX chưa chuyển tiền ngân hàng.</p>
+              <p>Tiền khách thanh toán qua VNPay hoặc chuyển khoản đã về trực tiếp nhà xe, không cần chi trả qua nền tảng. Mục này chỉ giữ lịch sử các lệnh chi trả cũ.</p>
             </div>
             {payoutLoading ? <p role="status" className="text-sm text-slate-500">Đang tải lịch sử chi trả...</p>
               : payoutError ? <p role="alert" className="text-sm text-red-700">{payoutError}</p>

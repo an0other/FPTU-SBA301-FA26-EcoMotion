@@ -35,7 +35,7 @@ export default function ProviderDriverPage() {
     setOffset(0)
     setter(value)
   }
-  const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
+  const [viewMode, setViewMode] = useState('grid')
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -58,8 +58,6 @@ export default function ProviderDriverPage() {
 
   const portraitInputRef = useRef(null)
   const licenseInputRef = useRef(null)
-
-  // Load drivers and stats
   const loadData = useCallback(async (quiet = false) => {
     const sequence = ++loadSequence.current
     if (invalidRange) { setDrivers([]); setTotal(0); setLoading(false); return }
@@ -367,156 +365,195 @@ export default function ProviderDriverPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 mb-8 flex flex-col lg:flex-row items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/90 mb-8 space-y-4">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
+            <div className="relative flex-1 min-w-[260px]">
+              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
+                search
+              </span>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => changeFilter(setSearchTerm, e.target.value)}
+                placeholder="Tìm kiếm theo tên, SĐT, email, GPLX..."
+                className="w-full bg-slate-50 pl-10 pr-4 py-2.5 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all"
+              />
+            </div>
 
-          <div className="relative w-full lg:w-96 flex-shrink-0">
-            <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
-              search
-            </span>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => changeFilter(setSearchTerm, e.target.value)}
-              placeholder="Tìm kiếm theo tên, SĐT, email, GPLX..."
-              className="w-full bg-slate-50 pl-10 pr-4 py-2.5 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all"
-            />
+            <div className="flex flex-wrap items-center gap-2.5">
+              <select
+                aria-label="Lọc trạng thái nhận chuyến"
+                value={operationalStatus}
+                onChange={(e) => changeFilter(setOperationalStatus, e.target.value)}
+                className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 px-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              >
+                <option value="">Tất cả trạng thái nhận chuyến</option>
+                {Object.entries(DRIVER_STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+
+              <div className="relative">
+                <select
+                  aria-label="Sắp xếp tài xế"
+                  value={sortBy}
+                  onChange={(e) => changeFilter(setSortBy, e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 pl-3.5 pr-8 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
+                >
+                  <option value="updated_desc">Cập nhật mới nhất</option>
+                  <option value="updated_asc">Cập nhật cũ nhất</option>
+                  <option value="status_updated_at">Cập nhật trạng thái mới nhất</option>
+                  <option value="newest">Tạo mới nhất</option>
+                  <option value="rating">Đánh giá cao nhất</option>
+                  <option value="expiry">GPLX sắp hết hạn</option>
+                </select>
+                <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[18px]">
+                  expand_more
+                </span>
+              </div>
+
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === 'grid' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                  title="Chế độ Thẻ (Grid)"
+                >
+                  <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === 'table' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                  title="Chế độ Bảng (Table)"
+                >
+                  <span className="material-symbols-outlined text-[18px]">view_list</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 scrollbar-none">
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'ALL')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'ALL'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Tất cả</span>
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  selectedStatus === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+          <div className="pt-3 border-t border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 xl:pb-0 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'ALL')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'ALL'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                {stats.total}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'APPROVED')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'APPROVED'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Đang hoạt động</span>
-              <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.approved}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'PENDING')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'PENDING'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Chờ duyệt</span>
-              <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.pending}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'REJECTED')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'REJECTED'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Bị từ chối</span>
-              <span className="bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.rejected}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'SUSPENDED')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'SUSPENDED'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Tạm ngưng</span>
-              <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.suspended}
-              </span>
-            </button>
-          </div>
-
-          {/* Right: View Controls & Sort */}
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
-            <div className="relative flex flex-wrap items-center gap-2">
-              <select aria-label="Lọc trạng thái nhận chuyến" value={operationalStatus} onChange={e => changeFilter(setOperationalStatus, e.target.value)} className="rounded-lg border border-slate-200 p-2 text-sm">
-<option value="">Tất cả trạng thái nhận chuyến</option>
-{Object.entries(DRIVER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-</select>
-<select
-                aria-label="Sắp xếp tài xế"
-                value={sortBy}
-                onChange={(e) => changeFilter(setSortBy, e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 pl-3.5 pr-8 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
-              >
-                <option value="updated_desc">Cập nhật mới nhất</option>
-                <option value="updated_asc">Cập nhật cũ nhất</option>
-                <option value="status_updated_at">Cập nhật trạng thái mới nhất</option>
-                <option value="newest">Tạo mới nhất</option>
-                <option value="rating">Đánh giá cao nhất</option>
-                <option value="expiry">GPLX sắp hết hạn</option>
-              </select>
-              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[18px]">
-                expand_more
-              </span>
-            </div>
-
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
+                <span>Tất cả</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    selectedStatus === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                   }`}
-                title="Chế độ Thẻ (Grid)"
-              >
-                <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                >
+                  {stats.total}
+                </span>
               </button>
+
               <button
-                onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                title="Chế độ Bảng (Table)"
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'APPROVED')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'APPROVED'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
               >
-                <span className="material-symbols-outlined text-[18px]">view_list</span>
+                <span>Đang hoạt động</span>
+                <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.approved}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'PENDING')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'PENDING'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>Chờ duyệt</span>
+                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.pending}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'REJECTED')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'REJECTED'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>Bị từ chối</span>
+                <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.rejected}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'SUSPENDED')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'SUSPENDED'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>Tạm ngưng</span>
+                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.suspended}
+                </span>
               </button>
             </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-500 font-medium">Khoảng ngày:</span>
+              <input
+                type="date"
+                aria-label="Cập nhật từ ngày"
+                value={updatedFrom}
+                onChange={(e) => changeFilter(setUpdatedFrom, e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
+              />
+              <span className="text-slate-400">→</span>
+              <input
+                type="date"
+                aria-label="Đến ngày"
+                value={updatedTo}
+                onChange={(e) => changeFilter(setUpdatedTo, e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
+              />
+              {(updatedFrom || updatedTo) && (
+                <button
+                  type="button"
+                  onClick={() => { changeFilter(setUpdatedFrom, ''); setUpdatedTo('') }}
+                  className="text-emerald-700 hover:text-emerald-800 font-semibold px-2 py-1 transition-colors cursor-pointer"
+                >
+                  Xóa
+                </button>
+              )}
+            </div>
           </div>
+          {invalidRange && (
+            <p role="alert" className="text-xs text-red-600 font-medium pt-1">
+              Ngày bắt đầu không được sau ngày kết thúc.
+            </p>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 mb-5">
-          <label className="text-sm text-slate-700">Cập nhật từ ngày
-            <input type="date" value={updatedFrom} onChange={e => changeFilter(setUpdatedFrom, e.target.value)} className="block border border-slate-200 rounded-lg p-2" />
-          </label>
-          <label className="text-sm text-slate-700">Đến ngày
-            <input type="date" value={updatedTo} onChange={e => changeFilter(setUpdatedTo, e.target.value)} className="block border border-slate-200 rounded-lg p-2" />
-          </label>
-          <button type="button" onClick={() => { changeFilter(setUpdatedFrom, ''); setUpdatedTo('') }} className="text-sm text-emerald-700 p-2">Xóa khoảng ngày</button>
-          <p className="text-xs text-slate-500">Giờ Việt Nam (UTC+7), bao gồm cả ngày kết thúc. Bản ghi chưa có thời gian cập nhật nằm cuối và không thuộc khoảng ngày.</p>
-          {invalidRange && <p role="alert" className="text-sm text-red-700">Ngày bắt đầu không được sau ngày kết thúc.</p>}
-        </div>
-
-        {/* Content Body: Grid or Table */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {[1, 2, 3].map((i) => (
@@ -844,8 +881,6 @@ export default function ProviderDriverPage() {
             <button disabled={loading || offset + pageSize >= total} onClick={() => { ++loadSequence.current; setOffset(offset + pageSize) }} className="border rounded-lg p-2 disabled:opacity-40">Trang sau</button>
           </div>
         </nav>
-
-        {/* Banner: Cơ chế Điều phối Linh hoạt */}
         <div className="bg-gradient-to-r from-white via-white to-emerald-50/60 rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
           <div className="flex items-start gap-4 z-10">
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700 flex-shrink-0 shadow-sm">
