@@ -12,7 +12,7 @@ public class BookingStartPolicy {
     private final Clock clock;
     private final int maxAdvanceMonths;
 
-    public BookingStartPolicy(Clock clock, @Value("${booking.max-advance-months}") int maxAdvanceMonths) {
+    public BookingStartPolicy(Clock clock, @Value("${booking.max-advance-months:3}") int maxAdvanceMonths) {
         if (maxAdvanceMonths < 1) throw new IllegalArgumentException("booking.max-advance-months must be positive");
         this.clock = clock;
         this.maxAdvanceMonths = maxAdvanceMonths;

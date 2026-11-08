@@ -326,14 +326,14 @@ class VnpayDepositSynchronizationIntegrationTest {
     }
 
     @Test
-    void browserReturnBeforeIpnAndRefreshingAreReadOnly() {
+    void browserReturnAppliesSignedResultOnceAndLaterIpnIsDuplicate() {
         var params = attempt();
-        assertThat(vnpay.processCallback(params).status()).isEqualTo("PENDING_VERIFICATION");
-        assertThat(vnpay.processCallback(params).status()).isEqualTo("PENDING_VERIFICATION");
-        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
-        assertThat(ledger.findByBooking_Id(bookingId).getFirst().getStatus()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
-        assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS"); assertDepositApplied();
+        assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("SUCCESS");
+        assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("SUCCESS");
+        assertDepositApplied();
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("02");
+        assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("SUCCESS");
+        assertDepositApplied();
     }
 
     @ParameterizedTest
@@ -391,11 +391,11 @@ class VnpayDepositSynchronizationIntegrationTest {
             config.setReconciliationEnabled(true); config.setQueryInterval(java.time.Duration.ZERO);
             config.setApiUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/query");
             // D1: Return URL hỏi QueryDR phía server khi còn PENDING; kết quả đã xác thực được áp dụng ngay.
-            assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+            assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("SUCCESS");
             assertDepositApplied();
             // Đối soát định kỳ và callback lặp không được ghi thêm lần nữa.
             reconciliation.reconcilePending(); assertDepositApplied();
-            assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+            assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("SUCCESS");
             assertDepositApplied();
         } finally { config.setReconciliationEnabled(false); config.setApiUrl(previousUrl); config.setQueryInterval(previousInterval); server.stop(0); }
     }
@@ -469,5 +469,70 @@ class VnpayDepositSynchronizationIntegrationTest {
             org.mockito.Mockito.verify(provider, org.mockito.Mockito.atLeastOnce()).send(org.mockito.ArgumentMatchers.any(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder.class));
             org.mockito.Mockito.verify(renter, org.mockito.Mockito.atLeastOnce()).send(org.mockito.ArgumentMatchers.any(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder.class));
         } finally { notifications.removeEmitter(providerId, provider); notifications.removeEmitter(renterId, renter); }
+    }
+
+    @Test
+    void signedFailedBrowserReturnMarksPaymentFailedWithoutConfirmingBooking() {
+        var params = attempt();
+        params.put("vnp_ResponseCode", "24"); params.put("vnp_TransactionStatus", "02"); sign(params);
+        assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("FAILED");
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
+        assertThat(ledger.findByBooking_Id(bookingId).getFirst().getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
+    void paidPaymentIsNotDowngradedByLaterFailedBrowserReturn() {
+        var ok = attempt();
+        assertThat(vnpay.processCallback(renterId, ok).status()).isEqualTo("SUCCESS");
+        var bad = new java.util.HashMap<>(ok);
+        bad.put("vnp_ResponseCode", "24"); bad.put("vnp_TransactionStatus", "02"); sign(bad);
+        assertThat(vnpay.processCallback(renterId, bad).status()).isEqualTo("SUCCESS");
+        assertDepositApplied();
+    }
+
+    @Test
+    void browserReturnOfAnotherUserIsRejectedWithoutChangingPayment() {
+        var params = attempt();
+        long outsider = tx.execute(s -> user(Role.RENTER).getId());
+        assertThat(vnpay.processCallback(outsider, params).status()).isEqualTo("INVALID");
+        assertThat(ledger.findByBooking_Id(bookingId).getFirst().getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
+    }
+
+    @Test
+    void browserReturnMissingRequiredParameterIsRejected() {
+        var params = attempt();
+        params.remove("vnp_ResponseCode"); sign(params);
+        assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("INVALID");
+        assertThat(ledger.findByBooking_Id(bookingId).getFirst().getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void browserReturnWithWrongAmountOrReferenceIsRejectedEvenWhenSigned() {
+        var wrongAmount = attempt();
+        wrongAmount.put("vnp_Amount", "1"); sign(wrongAmount);
+        assertThat(vnpay.processCallback(renterId, wrongAmount).status()).isEqualTo("INVALID");
+        var wrongRef = attempt();
+        wrongRef.put("vnp_TxnRef", "NOT-A-REAL-REF"); sign(wrongRef);
+        assertThat(vnpay.processCallback(renterId, wrongRef).status()).isEqualTo("INVALID");
+        assertThat(ledger.findByBooking_Id(bookingId).getFirst().getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void concurrentBrowserReturnAndIpnApplyPaymentOnce() throws Exception {
+        var params = attempt();
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            var browser = pool.submit(() -> { start.await(); return vnpay.processCallback(renterId, params).status(); });
+            var ipn = pool.submit(() -> { start.await(); return vnpay.processIpn(params).rspCode(); });
+            start.countDown();
+            assertThat(List.of(browser.get(30, java.util.concurrent.TimeUnit.SECONDS), ipn.get(30, java.util.concurrent.TimeUnit.SECONDS)))
+                    .doesNotContain("FAILED");
+        } finally {
+            pool.shutdownNow();
+        }
+        assertDepositApplied();
+        assertThat(ledger.findByBooking_Id(bookingId)).filteredOn(t -> t.getStatus() == PaymentStatus.PAID).hasSize(1);
     }
 }

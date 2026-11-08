@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = {"booking.max-advance-months=300"})
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
 @org.springframework.transaction.annotation.Transactional

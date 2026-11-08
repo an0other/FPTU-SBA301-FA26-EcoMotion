@@ -1,121 +1,153 @@
-import { useState, useEffect } from 'react'
-import { useSearchParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { paymentService } from '../services/paymentService'
 
-const POLL_INTERVAL_MS = 3000
-const MAX_POLLS = 40
-
+/**
+ * Landing page after VNPAY redirects the browser back. The backend verifies the signed return and
+ * records the result; this page shows that recorded result: success, failure, or an error when the
+ * return cannot be verified. It never shows a "waiting" state for a normal return.
+ */
 export default function VnpayCallbackPage() {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
   const query = searchParams.toString()
-  const [state, setState] = useState({ result: null, error: null, checking: true })
+  const hasReference = Boolean(searchParams.get('vnp_TxnRef'))
+  const [state, setState] = useState(() => (hasReference
+    ? { loading: true, result: null, error: null }
+    : { loading: false, result: null, error: 'Không nhận được thông tin giao dịch từ VNPay.' }))
 
   useEffect(() => {
-    if (state.result?.status === 'SUCCESS' && state.result?.bookingCode) {
-      const timer = window.setTimeout(() => {
-        navigate(`/payment/success?reference=${encodeURIComponent(state.result.vnpTxnRef || state.result.transactionCode)}`, {
-          replace: true,
-        })
-      }, 1000)
-      return () => window.clearTimeout(timer)
-    }
-  }, [state.result, navigate])
-
-  useEffect(() => {
+    if (!hasReference) return undefined
     let cancelled = false
-    let timer
-    let polls = 0
     const controller = new AbortController()
-    const publish = (value) => { if (!cancelled) setState(value) }
+    const params = Object.fromEntries(new URLSearchParams(query))
 
-    async function poll(result) {
-      try {
-        const next = await paymentService.queryVnpayTransaction(result.bookingCode, result.vnpTxnRef, controller.signal)
-        if (cancelled) return
-        polls += 1
-        publish({ result: next, error: null, checking: false, exhausted: next.status === 'PENDING_VERIFICATION' && polls >= MAX_POLLS })
-        if (next.status === 'PENDING_VERIFICATION' && polls < MAX_POLLS) {
-          timer = window.setTimeout(() => poll(next), POLL_INTERVAL_MS)
-        }
-      } catch (err) {
-        if (cancelled) return
-        polls += 1
-        publish({ result, error: err?.message || 'Chưa thể kết nối để xác minh thanh toán.', checking: false, exhausted: polls >= MAX_POLLS })
-        if (polls < MAX_POLLS) timer = window.setTimeout(() => poll(result), POLL_INTERVAL_MS)
-      }
-    }
+    paymentService.processVnpayCallback(params, controller.signal)
+      .then((result) => {
+        if (!cancelled) setState({ loading: false, result, error: null })
+      })
+      .catch((err) => {
+        if (!cancelled) setState({ loading: false, result: null, error: err?.response?.data?.message || err?.message || 'Không thể xác nhận kết quả thanh toán.' })
+      })
 
-    async function verify() {
-      publish({ result: null, error: null, checking: true })
-      const params = Object.fromEntries(new URLSearchParams(query))
-      if (!params.vnp_TxnRef) {
-        publish({ result: null, error: 'Không nhận được thông tin giao dịch từ VNPay.', checking: false, exhausted: true })
-        return
-      }
-      try {
-        const result = await paymentService.processVnpayCallback(params, controller.signal)
-        if (cancelled) return
-        publish({ result, error: null, checking: false, exhausted: result.status === 'PENDING_VERIFICATION' && (!result.bookingCode || !result.vnpTxnRef) })
-        if (result.status === 'PENDING_VERIFICATION' && result.bookingCode && result.vnpTxnRef) {
-          timer = window.setTimeout(() => poll(result), POLL_INTERVAL_MS)
-        }
-      } catch (err) {
-        if (cancelled) return
-        polls += 1
-        publish({ result: null, error: err?.message || 'Chưa thể xác minh thanh toán. Vui lòng kiểm tra lại sau.', checking: false, exhausted: polls >= MAX_POLLS })
-        if (polls < MAX_POLLS) timer = window.setTimeout(verify, POLL_INTERVAL_MS)
-      }
-    }
-
-    void verify()
     return () => {
       cancelled = true
       controller.abort()
-      window.clearTimeout(timer)
     }
-  }, [query])
+  }, [query, hasReference])
 
-  const { result, error, checking, exhausted } = state
+  const { loading, result, error } = state
   const success = result?.status === 'SUCCESS'
   const failed = result?.status === 'FAILED'
   const reconciliation = result?.status === 'RECONCILIATION_REQUIRED'
-  const title = reconciliation ? 'Đã nhận tiền, cần đối soát đơn thuê' : success ? 'Thanh toán thành công!' : failed ? 'Thanh toán không thành công' : exhausted ? 'Chưa xác nhận được giao dịch' : 'Đang xác nhận giao dịch'
-  const color = success ? 'text-emerald-700 bg-emerald-100' : failed ? 'text-red-700 bg-red-100' : 'text-amber-700 bg-amber-100'
   const bookingPath = result?.bookingCode ? `/renter/bookings/${encodeURIComponent(result.bookingCode)}` : null
 
+  if (loading) {
+    return (
+      <Shell tone="neutral" icon="progress_activity" title="Đang tải kết quả thanh toán">
+        <p className="text-sm text-slate-600">Vui lòng chờ trong giây lát.</p>
+      </Shell>
+    )
+  }
+
+  if (success) {
+    return (
+      <Shell tone="success" icon="check_circle" title="Thanh toán thành công">
+        <p className="text-sm text-slate-600">Giao dịch của bạn đã được thanh toán thành công.</p>
+        <Details rows={[
+          ['Mã đơn thuê', result.bookingCode],
+          ['Mã thanh toán nội bộ', result.transactionCode],
+          ['Số tiền', formatVnd(result.amount)],
+          ['Mã giao dịch VNPay', result.vnpTransactionNo || null],
+        ]} />
+        <Actions>
+          <Link to="/renter/bookings" className={PRIMARY}>Đơn của tôi</Link>
+          <Link to="/" className={SECONDARY}>Về trang chủ</Link>
+        </Actions>
+      </Shell>
+    )
+  }
+
+  if (failed || reconciliation) {
+    return (
+      <Shell
+        tone={failed ? 'failed' : 'reconciliation'}
+        icon={failed ? 'cancel' : 'receipt_long'}
+        title={failed ? 'Thanh toán thất bại' : 'Đã nhận tiền, cần đối soát đơn thuê'}
+      >
+        <p className="text-sm text-slate-600">
+          {failed ? 'Giao dịch chưa được thanh toán thành công.' : 'Khoản tiền đã được ghi nhận và sẽ được đối soát với đơn thuê.'}
+        </p>
+        <Details rows={[
+          ['Mã đơn thuê', result.bookingCode],
+          ['Số tiền', formatVnd(result.amount)],
+          ['Lý do', failed ? result.message : null],
+        ]} />
+        <Actions>
+          {bookingPath && <Link to={bookingPath} className={PRIMARY}>Quay lại đơn thuê</Link>}
+          <Link to="/" className={SECONDARY}>Về trang chủ</Link>
+        </Actions>
+      </Shell>
+    )
+  }
+
+  // Invalid or unverifiable return: nothing is confirmed, so the page says so instead of claiming success.
+  return (
+    <Shell tone="error" icon="error" title="Không xác nhận được kết quả thanh toán">
+      <p className="text-sm text-slate-600">{error || result?.message || 'Kết quả trả về từ VNPay không hợp lệ.'}</p>
+      <Actions>
+        <Link to="/renter/bookings" className={PRIMARY}>Đơn của tôi</Link>
+        <Link to="/" className={SECONDARY}>Về trang chủ</Link>
+      </Actions>
+    </Shell>
+  )
+}
+
+const PRIMARY = 'rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-brand-800'
+const SECONDARY = 'rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50'
+
+const TONE = {
+  success: 'text-emerald-700 bg-emerald-100',
+  failed: 'text-red-700 bg-red-100',
+  error: 'text-red-700 bg-red-100',
+  reconciliation: 'text-purple-700 bg-purple-100',
+  neutral: 'text-slate-700 bg-slate-100',
+}
+
+function Shell({ tone, icon, title, children }) {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-6 sm:p-7 shadow-xs text-center space-y-5" aria-live="polite">
-        <span className={`material-symbols-rounded inline-flex h-16 w-16 items-center justify-center rounded-full text-4xl ${color}`} aria-hidden="true">
-          {success ? 'check_circle' : failed ? 'cancel' : 'hourglass_top'}
+        <span className={`material-symbols-rounded inline-flex h-16 w-16 items-center justify-center rounded-full text-4xl ${TONE[tone]}`} aria-hidden="true">
+          {icon}
         </span>
-        <div>
+        <div className="space-y-2">
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{title}</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            {checking ? 'Hệ thống đang kiểm tra kết quả với máy chủ EcoMotion.' : error || result?.message}
-          </p>
-          {!success && !failed && !checking && (
-            <p className="mt-2 text-xs text-slate-500">Vui lòng không thanh toán lại. Nếu chưa có kết quả, hãy kiểm tra trong Đơn của tôi hoặc liên hệ hỗ trợ.</p>
-          )}
-        </div>
-        {result?.bookingCode && (
-          <dl className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-left space-y-3">
-            <div className="flex justify-between gap-3"><dt>Mã đơn đặt xe</dt><dd className="font-mono font-bold break-all">{result.bookingCode}</dd></div>
-            {result.transactionCode && <div className="flex justify-between gap-3"><dt>Mã thanh toán nội bộ</dt><dd className="font-mono font-bold text-brand-700">{result.transactionCode}</dd></div>}
-            <div className="flex justify-between gap-3"><dt>Số tiền thanh toán</dt><dd className="font-bold">{Number(result.amount ?? 0).toLocaleString('vi-VN')} ₫</dd></div>
-            <div className="flex justify-between gap-3"><dt>Mã giao dịch VNPay</dt><dd className="font-mono break-all">{result.vnpTransactionNo || '—'}</dd></div>
-            {result.bankCode && <div className="flex justify-between gap-3"><dt>Ngân hàng</dt><dd>{result.bankCode}</dd></div>}
-            <div className="flex justify-between gap-3"><dt>Trạng thái xác thực</dt><dd className="font-semibold">{success ? 'Đã xác minh bởi máy chủ EcoMotion' : failed ? 'Đã xác minh thất bại' : reconciliation ? 'Cần đối soát' : 'Đang xác nhận giao dịch'}</dd></div>
-          </dl>
-        )}
-        <div className="flex flex-wrap justify-center gap-3 pt-2">
-          {success && bookingPath && <Link to={bookingPath} className="rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-brand-800">Xem chi tiết đơn thuê</Link>}
-          {failed && result?.retryAllowed === true && bookingPath && <Link to={`${bookingPath}/payment`} className="rounded-lg bg-brand-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-brand-800">Thử lại thanh toán</Link>}
-          <Link to="/renter/bookings" className="rounded-lg border border-brand-200 bg-brand-50 px-5 py-2.5 text-xs font-semibold text-brand-800 hover:bg-brand-100">Đơn của tôi</Link>
-          <Link to="/" className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Về trang chủ</Link>
+          {children}
         </div>
       </div>
     </div>
   )
+}
+
+function Details({ rows }) {
+  const visible = rows.filter(([, value]) => value != null && value !== '')
+  if (visible.length === 0) return null
+  return (
+    <dl className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-left space-y-3">
+      {visible.map(([label, value]) => (
+        <div key={label} className="flex justify-between gap-3">
+          <dt className="text-slate-600">{label}</dt>
+          <dd className="font-mono font-bold text-slate-900 break-all text-right">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function Actions({ children }) {
+  return <div className="flex flex-wrap justify-center gap-3 pt-2">{children}</div>
+}
+
+function formatVnd(value) {
+  return `${Number(value ?? 0).toLocaleString('vi-VN')} ₫`
 }

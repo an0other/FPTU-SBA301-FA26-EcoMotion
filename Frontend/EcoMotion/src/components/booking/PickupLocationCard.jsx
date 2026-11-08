@@ -2,6 +2,7 @@ import { PickupMap } from './PickupMap'
 import { formatCurrency } from '../../utils/formatCurrency'
 
 export function PickupDistanceProof({
+  showMap = true,
   pickupAddress,
   pickupLatitude,
   pickupLongitude,
@@ -20,21 +21,21 @@ export function PickupDistanceProof({
 
   return (
     <div className="space-y-3">
-      {hasPickup ? (
+      {!hasPickup ? (
+        <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Đơn cũ chưa lưu tọa độ; đang hiển thị địa chỉ dạng văn bản.</p>
+      ) : showMap ? (
         <PickupMap
           readOnly
           value={{ address: pickupAddress, latitude: pickupLatitude, longitude: pickupLongitude }}
           origin={hasOrigin ? { latitude: originLatitude, longitude: originLongitude } : null}
         />
-      ) : (
-        <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Đơn cũ chưa lưu tọa độ; đang hiển thị địa chỉ dạng văn bản.</p>
-      )}
-      {hasOrigin ? (
+      ) : null}
+      {showMap && hasOrigin ? (
         <p className="text-xs text-[#3D4A42]">
           <span className="mr-3 inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full bg-[#1d4ed8]" /> Điểm xuất phát đã lưu</span>
           <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full bg-[#15803d]" /> Điểm đón</span>
         </p>
-      ) : hasFeeRecord ? (
+      ) : hasFeeRecord && !hasOrigin ? (
         <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Đơn này chưa lưu điểm xuất phát, nên không vẽ được khoảng cách đã dùng để tính phí đón.</p>
       ) : null}
       {distanceKm != null && freeRadiusKm != null ? (
