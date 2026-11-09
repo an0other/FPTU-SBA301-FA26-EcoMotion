@@ -186,7 +186,7 @@ class VnpayDepositSynchronizationIntegrationTest {
     void signedWrongAmountCallbackAndIpnNeverConfirmOrCreateRefund(String amount) {
         var params = attempt();
         params.put("vnp_Amount", amount); sign(params);
-        assertThat(vnpay.processCallback(params).success()).isFalse();
+        assertThat(vnpay.processCallback(renterId, params).success()).isFalse();
         assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("04");
         assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("04");
         assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
