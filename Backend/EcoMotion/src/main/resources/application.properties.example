@@ -228,8 +228,8 @@ app.upload.supabase.bucket=${SUPABASE_STORAGE_BUCKET:}
 app.upload.supabase.service-key=${SUPABASE_SERVICE_KEY:}
 app.upload.supabase.connect-timeout=5s
 app.upload.supabase.read-timeout=20s
-spring.servlet.multipart.max-file-size=8MB
-spring.servlet.multipart.max-request-size=24MB
+spring.servlet.multipart.max-file-size=${MULTIPART_MAX_FILE_SIZE:20MB}
+spring.servlet.multipart.max-request-size=${MULTIPART_MAX_REQUEST_SIZE:40MB}
 
 
 # ===============================
@@ -298,3 +298,22 @@ app.vnpay.reconciliation-batch-size=${VNPAY_RECONCILIATION_BATCH_SIZE:25}
 app.vnpay.reconciliation-delay-ms=${VNPAY_RECONCILIATION_DELAY_MS:60000}
 
 booking.max-advance-months=${BOOKING_MAX_ADVANCE_MONTHS:3}
+
+app.identity.fingerprint-secret=${IDENTITY_FINGERPRINT_SECRET:}
+app.identity.fingerprint-key-version=${IDENTITY_FINGERPRINT_KEY_VERSION:1}
+
+app.identity.ai.enabled=${IDENTITY_AI_ENABLED:false}
+app.identity.ai.base-url=${IDENTITY_AI_BASE_URL:http://127.0.0.1:8002}
+app.identity.ai.api-key=${IDENTITY_AI_API_KEY:}
+app.identity.ai.connect-timeout=${IDENTITY_AI_CONNECT_TIMEOUT:5s}
+app.identity.ai.read-timeout=${IDENTITY_AI_READ_TIMEOUT:180s}
+app.identity.ai.max-image-bytes=${IDENTITY_AI_MAX_IMAGE_BYTES:8388608}
+app.identity.ai.max-video-bytes=${IDENTITY_AI_MAX_VIDEO_BYTES:20971520}
+app.identity.ai.max-image-pixels=${IDENTITY_AI_MAX_IMAGE_PIXELS:20000000}
+
+app.identity.evidence-dir=${IDENTITY_EVIDENCE_DIR:./storage/identity-evidence}
+app.identity.attempt-ttl=${IDENTITY_ATTEMPT_TTL:24h}
+app.identity.processing-timeout=${IDENTITY_PROCESSING_TIMEOUT:10m}
+app.identity.acceptance-threshold=${IDENTITY_ACCEPTANCE_THRESHOLD:}
+app.provider.default-commission-rate=${PROVIDER_DEFAULT_COMMISSION_RATE:0.10}
+app.provider.default-deposit-ratio=${PROVIDER_DEFAULT_DEPOSIT_RATIO:0.30}

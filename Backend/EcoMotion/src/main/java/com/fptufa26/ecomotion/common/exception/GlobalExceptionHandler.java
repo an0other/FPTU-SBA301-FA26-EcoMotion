@@ -50,6 +50,7 @@ import com.fptufa26.ecomotion.vehicle.exception.VehicleNotFoundException;
 import com.fptufa26.ecomotion.verification.ekyc.exception.EkycFailedException;
 import com.fptufa26.ecomotion.verification.documentai.DocumentAiReadRejectedException;
 import com.fptufa26.ecomotion.verification.documentai.DocumentAiUnavailableException;
+import com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +74,13 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(IdentityAiException.class)
+    public ResponseEntity<ErrorResponse> handleIdentityAi(
+            IdentityAiException ex, HttpServletRequest request) {
+        log.warn("Identity AI assessment failed: code={}, path={}", ex.getErrorCode(), request.getRequestURI());
+        return build(ex.getStatus(), ex.getErrorCode(), ex.getMessage(), request);
+    }
 
     @ExceptionHandler({
             InvalidCredentialsException.class,

@@ -6,6 +6,10 @@ public record LoginResponse(
         String accessToken,
         String tokenType,
         long expiresIn,
-        UserResponse user
+        UserResponse user,
+        String sessionScope
 ) {
+    public LoginResponse(String accessToken, String tokenType, long expiresIn, UserResponse user) {
+        this(accessToken, tokenType, expiresIn, user, null);
+    }
 }

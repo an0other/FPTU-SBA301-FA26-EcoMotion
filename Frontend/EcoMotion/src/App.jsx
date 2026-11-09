@@ -5,6 +5,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 
 import ActivatePage from './pages/ActivatePage'
+import ProviderOnboardingPage from './pages/provider/ProviderOnboardingPage'
+import IdentityAccountsPage from './pages/IdentityAccountsPage'
 import AdminDashboard from './pages/AdminDashboard'
 import BookingReviewsPage from './pages/BookingReviewsPage'
 import CustomerPaymentPage from './pages/CustomerPaymentPage'
@@ -105,6 +107,13 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/me" element={<MePage />} />
+      </Route>
+
+      <Route element={<ProtectedRoute allowedRoles={['PROVIDER']} allowOnboarding />}>
+        <Route path="/provider/onboarding" element={<ProviderOnboardingPage />} />
+      </Route>
+      <Route element={<ProtectedRoute allowedRoles={['RENTER', 'PROVIDER']} allowOnboarding />}>
+        <Route path="/identity/accounts" element={<IdentityAccountsPage />} />
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>

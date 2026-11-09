@@ -47,6 +47,7 @@ public class AuthServiceImpl implements AuthService {
     private final CaptchaVerifier captchaVerifier;
     private final Duration ttlRememberMe;
     private final Duration ttlDefault;
+    private final com.fptufa26.ecomotion.user.service.ProviderOnboardingService onboarding;
 
     public AuthServiceImpl(
             UserService userService,
@@ -56,7 +57,8 @@ public class AuthServiceImpl implements AuthService {
             AuthMapper authMapper,
             CaptchaVerifier captchaVerifier,
             @Value("${app.refresh-token.ttl-remember-me:7d}") Duration ttlRememberMe,
-            @Value("${app.refresh-token.ttl-default:1d}") Duration ttlDefault) {
+            @Value("${app.refresh-token.ttl-default:1d}") Duration ttlDefault,
+            com.fptufa26.ecomotion.user.service.ProviderOnboardingService onboarding) {
         this.userService = userService;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -65,6 +67,7 @@ public class AuthServiceImpl implements AuthService {
         this.captchaVerifier = captchaVerifier;
         this.ttlRememberMe = ttlRememberMe;
         this.ttlDefault = ttlDefault;
+        this.onboarding = onboarding;
     }
 
     @Override
@@ -91,14 +94,15 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException();
         }
 
-        if (!user.isActive()) {
+        if (!canLogin(user)) {
             if (user.getStatus() == UserStatus.PENDING) {
                 throw new AccountPendingException();
             }
             throw new AccountInactiveException();
         }
 
-        String accessToken = jwtService.generateAccessToken(user);
+        String sessionScope = sessionScope(user);
+        String accessToken = jwtService.generateAccessToken(user, sessionScope);
 
         String rawRefreshToken = generateOpaqueToken();
         RefreshToken entity = new RefreshToken();
@@ -112,7 +116,7 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenRepository.save(entity);
 
         LoginResponse response = authMapper.toLoginResponse(
-                user, accessToken, jwtService.getAccessTokenTtlSeconds());
+                user, accessToken, jwtService.getAccessTokenTtlSeconds(), sessionScope);
         return new LoginResult(response, rawRefreshToken, rememberMe);
     }
 
@@ -143,7 +147,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         User user = stored.getUser();
-        if (!user.isActive()) {
+        if (!canLogin(user)) {
             throw new AccountInactiveException();
         }
 
@@ -168,8 +172,9 @@ public class AuthServiceImpl implements AuthService {
         replacement.setIpAddress(stored.getIpAddress());
         refreshTokenRepository.save(replacement);
 
-        String accessToken = jwtService.generateAccessToken(user);
-        RefreshResponse response = authMapper.toRefreshResponse(accessToken, jwtService.getAccessTokenTtlSeconds());
+        String sessionScope = sessionScope(user);
+        String accessToken = jwtService.generateAccessToken(user, sessionScope);
+        RefreshResponse response = authMapper.toRefreshResponse(accessToken, jwtService.getAccessTokenTtlSeconds(), sessionScope);
         return new RefreshResult(response, rawRefreshToken, rememberMe, stored.getExpiresAt());
     }
 
@@ -191,13 +196,40 @@ public class AuthServiceImpl implements AuthService {
     public CurrentUserResponse getCurrentUser(Long userId) {
         User user = userService.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: id=" + userId));
-        return authMapper.toCurrentUserResponse(user);
+        String identity = user.getIdentity() == null ? "UNVERIFIED" : user.getIdentity().getStatus().name();
+        if (user.getRole() == com.fptufa26.ecomotion.user.enums.Role.PROVIDER) {
+            var application = onboarding.get(userId);
+            var provider = userService.findProviderProfile(userId).orElse(null);
+            boolean full = userService.isProviderOperational(userId);
+            String next = user.getPhoneVerifiedAt() == null ? "VERIFY_PHONE" : application.nextAction();
+            if (provider != null && provider.getStatus() == com.fptufa26.ecomotion.user.enums.ProviderStatus.LOCKED) {
+                next = "CONTACT_SUPPORT";
+            }
+            return authMapper.toCurrentUserResponse(user).withAccess(full ? "FULL" : "ONBOARDING", identity,
+                    provider == null ? application.status().name() : provider.getStatus().name(),
+                    full ? "PROVIDER_DASHBOARD" : next,
+                    full ? java.util.List.of("PROVIDER_OPERATIONS", "VIEW_ONBOARDING")
+                            : application.canEdit() ? java.util.List.of("VIEW_ONBOARDING", "VERIFY_IDENTITY", "EDIT_PROVIDER_APPLICATION")
+                            : java.util.List.of("VIEW_ONBOARDING"));
+        }
+        return authMapper.toCurrentUserResponse(user).withAccess("FULL", identity, null, "DASHBOARD",
+                java.util.List.of("ROLE_" + user.getRole().name()));
     }
 
     private static String generateOpaqueToken() {
         byte[] bytes = new byte[REFRESH_TOKEN_BYTES];
         SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private boolean canLogin(User user) {
+        return user.isActive() || (user.getRole() == com.fptufa26.ecomotion.user.enums.Role.PROVIDER
+                && user.getStatus() == UserStatus.PENDING && user.getEmailVerifiedAt() != null);
+    }
+
+    private String sessionScope(User user) {
+        return user.getRole() == com.fptufa26.ecomotion.user.enums.Role.PROVIDER
+                && !userService.isProviderOperational(user.getId()) ? "ONBOARDING" : "FULL";
     }
 
     static String sha256Hex(String value) {

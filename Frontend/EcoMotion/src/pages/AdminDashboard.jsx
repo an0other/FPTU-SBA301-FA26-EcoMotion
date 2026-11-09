@@ -6,6 +6,7 @@ import AdminOverviewTab from './admin/AdminOverviewTab'
 import AdminUsersTab from './admin/AdminUsersTab'
 import AdminVehiclesTab from './admin/AdminVehiclesTab'
 import AdminOperationsTab from './admin/AdminOperationsTab'
+import AdminIdentityTab from './admin/AdminIdentityTab'
 import {
   IconZap,
   IconUsers,
@@ -210,6 +211,7 @@ export default function AdminDashboard() {
         {/* Tab Selection Bar */}
         <div className="border-t border-slate-100 bg-slate-50/50">
           <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6">
+            <button type="button" onClick={() => handleNavigate('identity')} className={`whitespace-nowrap border-b-2 px-4 py-3 text-xs font-bold ${activeTab === 'identity' ? 'border-brand-600 bg-white text-brand-700' : 'border-transparent text-slate-600'}`}>Xác minh & Provider mới</button>
             <button
               type="button"
               onClick={() => handleNavigate('overview')}
@@ -282,6 +284,7 @@ export default function AdminDashboard() {
 
       {/* Main Body Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        {activeTab === 'identity' && <AdminIdentityTab />}
         {activeTab === 'overview' && (
           <AdminOverviewTab
             stats={stats}

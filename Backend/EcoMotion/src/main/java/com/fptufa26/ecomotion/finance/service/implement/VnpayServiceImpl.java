@@ -105,6 +105,7 @@ public class VnpayServiceImpl implements VnpayService {
                 .equalsIgnoreCase(request.paymentType());
 
         if (!isFinalPayment && !isMonthlyInstallment) {
+            userService.assertRentalAllowed(booking.getRenter().getUser().getId(), booking.getVehicle().getProvider().getUser().getId());
             requireYearlyContractBeforePayment(booking);
         }
 

@@ -39,7 +39,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 @Component
-@Profile("dev")
+@Profile("dev & !prod")
 @RequiredArgsConstructor
 @Slf4j
 public class YearlyRentalDataSeeder {
@@ -68,8 +68,9 @@ public class YearlyRentalDataSeeder {
         demoVehicle(template, 9);
         Renter active = findRenter("renter.yearly.monthly@ecomotion.vn");
         Renter closing = findRenter("renter.yearly.happy-end@ecomotion.vn");
-        seedLicense(active, "B");
-        seedLicense(closing, "B");
+        seedLicense(findRenter("renter.yearly.new@ecomotion.vn"), "B2");
+        seedLicense(active, "B2");
+        seedLicense(closing, "B2");
         seedBooking(active, template, 2, "MONTHLY", activeStart, 3);
         seedBooking(closing, template, 10, "HAPPY-END", today.minusMonths(12), 12);
         entityManager.flush();
@@ -295,9 +296,15 @@ public class YearlyRentalDataSeeder {
     }
 
     private void seedLicense(Renter renter, String licenseClass) {
-        if (renter.getLicenseNo() != null) {
+        if (renter.getLicenseNo() != null && !renter.getLicenseNo().startsWith("SEED-YEARLY-")) {
             return;
         }
+
+        LocalDate today = LocalDate.now(clock.withZone(VIETNAM_ZONE));
+        if (licenseClass.equals(renter.getLicenseClass()) && renter.isLicenseVerified()
+                && renter.getLicenseDateOfBirth() != null && renter.getLicenseIssueDate() != null
+                && renter.getLicenseExpiry() != null && !renter.getLicenseExpiry().isBefore(today.plusYears(1))
+                && renter.getLicenseFrontImagePath() != null && renter.getLicenseBackImagePath() != null) return;
 
         String normalizedClass = licenseClass.toUpperCase();
         String filePrefix = "yearly-demo-license-" + renter.getUser().getId();
@@ -316,10 +323,10 @@ public class YearlyRentalDataSeeder {
 
         renter.setLicenseNo("SEED-YEARLY-" + renter.getUser().getId());
         renter.setLicenseFullName(renter.getUser().getFullName());
-        renter.setLicenseDateOfBirth(LocalDate.of(1992, 4, 12));
+        renter.setLicenseDateOfBirth(renter.getDateOfBirth() == null ? LocalDate.of(1992, 4, 12) : renter.getDateOfBirth());
         renter.setLicenseClass(normalizedClass);
-        renter.setLicenseIssueDate(LocalDate.of(2025, 2, 1));
-        renter.setLicenseExpiry(LocalDate.now(VIETNAM_ZONE).plusYears(5));
+        renter.setLicenseIssueDate(today.minusYears(2));
+        renter.setLicenseExpiry(today.plusYears(5));
         renter.setLicenseExpiryUnlimited(false);
         renter.setLicenseVerified(true);
         renter.setLicenseFrontImagePath(frontPath);

@@ -14,11 +14,16 @@ public interface AuthMapper {
 
     @Mapping(target = "tokenType", constant = "Bearer")
     @Mapping(target = "user", source = "user")
-    LoginResponse toLoginResponse(User user, String accessToken, long expiresIn);
+    LoginResponse toLoginResponse(User user, String accessToken, long expiresIn, String sessionScope);
 
     @Mapping(target = "tokenType", constant = "Bearer")
-    RefreshResponse toRefreshResponse(String accessToken, long expiresIn);
+    RefreshResponse toRefreshResponse(String accessToken, long expiresIn, String sessionScope);
 
+    @Mapping(target = "sessionScope", ignore = true)
+    @Mapping(target = "identityStatus", ignore = true)
+    @Mapping(target = "providerStatus", ignore = true)
+    @Mapping(target = "nextAction", ignore = true)
+    @Mapping(target = "capabilities", ignore = true)
     CurrentUserResponse toCurrentUserResponse(User user);
 
     UserResponse toUserResponse(User user);

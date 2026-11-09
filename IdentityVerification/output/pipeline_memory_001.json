@@ -1,0 +1,102 @@
+{
+  "sampledFrames": 15,
+  "motionChallenge": {
+    "status": "PASS",
+    "expected": [
+      "CENTER",
+      "POSITIVE",
+      "NEGATIVE",
+      "CENTER"
+    ],
+    "completed": [
+      {
+        "pose": "CENTER",
+        "from": 0.0,
+        "to": 0.5323311627906977
+      },
+      {
+        "pose": "POSITIVE",
+        "from": 1.530452093023256,
+        "to": 2.528573023255814
+      },
+      {
+        "pose": "NEGATIVE",
+        "from": 4.025754418604651,
+        "to": 5.023875348837209
+      },
+      {
+        "pose": "CENTER",
+        "from": 5.522935813953489,
+        "to": 6.521056744186047
+      }
+    ]
+  },
+  "faceMatching": {
+    "candidateFrames": 8,
+    "scoredFrames": 8,
+    "unusableFrames": 0,
+    "minimum": 0.5168184638023376,
+    "median": 0.5566833913326263,
+    "maximum": 0.5886614918708801,
+    "frames": [
+      {
+        "frameIndex": 0,
+        "timestamp": 0.0,
+        "yaw": 0.666441801507354,
+        "status": "SCORED",
+        "similarity": 0.5882073640823364
+      },
+      {
+        "frameIndex": 16,
+        "timestamp": 0.5323311627906977,
+        "yaw": 0.9207615094449078,
+        "status": "SCORED",
+        "similarity": 0.5639647245407104
+      },
+      {
+        "frameIndex": 31,
+        "timestamp": 1.0313916279069768,
+        "yaw": 1.4984558731318656,
+        "status": "SCORED",
+        "similarity": 0.5886614918708801
+      },
+      {
+        "frameIndex": 106,
+        "timestamp": 3.526693953488372,
+        "yaw": -9.635160228859915,
+        "status": "SCORED",
+        "similarity": 0.5168184638023376
+      },
+      {
+        "frameIndex": 166,
+        "timestamp": 5.522935813953489,
+        "yaw": -6.016868972399976,
+        "status": "SCORED",
+        "similarity": 0.5880851745605469
+      },
+      {
+        "frameIndex": 181,
+        "timestamp": 6.021996279069768,
+        "yaw": 4.234937336090704,
+        "status": "SCORED",
+        "similarity": 0.5485923886299133
+      },
+      {
+        "frameIndex": 196,
+        "timestamp": 6.521056744186047,
+        "yaw": 3.573028624328931,
+        "status": "SCORED",
+        "similarity": 0.547857403755188
+      },
+      {
+        "frameIndex": 211,
+        "timestamp": 7.020117209302326,
+        "yaw": 3.5064734115970215,
+        "status": "SCORED",
+        "similarity": 0.5494020581245422
+      }
+    ]
+  },
+  "identityDecision": "NOT_EVALUATED",
+  "automaticApproval": false
+}

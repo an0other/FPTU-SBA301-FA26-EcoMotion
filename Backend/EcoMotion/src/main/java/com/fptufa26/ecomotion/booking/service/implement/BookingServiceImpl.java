@@ -162,6 +162,7 @@ public class BookingServiceImpl implements BookingService {
     public RentalQuoteResponse quoteRental(
             Long userId, RentalQuoteRequest request) {
         Renter renter = userService.requireRenterByUserId(userId);
+        userService.assertRentalAllowed(userId, vehicleCatalogService.requireApproved(request.vehicleId()).getProvider().getUser().getId());
         var quote = rentalPricingService.quote(request);
         if (renterOverlaps(renter.getId(), request.pickupTime(), request.requestedEndAt())) {
             throw new ConflictException("Bạn đã có đơn thuê trùng khoảng thời gian này. Vui lòng chọn thời gian khác.");
@@ -296,6 +297,7 @@ public class BookingServiceImpl implements BookingService {
     public CreateBookingResponse create(Long userId, CreateBookingRequest request) {
         Renter renter = userService.requireRenterByUserId(userId);
         Vehicle vehicle = vehicleCatalogService.requireApprovedForUpdate(request.vehicleId());
+        userService.assertRentalAllowed(userId, vehicle.getProvider().getUser().getId());
         boolean mixed = request.plannedEndAt() != null || request.pricingItems() != null;
         var selection = mixed ? rentalPricingService.validateSelection(request.vehicleId(), request.pickupTime(),
                 request.plannedEndAt(), request.pricingItems(), request.expectedRentalAmount()) : null;

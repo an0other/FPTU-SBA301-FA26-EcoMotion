@@ -42,6 +42,19 @@ public class DocumentAiClient {
             String frontFilename,
             byte[] back,
             String backFilename) {
+        return readDocument(front, frontFilename, back, backFilename, "VN_DRIVING_LICENSE");
+    }
+
+    public Map<String, Object> readCitizenId(
+            byte[] front,
+            String frontFilename,
+            byte[] back,
+            String backFilename) {
+        return readDocument(front, frontFilename, back, backFilename, "VN_CITIZEN_ID");
+    }
+
+    private Map<String, Object> readDocument(
+            byte[] front, String frontFilename, byte[] back, String backFilename, String documentType) {
         if (baseUrl.isBlank() || apiKey.isBlank()) {
             throw new DocumentAiUnavailableException(
                     "DocumentAI is not configured. Set DOCUMENT_AI_BASE_URL and DOCUMENT_AI_API_KEY.");
@@ -50,7 +63,7 @@ public class DocumentAiClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("front", resource(front, frontFilename));
         body.add("back", resource(back, backFilename));
-        body.add("document_type", "VN_DRIVING_LICENSE");
+        body.add("document_type", documentType);
 
         try {
             Map<String, Object> response = restClient.post()

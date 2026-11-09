@@ -110,9 +110,8 @@ public class DocumentVerificationServiceImpl implements DocumentVerificationServ
     }
 
     private void requirePending(User user) {
-        if (user.getStatus() == UserStatus.ACTIVE) {
-            throw new AccountAlreadyActiveException();
-        }
+        throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                org.springframework.http.HttpStatus.GONE, "IDENTITY_ATTEMPT_REQUIRED", "Use identity verification attempts");
     }
 
     private void requireIdentityFields(EkycService.OcrResult ocr) {

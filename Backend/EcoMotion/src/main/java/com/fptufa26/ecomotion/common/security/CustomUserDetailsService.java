@@ -17,13 +17,21 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return new SecurityUser(userService.loadForAuthentication(email));
+        return principal(userService.loadForAuthentication(email));
     }
 
     @Transactional(readOnly = true)
     public UserDetails loadUserById(Long userId) throws UsernameNotFoundException {
         return userService.findById(userId)
-                .map(SecurityUser::new)
+                .map(this::principal)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: id=" + userId));
+    }
+
+    private SecurityUser principal(com.fptufa26.ecomotion.user.entity.User user) {
+        boolean full = true;
+        if (user.getRole() == com.fptufa26.ecomotion.user.enums.Role.PROVIDER) {
+            full = userService.isProviderOperational(user.getId());
+        }
+        return new SecurityUser(user, full);
     }
 }

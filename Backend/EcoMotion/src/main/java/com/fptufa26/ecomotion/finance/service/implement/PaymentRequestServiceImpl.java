@@ -121,6 +121,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     @Override
     @Transactional
     public PaymentRequest createDepositPaymentRequest(Booking booking) {
+        userService.assertRentalAllowed(booking.getRenter().getUser().getId(), booking.getVehicle().getProvider().getUser().getId());
         if (booking.getStatus() != BookingStatus.ACCEPTED
                 && booking.getStatus() != BookingStatus.AWAITING_DEPOSIT) {
             throw new InvalidPaymentOperationException("Chỉ có thể tạo yêu cầu đặt cọc cho đơn thuê đang chờ đặt cọc");

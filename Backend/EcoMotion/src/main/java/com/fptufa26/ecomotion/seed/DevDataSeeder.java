@@ -54,11 +54,16 @@ import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.user.dto.request.ProviderApplicationRequest;
+import com.fptufa26.ecomotion.user.entity.ProviderApplication;
+import com.fptufa26.ecomotion.user.enums.ProviderApplicationStatus;
+import com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity;
+import com.fptufa26.ecomotion.verification.identity.enums.IdentityVerificationMethod;
+import com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -75,8 +80,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Component
-@Profile("dev")
-@ConditionalOnProperty(name = "app.demo-seed.enabled", havingValue = "true", matchIfMissing = true)
+@Profile("dev & !prod")
 @RequiredArgsConstructor
 public class DevDataSeeder implements ApplicationRunner {
     public static final String RENTER_EMAIL = "renter01@ecomotion.vn";
@@ -140,6 +144,12 @@ public class DevDataSeeder implements ApplicationRunner {
     private final ScheduleService scheduleService;
     private final YearlyRentalDataSeeder yearlyRentalDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
+    private static final String SEED_IDENTITY_POLICY = "DEMO-SEED-V1-NOT-REAL-VERIFICATION";
+    private final com.fptufa26.ecomotion.verification.identity.repository.PersonIdentityRepository personIdentityRepository;
+    private final com.fptufa26.ecomotion.verification.identity.service.IdentityFingerprintService identityFingerprintService;
+    private final com.fptufa26.ecomotion.user.repository.ProviderApplicationRepository providerApplicationRepository;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
+    private final java.time.Clock clock;
 
     private record PlanPrices(String hourly, String daily, String monthly) {
     }
@@ -187,6 +197,11 @@ public class DevDataSeeder implements ApplicationRunner {
         seedRenterProfile(userRepository.findById(108L).orElseThrow());
         seedRenterProfile(userRepository.findById(109L).orElseThrow());
         seedRenterProfile(userRepository.findById(110L).orElseThrow());
+
+        List.of(1L, 5L, 101L, 102L, 103L, 104L, 105L, 106L, 107L, 108L, 109L, 110L)
+                .forEach(id -> seedAccountIdentity(id, Role.RENTER));
+        List.of(PROVIDER_A_USER_ID, PROVIDER_B_USER_ID).forEach(id -> seedAccountIdentity(id, Role.PROVIDER));
+        userRepository.flush();
 
         Driver driverNam = seedDriver(driverUser1, providerA, "7901230001", "B2");
         Driver driverCuong = seedDriver(driverUser2, providerA, "7901230002", "D");
@@ -778,6 +793,66 @@ public class DevDataSeeder implements ApplicationRunner {
                 .createNativeQuery("ALTER TABLE " + table + " ALTER COLUMN id RESTART WITH "
                         + (maxId.longValue() + 1L))
                 .executeUpdate();
+    }
+
+    private void seedAccountIdentity(Long userId, Role role) {
+        User user = userRepository.findById(userId).orElseThrow();
+        if (user.getRole() != role || !user.isActive() || user.getEkycStatus() != EkycStatus.VERIFIED) return;
+        if (user.getIdentity() != null && user.getIdentity().getVerificationMethod() != IdentityVerificationMethod.DEMO_SEED) return;
+        Provider provider = role == Role.PROVIDER ? providerRepository.findByUser_Id(userId).orElseThrow() : null;
+        if (provider != null && provider.getStatus() != ProviderStatus.APPROVED) return;
+        Renter renter = role == Role.RENTER ? renterRepository.findByUser_Id(userId).orElseThrow() : null;
+        PersonIdentity identity = user.getIdentity();
+        if (identity == null) {
+            String number = "990000" + String.format(java.util.Locale.ROOT, "%06d", userId);
+            String fingerprint = identityFingerprintService.fingerprint(number);
+            identity = personIdentityRepository.findByCccdFingerprint(fingerprint).orElseGet(() -> {
+                var created = new PersonIdentity();
+                created.setCccdNo(number);
+                created.setCccdFingerprint(fingerprint);
+                created.setFingerprintKeyVersion(identityFingerprintService.keyVersion());
+                created.setFullName(user.getFullName());
+                created.setDateOfBirth(renter != null && renter.getDateOfBirth() != null
+                        ? renter.getDateOfBirth() : LocalDate.of(1992, 4, 12));
+                created.setAddress("DEMO ONLY - NOT VERIFIED ADDRESS");
+                created.setDocumentExpiry(LocalDate.now(clock).plusYears(10));
+                created.setStatus(PersonIdentityStatus.VERIFIED);
+                created.setVerificationMethod(IdentityVerificationMethod.DEMO_SEED);
+                created.setPolicyVersion(SEED_IDENTITY_POLICY);
+                created.setVerifiedAt(clock.instant());
+                return personIdentityRepository.saveAndFlush(created);
+            });
+            if (identity.getVerificationMethod() != IdentityVerificationMethod.DEMO_SEED) {
+                throw new IllegalStateException("Demo identity number conflicts with a non-demo identity");
+            }
+            user.setIdentity(identity);
+        }
+        if (user.getEmailVerifiedAt() == null) user.setEmailVerifiedAt(clock.instant());
+        if (user.getPhoneVerifiedAt() == null) user.setPhoneVerifiedAt(clock.instant());
+        if (user.getTermsAcceptedAt() == null) user.setTermsAcceptedAt(clock.instant());
+        if (renter != null) {
+            if (renter.getCccdNo() == null) renter.setCccdNo(identity.getCccdNo());
+            if (renter.getDateOfBirth() == null) renter.setDateOfBirth(identity.getDateOfBirth());
+            renterRepository.save(renter);
+        } else {
+            if (user.getIdentityReviewedAt() == null) user.setIdentityReviewedAt(clock.instant());
+            if (!providerApplicationRepository.existsById(userId)) {
+                var application = new ProviderApplication();
+                application.setUserId(userId);
+                application.setStatus(ProviderApplicationStatus.APPROVED);
+                application.setSubmittedIdentityId(identity.getId());
+                application.setSubmittedAt(clock.instant());
+                application.setReviewedAt(clock.instant());
+                application.setReviewedBy(3L);
+                application.setReasonCode("DEMO_SEED");
+                application.setProfileJson(objectMapper.writeValueAsString(new ProviderApplicationRequest(0L,
+                        provider.getDisplayName(), provider.getHotline(), provider.getDepotAddress(),
+                        provider.getDepotLatitude(), provider.getDepotLongitude(), provider.getBankCode(),
+                        provider.getBankAccountNo(), provider.getBankAccountHolder())));
+                providerApplicationRepository.saveAndFlush(application);
+            }
+        }
+        userRepository.save(user);
     }
 
     private User seedUser(long id, String email, String phone, String fullName, Role role) {

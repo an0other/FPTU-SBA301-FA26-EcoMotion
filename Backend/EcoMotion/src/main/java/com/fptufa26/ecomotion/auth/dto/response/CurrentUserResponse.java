@@ -11,6 +11,16 @@ public record CurrentUserResponse(
         String phone,
         Role role,
         UserStatus status,
-        EkycStatus ekycStatus
+        EkycStatus ekycStatus,
+        String sessionScope,
+        String identityStatus,
+        String providerStatus,
+        String nextAction,
+        java.util.List<String> capabilities
 ) {
+    public CurrentUserResponse withAccess(String scope, String identity, String provider, String next,
+            java.util.List<String> allowed) {
+        return new CurrentUserResponse(userId, email, fullName, phone, role, status, ekycStatus,
+                scope, identity, provider, next, allowed);
+    }
 }

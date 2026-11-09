@@ -140,7 +140,13 @@ public class AuthController {
         if (principal == null) {
             throw new UsernameNotFoundException("Authenticated principal is missing");
         }
-        return ResponseEntity.ok(authService.getCurrentUser(principal.getUserId()));
+        var response = authService.getCurrentUser(principal.getUserId());
+        if (principal.isRestrictedProvider()) {
+            response = response.withAccess("ONBOARDING", response.identityStatus(), response.providerStatus(),
+                    "FULL".equals(response.sessionScope()) ? "LOGIN_OR_REFRESH" : response.nextAction(),
+                    java.util.List.of("VIEW_ONBOARDING", "VERIFY_IDENTITY"));
+        }
+        return ResponseEntity.ok(response);
     }
 
     private ResponseCookie buildRefreshCookie(String token, boolean rememberMe) {
