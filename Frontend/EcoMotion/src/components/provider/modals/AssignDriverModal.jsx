@@ -246,17 +246,15 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
               CHẾ ĐỘ 1: GỢI Ý TÀI XẾ
               ======================================================== */}
           {activeMode === 'SUGGESTION' && (
-            <div className="space-y-2"><p className="text-xs text-slate-600">Gợi ý chưa lưu phân công. {suggestionResult?.solverStatus?.startsWith('FALLBACK') ? 'Đang dùng xếp hạng dự phòng: ' : 'Trạng thái bộ giải: '}{suggestionResult?.solverStatus || 'Đang chờ'}</p>
+            <div className="space-y-2">
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Danh sách ứng viên tài xế đề xuất
+                    Tài xế đề xuất
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Chọn một tài xế cho đơn này theo ETA ước tính, tải chuyến và đánh giá; không có dữ liệu giao thông.
-                  </p>
+                  <p className="text-xs text-slate-500">Sắp theo thời gian tới điểm đón (ETA) và đánh giá.</p>
                 </div>
                 <button
                   type="button"
@@ -300,14 +298,18 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {suggestionResult.explanation && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 flex items-start gap-2">
-                      <Icon name="info" className="text-slate-500 text-[16px] shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-semibold">Đánh giá hệ thống điều phối: </span>
-                        {suggestionResult.explanation}
+                  {(suggestionResult.explanation || suggestionResult.solverStatus) && (
+                    <details className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                      <summary className="cursor-pointer font-semibold text-slate-600">Chi tiết điều phối</summary>
+                      <div className="mt-1.5 space-y-1">
+                        {suggestionResult.explanation && <p>{suggestionResult.explanation}</p>}
+                        {suggestionResult.solverStatus && (
+                          <p className="text-slate-500">
+                            {suggestionResult.solverStatus.startsWith('FALLBACK') ? 'Xếp hạng dự phòng' : 'Bộ giải'}: {suggestionResult.solverStatus}. Chỉ là gợi ý, chưa lưu phân công.
+                          </p>
+                        )}
                       </div>
-                    </div>
+                    </details>
                   )}
 
                   <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
@@ -373,12 +375,18 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                           <AssignmentDriverStatus driver={candidate} />
                           {/* Recommendation explanation or ineligibility reason */}
                           <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <div className="text-slate-600 text-[11px] leading-tight">
+                            <div className="min-w-0 text-slate-600 text-[11px] leading-tight">
                               {candidate.eligible ? (
-                                <span className="text-brand-900 font-medium">
-                                  {candidate.recommendationReason ||
-                                    `Số cuốc hiện tại: ${candidate.activeTripsCount || 0} • Điểm phù hợp: ${candidate.suitabilityScore || 0}`}
-                                </span>
+                                candidate.recommendationReason ? (
+                                  <details onClick={(e) => e.stopPropagation()}>
+                                    <summary className="cursor-pointer font-medium text-brand-900">Vì sao đề xuất?</summary>
+                                    <p className="mt-1 text-slate-600">{candidate.recommendationReason}</p>
+                                  </details>
+                                ) : (
+                                  <span className="text-brand-900 font-medium">
+                                    {candidate.activeTripsCount || 0} chuyến đang nhận
+                                  </span>
+                                )
                               ) : (
                                 <span className="text-red-700 font-medium">
                                   Không khả dụng: {candidate.ineligibilityReason || 'Đang bận chuyến khác'}

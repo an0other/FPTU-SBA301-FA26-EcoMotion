@@ -25,6 +25,12 @@ export function createDriverTripService(client = apiClient) {
       return items.find((item) => item?.status === 'IN_PROGRESS') || null
     },
 
+    // Số chuyến theo từng tab: { TODAY, REQUESTS, UPCOMING, ACTIVE, HISTORY }
+    async getTripCounts() {
+      const { data } = await client.get('/driver/trips/counts')
+      return data?.data || {}
+    },
+
     // Chuyến tài xế đang làm dở (đã đến điểm đón / đang chạy, chưa kết thúc) — dùng để khoá thao tác chuyến khác.
     async getBusyTrips() {
       const { data } = await client.get('/driver/trips', { params: { view: 'ACTIVE', size: 20 } })

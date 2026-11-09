@@ -31,6 +31,7 @@ export default function DriverSchedulePage() {
     size,
     trips,
     activeTrip,
+    counts,
     total,
     loading,
     error,
@@ -140,8 +141,19 @@ export default function DriverSchedulePage() {
               }`}
             >
               {item.label}
-              {isActive && !loading && total > 0 && (
-                <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-px text-[10px]">{total}</span>
+              {Number(counts?.[item.key] ?? (isActive ? total : 0)) > 0 && (
+                <span
+                  aria-label={`${counts?.[item.key] ?? total} chuyến`}
+                  className={`ml-1.5 rounded-full px-1.5 py-px text-[10px] ${
+                    isActive
+                      ? 'bg-white/20'
+                      : item.key === 'REQUESTS'
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {counts?.[item.key] ?? total}
+                </span>
               )}
             </button>
           )

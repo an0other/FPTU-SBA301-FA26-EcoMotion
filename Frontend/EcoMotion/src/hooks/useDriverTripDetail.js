@@ -9,10 +9,10 @@ export function useDriverTripDetail(tripIdOrCode) {
   const [error, setError] = useState(null)
 
   const sequence = useRef(0)
-  const fetchDetail = useCallback(async () => {
+  const fetchDetail = useCallback(async ({ silent = false } = {}) => {
     if (!tripIdOrCode) return
     const id = ++sequence.current
-    setLoading(true)
+    if (!silent) setLoading(true)
     setError(null)
 
     try {
@@ -53,6 +53,6 @@ export function useDriverTripDetail(tripIdOrCode) {
     trip,
     loading,
     error,
-    refetch: fetchDetail,
+    refetch: () => fetchDetail({ silent: true }),
   }
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
@@ -8,6 +9,33 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { getErrorMessage } from '../../utils/errorMessage'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { isValidEmail, isValidVnPhone } from '../../utils/validation'
+
+// Nhà xe cần biết tài xế đang chạy chuyến nào và sắp chạy những chuyến nào trước khi phân công.
+function DriverTripSummary({ driver, compact = false }) {
+  const upcomingCount = Number(driver.upcomingTripCount || 0)
+  if (!driver.currentTripBookingCode && !driver.nextTripBookingCode) {
+    return <p className={`${compact ? 'mt-0.5 text-[11px]' : 'mt-1 text-xs'} text-slate-400`}>Chưa có chuyến được giao</p>
+  }
+  const linkCls = 'font-mono font-semibold text-emerald-700 underline-offset-2 hover:underline'
+  return (
+    <div className={`${compact ? 'mt-0.5 text-[11px]' : 'mt-1.5 text-xs'} space-y-0.5 text-slate-600`}>
+      {driver.currentTripBookingCode && (
+        <p>
+          <span className="font-semibold text-blue-700">Đang chạy:</span>{' '}
+          <Link to={`/provider/bookings/${encodeURIComponent(driver.currentTripBookingCode)}`} className={linkCls}>{driver.currentTripBookingCode}</Link>
+        </p>
+      )}
+      {driver.nextTripBookingCode && (
+        <p>
+          <span className="font-semibold text-slate-700">Sắp tới:</span>{' '}
+          <Link to={`/provider/bookings/${encodeURIComponent(driver.nextTripBookingCode)}`} className={linkCls}>{driver.nextTripBookingCode}</Link>
+          {driver.nextTripPickupTime ? ` · ${formatBookingWhen(driver.nextTripPickupTime)}` : ''}
+          {upcomingCount > 1 ? <span className="text-slate-500"> (+{upcomingCount - 1} chuyến khác)</span> : null}
+        </p>
+      )}
+    </div>
+  )
+}
 
 export default function ProviderDriverPage() {
   const [drivers, setDrivers] = useState([])
@@ -697,14 +725,9 @@ export default function ProviderDriverPage() {
                           {driver.fullName}
                         </h3>
                         {driver.status === 'APPROVED' && (
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <div className="mt-1">
                             <DriverStatusBadge status={driver.operationalStatus} />
-                            {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
-                              <span className="text-xs text-slate-500 font-mono font-medium">
-                                {driver.currentTripBookingCode || driver.nextTripBookingCode}
-                                {!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}
-                              </span>
-                            )}
+                            <DriverTripSummary driver={driver} />
                           </div>
                         )}
                         <p className="mt-1 text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
@@ -895,14 +918,9 @@ export default function ProviderDriverPage() {
                             <p className="text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
                             <div className="font-bold text-slate-900 truncate">{driver.fullName}</div>
                             {driver.status === 'APPROVED' && (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                              <div className="mt-0.5">
                                 <DriverStatusBadge status={driver.operationalStatus} />
-                                {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
-                                  <span className="text-[11px] text-slate-500 font-mono">
-                                    {driver.currentTripBookingCode || driver.nextTripBookingCode}
-                                    {!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}
-                                  </span>
-                                )}
+                                <DriverTripSummary driver={driver} compact />
                               </div>
                             )}
                             <div className="text-[11px] text-slate-400 font-mono">ID #{driver.id}</div>

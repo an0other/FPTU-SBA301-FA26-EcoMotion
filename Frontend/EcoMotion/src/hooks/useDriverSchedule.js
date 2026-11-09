@@ -12,6 +12,7 @@ export function useDriverSchedule(initialOptions = {}) {
 
   const [trips, setTrips] = useState([])
   const [activeTrip, setActiveTrip] = useState(null)
+  const [counts, setCounts] = useState({})
   const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -43,15 +44,17 @@ export function useDriverSchedule(initialOptions = {}) {
     setPageState(0)
   }, [])
 
-  const fetchData = useCallback(async () => {
+  // silent: làm mới ngầm (realtime/poll/sau thao tác) — giữ danh sách cũ, không bật skeleton.
+  const fetchData = useCallback(async ({ silent = false } = {}) => {
     const currentRequestId = ++requestIdRef.current
-    setLoading(true)
+    if (!silent) setLoading(true)
     setError(null)
 
     try {
-      const [listResult, activeResult] = await Promise.all([
+      const [listResult, activeResult, countResult] = await Promise.all([
         driverTripService.listTrips({ view, status, date, page, size }),
         driverTripService.getActiveTrip(),
+        driverTripService.getTripCounts().catch(() => null),
       ])
 
       if (currentRequestId === requestIdRef.current) {
@@ -59,6 +62,7 @@ export function useDriverSchedule(initialOptions = {}) {
         setTotal(listResult.total || 0)
         setHasMore(Boolean(listResult.hasMore))
         setActiveTrip(activeResult)
+        if (countResult) setCounts(countResult)
         setLoading(false)
       }
     } catch (err) {
@@ -95,6 +99,7 @@ export function useDriverSchedule(initialOptions = {}) {
     size,
     trips,
     activeTrip,
+    counts,
     total,
     hasMore,
     loading,
@@ -104,6 +109,6 @@ export function useDriverSchedule(initialOptions = {}) {
     setDate,
     setPage,
     setSize,
-    refetch: fetchData,
+    refetch: () => fetchData({ silent: true }),
   }
 }

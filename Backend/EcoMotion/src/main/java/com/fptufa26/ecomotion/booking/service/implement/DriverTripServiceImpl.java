@@ -158,6 +158,22 @@ public class DriverTripServiceImpl implements DriverTripService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Map<String, Long> countDriverTripsByView(Long currentUserId) {
+        Driver driver = resolveDriver(currentUserId);
+        LocalDate today = LocalDate.now(clock.withZone(ClockConfig.VIETNAM_ZONE));
+        Instant startOfToday = today.atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant();
+        Instant startOfTomorrow = today.plusDays(1).atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant();
+        Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        for (TripView view : TripView.values()) {
+            Specification<Booking> spec = BookingSpecification.forDriverSchedule(
+                    driver.getId(), view, null, null, null, startOfToday, startOfTomorrow);
+            counts.put(view.name(), bookingRepository.count(spec));
+        }
+        return counts;
+    }
+
+    @Override
     public DriverTripDetailResponse getTripDetail(Long currentUserId, String tripIdOrCode) {
         Driver driver = resolveDriver(currentUserId);
         Booking booking = resolveDriverBooking(driver, tripIdOrCode);

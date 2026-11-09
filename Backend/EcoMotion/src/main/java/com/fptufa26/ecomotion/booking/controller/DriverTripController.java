@@ -105,6 +105,12 @@ public class DriverTripController {
         return ApiResponse.success(response);
     }
 
+    @GetMapping("/counts")
+    @Operation(summary = "Count trips per schedule tab for current driver")
+    public ApiResponse<java.util.Map<String, Long>> countTrips(@AuthenticationPrincipal SecurityUser principal) {
+        return ApiResponse.success(driverTripService.countDriverTripsByView(principal.getUserId()));
+    }
+
     @GetMapping("/{tripId}")
     @Operation(summary = "Get trip detail for current driver")
     public ApiResponse<DriverTripDetailResponse> getTripDetail(

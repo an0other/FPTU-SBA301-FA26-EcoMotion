@@ -37,6 +37,7 @@ class DriverSingleActiveTripTest {
 
     @Mock BookingRepository bookingRepository;
     @Mock UserService userService;
+    @Mock java.time.Clock clock;
     @InjectMocks DriverTripServiceImpl service;
 
     private Booking booking;
@@ -59,6 +60,19 @@ class DriverSingleActiveTripTest {
         when(bookingRepository.findByBookingCodeForUpdate("EM-2026-000043")).thenReturn(Optional.of(booking));
         when(bookingRepository.findOtherActiveDriverBookingCodes(eq(7L), eq(43L), anyCollection()))
                 .thenReturn(List.of("DF-2026-9003"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void countsEveryScheduleTabForBadges() {
+        when(clock.instant()).thenReturn(Instant.parse("2026-11-09T05:00:00Z"));
+        when(clock.getZone()).thenReturn(java.time.ZoneOffset.UTC);
+        when(clock.withZone(any())).thenReturn(java.time.Clock.fixed(Instant.parse("2026-11-09T05:00:00Z"), java.time.ZoneOffset.UTC));
+        when(bookingRepository.count(any(org.springframework.data.jpa.domain.Specification.class))).thenReturn(1L);
+        var counts = service.countDriverTripsByView(70L);
+        org.assertj.core.api.Assertions.assertThat(counts)
+                .containsOnlyKeys("TODAY", "UPCOMING", "HISTORY", "ACTIVE", "REQUESTS")
+                .containsValue(1L);
     }
 
     @Test
