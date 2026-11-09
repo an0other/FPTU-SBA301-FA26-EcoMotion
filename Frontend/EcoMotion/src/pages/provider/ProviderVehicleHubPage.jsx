@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
+import FilePreviewLightbox from '../../components/common/FilePreviewLightbox'
 import { providerService } from '../../services/providerService'
 import { formatLicensePlateInput } from '../../utils/validation'
 
@@ -84,8 +85,24 @@ export default function ProviderVehicleHubPage() {
     fuelType: 'EV',
     color: '',
     maintenanceBufferMinutes: 120,
-    coverImageUrl: ''
+    coverImageUrl: '',
+    galleryImageUrls: []
   })
+  const [uploadingGallery, setUploadingGallery] = useState(false)
+  const [previewFile, setPreviewFile] = useState({
+    isOpen: false,
+    fileUrl: '',
+    fileName: '',
+    title: ''
+  })
+
+  const todayStr = useMemo(() => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }, [])
 
   const [pricingPlans, setPricingPlans] = useState({
     HOURLY: { status: 'ACTIVE', slotPrice: 120000, hourlyToDailyThresholdMinutes: 480 },
@@ -169,7 +186,8 @@ export default function ProviderVehicleHubPage() {
         fuelType: data.fuelType || 'EV',
         color: data.color || '',
         maintenanceBufferMinutes: data.maintenanceBufferMinutes || 120,
-        coverImageUrl: data.coverImageUrl || ''
+        coverImageUrl: data.coverImageUrl || '',
+        galleryImageUrls: data.galleryImageUrls || []
       }
       setForm(initialForm)
       setInitialData(initialForm)
@@ -302,6 +320,24 @@ export default function ProviderVehicleHubPage() {
       setToast({ type: 'warning', message: 'Vui lòng nhập số hiệu giấy tờ' })
       return
     }
+
+    const isRequiredExpiry = docModal.docType !== 'REGISTRATION'
+    const cleanExpiry = docModal.expiryDate ? docModal.expiryDate.trim() : ''
+
+    if (isRequiredExpiry && !cleanExpiry) {
+      const docTitle = DOC_SPECS.find(s => s.type === docModal.docType)?.title || 'giấy tờ'
+      setToast({ type: 'warning', message: `Vui lòng chọn ngày hết hạn cho ${docTitle}` })
+      return
+    }
+
+    if (cleanExpiry && cleanExpiry < todayStr) {
+      setToast({
+        type: 'error',
+        message: 'Ngày hết hạn không được ở trong quá khứ. Giấy tờ phải còn hiệu lực ít nhất từ hôm nay trở đi.'
+      })
+      return
+    }
+
     if (!docModal.fileUrl.trim()) {
       setToast({ type: 'warning', message: 'Vui lòng tải lên tệp đính kèm (JPG, PNG hoặc PDF)' })
       return
@@ -312,7 +348,7 @@ export default function ProviderVehicleHubPage() {
       const payload = {
         docType: docModal.docType,
         docNumber: docModal.docNumber.trim(),
-        expiryDate: docModal.expiryDate ? docModal.expiryDate : null,
+        expiryDate: cleanExpiry ? cleanExpiry : null,
         fileUrl: docModal.fileUrl.trim()
       }
       const savedDoc = await providerService.updateVehicleDocument(id, payload)
@@ -376,12 +412,25 @@ export default function ProviderVehicleHubPage() {
     }
   }
 
+  function handleBufferInputChange(val) {
+    const clean = val.replace(/\D/g, '')
+    setForm(prev => ({ ...prev, maintenanceBufferMinutes: clean }))
+  }
+
+  function handleBufferInputBlur() {
+    setForm(prev => {
+      let num = parseInt(prev.maintenanceBufferMinutes, 10)
+      if (isNaN(num) || num < 60) num = 60
+      if (num > 240) num = 240
+      return { ...prev, maintenanceBufferMinutes: num }
+    })
+  }
+
   function adjustBuffer(delta) {
     setForm(prev => {
-      let val = (parseInt(prev.maintenanceBufferMinutes, 10) || 120) + delta
-      if (val < 30) val = 30
-      if (val > 240) val = 240
-      return { ...prev, maintenanceBufferMinutes: val }
+      const current = parseInt(prev.maintenanceBufferMinutes, 10) || 60
+      const next = Math.max(60, Math.min(240, current + delta))
+      return { ...prev, maintenanceBufferMinutes: next }
     })
   }
 
@@ -429,6 +478,95 @@ export default function ProviderVehicleHubPage() {
     }
   }
 
+  const MAX_GALLERY_IMAGES = 5
+
+  async function handleGalleryFilesSelected(e) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+
+    const currentCount = form.galleryImageUrls?.length || 0
+    const availableSlots = MAX_GALLERY_IMAGES - currentCount
+
+    if (availableSlots <= 0) {
+      setToast({
+        type: 'error',
+        message: `Thư viện ảnh đã đạt giới hạn tối đa ${MAX_GALLERY_IMAGES} ảnh chi tiết.`
+      })
+      e.target.value = ''
+      return
+    }
+
+    const filesToUpload = files.slice(0, availableSlots)
+    if (files.length > availableSlots) {
+      setToast({
+        type: 'warning',
+        message: `Chỉ có thể tải thêm ${availableSlots} ảnh để không vượt quá giới hạn ${MAX_GALLERY_IMAGES} ảnh.`
+      })
+    }
+
+    const validFiles = []
+    for (const file of filesToUpload) {
+      const isValidType = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+      if (!isValidType) {
+        setToast({
+          type: 'error',
+          message: `Tệp "${file.name}" không hợp lệ. Chỉ chấp nhận JPG, PNG, WEBP.`
+        })
+        continue
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        setToast({
+          type: 'error',
+          message: `Tệp "${file.name}" vượt quá dung lượng tối đa 8MB.`
+        })
+        continue
+      }
+      validFiles.push(file)
+    }
+
+    if (!validFiles.length) {
+      e.target.value = ''
+      return
+    }
+
+    try {
+      setUploadingGallery(true)
+      const uploadedUrls = []
+      for (const file of validFiles) {
+        const res = await providerService.uploadVehicleImage(file)
+        if (res?.imageUrl) {
+          uploadedUrls.push(res.imageUrl)
+        }
+      }
+      if (uploadedUrls.length > 0) {
+        setForm(prev => ({
+          ...prev,
+          galleryImageUrls: [...(prev.galleryImageUrls || []), ...uploadedUrls]
+        }))
+        setToast({
+          type: 'success',
+          message: `Đã tải lên thành công ${uploadedUrls.length} ảnh chi tiết!`
+        })
+      }
+    } catch (err) {
+      console.error('Gallery upload error:', err)
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Lỗi khi tải ảnh chi tiết'
+      })
+    } finally {
+      setUploadingGallery(false)
+      e.target.value = ''
+    }
+  }
+
+  function handleRemoveGalleryImage(indexToRemove) {
+    setForm(prev => ({
+      ...prev,
+      galleryImageUrls: prev.galleryImageUrls.filter((_, idx) => idx !== indexToRemove)
+    }))
+  }
+
   async function handleSaveProfile(e) {
     if (e) e.preventDefault()
     try {
@@ -443,7 +581,8 @@ export default function ProviderVehicleHubPage() {
         fuelType: form.fuelType,
         color: form.color.trim(),
         maintenanceBufferMinutes: parseInt(form.maintenanceBufferMinutes, 10),
-        coverImageUrl: form.coverImageUrl.trim()
+        coverImageUrl: form.coverImageUrl.trim(),
+        galleryImageUrls: form.galleryImageUrls || []
       }
 
       const updated = await providerService.updateVehicle(id, payload)
@@ -458,7 +597,8 @@ export default function ProviderVehicleHubPage() {
         fuelType: updated.fuelType || 'EV',
         color: updated.color || '',
         maintenanceBufferMinutes: updated.maintenanceBufferMinutes || 120,
-        coverImageUrl: updated.coverImageUrl || ''
+        coverImageUrl: updated.coverImageUrl || '',
+        galleryImageUrls: updated.galleryImageUrls || []
       }
       setForm(newInit)
       setInitialData(newInit)
@@ -1406,25 +1546,51 @@ export default function ProviderVehicleHubPage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => adjustBuffer(-15)}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition-colors"
-                  >
-                    -
-                  </button>
-                  <div className="text-center min-w-[70px]">
-                    <span className="text-base font-bold text-slate-900">{form.maintenanceBufferMinutes}</span>
-                    <span className="text-[11px] text-slate-500 block -mt-1">phút</span>
+                <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="60"
+                        max="240"
+                        step="15"
+                        value={form.maintenanceBufferMinutes}
+                        onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                        onChange={(e) => handleBufferInputChange(e.target.value)}
+                        onBlur={handleBufferInputBlur}
+                        className="w-28 h-10 text-center font-bold text-base text-slate-900 bg-white border border-slate-300 rounded-xl pr-9 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none shadow-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 pointer-events-none">
+                        phút
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col bg-white border border-slate-300 rounded-xl overflow-hidden shadow-xs">
+                      <button
+                        type="button"
+                        aria-label="Tăng 15 phút"
+                        onClick={() => adjustBuffer(15)}
+                        className="w-8 h-5 flex items-center justify-center text-slate-700 hover:bg-slate-50 transition-colors border-b border-slate-200 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          keyboard_arrow_up
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Giảm 15 phút"
+                        onClick={() => adjustBuffer(-15)}
+                        className="w-8 h-5 flex items-center justify-center text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          keyboard_arrow_down
+                        </span>
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => adjustBuffer(15)}
-                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition-colors"
-                  >
-                    +
-                  </button>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Tối thiểu 60 phút, tối đa 240 phút
+                  </span>
                 </div>
               </div>
 
@@ -1449,6 +1615,22 @@ export default function ProviderVehicleHubPage() {
                       <span className="material-symbols-outlined text-xs">photo_camera</span>
                       ẢNH BÌA CHÍNH THỨC · 16:9
                     </span>
+                    {form.coverImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewFile({
+                          isOpen: true,
+                          fileUrl: form.coverImageUrl,
+                          fileName: `cover_${form.licensePlate || 'vehicle'}.jpg`,
+                          title: `Ảnh bìa xe ${form.brand} ${form.model} (${form.licensePlate})`
+                        })}
+                        className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white text-[10px] font-semibold flex items-center gap-1 border border-white/20 transition-all cursor-pointer opacity-90 hover:opacity-100"
+                        title="Xem phóng to ảnh bìa"
+                      >
+                        <span className="material-symbols-outlined text-xs">zoom_in</span>
+                        Xem lớn
+                      </button>
+                    )}
                     {uploadingCoverImage && (
                       <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white z-10 gap-2">
                         <div className="w-8 h-8 rounded-full border-3 border-emerald-400 border-t-transparent animate-spin"></div>
@@ -1507,6 +1689,112 @@ export default function ProviderVehicleHubPage() {
                       Hỗ trợ định dạng WEBP, PNG, JPG (tối đa 8MB). Khuyến nghị ảnh chụp thực tế góc 3/4 mặt trước với tỷ lệ 16:9.
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* KHỐI ALBUM ẢNH CHI TIẾT CỦA XE (TÙY CHỌN) */}
+              <div className="pt-6 border-t border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                  <div>
+                    <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-2">
+                      <span>Album ảnh chi tiết của xe</span>
+                      <span className="text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        Tùy chọn · Tối đa 5 ảnh
+                      </span>
+                    </label>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Tải thêm ảnh chụp thực tế: nội thất ghế ngồi, khoang lái, cốp sau, góc nghiêng... Giúp xe thu hút và tăng độ tin cậy với khách thuê.
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold text-slate-500 font-mono self-start sm:self-auto">
+                    {form.galleryImageUrls?.length || 0}/5 ảnh
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {/* Danh sách ảnh đã upload */}
+                  {form.galleryImageUrls?.map((url, idx) => (
+                    <div
+                      key={`${url}-${idx}`}
+                      className="group relative aspect-video rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shadow-2xs hover:shadow-sm transition-all"
+                    >
+                      <img
+                        src={url}
+                        alt={`Ảnh chi tiết ${idx + 1}`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.target.onerror = null
+                          e.target.src = 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=400&q=80'
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({
+                            isOpen: true,
+                            fileUrl: url,
+                            fileName: `detail_${idx + 1}.jpg`,
+                            title: `Ảnh chi tiết #${idx + 1} - ${form.brand} ${form.model}`
+                          })}
+                          className="w-8 h-8 rounded-full bg-emerald-700 text-white flex items-center justify-center hover:bg-emerald-800 transition-colors shadow-sm cursor-pointer"
+                          title="Xem phóng to ảnh"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">zoom_in</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGalleryImage(idx)}
+                          className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
+                          title="Xóa ảnh này"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      </div>
+                      <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-bold font-mono">
+                        #{idx + 1}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Nút thêm ảnh nếu chưa đạt giới hạn 5 ảnh */}
+                  {(form.galleryImageUrls?.length || 0) < MAX_GALLERY_IMAGES && (
+                    <div>
+                      <input
+                        id="hubGalleryImagesInput"
+                        type="file"
+                        accept="image/png, image/jpeg, image/webp"
+                        multiple
+                        className="hidden"
+                        disabled={uploadingGallery}
+                        onChange={handleGalleryFilesSelected}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => !uploadingGallery && document.getElementById("hubGalleryImagesInput")?.click()}
+                        disabled={uploadingGallery}
+                        className={`w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center p-2 transition-all cursor-pointer ${
+                          uploadingGallery
+                            ? "bg-emerald-50/50 border-emerald-400 cursor-wait"
+                            : "bg-slate-50 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/30 text-slate-600 hover:text-emerald-700"
+                        }`}
+                      >
+                        {uploadingGallery ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="w-5 h-5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin"></div>
+                            <span className="text-[10px] font-semibold text-emerald-800">Đang tải...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-[22px] mb-0.5 text-slate-400 group-hover:text-emerald-600">
+                              add_photo_alternate
+                            </span>
+                            <span className="text-xs font-semibold">Thêm ảnh</span>
+                            <span className="text-[10px] text-slate-500">Tối đa 8MB/ảnh</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1641,8 +1929,13 @@ export default function ProviderVehicleHubPage() {
                               <span className="text-slate-400 text-[11px]">Tệp đính kèm:</span>
                               <button
                                 type="button"
-                                onClick={() => window.open(doc.fileUrl, '_blank', 'noopener,noreferrer')}
-                                title="Click để mở xem tài liệu trên tab mới"
+                                onClick={() => setPreviewFile({
+                                  isOpen: true,
+                                  fileUrl: doc.fileUrl,
+                                  fileName: fileName,
+                                  title: spec.title
+                                })}
+                                title="Click để xem trước tài liệu trực tiếp"
                                 className="inline-flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50/80 hover:bg-emerald-100/90 text-emerald-800 border border-emerald-200 transition-all text-xs font-medium group cursor-pointer"
                               >
                                 <span className="inline-flex items-center gap-1.5 min-w-0">
@@ -1654,9 +1947,9 @@ export default function ProviderVehicleHubPage() {
                                   </span>
                                 </span>
                                 <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 font-bold group-hover:text-emerald-900 bg-white/70 px-1.5 py-0.5 rounded border border-emerald-200/60 ml-1">
-                                  Mở tab mới
-                                  <span className="material-symbols-outlined text-[12px] group-hover:translate-x-0.5 transition-transform">
-                                    open_in_new
+                                  Xem trước
+                                  <span className="material-symbols-outlined text-[12px] group-hover:scale-110 transition-transform">
+                                    visibility
                                   </span>
                                 </span>
                               </button>
@@ -2548,14 +2841,26 @@ export default function ProviderVehicleHubPage() {
                 </label>
                 <input
                   type="date"
+                  min={todayStr}
                   value={docModal.expiryDate}
                   onChange={(e) => setDocModal(prev => ({ ...prev, expiryDate: e.target.value }))}
                   required={docModal.docType !== 'REGISTRATION'}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  className={`w-full px-3 py-2 bg-white border rounded-lg text-xs font-mono text-slate-800 focus:ring-1 ${
+                    docModal.expiryDate && docModal.expiryDate < todayStr
+                      ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500 bg-rose-50/30'
+                      : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500'
+                  }`}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {DOC_SPECS.find(s => s.type === docModal.docType)?.expiryHint}
-                </p>
+                {docModal.expiryDate && docModal.expiryDate < todayStr ? (
+                  <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1 mt-1">
+                    <span className="material-symbols-outlined text-[13px]">error</span>
+                    Ngày hết hạn đã qua. Giấy tờ nộp duyệt phải còn hiệu lực từ hôm nay trở đi.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {DOC_SPECS.find(s => s.type === docModal.docType)?.expiryHint}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -2587,7 +2892,6 @@ export default function ProviderVehicleHubPage() {
                           <p className="text-xs font-bold text-slate-800 truncate font-mono">
                             {docModal.fileName || docModal.fileUrl.split('/').pop()}
                           </p>
-                          <p className="text-[10px] text-emerald-700">Đã lưu trữ an toàn trên máy chủ Backend</p>
                         </div>
                       </div>
                       <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
@@ -2596,11 +2900,16 @@ export default function ProviderVehicleHubPage() {
                     <div className="flex items-center justify-between pt-2 border-t border-emerald-200/60 text-xs">
                       <button
                         type="button"
-                        onClick={() => window.open(docModal.fileUrl, '_blank', 'noopener,noreferrer')}
+                        onClick={() => setPreviewFile({
+                          isOpen: true,
+                          fileUrl: docModal.fileUrl,
+                          fileName: docModal.fileName || docModal.fileUrl.split('/').pop(),
+                          title: `Xem trước ${DOC_SPECS.find(s => s.type === docModal.docType)?.title || 'giấy tờ'}`
+                        })}
                         className="text-xs font-bold text-emerald-800 hover:text-emerald-950 inline-flex items-center gap-1 hover:underline cursor-pointer"
                       >
-                        <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        Xem thử tệp (Mở tab mới)
+                        <span className="material-symbols-outlined text-sm">visibility</span>
+                        Xem trước tệp (Lightbox)
                       </button>
 
                       <button
@@ -2661,6 +2970,15 @@ export default function ProviderVehicleHubPage() {
           </div>
         </div>
       )}
+
+      {/* File / Image Preview Lightbox (Nested Modal) */}
+      <FilePreviewLightbox
+        isOpen={previewFile.isOpen}
+        onClose={() => setPreviewFile(prev => ({ ...prev, isOpen: false }))}
+        fileUrl={previewFile.fileUrl}
+        fileName={previewFile.fileName}
+        title={previewFile.title}
+      />
     </div>
   )
 }

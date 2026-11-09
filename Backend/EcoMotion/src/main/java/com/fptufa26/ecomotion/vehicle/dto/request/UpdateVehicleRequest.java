@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 
 public record UpdateVehicleRequest(
         @NotBlank @Size(max = 20) @Pattern(regexp = "^[0-9]{2}[a-zA-Z]{1,2}[- .]?[0-9]{3}[- .]?[0-9]{1,2}$", message = "Biển số xe không đúng định dạng quy chuẩn Việt Nam") String licensePlate,
@@ -19,7 +20,23 @@ public record UpdateVehicleRequest(
         @NotNull FuelType fuelType,
         @NotBlank @Size(max = 40) String color,
         @NotNull @Min(0) Integer maintenanceBufferMinutes,
-        @Size(max = 500) String coverImageUrl
+        @Size(max = 500) String coverImageUrl,
+        List<@Size(max = 500) String> galleryImageUrls
 ) {
+
+    public UpdateVehicleRequest(
+            String licensePlate,
+            String brand,
+            String model,
+            Integer manufactureYear,
+            Integer seatCount,
+            Transmission transmission,
+            FuelType fuelType,
+            String color,
+            Integer maintenanceBufferMinutes,
+            String coverImageUrl
+    ) {
+        this(licensePlate, brand, model, manufactureYear, seatCount, transmission, fuelType, color, maintenanceBufferMinutes, coverImageUrl, List.of());
+    }
 }
 

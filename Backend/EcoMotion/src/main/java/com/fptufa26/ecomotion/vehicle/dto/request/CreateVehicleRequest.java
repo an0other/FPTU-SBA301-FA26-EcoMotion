@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 
 public record CreateVehicleRequest(
         @NotBlank @Size(max = 50) @Pattern(regexp = "^[a-zA-Z0-9-]{6,50}$", message = "Số khung (VIN) không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối)") String chassisNo,
@@ -21,8 +22,26 @@ public record CreateVehicleRequest(
         @NotNull FuelType fuelType,
         @NotBlank @Size(max = 40) String color,
         @NotNull @Min(0) Integer maintenanceBufferMinutes,
-        @Size(max = 500) String coverImageUrl
+        @Size(max = 500) String coverImageUrl,
+        List<@Size(max = 500) String> galleryImageUrls
 ) {
+
+    public CreateVehicleRequest(
+            String chassisNo,
+            String engineNo,
+            String licensePlate,
+            String brand,
+            String model,
+            Integer manufactureYear,
+            Integer seatCount,
+            Transmission transmission,
+            FuelType fuelType,
+            String color,
+            Integer maintenanceBufferMinutes,
+            String coverImageUrl
+    ) {
+        this(chassisNo, engineNo, licensePlate, brand, model, manufactureYear, seatCount, transmission, fuelType, color, maintenanceBufferMinutes, coverImageUrl, List.of());
+    }
 }
 
 
