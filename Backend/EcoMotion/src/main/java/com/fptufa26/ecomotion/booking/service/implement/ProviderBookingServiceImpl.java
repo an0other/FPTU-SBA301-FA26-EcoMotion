@@ -116,6 +116,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final com.fptufa26.ecomotion.booking.repository.BookingChargeEvidenceRepository chargeEvidenceRepository;
     private final com.fptufa26.ecomotion.booking.service.ChargeEvidenceValidator chargeEvidenceValidator;
     private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
+    private final com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage evidenceImageStorage;
+    private final TripEndConfirmationService endConfirmations;
     private final com.fptufa26.ecomotion.finance.service.RefundEventService refundEventService;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
@@ -730,22 +732,19 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         BookingCharge saved = bookingChargeRepository.saveAndFlush(charge);
         if (files != null) {
             for (org.springframework.web.multipart.MultipartFile file : files) {
-                var uploaded = cloudinaryService.uploadSurchargeEvidence(file, booking.getId(), saved.getId());
+                var uploaded = evidenceImageStorage.store(file, currentUserId, "surcharge-" + saved.getId());
                 org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
                     new org.springframework.transaction.support.TransactionSynchronization() {
                         @Override public void afterCompletion(int status) {
-                            if (status != STATUS_COMMITTED) {
-                                try { cloudinaryService.deleteImageStrict(uploaded.publicId()); }
-                                catch (RuntimeException ex) { log.error("Không thể dọn ảnh Cloudinary {} sau rollback", uploaded.publicId(), ex); }
-                            }
+                            if (status != STATUS_COMMITTED) evidenceImageStorage.deleteQuietly(uploaded.key());
                         }
                     });
                 var evidence = new com.fptufa26.ecomotion.booking.entity.BookingChargeEvidence();
                 evidence.setCharge(saved);
-                evidence.setSecureUrl(uploaded.secureUrl());
-                evidence.setPublicId(uploaded.publicId());
+                evidence.setSecureUrl(uploaded.url());
+                evidence.setPublicId(uploaded.key());
                 chargeEvidenceRepository.save(evidence);
-                if (saved.getEvidenceUrl() == null) saved.setEvidenceUrl(uploaded.secureUrl());
+                if (saved.getEvidenceUrl() == null) saved.setEvidenceUrl(uploaded.url());
             }
             bookingChargeRepository.saveAndFlush(saved);
         }
@@ -820,6 +819,14 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         if (openRefund.signum() > 0) {
             refundEventService.reserve(booking.getId(), "SETTLE:" + booking.getId(), openRefund,
                     "Hoàn phần đã thu vượt nghĩa vụ quyết toán", provider.getUser());
+        }
+        if (remaining.signum() <= 0 && !endConfirmations.isEndSettled(booking.getId())) {
+            // Khách còn trong 12 giờ xác nhận giờ kết thúc: ghi nhận đã chốt, đơn tự hoàn tất khi mốc được chốt.
+            booking.setSettlementRequestedAt(clock.instant());
+            bookingRepository.save(booking);
+            bookingNotificationService.changed(booking, "BOOKING_CHANGED");
+            return new SettlementResultResponse(
+                    booking.getBookingCode(), booking.getStatus(), null, BigDecimal.ZERO.setScale(2));
         }
         if (remaining.signum() <= 0) {
             booking.setStatus(BookingStatus.COMPLETED);

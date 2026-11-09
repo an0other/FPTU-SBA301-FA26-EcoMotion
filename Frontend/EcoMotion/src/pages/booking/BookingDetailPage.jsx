@@ -5,7 +5,7 @@ import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPrici
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { acceptCharge, cancelMyBooking, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
+import { acceptCharge, cancelMyBooking, confirmTripEnd, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
@@ -202,6 +202,7 @@ export function BookingDetailPage() {
         operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
+        onGoToReviews={() => navigate(`/renter/bookings/${encodeURIComponent(booking.id)}/reviews`)}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
         onCancelBooking={async (_code, account) => {
           const updated = await cancelMyBooking(booking.id, account)
@@ -210,6 +211,10 @@ export function BookingDetailPage() {
         }}
         onAcceptCharge={async (chargeId) => {
           await acceptCharge(booking.id, chargeId)
+          await refreshDetail()
+        }}
+        onConfirmTripEnd={async () => {
+          await confirmTripEnd(booking.id)
           await refreshDetail()
         }}
         onOpenDispute={async body => { const result = await openDispute(booking.id, body); await refreshDetail(); return result }}

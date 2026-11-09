@@ -20,6 +20,7 @@ import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
 import YearlyWorkflowPanel from '../components/yearly-rental/YearlyWorkflowPanel'
 import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
+import TripEndConfirmationBanner from '../components/booking/TripEndConfirmationBanner'
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 import { paymentStatusLabel } from '../utils/bookingStatus'
 import { CHARGE_TYPE_LABELS, formatChargeQuantity, PAYMENT_TYPE_LABELS } from '../utils/paymentDisplay'
@@ -295,7 +296,9 @@ export default function ProviderBookingDetailPage() {
       setToast({
         message: result?.status === 'COMPLETED'
           ? 'Đã chốt quyết toán. Đơn thuê đã hoàn thành.'
-          : 'Đã chốt phụ phí và tạo yêu cầu thanh toán VNPAY/quyết toán.',
+          : result?.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && Number(result?.remainingAmount ?? result?.amount ?? 0) <= 0
+            ? 'Đã chốt quyết toán. Đơn sẽ tự hoàn tất khi khách xác nhận giờ kết thúc (hoặc sau 12 giờ).'
+            : 'Đã chốt phụ phí và tạo yêu cầu thanh toán VNPAY/quyết toán.',
         type: 'success',
       })
       refetch()
@@ -532,6 +535,7 @@ export default function ProviderBookingDetailPage() {
             provider
             onAction={handleProgressAction}
           />
+          <div className="mt-3"><TripEndConfirmationBanner workflow={workflow} readOnly /></div>
         </section>}
 
         {booking.planType === 'YEARLY' && <YearlyWorkflowPanel key={booking.bookingCode} role="provider" bookingCode={booking.bookingCode} bookingStatus={booking.status} onChanged={refetch} />}

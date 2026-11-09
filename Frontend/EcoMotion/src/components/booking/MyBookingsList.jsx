@@ -334,9 +334,9 @@ export const MyBookingsList = ({
                       ) : null}
                     </div>
                     <p className="text-sm text-[#14221A]">
-                      <span className="text-[#14221A]/65">Tổng tiền thuê</span>
+                      <span className="text-[#14221A]/65">Tổng chi phí dự kiến</span>
                       <span className="ml-2 font-bold tabular-nums">
-                        {formatCurrency(booking.totalAmount)}
+                        {formatCurrency(booking.estimatedTotal ?? booking.totalAmount)}
                       </span>
                     </p>
                     {showDepositAmount ? (

@@ -25,32 +25,32 @@ export const providerFinanceService = {
   // ==========================================
 
   async getFinanceSummary() {
-    const { data } = await apiClient.get('/v1/provider/finance/summary')
+    const { data } = await apiClient.get('/provider/finance/summary')
     return data?.data ?? null
   },
 
   async getBankAccount() {
-    const { data } = await apiClient.get('/v1/provider/finance/bank-account')
+    const { data } = await apiClient.get('/provider/finance/bank-account')
     return data?.data ?? null
   },
 
   async listBankAccounts() {
-    const { data } = await apiClient.get('/v1/provider/finance/bank-accounts')
+    const { data } = await apiClient.get('/provider/finance/bank-accounts')
     return data?.data ?? []
   },
 
   async createBankAccount(payload) {
-    const { data } = await apiClient.post('/v1/provider/finance/bank-accounts', payload)
+    const { data } = await apiClient.post('/provider/finance/bank-accounts', payload)
     return data?.data
   },
 
   async patchBankAccount(id, payload) {
-    const { data } = await apiClient.patch(`/v1/provider/finance/bank-accounts/${id}`, payload)
+    const { data } = await apiClient.patch(`/provider/finance/bank-accounts/${id}`, payload)
     return data?.data
   },
 
   async updateBankAccount(payload) {
-    const { data } = await apiClient.put('/v1/provider/finance/bank-account', payload)
+    const { data } = await apiClient.put('/provider/finance/bank-account', payload)
     return data?.data
   },
 
@@ -67,17 +67,17 @@ export const providerFinanceService = {
     if (params.page != null) query.page = params.page
     if (params.size != null) query.size = params.size
 
-    const { data } = await apiClient.get('/v1/provider/finance/transactions', { params: query })
+    const { data } = await apiClient.get('/provider/finance/transactions', { params: query })
     return data?.data ?? { items: [], total: 0, offset: 0, limit: 10, hasMore: false }
   },
 
   async getBookingBreakdown(bookingId) {
-    const { data } = await apiClient.get(`/v1/provider/finance/bookings/${bookingId}/breakdown`)
+    const { data } = await apiClient.get(`/provider/finance/bookings/${bookingId}/breakdown`)
     return data?.data
   },
 
   async getCommissions() {
-    const { data } = await apiClient.get('/v1/provider/finance/commissions')
+    const { data } = await apiClient.get('/provider/finance/commissions')
     return data?.data
   },
 
@@ -86,7 +86,7 @@ export const providerFinanceService = {
     form.append('file', payload.file)
     form.append('bankReference', payload.bankReference)
     if (payload.note) form.append('note', payload.note)
-    const { data } = await apiClient.post(`/v1/payment-transactions/${transactionId}/refund-proof`, form)
+    const { data } = await apiClient.post(`/payment-transactions/${transactionId}/refund-proof`, form)
     return data?.data
   },
 
@@ -176,12 +176,12 @@ export const providerFinanceService = {
   // ==========================================
 
   async simulatePayment(paymentRequestId, payload) {
-    const { data } = await apiClient.post(`/v1/admin/sandbox/payment-requests/${paymentRequestId}/simulate`, payload)
+    const { data } = await apiClient.post(`/admin/sandbox/payment-requests/${paymentRequestId}/simulate`, payload)
     return data?.data
   },
 
   async seedSandbox() {
-    const { data } = await apiClient.post('/v1/admin/sandbox/seed')
+    const { data } = await apiClient.post('/admin/sandbox/seed')
     return data?.data
   },
 
@@ -190,17 +190,17 @@ export const providerFinanceService = {
   // ==========================================
 
   async listRefunds() {
-    const { data } = await apiClient.get('/v1/provider/finance/refunds')
+    const { data } = await apiClient.get('/provider/finance/refunds')
     return data?.data ?? []
   },
 
   async createRefund(payload) {
-    const { data } = await apiClient.post('/v1/provider/finance/refunds', payload)
+    const { data } = await apiClient.post('/provider/finance/refunds', payload)
     return data?.data
   },
 
   async reviewRefund(refundId, payload) {
-    const { data } = await apiClient.post(`/v1/provider/finance/refunds/${refundId}/review`, payload)
+    const { data } = await apiClient.post(`/provider/finance/refunds/${refundId}/review`, payload)
     return data?.data
   },
 
@@ -209,12 +209,12 @@ export const providerFinanceService = {
   // ==========================================
 
   async listPayouts(params = {}) {
-    const { data } = await apiClient.get('/v1/provider/finance/payouts', { params })
+    const { data } = await apiClient.get('/provider/finance/payouts', { params })
     return data?.data
   },
 
   async getPayoutDetail(payoutId) {
-    const { data } = await apiClient.get(`/v1/provider/finance/payouts/${payoutId}`)
+    const { data } = await apiClient.get(`/provider/finance/payouts/${payoutId}`)
     return data?.data
   },
 }

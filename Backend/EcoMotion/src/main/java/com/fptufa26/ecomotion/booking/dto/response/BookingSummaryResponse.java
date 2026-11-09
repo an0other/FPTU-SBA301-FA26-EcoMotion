@@ -31,6 +31,7 @@ public record BookingSummaryResponse(
         String driverName,
         BookingActionKind actionKind,
         String depositPaymentStatus,
-        String depositRejectionReason
+        String depositRejectionReason,
+        BigDecimal estimatedTotal
 ) {
 }

@@ -8,12 +8,13 @@ import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
 import { HoldCountdown } from '../payments/HoldCountdown';
 import YearlyWorkflowPanel from '../yearly-rental/YearlyWorkflowPanel';
+import TripEndConfirmationBanner from './TripEndConfirmationBanner';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
   SERVICE_QUALITY: 'Chất lượng dịch vụ / tài xế',
   DEPOSIT_REFUND: 'Hoàn cọc',
-  TRIP_NOT_CONFIRMED: 'Chuyến chưa được xác nhận kết thúc',
+  TRIP_NOT_CONFIRMED: 'Giờ kết thúc chuyến không đúng',
 };
 
 export const BookingDetail = ({
@@ -23,10 +24,12 @@ export const BookingDetail = ({
   onYearlyChanged,
   onGoBack,
   onGoToCarPage,
+  onGoToReviews,
   onPayDeposit,
   onCancelBooking,
   onOpenDispute,
   onAcceptCharge,
+  onConfirmTripEnd,
   onUploadDisputeEvidence,
   onEditRequest,
   trackingData,
@@ -76,11 +79,12 @@ export const BookingDetail = ({
               item.id === tempId ? { ...item, url: uploadedUrl, uploading: false } : item
             )
           );
-        } catch {
+        } catch (err) {
+          const reason = err?.response?.data?.message || err?.message;
           setEvidenceList((prev) =>
             prev.map((item) =>
               item.id === tempId
-                ? { ...item, uploading: false, error: 'Tải ảnh thất bại' }
+                ? { ...item, uploading: false, error: reason ? `Tải ảnh thất bại: ${reason}` : 'Tải ảnh thất bại' }
                 : item
             )
           );
@@ -186,6 +190,17 @@ export const BookingDetail = ({
         />
       )}
 
+      {booking.planType !== 'YEARLY' ? (
+        <TripEndConfirmationBanner
+          workflow={workflow}
+          onConfirm={onConfirmTripEnd}
+          onObject={() => {
+            if (booking.disputeCategories?.includes('TRIP_NOT_CONFIRMED')) setComplaintCategory('TRIP_NOT_CONFIRMED');
+            document.getElementById('booking-dispute-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        />
+      ) : null}
+
       {/* Main 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column (7 cols) */}
@@ -232,6 +247,23 @@ export const BookingDetail = ({
             </div>
           )}
 
+          {booking.status === 'COMPLETED' && onGoToReviews && (
+            <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-[#14221A]">Chuyến đi đã hoàn tất</h2>
+                <p className="text-xs text-gray-600 mt-1">Đánh giá xe và tài xế để giúp khách sau chọn đúng.</p>
+              </div>
+              <button
+                onClick={onGoToReviews}
+                type="button"
+                className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-semibold transition-colors shrink-0 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">star</span>
+                Đánh giá chuyến đi
+              </button>
+            </div>
+          )}
+
           {booking.status === 'DRIVER_ARRIVED' && (
             <div className="p-5 text-white bg-cyan-700 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
               <h2 className="text-base font-bold">Tài xế đã đến điểm đón</h2>
@@ -266,6 +298,15 @@ export const BookingDetail = ({
                     className="px-6 py-2.5 bg-[#15803D] text-white font-semibold text-sm rounded-[12px] focus-visible:ring-2 focus-visible:ring-brand-500/40"
                   >
                     Thanh toán cọc
+                  </button>
+                ) : null}
+                {booking.planType !== 'YEARLY' && booking.canCancel ? (
+                  <button
+                    onClick={() => setIsCancelModalOpen(true)}
+                    type="button"
+                    className="px-4 py-2.5 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-sm font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    Huỷ đơn
                   </button>
                 ) : null}
               </div>
@@ -599,7 +640,7 @@ export const BookingDetail = ({
           </div>
 
           {booking.disputeCategories.length > 0 && (
-            <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
+            <div id="booking-dispute-form" className="scroll-mt-24 bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
               <h3 className="text-sm font-bold text-[#14221A]">Khiếu nại</h3>
               <form onSubmit={handleComplaintSubmit} className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1.5">

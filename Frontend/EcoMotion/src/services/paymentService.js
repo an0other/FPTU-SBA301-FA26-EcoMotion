@@ -2,7 +2,7 @@ import apiClient from './apiClient.js'
 
 export const paymentService = {
   async getReceipt(reference, signal) {
-    const { data } = await apiClient.get('/v1/payments/receipt', { params: { reference }, signal })
+    const { data } = await apiClient.get('/payments/receipt', { params: { reference }, signal })
     return data?.data
   },
 
@@ -23,12 +23,12 @@ export const paymentService = {
   },
 
   async createVnpayPaymentUrl(payload) {
-    const { data } = await apiClient.post('/v1/payment/vnpay/create-url', payload)
+    const { data } = await apiClient.post('/payment/vnpay/create-url', payload)
     return data?.data
   },
 
   async processVnpayCallback(params, signal) {
-    const { data } = await apiClient.get('/v1/payment/vnpay/callback', { params, signal })
+    const { data } = await apiClient.get('/payment/vnpay/callback', { params, signal })
     return data?.data
   },
 
@@ -47,7 +47,7 @@ export const paymentService = {
   },
 
   async queryVnpayTransaction(bookingCode, vnpTxnRef, signal) {
-    const { data } = await apiClient.get('/v1/payment/vnpay/query', {
+    const { data } = await apiClient.get('/payment/vnpay/query', {
       params: { bookingCode, vnpTxnRef },
       signal,
     })

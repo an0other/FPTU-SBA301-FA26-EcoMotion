@@ -119,6 +119,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private final EntityManager entityManager;
     private final VehicleService vehicleService;
     private final com.fptufa26.ecomotion.finance.service.FinancialAuditService financialAudit;
+    private final com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService endConfirmations;
     private final jakarta.validation.Validator validator;
     private final tools.jackson.databind.ObjectMapper objectMapper;
 
@@ -799,6 +800,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT) {
                     throw new InvalidPaymentOperationException("Đơn thuê chưa ở bước thanh toán quyết toán");
                 }
+                endConfirmations.confirmedByPayment(booking, booking.getRenter().getUser().getId());
                 booking.setStatus(BookingStatus.COMPLETED);
                 bookingPaymentLedgerService.saveBooking(booking);
             }

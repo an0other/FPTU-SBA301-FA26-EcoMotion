@@ -35,6 +35,12 @@ public record OpenDisputeRequest(
         if (evidenceUrl != null && !evidenceUrl.isBlank() && !result.contains(evidenceUrl.trim())) {
             result.add(evidenceUrl.trim());
         }
-        return result;
+        // Chỉ nhận ảnh do hệ thống lưu (/api/files/...) hoặc https; tối đa 5 ảnh.
+        return result.stream()
+                .filter(url -> url.length() <= 500 && !url.chars().anyMatch(Character::isWhitespace)
+                        && (url.startsWith("/api/files/booking/") || url.startsWith("https://")))
+                .distinct()
+                .limit(5)
+                .toList();
     }
 }

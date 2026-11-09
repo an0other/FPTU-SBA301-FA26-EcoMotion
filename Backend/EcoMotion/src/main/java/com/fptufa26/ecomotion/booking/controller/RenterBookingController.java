@@ -175,6 +175,13 @@ public class RenterBookingController {
         return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
     }
 
+    @PostMapping("/{bookingCode}/trip-end/confirm")
+    public ApiResponse<BookingDetailResponse> confirmTripEnd(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(bookingService.confirmTripEnd(user.getUserId(), bookingCode));
+    }
+
     @PostMapping("/{bookingCode}/charges/{chargeId}/accept")
     public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse> acceptCharge(
             @AuthenticationPrincipal SecurityUser user,

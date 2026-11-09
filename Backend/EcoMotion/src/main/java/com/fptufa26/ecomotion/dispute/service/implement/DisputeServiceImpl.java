@@ -191,6 +191,8 @@ public class DisputeServiceImpl implements DisputeService {
         if(tripEndAction!=null) {
             endConfirmations.adminAction(booking,disputeId,adminUserId,tripEndAction,note);
             dispute.setTripEndAction(tripEndAction);
+        } else if (dispute.getCategory() == DisputeCategory.TRIP_NOT_CONFIRMED && status != DisputeStatus.IN_REVIEW) {
+            endConfirmations.adminSettled(booking, disputeId, adminUserId, note);
         }
         if (status != DisputeStatus.IN_REVIEW) refreshFinalPayment(booking);
         notifications.changed(booking, "DISPUTE_UPDATED");
@@ -246,7 +248,12 @@ public class DisputeServiceImpl implements DisputeService {
                 if (remaining.signum() <= 0) {
                     if (paid.signum() > 0) request.setAmount(paid);
                     request.setStatus(paid.signum() > 0 ? PaymentRequestStatus.CONFIRMED : PaymentRequestStatus.VOIDED);
-                    booking.setStatus(BookingStatus.COMPLETED);
+                    if (endConfirmations.isEndSettled(booking.getId())) {
+                        booking.setStatus(BookingStatus.COMPLETED);
+                    } else {
+                        booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
+                        booking.setSettlementRequestedAt(clock.instant());
+                    }
                 } else {
                     request.setAmount(paid.add(remaining));
                     request.setExpiresAt(clock.instant().plus(java.time.Duration.ofHours(48)));

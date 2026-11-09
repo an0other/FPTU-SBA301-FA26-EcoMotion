@@ -276,18 +276,23 @@ class EndUserWorkflowIntegrationTest {
         long[] driver=ready();optimization.manualAssign(bookingId,driver[0],driver[2]);trips.confirmTrip(driver[1],code());
         trips.arriveAtPickup(driver[1],code());trips.startTrip(driver[1],code());trips.finishTrip(driver[1],code());
     }
-    @Test void driverEndFinalizesTripImmediatelyWithoutRenterConfirmation() {
+    @Test void driverEndMovesToChargesAndOpensTwelveHourRenterWindow() {
         reportTripEnd();
         var b=bookings.findById(bookingId).orElseThrow();
+        // Không chặn luồng: đơn sang bước phụ phí ngay khi tài xế kết thúc.
         assertThat(b.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         assertThat(b.getActualEndAt()).isEqualTo(b.getDriverEndConfirmedAt());
         assertThat(b.getRenterConfirmedAt()).isNull();
         assertThat(b.getEndConfirmationMethod()).isEqualTo("DRIVER");
         var h=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
-        assertThat(h.getState()).isEqualTo("CONFIRMED");
-        assertThat(h.getConfirmationMethod()).isEqualTo("DRIVER");
+        assertThat(h.getState()).isEqualTo("WAITING");
+        assertThat(h.getDeadline()).isEqualTo(b.getDriverEndConfirmedAt().plus(java.time.Duration.ofHours(12)));
         assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(1);
         assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+        renterBookings.confirmTripEnd(renterId, code());
+        var confirmed=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
+        assertThat(confirmed.getState()).isEqualTo("CONFIRMED");
+        assertThat(confirmed.getConfirmationMethod()).isEqualTo("RENTER");
     }
     @Test void unassignedDriverCannotStartOrEndTrip() {
         long[] assigned = ready(); long[] other = ready();
@@ -344,6 +349,7 @@ class EndUserWorkflowIntegrationTest {
         disputes.resolveDispute(dispute.disputeId(), adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED,
                 com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE, "Evidence confirms no waiting charge");
         providerBookings.finalizeSettlement(providerId, code());
+        renterBookings.confirmTripEnd(renterId, code());
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("SETTLED");
     }
     @Autowired com.fptufa26.ecomotion.booking.service.BookingWorkflowService workflow;
@@ -746,7 +752,7 @@ class EndUserWorkflowIntegrationTest {
         assertThat(bookings.findById(bookingId).orElseThrow().getPickupTime().equals(next)).isEqualTo(decision.status().equals("ACCEPTED"));
     }
 
-    @Test void driverEndOnlyEndsTripThenProviderSettlesWithoutRenterConfirmation() {
+    @Test void providerSettlementCompletesAfterRenterConfirmsEndTime() {
         long[] driver = ready(); optimization.manualAssign(bookingId, driver[0], driver[2]);
         trips.confirmTrip(driver[1], code()); trips.arriveAtPickup(driver[1], code());
         trips.startTrip(driver[1], code());
@@ -754,6 +760,9 @@ class EndUserWorkflowIntegrationTest {
         assertThat(workflow.getWorkflow(renterId, code()).tripStatus()).isEqualTo("ENDED");
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("REVIEWING_CHARGES");
         providerBookings.finalizeSettlement(providerId, code());
+        // Số dư 0 nhưng khách còn trong 12 giờ xác nhận giờ kết thúc: chưa hoàn tất.
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isNotEqualTo(BookingStatus.COMPLETED);
+        renterBookings.confirmTripEnd(renterId, code());
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("SETTLED");
     }
     @Autowired EntityManager em;

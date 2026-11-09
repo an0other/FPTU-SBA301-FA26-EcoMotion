@@ -155,6 +155,7 @@ public class BookingServiceImpl implements BookingService {
     private final BookingStartPolicy bookingStartPolicy;
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
+    private final com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage evidenceImageStorage;
     private final RefundEventService refundEventService;
     private final com.fptufa26.ecomotion.finance.service.CancellationClosureService cancellationClosure;
 
@@ -713,8 +714,8 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Gói năm đã được chấp nhận, không sửa trực tiếp điều kiện đặt xe");
         }
         bookingStartPolicy.validate(request.pickupTime());
-        if (!request.pickupTime().isAfter(Instant.now())) {
-            throw new ConflictException("Thời gian đón phải ở tương lai");
+        if (request.pickupTime().isBefore(clock.instant().plus(MINIMUM_BOOKING_LEAD_TIME))) {
+            throw new ConflictException("Giờ nhận xe phải sau thời điểm hiện tại ít nhất 3 giờ");
         }
         int passengerLimit = Math.max(0, booking.getVehicle().getSeatCount() - 1);
         if (request.passengerCount() > passengerLimit) {
@@ -914,6 +915,18 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
+    public BookingDetailResponse confirmTripEnd(Long userId, String bookingCode) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (booking.getDriverEndConfirmedAt() == null) {
+            throw new ConflictException("Tài xế chưa kết thúc chuyến");
+        }
+        endConfirmations.renterConfirm(booking, userId);
+        return toDetail(booking);
+    }
+
+    @Override
+    @Transactional
     public com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
@@ -935,11 +948,7 @@ public class BookingServiceImpl implements BookingService {
     public String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Vui lòng chọn hình ảnh để tải lên");
-        }
-        var uploadResult = cloudinaryService.uploadDisputeEvidence(file, booking.getId());
-        return uploadResult.secureUrl();
+        return evidenceImageStorage.store(file, userId, "dispute-" + booking.getId()).url();
     }
 
     private BookingDetailResponse toDetail(Booking booking) {
@@ -976,8 +985,9 @@ public class BookingServiceImpl implements BookingService {
                     && paymentTransactionRepository.findByBooking_Id(booking.getId()).stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
                         && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0);
             case YEARLY_SETTLEMENT, YEARLY_CANCELLATION -> false;
-            case TRIP_NOT_CONFIRMED -> booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
-                    && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null));
+            case TRIP_NOT_CONFIRMED -> endConfirmations.canObject(booking)
+                    || (booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
+                    && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null)));
         };
     }
 
@@ -1163,7 +1173,19 @@ public class BookingServiceImpl implements BookingService {
                 assignedDriverName(booking),
                 actionKind(booking),
                 depositPaymentStatus(booking),
-                depositRejectionReason(booking));
+                depositRejectionReason(booking),
+                estimatedTotal(booking));
+    }
+
+    /** Tiền thuê + phụ phí chưa miễn (gồm phí đón ngoài bán kính) — khớp "Tổng chi phí dự kiến" ở trang chi tiết. */
+    private BigDecimal estimatedTotal(Booking booking) {
+        BigDecimal base = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
+        BigDecimal extras = chargeRepository.findByBooking_IdOrderByIdAsc(booking.getId()).stream()
+                .filter(c -> !c.isWaived() && c.getAmount() != null
+                        && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT)
+                .map(BookingCharge::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return base.add(extras);
     }
 
     private String depositPaymentStatus(Booking booking) {

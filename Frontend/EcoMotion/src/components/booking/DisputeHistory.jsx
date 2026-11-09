@@ -1,7 +1,7 @@
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 
-const categories = { CHARGE: 'Khiếu nại phụ phí', YEARLY_SETTLEMENT: 'Quyết toán năm', YEARLY_CANCELLATION: 'Hủy trước nhận xe', DEPOSIT_REFUND: 'Khiếu nại hoàn cọc', SERVICE_QUALITY: 'Chất lượng dịch vụ', TRIP_NOT_CONFIRMED: 'Chưa đủ xác nhận kết thúc' }
+const categories = { CHARGE: 'Khiếu nại phụ phí', YEARLY_SETTLEMENT: 'Quyết toán năm', YEARLY_CANCELLATION: 'Hủy trước nhận xe', DEPOSIT_REFUND: 'Khiếu nại hoàn cọc', SERVICE_QUALITY: 'Chất lượng dịch vụ', TRIP_NOT_CONFIRMED: 'Giờ kết thúc chuyến không đúng' }
 const statuses = { OPEN: 'Đã gửi, chờ thụ lý', IN_REVIEW: 'Đang xem xét', RESOLVED: 'Đã phân xử', REJECTED: 'Đã bác bỏ khiếu nại' }
 const finances = { AWAITING_REFUND: 'Đã phân xử, chờ hoàn tiền', AWAITING_RECEIPT: 'Nhà xe đã chuyển hoàn, chờ xác nhận nhận tiền', RECONCILIATION_REQUIRED: 'Khoản hoàn cần đối soát', COMPLETED: 'Khoản hoàn đã hoàn tất' }
 const decisions = { WAIVE_CHARGE: 'Miễn khoản phụ phí', KEEP_CHARGE: 'Giữ nguyên khoản phụ phí' }
@@ -15,7 +15,7 @@ export default function DisputeHistory({ disputes = [] }) {
       <p className="whitespace-pre-wrap break-words">{dispute.description || 'Chưa ghi nhận nội dung'}</p>
       {dispute.chargeDescription && <p>Khoản phí: {dispute.chargeDescription}</p>}
       <p>Thời gian gửi: {formatBookingWhen(dispute.createdAt) || 'Chưa ghi nhận'}</p>
-      {dispute.evidenceUrls?.length > 0 && <div className="flex flex-wrap gap-3">{dispute.evidenceUrls.map((url, index) => /^https?:\/\//.test(url) && <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="text-emerald-800 underline">Bằng chứng {index + 1}</a>)}</div>}
+      {dispute.evidenceUrls?.length > 0 && <div className="flex flex-wrap gap-3">{dispute.evidenceUrls.map((url, index) => /^(https?:\/\/|\/api\/files\/)/.test(url) && <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="text-emerald-800 underline">Bằng chứng {index + 1}</a>)}</div>}
       <p className="whitespace-pre-wrap break-words">Phản hồi / kết luận: {dispute.resolution || 'Chưa ghi nhận'}</p>
       <p>Người xử lý: {dispute.handledByName || 'Chưa ghi nhận'}</p>
       <p>Thời điểm phân xử: {formatBookingWhen(dispute.resolvedAt) || 'Chưa ghi nhận'}</p>

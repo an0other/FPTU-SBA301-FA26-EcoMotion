@@ -222,11 +222,11 @@ export function createNotificationStream({
   }
 }
 
-// Singleton của ứng dụng. Gọi API /v1/notifications/stream qua /api (cùng origin qua proxy dev).
+// Singleton của ứng dụng. Gọi API /notifications/stream qua /api (cùng origin qua proxy dev).
 const baseUrl = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
 const notificationStream = createNotificationStream({
-  url: `${baseUrl}/v1/notifications/stream`,
+  url: `${baseUrl}/notifications/stream`,
   getToken: getAccessToken,
   refreshToken: refreshAccessToken,
   subscribeToken: subscribeAccessToken,

@@ -32,7 +32,9 @@ export function computeBookingFinancialLines({
   charges,
 }) {
   const rent = Number(totalAmount) || 0
-  const fee = Number(pickupFee) || 0
+  // Phí đón ngoài bán kính đã là một dòng charge OUT_OF_RADIUS; không cộng pickupFee lần nữa.
+  const pickupFeeInCharges = Boolean(charges?.some((charge) => charge.chargeType === 'OUT_OF_RADIUS'))
+  const fee = pickupFeeInCharges ? 0 : Number(pickupFee) || 0
   const surcharges = surchargeItemsFromCharges(charges)
   const surchargeTotal = surcharges.reduce((sum, item) => sum + Number(item.amount), 0)
   const grand = rent + fee + surchargeTotal

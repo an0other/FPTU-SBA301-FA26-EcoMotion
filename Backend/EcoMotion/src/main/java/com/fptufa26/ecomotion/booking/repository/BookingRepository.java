@@ -262,6 +262,15 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
             @Param("end") Instant end
     );
 
+    /** Mã các chuyến khác mà tài xế đang thực hiện dở (đã đến điểm đón / đang chạy, chưa kết thúc). */
+    @Query("SELECT b.bookingCode FROM Booking b WHERE b.driver.id = :driverId AND b.id <> :excludeBookingId " +
+            "AND b.actualEndAt IS NULL AND b.status IN :statuses ORDER BY b.pickupTime ASC")
+    List<String> findOtherActiveDriverBookingCodes(
+            @Param("driverId") Long driverId,
+            @Param("excludeBookingId") Long excludeBookingId,
+            @Param("statuses") Collection<BookingStatus> statuses
+    );
+
     boolean existsByDriver_IdAndStatus(Long driverId, BookingStatus status);
 
     Optional<Booking> findFirstByDriver_IdAndStatus(Long driverId, BookingStatus status);

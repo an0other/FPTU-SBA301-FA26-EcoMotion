@@ -83,6 +83,7 @@ public class VnpayServiceImpl implements VnpayService {
     private final DriverOptimizationService driverOptimizationService;
     private final PaymentCodeGenerator paymentCodeGenerator;
     private final Clock clock;
+    private final com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService endConfirmations;
     private final VnpayConfig vnpayConfig;
     private final PlatformTransactionManager transactionManager;
 
@@ -209,6 +210,7 @@ public class VnpayServiceImpl implements VnpayService {
 
             // If final payable is 0, complete obligations immediately without creating 0 VND VNPay txn (TC09)
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                endConfirmations.confirmedByPayment(booking, currentUserId);
                 booking.setStatus(BookingStatus.COMPLETED);
                 bookingQueryService.saveBooking(booking);
                 paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
@@ -638,6 +640,7 @@ public class VnpayServiceImpl implements VnpayService {
             transaction.setPaidAt(clock.instant());
             bookingQueryService.saveTransaction(transaction);
             if (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT) {
+                endConfirmations.confirmedByPayment(booking, booking.getRenter().getUser().getId());
                 booking.setStatus(BookingStatus.COMPLETED);
                 bookingQueryService.saveBooking(booking);
             }

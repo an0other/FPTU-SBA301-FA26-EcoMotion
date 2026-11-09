@@ -21,6 +21,8 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
   const [resolution, setResolution] = useState('CHANGE_VEHICLE')
   const [vehicleId, setVehicleId] = useState('')
   const [pickup, setPickup] = useState('')
+  // Giờ VN (UTC+7) sớm nhất: hiện tại + 1 giờ, khớp kiểm tra đề xuất đổi giờ ở backend.
+  const [minPickup] = useState(() => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 16))
   const [reason, setReason] = useState(risk?.userMessage || 'Chưa có tài xế phù hợp, cần thống nhất phương án với khách thuê.')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -201,7 +203,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
               {resolution === 'RESCHEDULE' && (
                 <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900">
                   Giờ nhận xe mới
-                  <input aria-label="Giờ nhận xe mới" type="datetime-local" required value={pickup} onChange={e => setPickup(e.target.value)} disabled={submitting} className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  <input aria-label="Giờ nhận xe mới" type="datetime-local" required min={minPickup} value={pickup} onChange={e => setPickup(e.target.value)} disabled={submitting} className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
                 </label>
               )}
 
