@@ -21,14 +21,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
 
 @Service
 @RequiredArgsConstructor
 public class ProviderScheduleServiceImpl implements ProviderScheduleService {
 
+    private static final DateTimeFormatter VIETNAM_DATETIME_FORMATTER =
+            DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
+
     private final VehicleScheduleRepository vehicleScheduleRepository;
+    private final VehicleRepository vehicleRepository;
     private final VehicleCatalogService vehicleCatalogService;
     private final UserService userService;
 
@@ -81,13 +88,12 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
             Instant toDate
     ) {
         Provider provider = findProviderByUserId(userId);
-        List<VehicleSchedule> schedules = vehicleScheduleRepository.findByProviderIdOrderDesc(provider.getId());
+        List<VehicleSchedule> schedules = (vehicleId != null)
+                ? vehicleScheduleRepository.findVisibleByProviderIdAndVehicleIdOrderDesc(provider.getId(), vehicleId)
+                : vehicleScheduleRepository.findVisibleByProviderIdOrderDesc(provider.getId());
 
         return schedules.stream()
                 .filter(s -> {
-                    if (vehicleId != null && !s.getVehicle().getId().equals(vehicleId)) {
-                        return false;
-                    }
                     if (type != null && s.getType() != type) {
                         return false;
                     }
@@ -123,7 +129,12 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
             throw new BadRequestException("Thời gian kết thúc phải lớn hơn thời gian bắt đầu");
         }
 
-        Vehicle vehicle = vehicleCatalogService.requireOwnedByProvider(request.vehicleId(), provider.getId());
+        Vehicle vehicle = vehicleRepository.findByIdForUpdate(request.vehicleId())
+                .orElseThrow(() -> new NotFoundException("Phương tiện không tồn tại hoặc không thuộc sở hữu của nhà xe"));
+
+        if (!vehicle.getProvider().getId().equals(provider.getId())) {
+            throw new NotFoundException("Phương tiện không tồn tại hoặc không thuộc sở hữu của nhà xe");
+        }
 
         if (vehicle.getStatus() == VehicleStatus.PENDING) {
             throw new BadRequestException("Phương tiện đang chờ Admin duyệt hồ sơ, chưa thể tạo lịch chặn hoặc bảo dưỡng");
@@ -135,13 +146,31 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
         AvailabilityPolicy.Window protectedWindow =
                 AvailabilityPolicy.bufferedWindow(
                         vehicle, request.startAt(), request.endAt());
-        boolean hasConflictSchedule = vehicleScheduleRepository.existsActiveOverlap(
+        List<VehicleSchedule> occupiedSchedules = vehicleScheduleRepository.findOccupiedInRange(
                 vehicle.getId(),
                 protectedWindow.start(),
                 protectedWindow.end()
         );
-        if (hasConflictSchedule) {
-            throw new ConflictException("Không thể chặn lịch vì xe đã có lịch giữ chỗ, đặt xe, bảo dưỡng hoặc khoảng đệm đang hiệu lực");
+
+        for (VehicleSchedule occupied : occupiedSchedules) {
+            if (occupied.getType() == ScheduleType.BOOKED) {
+                String bookingRef = (occupied.getBooking() != null && occupied.getBooking().getBookingCode() != null)
+                        ? occupied.getBooking().getBookingCode()
+                        : (occupied.getBooking() != null ? String.valueOf(occupied.getBooking().getId()) : "N/A");
+                int bufferMinutes = vehicle.getMaintenanceBufferMinutes() != null ? vehicle.getMaintenanceBufferMinutes() : 0;
+                String timeRange = VIETNAM_DATETIME_FORMATTER.format(occupied.getStartAt()) + " - " + VIETNAM_DATETIME_FORMATTER.format(occupied.getEndAt());
+                String message = bufferMinutes > 0
+                        ? String.format("Không thể chặn lịch vì trùng với đơn đặt xe #%s (%s, kèm %d phút đệm kỹ thuật)", bookingRef, timeRange, bufferMinutes)
+                        : String.format("Không thể chặn lịch vì trùng với đơn đặt xe #%s (%s)", bookingRef, timeRange);
+                throw new ConflictException(message);
+            } else if (occupied.getType() == ScheduleType.MAINTENANCE || occupied.getType() == ScheduleType.BLOCKED) {
+                if (occupied.getStartAt().isBefore(request.endAt()) && occupied.getEndAt().isAfter(request.startAt())) {
+                    String typeName = occupied.getType() == ScheduleType.MAINTENANCE ? "bảo dưỡng" : "chặn bận";
+                    String timeRange = VIETNAM_DATETIME_FORMATTER.format(occupied.getStartAt()) + " - " + VIETNAM_DATETIME_FORMATTER.format(occupied.getEndAt());
+                    String message = String.format("Không thể chặn lịch vì trùng với lịch %s hiện có (%s)", typeName, timeRange);
+                    throw new ConflictException(message);
+                }
+            }
         }
 
         VehicleSchedule schedule = new VehicleSchedule();
@@ -176,6 +205,10 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
 
         if (schedule.getStatus() == ScheduleStatus.CANCELLED) {
             throw new BadRequestException("Lịch xe này đã được mở lại từ trước");
+        }
+
+        if (!schedule.getEndAt().isAfter(Instant.now())) {
+            throw new BadRequestException("Lịch chặn này đã kết thúc, hệ thống đã tự động mở lại lịch xe");
         }
 
         schedule.setStatus(ScheduleStatus.CANCELLED);

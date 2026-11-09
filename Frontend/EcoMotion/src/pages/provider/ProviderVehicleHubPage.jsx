@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
@@ -107,8 +107,48 @@ export default function ProviderVehicleHubPage() {
   const [initialSurcharges, setInitialSurcharges] = useState(null)
   const [savingPlans, setSavingPlans] = useState(false)
   const [depositPolicy, setDepositPolicy] = useState({ depositRatioOverride: '', minimumDepositAmount: 0 })
+  const [initialDepositPolicy, setInitialDepositPolicy] = useState(null)
   const [depositPolicyInfo, setDepositPolicyInfo] = useState(null)
   const [savingDepositPolicy, setSavingDepositPolicy] = useState(false)
+
+  const liveDepositCalculation = useMemo(() => {
+    const providerRatio = Number(depositPolicyInfo?.providerDefaultRatio ?? 0.3)
+    const overrideRaw = depositPolicy.depositRatioOverride
+    let effectiveRatio = providerRatio
+    let isOverride = false
+    let ratioWarning = null
+
+    if (overrideRaw !== '' && overrideRaw != null) {
+      const parsed = Number(overrideRaw)
+      if (parsed > 1) {
+        ratioWarning = `Bạn đang nhập ${parsed} (${parsed * 100}%). Tỷ lệ hợp lệ từ 0.01 (1%) đến 1.0 (100%). Hãy nhập ${parsed / 100} cho ${parsed}%.`
+      } else if (parsed < 0.01) {
+        ratioWarning = 'Tỷ lệ cọc riêng tối thiểu phải từ 0.01 (1%).'
+      } else {
+        effectiveRatio = parsed
+        isOverride = true
+      }
+    }
+
+    const minAmount = Math.max(0, Number(depositPolicy.minimumDepositAmount || 0))
+    const sample10M = 10000000
+    const sampleShortTrip = 300000
+
+    const calcDeposit = (total) => {
+      const raw = Math.round(total * effectiveRatio)
+      return Math.min(total, Math.max(raw, minAmount))
+    }
+
+    return {
+      effectiveRatio,
+      effectiveRatioPercent: Math.round(effectiveRatio * 100),
+      isOverride,
+      ratioWarning,
+      minAmount,
+      example10MDeposit: calcDeposit(sample10M),
+      exampleShortDeposit: calcDeposit(sampleShortTrip)
+    }
+  }, [depositPolicy, depositPolicyInfo])
 
   const fetchVehicleData = useCallback(async () => {
     try {
@@ -137,10 +177,12 @@ export default function ProviderVehicleHubPage() {
       try {
         const policy = await providerService.getVehicleDepositPolicy(id)
         setDepositPolicyInfo(policy)
-        setDepositPolicy({
+        const loadedPolicy = {
           depositRatioOverride: policy.depositRatioOverride == null ? '' : Number(policy.depositRatioOverride),
           minimumDepositAmount: Number(policy.minimumDepositAmount ?? 0),
-        })
+        }
+        setDepositPolicy(loadedPolicy)
+        setInitialDepositPolicy(loadedPolicy)
       } catch (policyError) {
         console.error('Failed to load deposit policy', policyError)
       }
@@ -198,7 +240,7 @@ export default function ProviderVehicleHubPage() {
       })
     } finally {
       setLoading(false)
-    }
+      }
   }, [id])
 
   function openUploadDocModal(docType, existingDoc = null) {
@@ -424,7 +466,7 @@ export default function ProviderVehicleHubPage() {
       if (isPlateChanged) {
         setToast({
           type: 'warning',
-          message: 'Biển số mới đã gửi: Xe chuyển về trạng thái CHỜ DUYỆT (PENDING)'
+          message: 'Biển số mới đã gửi: Xe chuyển về trạng thái Chờ duyệt'
         })
       } else {
         setToast({
@@ -447,6 +489,54 @@ export default function ProviderVehicleHubPage() {
     return new Intl.NumberFormat('vi-VN').format(amount)
   }
 
+  function blockNegativeAndExponentKeys(e, allowDecimal = true) {
+    if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+      e.preventDefault()
+    }
+    if (!allowDecimal && (e.key === '.' || e.key === ',')) {
+      e.preventDefault()
+    }
+  }
+
+  function sanitizeRatioInput(value) {
+    if (value === '' || value === null || value === undefined) return ''
+    let clean = String(value).replace(',', '.').replace(/[^0-9.]/g, '')
+    const parts = clean.split('.')
+    if (parts.length > 2) {
+      clean = `${parts[0]}.${parts.slice(1).join('')}`
+    }
+    if (clean === '.' || clean === '0.') return '0.'
+    const num = parseFloat(clean)
+    if (isNaN(num)) return ''
+    if (num > 1) return '1'
+    if (num < 0) return '0'
+    return clean
+  }
+
+  function sanitizeIntegerInput(value, min = 0) {
+    if (value === '' || value === null || value === undefined) return ''
+    const clean = String(value).replace(/[^0-9]/g, '')
+    if (clean === '') return ''
+    const num = parseInt(clean, 10)
+    return Math.max(min, isNaN(num) ? min : num)
+  }
+
+  function handleDepositRatioOverrideChange(value) {
+    const sanitized = sanitizeRatioInput(value)
+    setDepositPolicy(prev => ({ ...prev, depositRatioOverride: sanitized }))
+  }
+
+  function handleDepositRatioBlur() {
+    if (depositPolicy.depositRatioOverride === '0.' || depositPolicy.depositRatioOverride === '.') {
+      setDepositPolicy(prev => ({ ...prev, depositRatioOverride: '' }))
+    }
+  }
+
+  function handleMinimumDepositChange(value) {
+    const sanitized = sanitizeIntegerInput(value, 0)
+    setDepositPolicy(prev => ({ ...prev, minimumDepositAmount: sanitized }))
+  }
+
   function togglePlanStatus(planType) {
     setPricingPlans(prev => ({
       ...prev,
@@ -458,49 +548,59 @@ export default function ProviderVehicleHubPage() {
   }
 
   function handlePlanPriceChange(planType, value) {
-    const num = value === '' ? '' : Math.max(0, parseInt(value, 10) || 0)
+    const sanitized = sanitizeIntegerInput(value, 0)
     setPricingPlans(prev => ({
       ...prev,
-      [planType]: {
-        ...prev[planType],
-        slotPrice: num
-      }
+      [planType]: { ...prev[planType], slotPrice: sanitized }
     }))
   }
 
   function handleHourlyThresholdChange(value) {
-    const num = value === '' ? '' : Math.max(1, parseInt(value, 10) || 1)
+    const sanitized = sanitizeIntegerInput(value, 1)
     setPricingPlans(prev => ({
       ...prev,
       HOURLY: {
         ...prev.HOURLY,
-        hourlyToDailyThresholdMinutes: num
+        hourlyToDailyThresholdMinutes: sanitized
       }
     }))
   }
 
   function handleYearlyUpfrontChange(value) {
-    const num = value === '' ? '' : Math.max(0, parseInt(value, 10) || 0)
+    const sanitized = sanitizeIntegerInput(value, 0)
     setPricingPlans(prev => ({
       ...prev,
       YEARLY: {
         ...prev.YEARLY,
-        upfrontAmount: num
+        upfrontAmount: sanitized
       }
     }))
   }
 
   function handleSurchargeChange(field, value) {
-    setSurcharges(prev => ({
-      ...prev,
-      [field]: value === '' ? '' : (field.includes('Ratio') ? parseFloat(value) : (parseInt(value, 10) || 0))
-    }))
+    if (field.includes('Ratio')) {
+      const sanitized = sanitizeRatioInput(value)
+      setSurcharges(prev => ({ ...prev, [field]: sanitized }))
+    } else {
+      const sanitized = sanitizeIntegerInput(value, 0)
+      setSurcharges(prev => ({ ...prev, [field]: sanitized }))
+    }
+  }
+
+  function handleSurchargeBlur(field) {
+    if (field.includes('Ratio')) {
+      const val = surcharges[field]
+      if (val === '0.' || val === '.') {
+        setSurcharges(prev => ({ ...prev, [field]: 0 }))
+      }
+    }
   }
 
   function handleResetPricing() {
     if (initialPricingPlans) setPricingPlans({ ...initialPricingPlans })
     if (initialSurcharges) setSurcharges({ ...initialSurcharges })
-    setToast({ type: 'info', message: 'Đã khôi phục cấu hình bảng giá ban đầu' })
+    if (initialDepositPolicy) setDepositPolicy({ ...initialDepositPolicy })
+    setToast({ type: 'info', message: 'Đã khôi phục cấu hình bảng giá và chính sách cọc ban đầu' })
   }
 
   async function handleSavePricing(e) {
@@ -536,6 +636,43 @@ export default function ProviderVehicleHubPage() {
         }
       }
 
+      const isDepositPolicyChanged = initialDepositPolicy && (
+        depositPolicy.depositRatioOverride !== initialDepositPolicy.depositRatioOverride ||
+        Number(depositPolicy.minimumDepositAmount) !== Number(initialDepositPolicy.minimumDepositAmount)
+      )
+
+      let ratioValue = null
+      if (isDepositPolicyChanged) {
+        ratioValue = depositPolicy.depositRatioOverride === ''
+          ? null
+          : Number(depositPolicy.depositRatioOverride)
+        if (ratioValue != null && (ratioValue < 0.01 || ratioValue > 1)) {
+          setToast({ type: 'error', message: 'Tỷ lệ cọc riêng phải từ 1% đến 100%.' })
+          setSavingPlans(false)
+          return
+        }
+      }
+
+      if (
+        Number(surcharges.allowedOvertimeMinutes) < 0 ||
+        Number(surcharges.overtimeSurchargeRatio) < 0 ||
+        Number(surcharges.freeRadiusKm) < 0 ||
+        Number(surcharges.outOfRadiusRate) < 0 ||
+        Number(surcharges.waitingFreeMinutes) < 0 ||
+        Number(surcharges.waitingRate) < 0 ||
+        Number(surcharges.weekendSurchargeRatio) < 0
+      ) {
+        setToast({ type: 'error', message: 'Các giá trị phụ phí không được mang số âm' })
+        setSavingPlans(false)
+        return
+      }
+
+      if (Number(surcharges.overtimeSurchargeRatio) > 1 || Number(surcharges.weekendSurchargeRatio) > 1) {
+        setToast({ type: 'error', message: 'Tỷ lệ phụ thu không được vượt quá 100% (1.0)' })
+        setSavingPlans(false)
+        return
+      }
+
       const payload = {
         plans: [
           {
@@ -561,25 +698,42 @@ export default function ProviderVehicleHubPage() {
             upfrontAmount: pricingPlans.YEARLY?.upfrontAmount ? Number(pricingPlans.YEARLY?.upfrontAmount) : 0
           }
         ],
-        allowedOvertimeMinutes: Number(surcharges.allowedOvertimeMinutes) || 0,
-        overtimeSurchargeRatio: Number(surcharges.overtimeSurchargeRatio) || 0,
-        freeRadiusKm: Number(surcharges.freeRadiusKm) || 0,
-        outOfRadiusRate: Number(surcharges.outOfRadiusRate) || 0,
-        waitingFreeMinutes: Number(surcharges.waitingFreeMinutes) || 0,
-        waitingRate: Number(surcharges.waitingRate) || 0,
-        weekendSurchargeRatio: Number(surcharges.weekendSurchargeRatio) || 0,
+        allowedOvertimeMinutes: Math.max(0, Number(surcharges.allowedOvertimeMinutes) || 0),
+        overtimeSurchargeRatio: Math.min(1.0, Math.max(0, Number(surcharges.overtimeSurchargeRatio) || 0)),
+        freeRadiusKm: Math.max(0, Number(surcharges.freeRadiusKm) || 0),
+        outOfRadiusRate: Math.max(0, Number(surcharges.outOfRadiusRate) || 0),
+        waitingFreeMinutes: Math.max(0, Number(surcharges.waitingFreeMinutes) || 0),
+        waitingRate: Math.max(0, Number(surcharges.waitingRate) || 0),
+        weekendSurchargeRatio: Math.min(1.0, Math.max(0, Number(surcharges.weekendSurchargeRatio) || 0)),
         confirmUnusualPriceChange
       }
 
-      const updated = await providerService.updateVehicleRentalPlans(id, payload)
-      if (updated) {
+      const savePromises = [providerService.updateVehicleRentalPlans(id, payload)]
+      if (isDepositPolicyChanged) {
+        savePromises.push(providerService.updateVehicleDepositPolicy(id, {
+          depositRatioOverride: ratioValue,
+          minimumDepositAmount: Number(depositPolicy.minimumDepositAmount || 0),
+        }))
+      }
+
+      const [updatedPlans, updatedPolicy] = await Promise.all(savePromises)
+      if (updatedPlans) {
         setInitialPricingPlans(pricingPlans)
         setInitialSurcharges(surcharges)
-        setToast({
-          type: 'success',
-          message: 'Cập nhật bảng giá gói cước & phụ phí vận hành thành công!'
+      }
+      if (updatedPolicy) {
+        setDepositPolicyInfo(updatedPolicy)
+        setInitialDepositPolicy({
+          depositRatioOverride: updatedPolicy.depositRatioOverride == null ? '' : Number(updatedPolicy.depositRatioOverride),
+          minimumDepositAmount: Number(updatedPolicy.minimumDepositAmount ?? 0),
         })
       }
+      setToast({
+        type: 'success',
+        message: isDepositPolicyChanged
+          ? 'Cập nhật bảng giá gói cước & chính sách đặt cọc thành công!'
+          : 'Cập nhật bảng giá gói cước & phụ phí vận hành thành công!'
+      })
     } catch (err) {
       setToast({
         type: 'error',
@@ -605,6 +759,10 @@ export default function ProviderVehicleHubPage() {
         minimumDepositAmount: Number(depositPolicy.minimumDepositAmount || 0),
       })
       setDepositPolicyInfo(updated)
+      setInitialDepositPolicy({
+        depositRatioOverride: updated.depositRatioOverride == null ? '' : Number(updated.depositRatioOverride),
+        minimumDepositAmount: Number(updated.minimumDepositAmount ?? 0),
+      })
       setToast({ type: 'success', message: 'Đã cập nhật chính sách đặt cọc cho xe.' })
     } catch (err) {
       setToast({ type: 'error', message: err.response?.data?.message || err.message || 'Không thể cập nhật chính sách đặt cọc.' })
@@ -639,28 +797,28 @@ export default function ProviderVehicleHubPage() {
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>ĐÃ DUYỆT (APPROVED)</span>
+            <span>Đã duyệt</span>
           </span>
         )
       case 'PENDING':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-            <span>CHỜ DUYỆT (PENDING)</span>
+            <span>Chờ duyệt</span>
           </span>
         )
       case 'REJECTED':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-            <span>TỪ CHỐI (REJECTED)</span>
+            <span>Bị từ chối</span>
           </span>
         )
       case 'HIDDEN':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-            <span>TẠM ẨN (HIDDEN)</span>
+            <span>Tạm ẩn</span>
           </span>
         )
       default:
@@ -681,7 +839,7 @@ export default function ProviderVehicleHubPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] text-slate-800 font-sans flex flex-col pb-32 antialiased">
+    <div className="min-h-screen bg-[#f8f9ff] text-slate-800 font-sans flex flex-col pb-12 antialiased">
       {toast && (
         <Toast
           message={toast.message}
@@ -846,7 +1004,7 @@ export default function ProviderVehicleHubPage() {
                 }`}
             >
               <span className="material-symbols-outlined text-lg">payments</span>
-              <span>Tab 3: Bảng giá & Gói cước (Rental Plans)</span>
+              <span>Tab 3: Bảng giá & Gói cước</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             </button>
           </div>
@@ -862,7 +1020,7 @@ export default function ProviderVehicleHubPage() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    Kiến trúc Cập nhật Hồ sơ 3 Tầng (3-Tier Legal Rules)
+                    Quy chuẩn cập nhật hồ sơ xe 3 tầng
                     <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">Quy chuẩn v10.1</span>
                   </h2>
                   <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
@@ -907,7 +1065,7 @@ export default function ProviderVehicleHubPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                      Số khung (VIN / Chassis Number) <span className="text-rose-500">*</span>
+                      Số khung xe <span className="text-rose-500">*</span>
                     </label>
                     <span className="text-[11px] text-slate-400 flex items-center gap-1">
                       <span className="material-symbols-outlined text-xs">lock</span> Đã khóa bất biến
@@ -969,7 +1127,7 @@ export default function ProviderVehicleHubPage() {
               <div className="mb-5 p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
                 <span className="material-symbols-outlined text-amber-600 text-base flex-shrink-0 mt-0.5">verified_user</span>
                 <p className="leading-relaxed">
-                  <strong>Quy chuẩn xét duyệt:</strong> Khi chỉnh sửa Biển số xe kiểm soát, phương tiện sẽ tự động chuyển sang trạng thái <strong>CHỜ DUYỆT (PENDING)</strong> để Chuyên viên kiểm duyệt hồ sơ cà-vẹt trước khi đưa vào vận hành thực tế.
+                  <strong>Quy chuẩn xét duyệt:</strong> Khi chỉnh sửa Biển số xe kiểm soát, phương tiện sẽ tự động chuyển sang trạng thái <strong>Chờ duyệt</strong> để Chuyên viên kiểm duyệt hồ sơ cà-vẹt trước khi đưa vào vận hành thực tế.
                 </p>
               </div>
 
@@ -1005,7 +1163,7 @@ export default function ProviderVehicleHubPage() {
                     <div className="p-3 rounded-xl bg-amber-100/70 border border-amber-300 text-xs text-amber-900 flex items-start gap-2">
                       <span className="material-symbols-outlined text-amber-700 text-base flex-shrink-0">report</span>
                       <div>
-                        <strong className="font-bold">⚠️ Biển mới: Sẽ chuyển về CHỜ DUYỆT (PENDING)</strong>
+                        <strong className="font-bold">⚠️ Biển mới: Sẽ chuyển về Chờ duyệt</strong>
                         <p className="text-[11px] text-amber-800 mt-0.5">Xe sẽ tạm dừng nhận khách cho đến khi Quản trị viên duyệt lại hồ sơ biển số mới.</p>
                       </div>
                     </div>
@@ -1018,7 +1176,7 @@ export default function ProviderVehicleHubPage() {
                 </div>
 
                 <div className="lg:col-span-6 bg-slate-50/80 p-5 rounded-2xl border border-slate-200 flex flex-col items-center justify-center">
-                  <span className="text-xs font-semibold text-slate-500 mb-3 self-start">Mô phỏng biển số thực tế (Live Preview):</span>
+                  <span className="text-xs font-semibold text-slate-500 mb-3 self-start">Mô phỏng biển số thực tế:</span>
                   <div className="vn-plate w-64 sm:w-72 h-24 rounded-2xl px-4 py-2 flex flex-col items-center justify-center relative select-none bg-gradient-to-b from-white to-slate-100 border-[3.5px] border-slate-800 shadow-md">
                     
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-300 border border-slate-500 absolute top-2 left-3 shadow-inner"></span>
@@ -1075,7 +1233,7 @@ export default function ProviderVehicleHubPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                    Hãng xe (Brand) <span className="text-rose-500">*</span>
+                    Hãng xe <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <select
@@ -1099,7 +1257,7 @@ export default function ProviderVehicleHubPage() {
 
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                    Dòng xe (Model) <span className="text-rose-500">*</span>
+                    Dòng xe <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1118,7 +1276,11 @@ export default function ProviderVehicleHubPage() {
                     min="2015"
                     max="2026"
                     value={form.manufactureYear}
-                    onChange={(e) => setForm(prev => ({ ...prev, manufactureYear: e.target.value }))}
+                    onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/[^0-9]/g, '')
+                      setForm(prev => ({ ...prev, manufactureYear: clean }))
+                    }}
                     className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 text-xs font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
                   />
                 </div>
@@ -1161,7 +1323,7 @@ export default function ProviderVehicleHubPage() {
                         className="hidden"
                       />
                       <span className="material-symbols-outlined text-sm">auto_transmission</span>
-                      Tự động (AT)
+                      Số tự động
                     </label>
 
                     <label className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${form.transmission === 'MANUAL'
@@ -1177,7 +1339,7 @@ export default function ProviderVehicleHubPage() {
                         className="hidden"
                       />
                       <span className="material-symbols-outlined text-sm">settings</span>
-                      Số sàn (MT)
+                      Số sàn
                     </label>
                   </div>
                 </div>
@@ -1236,7 +1398,7 @@ export default function ProviderVehicleHubPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-900">Khoảng đệm bảo trì giữa các chuyến (Maintenance Buffer) <span className="text-rose-500">*</span></span>
+                      <span className="text-xs font-bold text-slate-900">Khoảng đệm bảo trì giữa các chuyến <span className="text-rose-500">*</span></span>
                       <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">Đặc quyền EcoMotion</span>
                     </div>
                     <p className="text-xs text-slate-600 mt-0.5">
@@ -1268,7 +1430,7 @@ export default function ProviderVehicleHubPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700">Ảnh bìa xe chính thức (Hero Display Image) <span className="text-rose-500">*</span></label>
+                  <label className="text-xs font-bold text-slate-700">Ảnh bìa đại diện của xe <span className="text-rose-500">*</span></label>
                   <span className="text-[11px] text-slate-400">Bảng &apos;vehicle_image&apos; (display_order = 0)</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch">
@@ -1331,7 +1493,7 @@ export default function ProviderVehicleHubPage() {
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Đường dẫn ảnh bìa (Image URL):</label>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Đường dẫn ảnh bìa:</label>
                       <input
                         type="url"
                         value={form.coverImageUrl}
@@ -1348,6 +1510,56 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
             </div>
+
+            <aside
+              aria-label="Thanh tác vụ cập nhật hồ sơ xe"
+              className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-3 text-xs sm:text-sm text-slate-600">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                  isPlateChanged ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                }`}>
+                  <span className="material-symbols-outlined text-[20px]">
+                    {isPlateChanged ? 'warning' : 'verified_user'}
+                  </span>
+                </div>
+                <span className="leading-relaxed">
+                  {isPlateChanged ? (
+                    <span>
+                      <strong className="text-amber-800">Lưu ý Tầng 2:</strong> Thay đổi Biển số xe sẽ chuyển phương tiện về <strong className="text-amber-800">Chờ duyệt</strong> và tạm dừng nhận khách cho đến khi xác minh.
+                    </span>
+                  ) : (
+                    <span>
+                      <strong className="text-slate-800">Chế độ an toàn:</strong> Thay đổi Tầng 3 sẽ cập nhật ngay lập tức mà không làm gián đoạn lịch xe.
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={handleResetForm}
+                  disabled={saving}
+                  className="cursor-pointer px-4 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50 border border-slate-200"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={saving}
+                  className={`cursor-pointer px-5 py-2.5 text-xs font-bold text-white rounded-xl transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 ${
+                    isPlateChanged
+                      ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                      : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  <span>{saving ? 'Đang lưu...' : isPlateChanged ? 'Lưu và Gửi duyệt lại' : 'Cập nhật hồ sơ xe'}</span>
+                </button>
+              </div>
+            </aside>
           </section>
         )}
 
@@ -1541,24 +1753,164 @@ export default function ProviderVehicleHubPage() {
                 </div>
               </div>
 
-              <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-6 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/50 via-white to-emerald-50/20 p-5 shadow-xs">
+                {/* Header & Badges */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-emerald-100">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-emerald-700 text-lg">shield_with_heart</span>
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Chính sách đặt cọc giữ chỗ &amp; bảo đảm phương tiện
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <span className="px-2 py-0.5 rounded-md font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Áp dụng: Gói Giờ · Ngày · Tháng
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md font-medium bg-slate-100 text-slate-600 border border-slate-200" title="Gói năm dùng upfrontAmount cố định">
+                      Gói Năm: Ký quỹ riêng
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                  {/* Cột trái: 2 Input Tỷ lệ cọc riêng + Mức cọc tối thiểu */}
+                  <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Ô 1: Tỷ lệ cọc riêng */}
                     <div>
-                      <label className="text-xs font-bold text-slate-800">Tỷ lệ cọc riêng của xe</label>
-                      <p className="mb-1 text-[10px] text-slate-500">Để trống để dùng mức mặc định {Math.round(Number(depositPolicyInfo?.providerDefaultRatio ?? 0.3) * 100)}% của nhà cung cấp.</p>
-                      <input type="number" min="0.01" max="1" step="0.01" value={depositPolicy.depositRatioOverride} onChange={(event) => setDepositPolicy((current) => ({ ...current, depositRatioOverride: event.target.value }))} placeholder="Ví dụ 0.5 = 50%" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold" />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-800">Tỷ lệ cọc riêng của xe</label>
+                        {depositPolicy.depositRatioOverride !== '' && !liveDepositCalculation.ratioWarning && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                            = {Math.round(Number(depositPolicy.depositRatioOverride) * 100)}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0.01"
+                          max="1"
+                          step="0.01"
+                          value={depositPolicy.depositRatioOverride}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, true)}
+                          onChange={(e) => handleDepositRatioOverrideChange(e.target.value)}
+                          onBlur={handleDepositRatioBlur}
+                          placeholder="Ví dụ 0.4 = 40%"
+                          className={`w-full rounded-lg border bg-white px-3 py-2 text-xs font-bold ${
+                            liveDepositCalculation.ratioWarning ? 'border-amber-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-200' : 'border-slate-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200'
+                          }`}
+                        />
+                      </div>
+                      {/* Nút presets chọn nhanh */}
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        <span className="text-[10px] text-slate-400">Gợi ý:</span>
+                        {['0.2', '0.3', '0.4', '0.5'].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => handleDepositRatioOverrideChange(val)}
+                            className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                              String(depositPolicy.depositRatioOverride) === val
+                                ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            {Number(val) * 100}%
+                          </button>
+                        ))}
+                        {depositPolicy.depositRatioOverride !== '' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDepositRatioOverrideChange('')}
+                            className="text-[10px] text-slate-400 hover:text-red-600 underline ml-1"
+                          >
+                            Dùng mặc định
+                          </button>
+                        )}
+                      </div>
+                      {liveDepositCalculation.ratioWarning ? (
+                        <p className="mt-1 text-[10px] text-amber-700 font-semibold">{liveDepositCalculation.ratioWarning}</p>
+                      ) : (
+                        <p className="mt-1 text-[10px] text-slate-500">
+                          Để trống để dùng tỷ lệ mặc định {Math.round(Number(depositPolicyInfo?.providerDefaultRatio ?? 0.3) * 100)}% của nhà xe. Tối đa 1.0 (100%).
+                        </p>
+                      )}
                     </div>
+
+                    {/* Ô 2: Mức cọc sàn tối thiểu */}
                     <div>
-                      <label className="text-xs font-bold text-slate-800">Mức cọc tối thiểu (VNĐ)</label>
-                      <p className="mb-1 text-[10px] text-slate-500">Hữu ích cho xe giá trị cao; cọc không vượt tổng tiền thuê.</p>
-                      <input type="number" min="0" step="100000" value={depositPolicy.minimumDepositAmount} onChange={(event) => setDepositPolicy((current) => ({ ...current, minimumDepositAmount: event.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold" />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-800">Mức cọc sàn tối thiểu</label>
+                        <span className="text-[10px] font-bold text-emerald-700">
+                          ≈ {formatMoney(depositPolicy.minimumDepositAmount || 0)} VNĐ
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="50000"
+                          value={depositPolicy.minimumDepositAmount}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                          onChange={(e) => handleMinimumDepositChange(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold pr-8 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">đ</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        <span className="text-[10px] text-slate-400">Gợi ý:</span>
+                        {['0', '200000', '500000', '1000000'].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => handleMinimumDepositChange(val)}
+                            className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                              String(depositPolicy.minimumDepositAmount) === val
+                                ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            {val === '0' ? 'Không sàn' : `${Number(val) / 1000}k`}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        Bảo đảm cho cuốc thuê giờ ngắn hạn (tiền cọc không vượt quá tổng giá thuê).
+                      </p>
                     </div>
                   </div>
-                  <div className="min-w-56 rounded-lg bg-white p-3 text-xs text-slate-600 shadow-xs">
-                    <p>Tỷ lệ hiệu lực: <strong>{Math.round(Number(depositPolicyInfo?.effectiveRatio ?? depositPolicyInfo?.providerDefaultRatio ?? 0.3) * 100)}%</strong></p>
-                    <p>Ví dụ đơn {Number(depositPolicyInfo?.exampleRentalAmount ?? 10000000).toLocaleString('vi-VN')} đ: <strong className="text-emerald-700">{Number(depositPolicyInfo?.exampleDepositAmount ?? 0).toLocaleString('vi-VN')} đ</strong></p>
-                    <button type="button" onClick={handleSaveDepositPolicy} disabled={savingDepositPolicy} className="mt-2 w-full rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white disabled:opacity-50">{savingDepositPolicy ? 'Đang lưu...' : 'Lưu chính sách cọc'}</button>
+
+                  {/* Cột phải: Live Preview Box & Button */}
+                  <div className="lg:col-span-5 rounded-xl border border-emerald-200/80 bg-white p-4 shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <span className="text-[11px] font-bold text-slate-700">Tỷ lệ cọc hiệu lực:</span>
+                      <span className="text-sm font-extrabold text-emerald-700 font-mono">
+                        {liveDepositCalculation.effectiveRatioPercent}%
+                        <span className="text-[10px] font-normal text-slate-500 ml-1">
+                          ({liveDepositCalculation.isOverride ? 'Riêng xe' : 'Mặc định'})
+                        </span>
+                      </span>
+                    </div>
+                    
+                    <div className="text-xs space-y-1.5 text-slate-600">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span>• Đơn mẫu 10.000.000 đ:</span>
+                        <strong className="text-slate-900 font-mono">{formatMoney(liveDepositCalculation.example10MDeposit)} đ</strong>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span>• Cuốc ngắn 300.000 đ:</span>
+                        <strong className="text-emerald-700 font-mono">{formatMoney(liveDepositCalculation.exampleShortDeposit)} đ</strong>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveDepositPolicy}
+                      disabled={savingDepositPolicy || !!liveDepositCalculation.ratioWarning}
+                      className="w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 px-3 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-700/20 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {savingDepositPolicy ? 'Đang lưu chính sách cọc...' : 'Lưu riêng chính sách cọc'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1576,7 +1928,7 @@ export default function ProviderVehicleHubPage() {
                     <div className="flex items-center justify-between mb-3 mt-1">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-base text-emerald-600">calendar_today</span>
-                        Gói Theo Ngày (DAILY)
+                        Gói thuê theo ngày
                       </span>
                       
                       <button
@@ -1610,13 +1962,14 @@ export default function ProviderVehicleHubPage() {
                           step="10000"
                           placeholder="Chưa thiết lập giá"
                           value={pricingPlans.DAILY?.slotPrice ?? ''}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
                           onChange={(e) => handlePlanPriceChange('DAILY', e.target.value)}
                           className="w-full pl-3 pr-16 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">đ/ngày</span>
                       </div>
                       <p className="text-[10px] text-emerald-700 font-semibold mt-1">
-                        {pricingPlans.DAILY?.slotPrice ? `≈ ${formatMoney(pricingPlans.DAILY.slotPrice)} VNĐ / ngày (24h)` : 'Chưa thiết lập giá'}
+                        {pricingPlans.DAILY?.slotPrice ? `≈ ${formatMoney(pricingPlans.DAILY.slotPrice)} VNĐ / ngày (24 giờ)` : 'Chưa thiết lập giá'}
                       </p>
                     </div>
 
@@ -1625,8 +1978,8 @@ export default function ProviderVehicleHubPage() {
                         <span className="material-symbols-outlined text-xs text-emerald-600">check</span> Chu kỳ thuê: 24 giờ / ngày
                       </li>
                       <li className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-xs text-emerald-600">all_inclusive</span>
-                        <strong className="text-emerald-700">Không giới hạn quãng đường (Unlimited km)</strong>
+                        <span className="material-symbols-outlined text-xs text-emerald-600">route</span>
+                        <span>Không giới hạn km hành trình</span>
                       </li>
                     </ul>
                   </div>
@@ -1646,7 +1999,7 @@ export default function ProviderVehicleHubPage() {
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-base text-slate-600">schedule</span>
-                        Gói Theo Giờ (HOURLY)
+                        Gói thuê theo giờ
                       </span>
                       
                       <button
@@ -1680,6 +2033,7 @@ export default function ProviderVehicleHubPage() {
                           step="5000"
                           placeholder="Chưa thiết lập giá"
                           value={pricingPlans.HOURLY?.slotPrice ?? ''}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
                           onChange={(e) => handlePlanPriceChange('HOURLY', e.target.value)}
                           className="w-full pl-3 pr-12 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                         />
@@ -1699,6 +2053,7 @@ export default function ProviderVehicleHubPage() {
                         min="60"
                         step="60"
                         value={pricingPlans.HOURLY?.hourlyToDailyThresholdMinutes ?? 480}
+                        onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
                         onChange={(e) => handleHourlyThresholdChange(e.target.value)}
                         className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium text-xs focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                       />
@@ -1709,8 +2064,11 @@ export default function ProviderVehicleHubPage() {
 
                     <ul className="text-[11px] text-slate-600 space-y-1.5 mb-4">
                       <li className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-xs text-emerald-600">all_inclusive</span>
-                        <strong className="text-emerald-700">Không giới hạn quãng đường (Unlimited km)</strong>
+                        <span className="material-symbols-outlined text-xs text-emerald-600">check</span> Tính theo giờ thực tế phát sinh
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-emerald-600">route</span>
+                        <span>Không giới hạn km hành trình</span>
                       </li>
                     </ul>
                   </div>
@@ -1730,7 +2088,7 @@ export default function ProviderVehicleHubPage() {
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-base text-slate-600">date_range</span>
-                        Gói Theo Tháng (MONTHLY)
+                        Gói thuê theo tháng
                       </span>
                       
                       <button
@@ -1764,6 +2122,7 @@ export default function ProviderVehicleHubPage() {
                           step="100000"
                           placeholder="Chưa thiết lập giá"
                           value={pricingPlans.MONTHLY?.slotPrice ?? ''}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
                           onChange={(e) => handlePlanPriceChange('MONTHLY', e.target.value)}
                           className="w-full pl-3 pr-16 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                         />
@@ -1779,8 +2138,8 @@ export default function ProviderVehicleHubPage() {
                         <span className="material-symbols-outlined text-xs text-emerald-600">check</span> Chu kỳ 30 ngày liên tục
                       </li>
                       <li className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-xs text-emerald-600">all_inclusive</span>
-                        <strong className="text-emerald-700">Không giới hạn quãng đường (Unlimited km)</strong>
+                        <span className="material-symbols-outlined text-xs text-emerald-600">route</span>
+                        <span>Không giới hạn km hành trình</span>
                       </li>
                     </ul>
                   </div>
@@ -1800,7 +2159,7 @@ export default function ProviderVehicleHubPage() {
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-base text-slate-600">stars</span>
-                        Gói Năm (YEARLY)
+                        Gói thuê theo năm
                       </span>
                       
                       <button
@@ -1834,6 +2193,7 @@ export default function ProviderVehicleHubPage() {
                           step="1000000"
                           placeholder="Chưa thiết lập giá"
                           value={pricingPlans.YEARLY?.slotPrice ?? ''}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
                           onChange={(e) => handlePlanPriceChange('YEARLY', e.target.value)}
                           className="w-full pl-3 pr-16 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                         />
@@ -1854,6 +2214,7 @@ export default function ProviderVehicleHubPage() {
                           min="0"
                           step="1000000"
                           value={pricingPlans.YEARLY?.upfrontAmount ?? 0}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
                           onChange={(e) => handleYearlyUpfrontChange(e.target.value)}
                           className="w-full pl-3 pr-10 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-900 font-medium text-xs focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                         />
@@ -1869,6 +2230,14 @@ export default function ProviderVehicleHubPage() {
                         <span className="material-symbols-outlined text-xs text-emerald-600">all_inclusive</span>
                         <strong className="text-emerald-700">Hạn mức km được chốt riêng trong hợp đồng năm</strong>
                       </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-emerald-600">verified</span>
+                        <span>Hợp đồng năm: Miễn phụ phí giờ/chờ/cuối tuần</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-emerald-600">payments</span>
+                        <span>Cọc tính theo khoản tiền bảo đảm / ký quỹ</span>
+                      </li>
                     </ul>
                   </div>
                   <div className={`text-[10px] p-2 rounded-lg border font-medium ${pricingPlans.YEARLY?.status === 'ACTIVE'
@@ -1881,113 +2250,183 @@ export default function ProviderVehicleHubPage() {
               </div>
 
               <div className="mt-8 pt-6 border-t border-slate-200">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-base text-emerald-600">tune</span>
-                  Cấu hình phụ phí vận hành & điều khoản vượt hạn mức (CSDL rental_plan)
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base text-emerald-600">tune</span>
+                    Cấu hình định mức phụ phí vận hành
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    (Gói Năm được miễn toàn bộ phụ phí này theo quy chuẩn hợp đồng)
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <label className="text-xs font-bold text-slate-800 block mb-1">Phụ phí vượt giờ</label>
-                    <p className="text-[10px] text-slate-500 mb-2 font-mono">allowed_overtime & overtime_surcharge_ratio</p>
-                    <div className="space-y-2">
-                      <div>
-                        <span className="text-[11px] text-slate-500 block mb-0.5">Ân hạn miễn phí (phút):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={surcharges.allowedOvertimeMinutes ?? 15}
-                          onChange={(e) => handleSurchargeChange('allowedOvertimeMinutes', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
-                        />
+                  {/* Card 1: Phụ phí vượt giờ */}
+                  <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs">
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <label className="text-xs font-bold text-slate-800">Phụ phí vượt giờ</label>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          Giờ · Ngày · Tháng
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-[11px] text-slate-500 block mb-0.5">Tỉ lệ phụ thu mỗi giờ (0.15 = 15%):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={surcharges.overtimeSurchargeRatio ?? 0.15}
-                          onChange={(e) => handleSurchargeChange('overtimeSurchargeRatio', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-emerald-700"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <label className="text-xs font-bold text-slate-800 block mb-1">Bán kính đón miễn phí</label>
-                    <p className="text-[10px] text-slate-500 mb-2 font-mono">free_radius_km & out_of_radius_rate</p>
-                    <div className="space-y-2">
-                      <div>
-                        <span className="text-[11px] text-slate-500 block mb-0.5">Đón miễn phí (km):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={surcharges.freeRadiusKm ?? 10}
-                          onChange={(e) => handleSurchargeChange('freeRadiusKm', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[11px] text-slate-500 block mb-0.5">Đơn giá ngoài bán kính (VNĐ/km):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1000"
-                          value={surcharges.outOfRadiusRate ?? 12000}
-                          onChange={(e) => handleSurchargeChange('outOfRadiusRate', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-emerald-700"
-                        />
+                      <p className="text-[10px] text-slate-500 mb-2.5">Ân hạn trả trễ &amp; tỉ lệ phụ thu phát sinh</p>
+                      <div className="space-y-2.5">
+                        <div>
+                          <span className="text-[11px] text-slate-600 block mb-0.5">Ân hạn miễn phí (phút):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={surcharges.allowedOvertimeMinutes ?? 15}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                            onChange={(e) => handleSurchargeChange('allowedOvertimeMinutes', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            Được trễ tối đa {surcharges.allowedOvertimeMinutes ?? 15} phút miễn phí.
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[11px] text-slate-600 block mb-0.5">Tỉ lệ phụ thu mỗi giờ (0.15 = 15%):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={surcharges.overtimeSurchargeRatio ?? 0.15}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, true)}
+                            onChange={(e) => handleSurchargeChange('overtimeSurchargeRatio', e.target.value)}
+                            onBlur={() => handleSurchargeBlur('overtimeSurchargeRatio')}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-emerald-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200"
+                          />
+                          <p className="text-[10px] text-emerald-700 font-bold mt-0.5">
+                            +{Math.round(Number(surcharges.overtimeSurchargeRatio || 0) * 100)}% đơn giá slot vượt
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <label className="text-xs font-bold text-slate-800 block mb-1">Phí chờ tại điểm đón</label>
-                    <p className="text-[10px] text-slate-500 mb-2 font-mono">waiting_free_minutes & waiting_rate</p>
-                    <div className="space-y-2">
-                      <div>
-                        <span className="text-[11px] text-slate-500 block mb-0.5">Chờ miễn phí (phút):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={surcharges.waitingFreeMinutes ?? 15}
-                          onChange={(e) => handleSurchargeChange('waitingFreeMinutes', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
-                        />
+                  {/* Card 2: Bán kính đón miễn phí */}
+                  <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs">
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <label className="text-xs font-bold text-slate-800">Bán kính đón miễn phí</label>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          Giờ · Ngày · Tháng
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-[11px] text-slate-500 block mb-0.5">Phí mỗi phút chờ (VNĐ/phút):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="500"
-                          value={surcharges.waitingRate ?? 2000}
-                          onChange={(e) => handleSurchargeChange('waitingRate', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-emerald-700"
-                        />
+                      <p className="text-[10px] text-slate-500 mb-2.5">Bán kính giao đón xe tính từ vị trí depot</p>
+                      <div className="space-y-2.5">
+                        <div>
+                          <span className="text-[11px] text-slate-600 block mb-0.5">Đón miễn phí (km):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={surcharges.freeRadiusKm ?? 10}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                            onChange={(e) => handleSurchargeChange('freeRadiusKm', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            Trong vòng {surcharges.freeRadiusKm ?? 10} km tính từ depot.
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[11px] text-slate-600 block mb-0.5">Đơn giá ngoài bán kính (VNĐ/km):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1000"
+                            value={surcharges.outOfRadiusRate ?? 12000}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                            onChange={(e) => handleSurchargeChange('outOfRadiusRate', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-emerald-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200"
+                          />
+                          <p className="text-[10px] text-emerald-700 font-bold mt-0.5">
+                            ≈ {formatMoney(surcharges.outOfRadiusRate || 0)} đ/km phát sinh
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <label className="text-xs font-bold text-slate-800 block mb-1">Phụ thu cuối tuần & Lễ</label>
-                    <p className="text-[10px] text-slate-500 mb-2 font-mono">weekend_surcharge_ratio</p>
-                    <div className="space-y-2">
-                      <div>
-                        <span className="text-[11px] text-slate-500 block mb-0.5">Tỉ lệ phụ thu (+15% = 0.15):</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={surcharges.weekendSurchargeRatio ?? 0.15}
-                          onChange={(e) => handleSurchargeChange('weekendSurchargeRatio', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-amber-700"
-                        />
+                  {/* Card 3: Phí chờ tại điểm đón */}
+                  <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs">
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <label className="text-xs font-bold text-slate-800">Phí chờ tại điểm đón</label>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          Giờ · Ngày
+                        </span>
                       </div>
-                      <div className="pt-2 text-[10px] text-slate-400">
-                        <span>Cơ chế tính: Tự động cộng vào giá gốc khi khách đặt chuyến thứ 7, CN hoặc ngày Lễ.</span>
+                      <p className="text-[10px] text-slate-500 mb-2.5">Thời gian chờ đón khách &amp; đơn giá chờ</p>
+                      <div className="space-y-2.5">
+                        <div>
+                          <span className="text-[11px] text-slate-600 block mb-0.5">Chờ miễn phí (phút):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={surcharges.waitingFreeMinutes ?? 15}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                            onChange={(e) => handleSurchargeChange('waitingFreeMinutes', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            {surcharges.waitingFreeMinutes ?? 15} phút chờ đón đầu miễn phí.
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[11px] text-slate-600 block mb-0.5">Phí mỗi phút chờ (VNĐ/phút):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="500"
+                            value={surcharges.waitingRate ?? 2000}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                            onChange={(e) => handleSurchargeChange('waitingRate', e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-emerald-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-200"
+                          />
+                          <p className="text-[10px] text-emerald-700 font-bold mt-0.5">
+                            ≈ {formatMoney(surcharges.waitingRate || 0)} đ/phút ({formatMoney(Number(surcharges.waitingRate || 0) * 60)} đ/h)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Phụ thu cuối tuần & Lễ */}
+                  <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 flex flex-col justify-between shadow-xs">
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <label className="text-xs font-bold text-slate-800">Phụ thu cuối tuần &amp; Lễ</label>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          Giờ · Ngày
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mb-2.5">Tỉ lệ phụ thu các ngày thứ 7, CN và ngày Lễ</p>
+                      <div className="space-y-2.5">
+                        <div>
+                          <span className="text-[11px] text-slate-600 block mb-0.5">Tỉ lệ phụ thu (+15% = 0.15):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={surcharges.weekendSurchargeRatio ?? 0.15}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, true)}
+                            onChange={(e) => handleSurchargeChange('weekendSurchargeRatio', e.target.value)}
+                            onBlur={() => handleSurchargeBlur('weekendSurchargeRatio')}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-amber-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-200"
+                          />
+                          <p className="text-[10px] text-amber-800 font-bold mt-0.5">
+                            +{Math.round(Number(surcharges.weekendSurchargeRatio || 0) * 100)}% vào giá gốc
+                          </p>
+                        </div>
+                        <div className="pt-2 text-[10px] text-slate-400">
+                          <span>Cơ chế: Tự động cộng vào giá gốc khi khách đặt chuyến thứ 7, CN hoặc ngày Lễ (Gói Tháng &amp; Năm được miễn).</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1997,84 +2436,6 @@ export default function ProviderVehicleHubPage() {
           </section>
         )}
       </main>
-
-      {activeTab === 'profile' && (
-        <aside className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-xl z-30 py-3 px-4 sm:px-8">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-600 w-full sm:w-auto">
-              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isPlateChanged ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'
-                }`}></span>
-              <span className="leading-tight">
-                {isPlateChanged ? (
-                  <span>
-                    <strong className="text-amber-700">Lưu ý Tầng 2:</strong> Thay đổi Biển số xe sẽ chuyển phương tiện về <strong>CHỜ DUYỆT (PENDING)</strong> và tạm dừng nhận khách cho đến khi xác minh.
-                  </span>
-                ) : (
-                  <span>
-                    <strong>Chế độ an toàn:</strong> Thay đổi Tầng 3 sẽ cập nhật ngay lập tức mà không làm gián đoạn lịch xe.
-                  </span>
-                )}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-              <button
-                type="button"
-                onClick={handleResetForm}
-                disabled={saving}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveProfile}
-                disabled={saving}
-                className={`px-5 py-2 text-xs font-bold text-white rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50 ${isPlateChanged
-                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/25'
-                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/25'
-                  }`}
-              >
-                <span className="material-symbols-outlined text-sm">save</span>
-                <span>{saving ? 'Đang lưu...' : isPlateChanged ? 'Lưu và Gửi duyệt lại' : 'Cập nhật hồ sơ xe'}</span>
-              </button>
-            </div>
-          </div>
-        </aside>
-      )}
-
-      {activeTab === 'pricing' && (
-        <aside className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-xl z-30 py-3 px-4 sm:px-8">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-600 w-full sm:w-auto">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
-              <span className="leading-tight">
-                <strong>Cấu hình bảng giá:</strong> Cho phép tùy chỉnh đơn giá và phụ phí cho xe <strong>{form.licensePlate}</strong> mà không cần duyệt lại hồ sơ.
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-              <button
-                type="button"
-                onClick={handleResetPricing}
-                disabled={savingPlans}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
-              >
-                Khôi phục
-              </button>
-              <button
-                type="button"
-                onClick={handleSavePricing}
-                disabled={savingPlans}
-                className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md shadow-emerald-500/25 flex items-center gap-2 disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-sm">save</span>
-                <span>{savingPlans ? 'Đang lưu...' : 'Lưu cấu hình gói giá'}</span>
-              </button>
-            </div>
-          </div>
-        </aside>
-      )}
 
       {showRuleModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2101,27 +2462,27 @@ export default function ProviderVehicleHubPage() {
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <div className="flex items-center gap-2 text-slate-900 font-bold mb-1">
                   <span className="w-5 h-5 rounded bg-slate-200 text-slate-800 text-[10px] flex items-center justify-center">01</span>
-                  TẦNG 1: Định danh vật lý (Physical Identity)
+                  TẦNG 1: Định danh vật lý
                 </div>
                 <p className="text-slate-600 leading-relaxed">
-                  Bao gồm <strong>Số khung (VIN)</strong> và <strong>Số máy (Engine/Motor)</strong>. Đây là định danh vật lý vĩnh cửu đi theo xe suốt vòng đời. Hệ thống khóa cứng 100% sau khi tạo xe nhằm chống nạn tráo vỏ, giả mạo danh tính phương tiện. Mọi chỉnh sửa bắt buộc phải lập biên bản thẩm định pháp lý offline tại Depot.
+                  Bao gồm <strong>Số khung</strong> và <strong>Số máy</strong>. Đây là định danh vật lý vĩnh cửu đi theo xe suốt vòng đời. Hệ thống khóa cứng 100% sau khi tạo xe nhằm chống nạn tráo vỏ, giả mạo danh tính phương tiện. Mọi chỉnh sửa bắt buộc phải lập biên bản thẩm định pháp lý offline tại Depot.
                 </p>
               </div>
 
               <div className="p-4 rounded-xl bg-amber-50/80 border border-amber-200">
                 <div className="flex items-center gap-2 text-amber-900 font-bold mb-1">
                   <span className="w-5 h-5 rounded bg-amber-200 text-amber-900 text-[10px] flex items-center justify-center">02</span>
-                  TẦNG 2: Định danh pháp lý (Legal Identity)
+                  TẦNG 2: Định danh pháp lý
                 </div>
                 <p className="text-amber-800 leading-relaxed">
-                  Bao gồm <strong>Biển số xe kiểm soát</strong>. Được phép thay đổi khi chủ xe đổi biển hoặc chuyển vùng lưu hành. Tuy nhiên, khi đổi biển số, xe sẽ lập tức chuyển về trạng thái <strong>CHỜ DUYỆT (PENDING)</strong> và tạm ngừng nhận cuốc mới cho đến khi chuyên viên kiểm duyệt xác minh giấy đăng ký xe mới.
+                  Bao gồm <strong>Biển số xe kiểm soát</strong>. Được phép thay đổi khi chủ xe đổi biển hoặc chuyển vùng lưu hành. Tuy nhiên, khi đổi biển số, xe sẽ lập tức chuyển về trạng thái <strong>Chờ duyệt</strong> và tạm ngừng nhận cuốc mới cho đến khi chuyên viên kiểm duyệt xác minh giấy đăng ký xe mới.
                 </p>
               </div>
 
               <div className="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200">
                 <div className="flex items-center gap-2 text-emerald-900 font-bold mb-1">
                   <span className="w-5 h-5 rounded bg-emerald-200 text-emerald-900 text-[10px] flex items-center justify-center">03</span>
-                  TẦNG 3: Thông tin mô tả & Vận hành (Operational Info)
+                  TẦNG 3: Thông tin mô tả & Vận hành
                 </div>
                 <p className="text-emerald-800 leading-relaxed">
                   Bao gồm: <strong>Hãng xe, Dòng xe, Năm sản xuất, Số chỗ, Hộp số, Loại nhiên liệu, Màu sơn, Ảnh bìa 16:9, Buffer đệm bảo trì</strong>. Nhà xe có toàn quyền cập nhật tức thì 24/7 mà không cần duyệt lại, dữ liệu đồng bộ ngay lập tức lên ứng dụng đặt xe của khách hàng.
@@ -2168,7 +2529,7 @@ export default function ProviderVehicleHubPage() {
             <form onSubmit={handleSaveDocument} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Số hiệu văn bản (doc_number) <span className="text-rose-500">*</span>
+                  Số hiệu giấy tờ <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -2182,7 +2543,7 @@ export default function ProviderVehicleHubPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Ngày hết hạn (expiry_date)
+                  Ngày hết hạn
                   {docModal.docType !== 'REGISTRATION' && <span className="text-rose-500"> *</span>}
                 </label>
                 <input
