@@ -615,6 +615,25 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, String bookingCode, int offset, int limit) {
+        if (bookingCode == null || bookingCode.isBlank()) return listProviderPaymentRequests(currentUserId, status, offset, limit);
+        Provider provider = resolveProvider(currentUserId);
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = Math.min(Math.max(1, limit), 100);
+        int pageIndex = safeOffset / safeLimit;
+        Page<PaymentRequest> page = paymentRequestRepository.findByBooking_Vehicle_Provider_IdAndBooking_BookingCode(
+                provider.getId(), bookingCode.trim().toUpperCase(java.util.Locale.ROOT), PageRequest.of(pageIndex, safeLimit, DEFAULT_SORT));
+        PaymentRequestStatus filterStatus = parseStatus(status);
+        List<PaymentRequestResponse> items = page.getContent().stream()
+                .filter(pr -> filterStatus == null || pr.getStatus() == filterStatus)
+                .map(this::toResponse)
+                .toList();
+        boolean hasMore = (long) (pageIndex + 1) * safeLimit < page.getTotalElements();
+        return new PageResponse<>(items, page.getTotalElements(), safeOffset, safeLimit, hasMore);
+    }
+
+    @Override
     public PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, int offset, int limit) {
         Provider provider = resolveProvider(currentUserId);
 

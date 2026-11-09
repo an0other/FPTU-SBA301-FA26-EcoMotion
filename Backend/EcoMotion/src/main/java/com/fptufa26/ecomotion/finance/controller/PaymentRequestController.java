@@ -139,6 +139,7 @@ public class PaymentRequestController {
     public ApiResponse<PageResponse<PaymentRequestResponse>> listProviderPaymentRequests(
             @AuthenticationPrincipal SecurityUser principal,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String bookingCode,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) Integer page,
@@ -146,7 +147,7 @@ public class PaymentRequestController {
         int effectiveLimit = (size != null && size > 0) ? size : limit;
         int effectiveOffset = (page != null && page >= 0) ? page * effectiveLimit : offset;
         return ApiResponse.success(paymentRequestService.listProviderPaymentRequests(
-                principal.getUserId(), status, effectiveOffset, effectiveLimit));
+                principal.getUserId(), status, bookingCode, effectiveOffset, effectiveLimit));
     }
 
     @PostMapping({"/api/v1/provider/payment-requests/{id}/confirm", "/api/provider/payment-requests/{id}/confirm"})

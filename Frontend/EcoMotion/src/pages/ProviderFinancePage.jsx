@@ -2,6 +2,7 @@ import { BankReceiptReconciliationModal } from '../components/payments/BankRecei
 import { canReviewRefund, refundReviewPayload } from '../utils/tv5Contracts'
 import { RefundProofModal } from '../components/payments/RefundProofModal'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
@@ -304,8 +305,20 @@ const REFUND_STATUS_CONFIG = {
   PENDING_RECONCILIATION: { label: 'Chờ đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
 }
 
+// Ghi nhận tiền về theo sao kê chỉ dành cho ngoại lệ (yêu cầu không còn nhận thanh toán bình thường).
+// Yêu cầu đang chờ (PENDING/PROOF_SUBMITTED) dùng nút Xác nhận; đã xác nhận đủ thì không cần đối soát.
+const BANK_EXCEPTION_STATUSES = new Set(['EXPIRED', 'REJECTED', 'VOIDED', 'REVIEW_REQUIRED', 'PARTIALLY_PAID'])
+
 export default function ProviderFinancePage() {
-  const [activeTab, setActiveTab] = useState('transactions') // transactions | incoming | refunds | bankAccounts | payout
+  // Deep-link từ chi tiết đơn: /provider/finance?tab=incoming&booking=EM-...
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'transactions') // transactions | incoming | refunds | bankAccounts | payout
+  const bookingFilter = searchParams.get('booking') || ''
+  const clearBookingFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('booking')
+    setSearchParams(next, { replace: true })
+  }
 
   // Summary & Core Metrics
   const [summary, setSummary] = useState(null)
@@ -447,6 +460,7 @@ export default function ProviderFinancePage() {
     try {
       const res = await providerFinanceService.listProviderPaymentRequests({
         status: requestStatusFilter !== 'ALL' ? requestStatusFilter : undefined,
+        bookingCode: bookingFilter || undefined,
         offset: (requestPage - 1) * requestPageSize,
         limit: requestPageSize,
       })
@@ -456,7 +470,7 @@ export default function ProviderFinancePage() {
     } catch {
       // Quiet fail
     }
-  }, [requestStatusFilter, requestPage, requestPageSize])
+  }, [requestStatusFilter, requestPage, requestPageSize, bookingFilter])
 
   // Realtime Sync Hook
   useRealtimeSync({
@@ -1037,7 +1051,13 @@ export default function ProviderFinancePage() {
           <div className="rounded-lg border border-slate-200 bg-white shadow-xs overflow-hidden">
             {/* Toolbar */}
             <div className="p-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {bookingFilter && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-800">
+                    Đơn {bookingFilter}
+                    <button type="button" onClick={clearBookingFilter} aria-label="Bỏ lọc theo đơn" className="ml-0.5 text-brand-700 hover:text-brand-900">×</button>
+                  </span>
+                )}
                 <label htmlFor="finance-req-status-filter" className="text-xs font-semibold text-slate-600">
                   Trạng thái:
                 </label>
@@ -1216,9 +1236,16 @@ export default function ProviderFinancePage() {
                               onOpenRefundsTab={() => setActiveTab('refunds')}
                               onDeclineTrip={handleOpenDeclineTripModal}
                             />
-                            <button type="button" onClick={() => setBankReceiptRequest(pr)} className="mt-2 w-full rounded-md border border-amber-200 px-2 py-1 text-xs font-semibold text-amber-800">
-                              Tiền nhận cần đối soát
-                            </button>
+                            {BANK_EXCEPTION_STATUSES.has(pr.status) && (
+                              <button
+                                type="button"
+                                onClick={() => setBankReceiptRequest(pr)}
+                                title="Dùng khi sao kê ngân hàng có tiền khách chuyển nhưng yêu cầu này đã hết hạn, bị từ chối, bị huỷ hoặc cần xem lại. Chỉ ghi nhận để đối soát, không tự xác nhận đơn hay hoàn tiền."
+                                className="mt-2 w-full text-left text-[11px] font-semibold text-amber-800 underline-offset-2 hover:underline"
+                              >
+                                Có tiền về ngoài luồng? Ghi nhận đối soát
+                              </button>
+                            )}
                           </td>
                         </tr>
                       )

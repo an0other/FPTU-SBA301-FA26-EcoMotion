@@ -553,6 +553,16 @@ export default function ProviderBookingDetailPage() {
             onAction={handleProgressAction}
           />
           <div className="mt-3"><TripEndConfirmationBanner workflow={workflow} readOnly /></div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(`/provider/finance?tab=incoming&booking=${encodeURIComponent(booking.bookingCode)}`)}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Icon name="account_balance_wallet" className="text-[16px]" />
+              Xem thanh toán cọc &amp; quyết toán của đơn
+            </button>
+          </div>
         </section>}
 
         {booking.planType === 'YEARLY' && <YearlyWorkflowPanel key={booking.bookingCode} role="provider" bookingCode={booking.bookingCode} bookingStatus={booking.status} onChanged={refetch} />}

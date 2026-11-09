@@ -150,8 +150,21 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
         <div className="min-w-0">
           <h2 className="text-sm font-bold">{panelTitle}</h2>
           <p className="mt-0.5 line-clamp-2 text-xs text-amber-900">
-            {risk?.message || 'Chọn phương án xử lý và gửi cho khách thuê.'}
+            {(risk?.userMessage || risk?.message) || 'Chọn phương án xử lý và gửi cho khách thuê.'}
           </p>
+          {risk?.atRisk && risk?.blockingBookingCode ? (
+            <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs text-amber-950 sm:grid-cols-3">
+              <div><dt className="text-amber-800">Chuyến đang giữ xe</dt><dd className="font-mono font-semibold">{risk.blockingBookingCode}</dd></div>
+              <div><dt className="text-amber-800">Lịch trả xe của chuyến đó</dt><dd className="font-semibold">{formatBookingWhen(risk.blockingPlannedEndAt)}</dd></div>
+              <div>
+                <dt className="text-amber-800">Dự kiến sẵn sàng</dt>
+                <dd className="font-semibold">
+                  {formatBookingWhen(risk.estimatedReadyAt)}
+                  {risk.estimatedDelayMinutes ? <span className="text-red-700"> · trễ ~{risk.estimatedDelayMinutes} phút</span> : null}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
         </div>
         <button
           type="button"
@@ -188,7 +201,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
             <p className="mt-1">
               {awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver
                 ? 'Khách chưa cọc hoặc chưa gửi biên lai. Nếu nhà xe không nhận chuyến, chọn Hủy và hoàn tiền — không dùng nút Từ chối ở tab Tài chính khi chưa có biên lai.'
-                : (risk?.message || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.')}
+                : ((risk?.userMessage || risk?.message) || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.')}
             </p>
             {pendingProposal && <p className="mt-2 text-xs">Đang chờ khách phản hồi; không thể gửi đè một đề xuất khác. Nếu không tiếp tục cung cấp dịch vụ, nhà xe có thể hủy và bắt đầu hoàn tiền.</p>}
 

@@ -100,6 +100,7 @@ export const providerFinanceService = {
       limit: params.limit ?? 10,
     }
     if (params.status && params.status !== 'ALL') query.status = params.status
+    if (params.bookingCode) query.bookingCode = params.bookingCode
     if (params.page != null) query.page = params.page
     if (params.size != null) query.size = params.size
 

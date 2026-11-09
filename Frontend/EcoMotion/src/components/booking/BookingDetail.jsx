@@ -9,6 +9,7 @@ import LiveMapViewer from '../map/LiveMapViewer';
 import { HoldCountdown } from '../payments/HoldCountdown';
 import YearlyWorkflowPanel from '../yearly-rental/YearlyWorkflowPanel';
 import TripEndConfirmationBanner from './TripEndConfirmationBanner';
+import { formatBookingWhen } from '../../utils/bookingDateTime';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
@@ -171,10 +172,16 @@ export const BookingDetail = ({
           </div>
         </div>
         {actionError && <p className="text-sm text-[#B42318]">{actionError}</p>}
-        {canShowOperationalRisk(booking.status, operationalRisk?.atRisk, operationalRisk?.message) && (
+        {canShowOperationalRisk(booking.status, operationalRisk?.atRisk, operationalRisk?.userMessage || operationalRisk?.message) && (
           <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             <p className="font-bold">Nguy cơ xe về trễ</p>
-            <p className="mt-1">{operationalRisk.message}</p>
+            <p className="mt-1">{operationalRisk.userMessage || operationalRisk.message}</p>
+            {operationalRisk.estimatedReadyAt ? (
+              <p className="mt-1 font-semibold">
+                Xe dự kiến sẵn sàng: {formatBookingWhen(operationalRisk.estimatedReadyAt)}
+                {operationalRisk.estimatedDelayMinutes ? ` (trễ khoảng ${operationalRisk.estimatedDelayMinutes} phút)` : ''}
+              </p>
+            ) : null}
             <p className="mt-1 text-xs">Nhà xe cần xử lý. Đổi xe hoặc giờ đón chỉ áp dụng khi bạn đồng ý phương án; khoản tiền đã nhận vẫn được theo dõi và hoàn theo chính sách nếu đơn không thực hiện được.</p>
           </div>
         )}
@@ -782,6 +789,7 @@ export const BookingDetail = ({
             pickupFee={booking.pickupFee}
             charges={booking.charges}
             showStatusBadges={false}
+            totalOnly={booking.charges?.length > 0}
           />
 
           {/* Timeline Card */}

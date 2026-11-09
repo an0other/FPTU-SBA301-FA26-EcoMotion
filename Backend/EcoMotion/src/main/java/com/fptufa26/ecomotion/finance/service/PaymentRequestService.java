@@ -73,6 +73,11 @@ public interface PaymentRequestService {
 
     PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, int offset, int limit);
 
+    /** Lọc theo mã đơn (deep-link từ chi tiết đơn sang trang tài chính); bookingCode rỗng = như bản không lọc. */
+    default PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, String bookingCode, int offset, int limit) {
+        return listProviderPaymentRequests(currentUserId, status, offset, limit);
+    }
+
     PaymentRequestResponse confirmPayment(Long paymentRequestId, Long currentUserId, ConfirmPaymentRequest request);
 
     PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
