@@ -59,6 +59,15 @@ public class ReviewController {
                 .body(ApiResponse.success(response));
     }
 
+    @PostMapping(value = "/images", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload an image to attach to a review")
+    public ApiResponse<java.util.Map<String, String>> uploadImage(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode,
+            @org.springframework.web.bind.annotation.RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return ApiResponse.success(java.util.Map.of("url", reviewService.uploadReviewImage(principal.getUserId(), bookingCode, file)));
+    }
+
     @PutMapping("/{target}")
     @Operation(summary = "Update a vehicle or driver review")
     public ApiResponse<ReviewResponse> updateReview(@AuthenticationPrincipal SecurityUser principal, @PathVariable String bookingCode, @PathVariable ReviewTarget target, @Valid @RequestBody UpdateReviewRequest request) {

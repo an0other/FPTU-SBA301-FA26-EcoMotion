@@ -39,6 +39,41 @@ public class ReviewServiceImpl implements ReviewService {
     private final VehicleService vehicleService;
     private final UserService userService;
     private final EntityManager entityManager;
+    private final com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage evidenceImageStorage;
+
+    private static final int MAX_MEDIA = 5;
+    private static final int MAX_MEDIA_COLUMN = 500;
+
+    @Override
+    @Transactional(readOnly = true)
+    public String uploadReviewImage(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file) {
+        BookingReviewContext booking = bookingReviewAccessService.getOwnedBooking(userId, bookingCode);
+        validateBooking(booking, ReviewTarget.VEHICLE);
+        return evidenceImageStorage.store(file, userId, "review").url();
+    }
+
+    /** Nhận xét không được chứa từ ngữ thô tục/xúc phạm. */
+    private void validateComment(String comment) {
+        if (!com.fptufa26.ecomotion.review.service.ReviewContentPolicy.isClean(comment)) {
+            throw new IllegalArgumentException(
+                    "Nhận xét có từ ngữ không phù hợp. Vui lòng chỉnh lại nội dung lịch sự trước khi gửi.");
+        }
+    }
+
+    /** Chỉ nhận ảnh do chính người đánh giá tải lên qua hệ thống; lưu vào cột media (mỗi dòng một URL). */
+    private String normalizeMedia(Long userId, java.util.List<String> urls) {
+        if (urls == null || urls.isEmpty()) return null;
+        String prefix = "/api/files/booking/" + userId + "/review-";
+        java.util.List<String> clean = urls.stream()
+                .filter(java.util.Objects::nonNull).map(String::trim)
+                .filter(url -> !url.isEmpty()).distinct().toList();
+        if (clean.size() > MAX_MEDIA) throw new IllegalArgumentException("Tối đa " + MAX_MEDIA + " ảnh cho mỗi đánh giá");
+        if (clean.stream().anyMatch(url -> !url.startsWith(prefix) || !url.matches("[A-Za-z0-9/._-]+")))
+            throw new IllegalArgumentException("Ảnh đánh giá không hợp lệ, vui lòng tải lại ảnh");
+        String joined = String.join("\n", clean);
+        if (joined.length() > MAX_MEDIA_COLUMN) throw new IllegalArgumentException("Quá nhiều ảnh cho mỗi đánh giá");
+        return clean.isEmpty() ? null : joined;
+    }
 
     @Override
     @Transactional
@@ -53,8 +88,10 @@ public class ReviewServiceImpl implements ReviewService {
         userService.lockProviderForReview(booking.vehicleProviderId());
 
         Review review = findExistingReview(booking, target);
+        validateComment(request.comment());
         review.setRating(request.rating());
         review.setComment(normalizeComment(request.comment()));
+        if (request.mediaUrls() != null) review.setMedia(normalizeMedia(userId, request.mediaUrls()));
 
         reviewRepository.flush();
 
@@ -168,8 +205,10 @@ public class ReviewServiceImpl implements ReviewService {
         review.setBooking(entityManager.getReference(
                 Booking.class,
                 booking.bookingId()));
+        validateComment(request.comment());
         review.setRating(request.rating());
         review.setComment(normalizeComment(request.comment()));
+        review.setMedia(normalizeMedia(userId, request.mediaUrls()));
 
         if (request.target() == ReviewTarget.VEHICLE) {
             review.setVehicle(entityManager.getReference(
@@ -313,6 +352,9 @@ public class ReviewServiceImpl implements ReviewService {
                 review.getRating(),
                 review.getComment(),
                 review.getMedia(),
-                review.getCreatedAt());
+                review.getCreatedAt(),
+                review.getMedia() == null || review.getMedia().isBlank()
+                        ? java.util.List.of()
+                        : java.util.Arrays.stream(review.getMedia().split("\n")).filter(s -> !s.isBlank()).toList());
     }
 }

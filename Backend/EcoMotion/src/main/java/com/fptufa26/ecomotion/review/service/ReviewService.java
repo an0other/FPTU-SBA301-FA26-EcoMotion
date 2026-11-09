@@ -9,6 +9,10 @@ import java.util.List;
 
 public interface ReviewService {
 
+    /** Tải ảnh minh hoạ cho đánh giá; trả về URL để gửi kèm mediaUrls. */
+    String uploadReviewImage(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file);
+
+
 //    List<ReviewResponse> getBookingReviews(Long userId, String bookingCode);
 BookingReviewsResponse getBookingReviews(
         Long userId,
