@@ -7,6 +7,7 @@ import {
   IconTag,
 } from '../../components/icons/Icons'
 import VehicleDetailModal from './modals/VehicleDetailModal'
+import AdminPopupModal from './modals/AdminPopupModal'
 
 const STATUS_BADGES = {
   APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -34,6 +35,7 @@ export default function AdminVehiclesTab({
   const [selectedVehicle, setSelectedVehicle] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
   const [previewDocUrl, setPreviewDocUrl] = useState(null)
+  const [popupModal, setPopupModal] = useState(null)
 
   const loadVehicles = useCallback(async () => {
     setLoading(true)
@@ -75,7 +77,12 @@ export default function AdminVehiclesTab({
       const fullDetail = await adminService.getVehicleDetail(vehicleSummary.id)
       setSelectedVehicle(fullDetail)
     } catch (err) {
-      alert('Không thể tải chi tiết xe: ' + err.message)
+      setPopupModal({
+        mode: 'alert',
+        tone: 'error',
+        title: 'Không thể tải chi tiết xe',
+        message: 'Không thể tải chi tiết xe: ' + (err.message || 'Đã xảy ra lỗi.'),
+      })
     }
   }
 
@@ -108,7 +115,12 @@ export default function AdminVehiclesTab({
   async function handleReject(vehicleId, customReason) {
     const finalReason = customReason || rejectReason
     if (!finalReason || !finalReason.trim()) {
-      alert('Vui lòng nhập lý do từ chối duyệt xe.')
+      setPopupModal({
+        mode: 'alert',
+        tone: 'warning',
+        title: 'Thiếu lý do từ chối',
+        message: 'Vui lòng nhập lý do từ chối duyệt xe.',
+      })
       return
     }
     setActionLoading(true)
@@ -317,6 +329,20 @@ export default function AdminVehiclesTab({
           </div>
         </div>
       )}
+
+      {/* Custom Popup Modal for Alerts / Confirmations */}
+      <AdminPopupModal
+        open={Boolean(popupModal)}
+        mode={popupModal?.mode}
+        tone={popupModal?.tone}
+        title={popupModal?.title}
+        message={popupModal?.message}
+        confirmText={popupModal?.confirmText}
+        cancelText={popupModal?.cancelText}
+        loading={actionLoading}
+        onClose={() => setPopupModal(null)}
+        onConfirm={popupModal?.onConfirm}
+      />
     </div>
   )
 }
