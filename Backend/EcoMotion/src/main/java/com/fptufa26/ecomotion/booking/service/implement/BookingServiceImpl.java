@@ -1655,4 +1655,10 @@ public class BookingServiceImpl implements BookingService {
     public long countTotalBookings(Instant from, Instant to) {
         return bookingRepository.countBookingsCreatedBetween(from, to);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Instant findEarliestCompletedBookingDate() {
+        return bookingRepository.findEarliestCompletedBookingDate();
+    }
 }

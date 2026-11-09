@@ -22,6 +22,7 @@ public class YearlyRentalQuoteServiceImpl implements YearlyRentalQuoteService {
     private final BigDecimal roundingUnit;
     private final com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService ledger;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public YearlyRentalQuoteServiceImpl(BookingRepository bookings,
             BookingPolicySnapshotRepository snapshots, com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService ledger,
             @Value("${booking.yearly.rounding-unit:100000}") BigDecimal roundingUnit) {

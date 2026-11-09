@@ -143,9 +143,16 @@ export default function AdminOverviewTab({
     return generateFallbackMonths()
   }, [monthlySummaries])
 
-  // Chronological 6 months for trend chart (oldest to newest)
+  // Chronological months for trend chart (oldest to newest), starting from the earliest month with data
   const chronologicalMonths = useMemo(() => {
-    return [...(monthlySummaries || [])].reverse()
+    const raw = [...(monthlySummaries || [])].reverse()
+    const firstActiveIndex = raw.findIndex(
+      (m) => Number(m.grossMerchandiseValue ?? 0) > 0 || Number(m.completedBookings ?? 0) > 0
+    )
+    if (firstActiveIndex > 0) {
+      return raw.slice(firstActiveIndex)
+    }
+    return raw
   }, [monthlySummaries])
 
   const maxTrendGmv = useMemo(() => {
@@ -1152,7 +1159,21 @@ export default function AdminOverviewTab({
                   </div>
 
                   {/* Columns Grid */}
-                  <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4 items-end px-2 sm:px-6">
+                  <div
+                    className={`relative z-10 grid gap-3 sm:gap-4 items-end px-2 sm:px-6 ${
+                      chronologicalMonths.length === 1
+                        ? 'grid-cols-1 max-w-xs mx-auto'
+                        : chronologicalMonths.length === 2
+                          ? 'grid-cols-2 max-w-md mx-auto'
+                          : chronologicalMonths.length === 3
+                            ? 'grid-cols-2 sm:grid-cols-3'
+                            : chronologicalMonths.length === 4
+                              ? 'grid-cols-2 sm:grid-cols-4'
+                              : chronologicalMonths.length === 5
+                                ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5'
+                                : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-6'
+                    }`}
+                  >
                     {chronologicalMonths.map((m) => {
                       const rowKey = `${m.year}-${String(m.month).padStart(2, '0')}`
                       const isSelected = selectedMonthKey === rowKey
@@ -1239,7 +1260,7 @@ export default function AdminOverviewTab({
                 <span className="flex items-center gap-1.5">
                   <IconSparkles className="h-3.5 w-3.5 text-indigo-500" />
                   <span>
-                    Ví dụ: Tháng 10/2026 có Doanh thu sàn đạt <strong>1.675.000 ₫</strong> (tăng <strong>+17.0%</strong> so với Tháng 09/2026).
+                    Dữ liệu đối soát tài chính theo từng tháng được tổng hợp tự động từ các đơn hàng thực tế trong cơ sở dữ liệu.
                   </span>
                 </span>
                 <span className="font-semibold text-slate-700">
@@ -1258,7 +1279,7 @@ export default function AdminOverviewTab({
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <span>Bảng đối soát tài chính theo từng tháng</span>
                   <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-extrabold text-purple-700 border border-purple-200">
-                    6 kỳ gần nhất
+                    {stats.monthlySummaries.length} kỳ đối soát
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500">

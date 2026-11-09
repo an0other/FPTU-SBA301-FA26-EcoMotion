@@ -19,6 +19,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -151,12 +152,20 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     }
 
     private List<MonthlyFinancialSummaryDto> buildMonthlySummaries() {
-        int count = 6;
-        List<MonthlyFinancialSummaryDto> temp = new ArrayList<>();
         YearMonth currentYm = YearMonth.now(ZONE_VN);
+        Instant earliestDate = bookingService.findEarliestCompletedBookingDate();
+        YearMonth earliestYm = (earliestDate != null)
+                ? YearMonth.from(earliestDate.atZone(ZONE_VN))
+                : currentYm;
+        if (earliestYm.isAfter(currentYm)) {
+            earliestYm = currentYm;
+        }
 
-        // Build last 6 + 1 months to allow comparing the 6th month against its prior
-        // month
+        int count = (int) ChronoUnit.MONTHS.between(earliestYm, currentYm) + 1;
+        List<MonthlyFinancialSummaryDto> temp = new ArrayList<>();
+
+        // Build count + 1 months to allow comparing the earliest month (temp.get(count - 1))
+        // against its prior month (temp.get(count)) for MoM metrics
         for (int i = 0; i < count + 1; i++) {
             YearMonth ym = currentYm.minusMonths(i);
             Instant from = ym.atDay(1).atStartOfDay(ZONE_VN).toInstant();
@@ -187,8 +196,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                     .build());
         }
 
-        // Calculate MoM growth for each month compared to previous month (temp.get(i +
-        // 1))
+        // Calculate MoM growth for each month compared to previous month (temp.get(i + 1))
         for (int i = 0; i < count; i++) {
             MonthlyFinancialSummaryDto curr = temp.get(i);
             MonthlyFinancialSummaryDto prev = temp.get(i + 1);
