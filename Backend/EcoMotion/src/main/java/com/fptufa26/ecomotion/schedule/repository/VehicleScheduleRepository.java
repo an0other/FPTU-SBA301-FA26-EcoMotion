@@ -25,9 +25,8 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
     @Query("""
             SELECT COUNT(s) FROM VehicleSchedule s
             WHERE s.vehicle.provider.id = :providerId
-              AND s.type IN ('BLOCKED', 'MAINTENANCE')
-              AND (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
-                   OR (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD AND (s.expiresAt > CURRENT_TIMESTAMP or exists (select p.id from PaymentTransaction p where p.booking.id = s.booking.id and p.method = com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY and p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING))))
+              AND s.type IN (com.fptufa26.ecomotion.schedule.enums.ScheduleType.BLOCKED, com.fptufa26.ecomotion.schedule.enums.ScheduleType.MAINTENANCE)
+              AND s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
               AND s.endAt > :now
             """)
     long countActiveBlocksByProviderId(@Param("providerId") Long providerId, @Param("now") Instant now);
@@ -77,6 +76,46 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
             ORDER BY s.startAt DESC
             """)
     List<VehicleSchedule> findByProviderIdOrderDesc(@Param("providerId") Long providerId);
+
+    @Query("""
+            SELECT s FROM VehicleSchedule s
+            JOIN FETCH s.vehicle v
+            LEFT JOIN FETCH s.booking b
+            WHERE v.provider.id = :providerId
+              AND (s.status IN (com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE,
+                                com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.CANCELLED)
+                   OR (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD
+                       AND (s.expiresAt > CURRENT_TIMESTAMP OR EXISTS (
+                           SELECT p.id FROM PaymentTransaction p
+                           WHERE p.booking.id = s.booking.id
+                             AND p.method = com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY
+                             AND p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING
+                       ))))
+            ORDER BY s.startAt DESC
+            """)
+    List<VehicleSchedule> findVisibleByProviderIdOrderDesc(@Param("providerId") Long providerId);
+
+    @Query("""
+            SELECT s FROM VehicleSchedule s
+            JOIN FETCH s.vehicle v
+            LEFT JOIN FETCH s.booking b
+            WHERE v.provider.id = :providerId
+              AND v.id = :vehicleId
+              AND (s.status IN (com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE,
+                                com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.CANCELLED)
+                   OR (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD
+                       AND (s.expiresAt > CURRENT_TIMESTAMP OR EXISTS (
+                           SELECT p.id FROM PaymentTransaction p
+                           WHERE p.booking.id = s.booking.id
+                             AND p.method = com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY
+                             AND p.status = com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING
+                       ))))
+            ORDER BY s.startAt DESC
+            """)
+    List<VehicleSchedule> findVisibleByProviderIdAndVehicleIdOrderDesc(
+            @Param("providerId") Long providerId,
+            @Param("vehicleId") Long vehicleId
+    );
 
     @Query("""
             SELECT COUNT(s) > 0 FROM VehicleSchedule s
@@ -136,6 +175,7 @@ public interface VehicleScheduleRepository extends JpaRepository<VehicleSchedule
 
     @Query("""
             select s from VehicleSchedule s
+            left join fetch s.booking b
             where s.vehicle.id = :vehicleId
               and (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.ACTIVE
                    or (s.status = com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD

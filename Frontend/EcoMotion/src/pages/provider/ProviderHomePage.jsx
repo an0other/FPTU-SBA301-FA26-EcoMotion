@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { providerService } from '../../services/providerService'
@@ -10,26 +10,29 @@ export default function ProviderHomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    async function fetchSummary() {
-      try {
-        setLoading(true)
-        setError(null)
-        const data = await providerService.getDashboardSummary()
-        setSummary(data)
-      } catch (err) {
-        console.error('Failed to load dashboard summary:', err)
-        setError('Không thể tải dữ liệu thống kê từ hệ thống.')
-      } finally {
-        setLoading(false)
-      }
+  const fetchSummary = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await providerService.getDashboardSummary()
+      setSummary(data)
+    } catch (err) {
+      console.error('Failed to load dashboard summary:', err)
+      setError('Không thể tải dữ liệu thống kê từ hệ thống.')
+    } finally {
+      setLoading(false)
     }
-    fetchSummary()
   }, [])
 
-  const providerName = summary?.providerName || user?.fullName || 'Nhà xe đối tác'
-  const depotAddress = summary?.depotAddress || '120 Phổ Quang, Q. Tân Bình, TP.HCM'
-  const hotline = summary?.hotline || '1900 6868'
+  useEffect(() => {
+    queueMicrotask(() => {
+      fetchSummary()
+    })
+  }, [fetchSummary])
+
+  const providerName = summary?.providerName || user?.fullName || (loading ? '...' : 'Nhà xe đối tác')
+  const depotAddress = summary?.depotAddress || (loading ? 'Đang tải...' : 'Chưa cập nhật')
+  const hotline = summary?.hotline || (loading ? '...' : 'Chưa cập nhật')
 
   const pendingCount = summary?.pendingVehicles || 0
   const hiddenCount = summary?.hiddenVehicles || 0
@@ -43,6 +46,7 @@ export default function ProviderHomePage() {
 
   const notices = []
 
+  if (!loading && !error && summary) {
   if (rejectedCount > 0) {
     notices.push({
       id: 'rejected',
@@ -85,7 +89,7 @@ export default function ProviderHomePage() {
       descColor: 'text-slate-600',
       linkColor: 'text-emerald-700',
       title: `${hiddenCount} xe đang tạm dừng nhận khách`,
-      description: 'Xe ở trạng thái ẩn (HIDDEN), không xuất hiện trên ứng dụng khách. Bạn có thể bật nhận khách lại bất cứ lúc nào.',
+      description: 'Xe ở trạng thái tạm ẩn, không xuất hiện trên ứng dụng khách. Bạn có thể bật nhận khách lại bất cứ lúc nào.',
       linkTo: '/provider/vehicles?status=HIDDEN',
       actionText: 'Quản lý hiển thị xe',
     })
@@ -101,7 +105,7 @@ export default function ProviderHomePage() {
       descColor: 'text-sky-700',
       linkColor: 'text-sky-800',
       title: `${activeBlocks} lịch chặn / bảo trì đang kích hoạt`,
-      description: 'Đội xe đang có khung giờ chặn lịch (BLOCKED / MAINTENANCE) để bảo dưỡng hoặc nghỉ ngơi.',
+      description: 'Đội xe đang có khung giờ chặn bận hoặc bảo dưỡng định kỳ.',
       linkTo: '/provider/schedules',
       actionText: 'Xem lịch trình xe',
     })
@@ -122,13 +126,14 @@ export default function ProviderHomePage() {
       actionText: 'Tạo tài xế hộ',
     })
   }
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#334155] font-sans">
       <ProviderHeader
         activeTab="home"
-        providerName={providerName}
-        depotAddress={depotAddress}
+        providerName={summary?.providerName}
+        depotAddress={summary?.depotAddress}
       />
       
       <main className="w-full">
@@ -183,8 +188,8 @@ export default function ProviderHomePage() {
                 <span>{error}</span>
                 <button
                   type="button"
-                  onClick={() => window.location.reload()}
-                  className="font-semibold underline hover:text-red-900"
+                  onClick={fetchSummary}
+                  className="cursor-pointer font-semibold underline hover:text-red-900"
                 >
                   Tải lại
                 </button>
@@ -241,12 +246,16 @@ export default function ProviderHomePage() {
                     <span className="text-[28px] font-bold text-emerald-700">
                       {loading ? '—' : availableCount}
                     </span>
-                    <span className="text-[13px] text-slate-500">/{approvedCount} xe</span>
+                    {!loading && (
+                      <span className="text-[13px] text-slate-500">/{approvedCount} xe</span>
+                    )}
                   </div>
                   <p className="text-[11px] font-medium text-slate-500 mt-1">
-                    {isPartiallyBlocked
-                      ? `${approvedCount - availableCount} xe đang bảo dưỡng / bận`
-                      : 'Sẵn sàng nhận khách'}
+                    {loading
+                      ? 'Đang kiểm tra khả dụng...'
+                      : (isPartiallyBlocked
+                          ? `${approvedCount - availableCount} xe đang bảo dưỡng / bận`
+                          : 'Sẵn sàng nhận khách')}
                   </p>
                 </div>
               </div>
@@ -325,7 +334,12 @@ export default function ProviderHomePage() {
                 </div>
 
                 <div className="flex flex-col gap-3.5">
-                  {notices.length > 0 ? (
+                  {loading ? (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 flex items-center justify-center gap-2.5 text-xs text-slate-500 font-medium">
+                      <span className="material-symbols-outlined text-[20px] animate-spin text-emerald-600">progress_activity</span>
+                      <span>Đang tải thông báo vận hành...</span>
+                    </div>
+                  ) : notices.length > 0 ? (
                     notices.map((notice) => (
                       <div
                         key={notice.id}
@@ -460,9 +474,9 @@ export default function ProviderHomePage() {
         <div className="max-w-7xl mx-auto px-6 lg:px-12 flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-slate-500">
           <div>© 2026 EcoMotion VN. Nền tảng chia sẻ và quản trị phương tiện di chuyển xanh.</div>
           <div className="flex items-center gap-6">
-            <span className="hover:text-emerald-700 transition-colors cursor-pointer">Quy chuẩn vận hành</span>
-            <span className="hover:text-emerald-700 transition-colors cursor-pointer">Hỗ trợ trạm depot</span>
-            <span className="hover:text-emerald-700 transition-colors cursor-pointer">Chính sách bảo mật</span>
+            <Link to="/policy" className="hover:text-emerald-700 transition-colors cursor-pointer">Quy chuẩn vận hành</Link>
+            <Link to="/policy" className="hover:text-emerald-700 transition-colors cursor-pointer">Hỗ trợ trạm depot</Link>
+            <Link to="/policy" className="hover:text-emerald-700 transition-colors cursor-pointer">Chính sách bảo mật</Link>
           </div>
         </div>
       </footer>

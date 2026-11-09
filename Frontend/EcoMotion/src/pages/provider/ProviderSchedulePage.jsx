@@ -5,12 +5,8 @@ import { providerService } from '../../services/providerService'
 import { getErrorMessage } from '../../utils/errorMessage'
 
 export default function ProviderSchedulePage() {
-  const [stats, setStats] = useState({
-    totalActiveBlocks: 0,
-    activeMaintenance: 0,
-    activeBlocked: 0,
-    upcomingBookings: 0,
-  })
+  const [stats, setStats] = useState(null)
+  const [statsLoading, setStatsLoading] = useState(true)
   const [schedules, setSchedules] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -35,20 +31,33 @@ export default function ProviderSchedulePage() {
   const [formEndAt, setFormEndAt] = useState('')
   const [formReason, setFormReason] = useState('')
   const [formError, setFormError] = useState('')
+  const [vehicleBusySchedules, setVehicleBusySchedules] = useState([])
+  const [loadingBusySchedules, setLoadingBusySchedules] = useState(false)
+  const [vehicleDetailsMap, setVehicleDetailsMap] = useState({})
+  const [showBusyDetailModal, setShowBusyDetailModal] = useState(false)
 
   const [cancelingSchedule, setCancelingSchedule] = useState(null)
   const [cancelingLoading, setCancelingLoading] = useState(false)
 
-  const loadInitialData = useCallback(async () => {
+  const loadStats = useCallback(async () => {
     try {
-      const [statsRes, vehiclesRes] = await Promise.all([
-        providerService.getProviderScheduleStats(),
-        providerService.getVehicles({ size: 100 }),
-      ])
+      const statsRes = await providerService.getProviderScheduleStats()
       if (statsRes) setStats(statsRes)
+    } catch (err) {
+      console.error('Failed to load schedule stats', err)
+      setToast({ type: 'error', message: getErrorMessage(err, 'Không thể tải thống kê lịch xe') })
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [])
+
+  const loadVehiclesData = useCallback(async () => {
+    try {
+      const vehiclesRes = await providerService.getVehicles({ size: 100 })
       if (vehiclesRes?.items) setVehicles(vehiclesRes.items)
     } catch (err) {
-      console.error('Failed to load schedule stats or vehicles', err)
+      console.error('Failed to load vehicles', err)
+      setToast({ type: 'error', message: getErrorMessage(err, 'Không thể tải danh sách phương tiện') })
     }
   }, [])
 
@@ -59,9 +68,15 @@ export default function ProviderSchedulePage() {
       if (selectedVehicleId) params.vehicleId = selectedVehicleId
       if (selectedType) params.type = selectedType
       if (selectedStatus === 'CANCELLED') params.status = 'CANCELLED'
-      else if (selectedStatus === 'ACTIVE' || selectedStatus === 'EXPIRED') params.status = 'ACTIVE'
-      if (startDateFilter) params.fromDate = new Date(startDateFilter).toISOString()
-      if (endDateFilter) params.toDate = new Date(endDateFilter).toISOString()
+      else if (selectedStatus === 'HELD') params.status = 'HELD'
+      else if (selectedStatus === 'ACTIVE') params.status = 'ACTIVE'
+
+      if (startDateFilter) {
+        params.fromDate = new Date(`${startDateFilter}T00:00:00.000`).toISOString()
+      }
+      if (endDateFilter) {
+        params.toDate = new Date(`${endDateFilter}T23:59:59.999`).toISOString()
+      }
 
       const data = await providerService.getProviderSchedules(params)
       setSchedules(data || [])
@@ -73,16 +88,21 @@ export default function ProviderSchedulePage() {
   }, [selectedVehicleId, selectedType, selectedStatus, startDateFilter, endDateFilter])
 
   useEffect(() => {
-    queueMicrotask(loadInitialData)
-  }, [loadInitialData])
+    queueMicrotask(() => {
+      loadStats()
+      loadVehiclesData()
+    })
+  }, [loadStats, loadVehiclesData])
 
   useEffect(() => {
     const timer = setInterval(() => {
       setNowTime(Date.now())
-      loadInitialData()
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        loadStats()
+      }
     }, 15000)
     return () => clearInterval(timer)
-  }, [loadInitialData])
+  }, [loadStats])
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -144,8 +164,11 @@ export default function ProviderSchedulePage() {
     if (selectedStatus === 'ACTIVE') {
       return schedules.filter((item) => item.status === 'ACTIVE' && new Date(item.endAt).getTime() > nowTime)
     }
+    if (selectedStatus === 'HELD') {
+      return schedules.filter((item) => item.status === 'HELD' && new Date(item.endAt).getTime() > nowTime)
+    }
     if (selectedStatus === 'EXPIRED') {
-      return schedules.filter((item) => item.status === 'ACTIVE' && new Date(item.endAt).getTime() <= nowTime)
+      return schedules.filter((item) => (item.status === 'ACTIVE' || item.status === 'HELD') && new Date(item.endAt).getTime() <= nowTime)
     }
     if (selectedStatus === 'CANCELLED') {
       return schedules.filter((item) => item.status === 'CANCELLED')
@@ -153,12 +176,13 @@ export default function ProviderSchedulePage() {
     return schedules
   }, [schedules, selectedStatus, nowTime])
 
-  const paginatedSchedules = useMemo(() => {
-    const startIdx = (currentPage - 1) * itemsPerPage
-    return displayedSchedules.slice(startIdx, startIdx + itemsPerPage)
-  }, [displayedSchedules, currentPage, itemsPerPage])
-
   const totalPages = Math.ceil(displayedSchedules.length / itemsPerPage) || 1
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+
+  const paginatedSchedules = useMemo(() => {
+    const startIdx = (safeCurrentPage - 1) * itemsPerPage
+    return displayedSchedules.slice(startIdx, startIdx + itemsPerPage)
+  }, [displayedSchedules, safeCurrentPage, itemsPerPage])
 
   const eligibleVehicles = useMemo(() => {
     return vehicles.filter((v) => v.status === 'APPROVED' || v.status === 'HIDDEN')
@@ -170,8 +194,42 @@ export default function ProviderSchedulePage() {
     return new Date(d.getTime() - offset).toISOString().slice(0, 16)
   }
 
+  const loadBusySchedulesForVehicle = useCallback(async (vId) => {
+    if (!vId) {
+      setVehicleBusySchedules([])
+      return
+    }
+    setLoadingBusySchedules(true)
+    try {
+      const numId = Number(vId)
+      const [schedRes, detailRes] = await Promise.allSettled([
+        providerService.getProviderSchedules({ vehicleId: numId }),
+        vehicleDetailsMap[numId] ? Promise.resolve(vehicleDetailsMap[numId]) : providerService.getVehicleById(numId),
+      ])
+
+      const now = Date.now()
+      if (schedRes.status === 'fulfilled' && schedRes.value) {
+        const activeBusy = (schedRes.value || []).filter(
+          (s) => s.status !== 'CANCELLED' && new Date(s.endAt).getTime() > now
+        )
+        setVehicleBusySchedules(activeBusy)
+      } else {
+        setVehicleBusySchedules([])
+      }
+
+      if (detailRes.status === 'fulfilled' && detailRes.value) {
+        setVehicleDetailsMap((prev) => ({ ...prev, [numId]: detailRes.value }))
+      }
+    } catch {
+      setVehicleBusySchedules([])
+    } finally {
+      setLoadingBusySchedules(false)
+    }
+  }, [vehicleDetailsMap])
+
   const handleOpenCreateModal = () => {
-    setFormVehicleId(eligibleVehicles.length > 0 ? eligibleVehicles[0].id : '')
+    const defaultVehicleId = eligibleVehicles.length > 0 ? eligibleVehicles[0].id : ''
+    setFormVehicleId(defaultVehicleId)
     setFormType('MAINTENANCE')
     const now = new Date()
     now.setMinutes(0, 0, 0)
@@ -183,8 +241,74 @@ export default function ProviderSchedulePage() {
     setFormEndAt(toLocalIso(end))
     setFormReason('')
     setFormError('')
+    setShowBusyDetailModal(false)
     setIsModalOpen(true)
+    if (defaultVehicleId) {
+      loadBusySchedulesForVehicle(defaultVehicleId)
+    }
   }
+
+  const handleCloseCreateModal = () => {
+    setIsModalOpen(false)
+    setShowBusyDetailModal(false)
+  }
+
+  const modalMinStart = useMemo(() => (isModalOpen ? toLocalIso(new Date()) : ''), [isModalOpen])
+
+  const handleVehicleChange = (vId) => {
+    setFormVehicleId(vId)
+    setShowBusyDetailModal(false)
+    loadBusySchedulesForVehicle(vId)
+  }
+
+  const handleAddDuration = (hours) => {
+    if (!formStartAt) return
+    const start = new Date(formStartAt)
+    if (isNaN(start.getTime())) return
+    const end = new Date(start.getTime() + hours * 3600000)
+    setFormEndAt(toLocalIso(end))
+  }
+
+  const selectedModalVehicle = useMemo(
+    () => vehicles.find((v) => v.id === Number(formVehicleId)),
+    [vehicles, formVehicleId]
+  )
+
+  const selectedVehicleMaintenanceBuffer = useMemo(() => {
+    const numId = Number(formVehicleId)
+    return vehicleDetailsMap[numId]?.maintenanceBufferMinutes ?? selectedModalVehicle?.maintenanceBufferMinutes ?? 60
+  }, [formVehicleId, vehicleDetailsMap, selectedModalVehicle])
+
+  const liveConflictWarning = useMemo(() => {
+    if (!formStartAt || !formEndAt || vehicleBusySchedules.length === 0) return null
+    const startMs = new Date(formStartAt).getTime()
+    const endMs = new Date(formEndAt).getTime()
+    if (isNaN(startMs) || isNaN(endMs) || endMs <= startMs) return null
+
+    const bufferMs = selectedVehicleMaintenanceBuffer * 60000
+
+    for (const s of vehicleBusySchedules) {
+      const sStart = new Date(s.startAt).getTime()
+      const sEnd = new Date(s.endAt).getTime()
+      if (s.type === 'BOOKED') {
+        const conflict = startMs < sEnd + bufferMs && endMs > sStart - bufferMs
+        if (conflict) {
+          const startStr = new Date(s.startAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(s.startAt).toLocaleDateString('vi-VN')
+          const endStr = new Date(s.endAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(s.endAt).toLocaleDateString('vi-VN')
+          return `Khung giờ chọn đang trùng hoặc lấn vào khoảng đệm của đơn khách #${s.bookingCode || s.bookingId || 'BOOKED'} (${startStr} - ${endStr})`
+        }
+      } else {
+        const conflict = startMs < sEnd && endMs > sStart
+        if (conflict) {
+          const typeName = s.type === 'MAINTENANCE' ? 'bảo dưỡng' : 'chặn bận'
+          const startStr = new Date(s.startAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(s.startAt).toLocaleDateString('vi-VN')
+          const endStr = new Date(s.endAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(s.endAt).toLocaleDateString('vi-VN')
+          return `Khung giờ chọn đang trùng với lịch ${typeName} hiện có (${startStr} - ${endStr})`
+        }
+      }
+    }
+    return null
+  }, [formStartAt, formEndAt, vehicleBusySchedules, selectedVehicleMaintenanceBuffer])
 
   const handleCreateSchedule = async (e) => {
     e.preventDefault()
@@ -214,6 +338,11 @@ export default function ProviderSchedulePage() {
       return
     }
 
+    if (liveConflictWarning) {
+      setFormError(liveConflictWarning)
+      return
+    }
+
     setSubmitting(true)
     try {
       await providerService.createBlockSchedule({
@@ -225,8 +354,8 @@ export default function ProviderSchedulePage() {
       })
 
       setToast({ type: 'success', message: 'Tạo lịch chặn thành công!' })
-      setIsModalOpen(false)
-      loadInitialData()
+      handleCloseCreateModal()
+      loadStats()
       loadSchedules()
     } catch (err) {
       setFormError(getErrorMessage(err, 'Không thể tạo lịch chặn'))
@@ -242,7 +371,7 @@ export default function ProviderSchedulePage() {
       await providerService.cancelBlockSchedule(cancelingSchedule.id)
       setToast({ type: 'success', message: `Đã mở lại lịch cho xe ${cancelingSchedule.vehicleLicensePlate}` })
       setCancelingSchedule(null)
-      loadInitialData()
+      loadStats()
       loadSchedules()
     } catch (err) {
       setToast({ type: 'error', message: getErrorMessage(err, 'Không thể mở lại lịch xe') })
@@ -296,7 +425,7 @@ export default function ProviderSchedulePage() {
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng lịch đang chặn</p>
                 <div className="mt-2 flex items-baseline gap-1.5">
                   <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                    {String(stats.totalActiveBlocks).padStart(2, '0')}
+                    {statsLoading || !stats ? '—' : String(stats.totalActiveBlocks).padStart(2, '0')}
                   </span>
                   <span className="text-sm font-medium text-slate-500">lịch</span>
                 </div>
@@ -310,7 +439,7 @@ export default function ProviderSchedulePage() {
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center">
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                Đang hiệu lực (ACTIVE)
+                Đang hiệu lực
               </span>
             </div>
           </div>
@@ -318,12 +447,12 @@ export default function ProviderSchedulePage() {
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Xe đang bảo dưỡng</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lịch bảo dưỡng</p>
                 <div className="mt-2 flex items-baseline gap-1.5">
                   <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                    {String(stats.activeMaintenance).padStart(2, '0')}
+                    {statsLoading || !stats ? '—' : String(stats.activeMaintenance).padStart(2, '0')}
                   </span>
-                  <span className="text-sm font-medium text-slate-500">xe</span>
+                  <span className="text-sm font-medium text-slate-500">lịch</span>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 shrink-0">
@@ -346,12 +475,12 @@ export default function ProviderSchedulePage() {
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Xe bận việc riêng</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lịch bận việc riêng</p>
                 <div className="mt-2 flex items-baseline gap-1.5">
                   <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                    {String(stats.activeBlocked).padStart(2, '0')}
+                    {statsLoading || !stats ? '—' : String(stats.activeBlocked).padStart(2, '0')}
                   </span>
-                  <span className="text-sm font-medium text-slate-500">xe</span>
+                  <span className="text-sm font-medium text-slate-500">lịch</span>
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100 shrink-0">
@@ -376,7 +505,7 @@ export default function ProviderSchedulePage() {
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lịch khách đặt sắp tới</p>
                 <div className="mt-2 flex items-baseline gap-1.5">
                   <span className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                    {String(stats.upcomingBookings).padStart(2, '0')}
+                    {statsLoading || !stats ? '—' : String(stats.upcomingBookings).padStart(2, '0')}
                   </span>
                   <span className="text-sm font-medium text-slate-500">chuyến</span>
                 </div>
@@ -399,9 +528,9 @@ export default function ProviderSchedulePage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
             
-            <div className="relative min-w-[220px]">
+            <div className="relative w-full sm:w-auto flex-1 sm:flex-initial sm:min-w-[200px]">
               <select
                 value={selectedVehicleId}
                 onChange={(e) => setSelectedVehicleId(e.target.value)}
@@ -426,16 +555,16 @@ export default function ProviderSchedulePage() {
               </div>
             </div>
 
-            <div className="relative min-w-[170px]">
+            <div className="relative w-full sm:w-auto flex-1 sm:flex-initial sm:min-w-[160px]">
               <select
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer appearance-none text-slate-700"
               >
                 <option value="">Phân loại: Tất cả</option>
-                <option value="MAINTENANCE">Bảo dưỡng (MAINTENANCE)</option>
-                <option value="BLOCKED">Chặn bận (BLOCKED)</option>
-                <option value="BOOKED">Khách đặt (BOOKED)</option>
+                <option value="MAINTENANCE">Bảo dưỡng</option>
+                <option value="BLOCKED">Chặn bận</option>
+                <option value="BOOKED">Khách đặt</option>
               </select>
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -449,16 +578,17 @@ export default function ProviderSchedulePage() {
               </div>
             </div>
 
-            <div className="relative min-w-[180px]">
+            <div className="relative w-full sm:w-auto flex-1 sm:flex-initial sm:min-w-[160px]">
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer appearance-none text-slate-700"
               >
                 <option value="">Trạng thái: Tất cả</option>
-                <option value="ACTIVE">Đang hiệu lực (ACTIVE)</option>
-                <option value="EXPIRED">Đã kết thúc (EXPIRED)</option>
-                <option value="CANCELLED">Đã mở lại (CANCELLED)</option>
+                <option value="ACTIVE">Đang hiệu lực</option>
+                <option value="HELD">Đang giữ chỗ cọc</option>
+                <option value="EXPIRED">Đã kết thúc</option>
+                <option value="CANCELLED">Đã mở lại</option>
               </select>
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -472,14 +602,20 @@ export default function ProviderSchedulePage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-600">
+            <div className="flex items-center flex-wrap sm:flex-nowrap gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-600 w-full sm:w-auto">
               <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <input
                 type="date"
                 value={startDateFilter}
-                onChange={(e) => setStartDateFilter(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setStartDateFilter(val)
+                  if (endDateFilter && val && val > endDateFilter) {
+                    setEndDateFilter(val)
+                  }
+                }}
                 className="bg-transparent focus:outline-none text-xs text-slate-700 cursor-pointer"
                 title="Từ ngày"
               />
@@ -487,7 +623,15 @@ export default function ProviderSchedulePage() {
               <input
                 type="date"
                 value={endDateFilter}
-                onChange={(e) => setEndDateFilter(e.target.value)}
+                min={startDateFilter || undefined}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (startDateFilter && val && val < startDateFilter) {
+                    setToast({ type: 'warning', message: 'Ngày kết thúc không thể trước ngày bắt đầu' })
+                    return
+                  }
+                  setEndDateFilter(val)
+                }}
                 className="bg-transparent focus:outline-none text-xs text-slate-700 cursor-pointer"
                 title="Đến ngày"
               />
@@ -602,21 +746,21 @@ export default function ProviderSchedulePage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               </svg>
-                              <span>Bảo dưỡng (MAINTENANCE)</span>
+                              <span>Bảo dưỡng</span>
                             </span>
                           ) : item.type === 'BLOCKED' ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200/80">
                               <svg className="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                               </svg>
-                              <span>Chặn bận (BLOCKED)</span>
+                              <span>Chặn bận</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200/80">
                               <svg className="w-3.5 h-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                               </svg>
-                              <span>Khách đặt (BOOKED)</span>
+                              <span>Khách đặt</span>
                             </span>
                           )}
                         </td>
@@ -644,20 +788,32 @@ export default function ProviderSchedulePage() {
                           {isCancelled ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                              Đã mở lại (CANCELLED)
+                              Đã mở lại
                             </span>
                           ) : isPast ? (
                             <span
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200"
-                              title="Khung giờ chặn đã kết thúc, hệ thống đã tự động mở lại lịch xe"
+                              title={
+                                item.type === 'BOOKED'
+                                   ? 'Đơn thuê của khách hàng đã hoàn thành'
+                                   : 'Khung giờ chặn đã kết thúc, hệ thống đã tự động mở lại lịch xe'
+                              }
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
                               Đã kết thúc
                             </span>
+                          ) : item.status === 'HELD' ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200"
+                              title="Đơn thuê đang trong thời gian giữ chỗ chờ thanh toán tiền cọc"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>
+                              Đang giữ chỗ cọc
+                            </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              Đang hiệu lực (ACTIVE)
+                              Đang hiệu lực
                             </span>
                           )}
                         </td>
@@ -756,20 +912,36 @@ export default function ProviderSchedulePage() {
                 >
                   Trước
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setCurrentPage(p)}
-                    className={`w-8 h-8 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      currentPage === p
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
+                  if (
+                    p === 1 ||
+                    p === totalPages ||
+                    Math.abs(p - currentPage) <= 1
+                  ) {
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setCurrentPage(p)}
+                        className={`w-8 h-8 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          currentPage === p
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  }
+                  if (p === currentPage - 2 || p === currentPage + 2) {
+                    return (
+                      <span key={p} className="px-1 text-slate-400 text-xs">
+                        ...
+                      </span>
+                    )
+                  }
+                  return null
+                })}
                 <button
                   type="button"
                   disabled={currentPage === totalPages}
@@ -786,8 +958,8 @@ export default function ProviderSchedulePage() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -801,173 +973,278 @@ export default function ProviderSchedulePage() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={handleCloseCreateModal}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateSchedule} className="p-6 space-y-4">
-              {eligibleVehicles.length === 0 && (
-                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2.5">
-                  <svg className="w-4 h-4 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Hiện tại bạn chưa có phương tiện nào đã qua kiểm duyệt (APPROVED/HIDDEN) để thực hiện chặn lịch.</span>
-                </div>
-              )}
-              {formError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
-                  <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <span>{formError}</span>
-                </div>
-              )}
+            <form onSubmit={handleCreateSchedule} className="flex-1 min-h-0 flex flex-col">
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                {eligibleVehicles.length === 0 && (
+                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2.5">
+                    <svg className="w-4 h-4 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Hiện tại bạn chưa có phương tiện nào đã qua kiểm duyệt để thực hiện chặn lịch.</span>
+                  </div>
+                )}
+                {formError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+                    <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>{formError}</span>
+                  </div>
+                )}
+                {liveConflictWarning && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                    <svg className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>{liveConflictWarning}</span>
+                  </div>
+                )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  1. Chọn phương tiện <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={formVehicleId}
-                  onChange={(e) => setFormVehicleId(e.target.value)}
-                  disabled={eligibleVehicles.length === 0}
-                  className="w-full px-3.5 py-2.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800 cursor-pointer"
-                >
-                  {eligibleVehicles.length === 0 ? (
-                    <option value="">Không có phương tiện khả dụng</option>
-                  ) : (
-                    eligibleVehicles.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.licensePlate} • {v.brand} {v.model} ({v.seatCount} chỗ){v.status === 'HIDDEN' ? ' [Tạm ẩn]' : ''}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+                  {/* CỘT TRÁI: ĐỐI TƯỢNG & MỤC ĐÍCH */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                        1. Chọn phương tiện <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={formVehicleId}
+                        onChange={(e) => handleVehicleChange(e.target.value)}
+                        disabled={eligibleVehicles.length === 0}
+                        className="w-full px-3.5 py-2.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800 cursor-pointer"
+                      >
+                        {eligibleVehicles.length === 0 ? (
+                          <option value="">Không có phương tiện khả dụng</option>
+                        ) : (
+                          eligibleVehicles.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.licensePlate} • {v.brand} {v.model} ({v.seatCount} chỗ){v.status === 'HIDDEN' ? ' [Tạm ẩn]' : ''}
+                            </option>
+                          ))
+                        )}
+                      </select>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  2. Loại lịch chặn <span className="text-rose-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label
-                    className={`border rounded-xl p-3 flex flex-col gap-1 cursor-pointer transition-all ${
-                      formType === 'MAINTENANCE'
-                        ? 'border-amber-500 bg-amber-50/50 text-amber-900 ring-2 ring-amber-500/20'
-                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        </svg>
-                        Bảo dưỡng kỹ thuật
-                      </span>
-                      <input
-                        type="radio"
-                        name="scheduleType"
-                        value="MAINTENANCE"
-                        checked={formType === 'MAINTENANCE'}
-                        onChange={() => setFormType('MAINTENANCE')}
-                        className="text-amber-600 focus:ring-amber-500"
-                      />
+                      <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-2">
+                        <div className="flex items-center justify-between text-slate-500 font-semibold">
+                          <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Lịch bận sắp tới {vehicleBusySchedules.length > 0 && `(${vehicleBusySchedules.length})`}
+                          </span>
+                          {loadingBusySchedules ? (
+                            <span className="text-[10px] text-emerald-600 animate-pulse">Đang tải...</span>
+                          ) : (
+                            vehicleBusySchedules.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setShowBusyDetailModal(true)}
+                                className="text-emerald-700 hover:text-emerald-800 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer hover:underline"
+                              >
+                                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                <span>Xem chi tiết</span>
+                              </button>
+                            )
+                          )}
+                        </div>
+
+                        {vehicleBusySchedules.length === 0 ? (
+                          <p className="text-[11px] text-emerald-600">Xe hiện chưa có lịch bận nào sắp tới, sẵn sàng lên lịch.</p>
+                        ) : (
+                          <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
+                            {vehicleBusySchedules.slice(0, 3).map((s) => {
+                              const start = formatDateTime(s.startAt)
+                              const end = formatDateTime(s.endAt)
+                              return (
+                                <div
+                                  key={s.id}
+                                  className="flex items-center gap-2 text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/70 font-medium text-slate-700 shadow-2xs"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                                  <span className="truncate">
+                                    {start.time} {start.date} &rarr; {end.time} {end.date}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                            {vehicleBusySchedules.length > 3 && (
+                              <p className="text-[10px] text-slate-400 text-center pt-0.5">
+                                + {vehicleBusySchedules.length - 3} khung giờ bận khác
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-[11px] text-slate-500">Sửa chữa, thay pin, bảo dưỡng định kỳ</span>
-                  </label>
 
-                  <label
-                    className={`border rounded-xl p-3 flex flex-col gap-1 cursor-pointer transition-all ${
-                      formType === 'BLOCKED'
-                        ? 'border-purple-500 bg-purple-50/50 text-purple-900 ring-2 ring-purple-500/20'
-                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        Khóa bận việc riêng
-                      </span>
-                      <input
-                        type="radio"
-                        name="scheduleType"
-                        value="BLOCKED"
-                        checked={formType === 'BLOCKED'}
-                        onChange={() => setFormType('BLOCKED')}
-                        className="text-purple-600 focus:ring-purple-500"
-                      />
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                        2. Loại lịch chặn <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label
+                          className={`border rounded-xl p-3 flex flex-col gap-1 cursor-pointer transition-all ${
+                            formType === 'MAINTENANCE'
+                              ? 'border-amber-500 bg-amber-50/50 text-amber-900 ring-2 ring-amber-500/20'
+                              : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs flex items-center gap-1.5">
+                              <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                              </svg>
+                              Bảo dưỡng kỹ thuật
+                            </span>
+                            <input
+                              type="radio"
+                              name="scheduleType"
+                              value="MAINTENANCE"
+                              checked={formType === 'MAINTENANCE'}
+                              onChange={() => setFormType('MAINTENANCE')}
+                              className="text-amber-600 focus:ring-amber-500"
+                            />
+                          </div>
+                          <span className="text-[11px] text-slate-500">Sửa chữa, thay pin, bảo dưỡng định kỳ</span>
+                        </label>
+
+                        <label
+                          className={`border rounded-xl p-3 flex flex-col gap-1 cursor-pointer transition-all ${
+                            formType === 'BLOCKED'
+                              ? 'border-purple-500 bg-purple-50/50 text-purple-900 ring-2 ring-purple-500/20'
+                              : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs flex items-center gap-1.5">
+                              <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                              Khóa bận việc riêng
+                            </span>
+                            <input
+                              type="radio"
+                              name="scheduleType"
+                              value="BLOCKED"
+                              checked={formType === 'BLOCKED'}
+                              onChange={() => setFormType('BLOCKED')}
+                              className="text-purple-600 focus:ring-purple-500"
+                            />
+                          </div>
+                          <span className="text-[11px] text-slate-500">Chủ xe dùng cá nhân hoặc công tác</span>
+                        </label>
+                      </div>
                     </div>
-                    <span className="text-[11px] text-slate-500">Chủ xe dùng cá nhân hoặc công tác</span>
-                  </label>
+                  </div>
+
+                  {/* CỘT PHẢI: THỜI GIAN & GHI CHÚ */}
+                  <div className="space-y-4">
+                    <div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                            3. Bắt đầu <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={formStartAt}
+                            min={modalMinStart}
+                            onChange={(e) => {
+                              const newStart = e.target.value
+                              setFormStartAt(newStart)
+                              if (formEndAt && newStart && newStart >= formEndAt) {
+                                const startD = new Date(newStart)
+                                if (!isNaN(startD.getTime())) {
+                                  setFormEndAt(toLocalIso(new Date(startD.getTime() + 2 * 3600000)))
+                                }
+                              }
+                            }}
+                            required
+                            className="w-full px-3.5 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                            4. Kết thúc <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={formEndAt}
+                            min={formStartAt || modalMinStart}
+                            onChange={(e) => setFormEndAt(e.target.value)}
+                            required
+                            className="w-full px-3.5 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                        <span className="text-[11px] font-semibold text-slate-500 mr-1">Chọn nhanh:</span>
+                        {[
+                          { label: '+2 giờ', hours: 2 },
+                          { label: '+4 giờ', hours: 4 },
+                          { label: '+8 giờ', hours: 8 },
+                          { label: '+1 ngày', hours: 24 },
+                          { label: '+3 ngày', hours: 72 },
+                        ].map((btn) => (
+                          <button
+                            key={btn.label}
+                            type="button"
+                            onClick={() => handleAddDuration(btn.hours)}
+                            className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg transition-colors cursor-pointer"
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700 uppercase">
+                          5. Lý do / Ghi chú
+                        </label>
+                        <span className="text-[11px] text-slate-400">{formReason.length}/255</span>
+                      </div>
+                      <textarea
+                        rows="3"
+                        maxLength={255}
+                        value={formReason}
+                        onChange={(e) => setFormReason(e.target.value)}
+                        placeholder={
+                          formType === 'MAINTENANCE'
+                            ? 'VD: Bảo dưỡng pin định kỳ 10.000km, thay lọc gió cabin...'
+                            : 'VD: Chủ xe đi công tác tỉnh, phục vụ việc cá nhân gia đình...'
+                        }
+                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800"
+                      ></textarea>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                    3. Bắt đầu <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formStartAt}
-                    min={toLocalIso(new Date())}
-                    onChange={(e) => setFormStartAt(e.target.value)}
-                    required
-                    className="w-full px-3.5 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                    4. Kết thúc <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formEndAt}
-                    min={formStartAt || toLocalIso(new Date())}
-                    onChange={(e) => setFormEndAt(e.target.value)}
-                    required
-                    className="w-full px-3.5 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700 uppercase">
-                    5. Lý do / Ghi chú
-                  </label>
-                  <span className="text-[11px] text-slate-400">{formReason.length}/255</span>
-                </div>
-                <textarea
-                  rows="3"
-                  maxLength={255}
-                  value={formReason}
-                  onChange={(e) => setFormReason(e.target.value)}
-                  placeholder={
-                    formType === 'MAINTENANCE'
-                      ? 'VD: Bảo dưỡng pin định kỳ 10.000km, thay lọc gió cabin...'
-                      : 'VD: Chủ xe đi công tác tỉnh, phục vụ việc cá nhân gia đình...'
-                  }
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-800"
-                ></textarea>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/60 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleCloseCreateModal}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || eligibleVehicles.length === 0}
+                  disabled={submitting || eligibleVehicles.length === 0 || !!liveConflictWarning}
+                  title={liveConflictWarning || undefined}
                   className="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-xs disabled:opacity-50 transition-all cursor-pointer inline-flex items-center gap-2"
                 >
                   {submitting && (
@@ -1023,6 +1300,111 @@ export default function ProviderSchedulePage() {
                   </svg>
                 )}
                 <span>Mở lại ngay</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBusyDetailModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[85vh] flex flex-col overflow-hidden border border-slate-200">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base leading-tight">
+                    Toàn bộ lịch bận — {selectedModalVehicle?.licensePlate || 'Phương tiện'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {selectedModalVehicle ? `${selectedModalVehicle.brand} ${selectedModalVehicle.model}` : ''} • {vehicleBusySchedules.length} lịch bận sắp tới
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBusyDetailModal(false)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-3 flex-1">
+              {vehicleBusySchedules.map((s) => {
+                const startFormatted = formatDateTime(s.startAt)
+                const endFormatted = formatDateTime(s.endAt)
+                const isBooked = s.type === 'BOOKED'
+                const isMaintenance = s.type === 'MAINTENANCE'
+                return (
+                  <div
+                    key={s.id}
+                    className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                        isBooked
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : isMaintenance
+                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                          : 'bg-purple-50 text-purple-700 border border-purple-200'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          isBooked ? 'bg-blue-500' : isMaintenance ? 'bg-amber-500' : 'bg-purple-500'
+                        }`} />
+                        {isBooked
+                          ? (s.bookingCode ? `Đơn thuê #${s.bookingCode}` : 'Lịch khách đặt')
+                          : isMaintenance
+                          ? 'Bảo dưỡng định kỳ'
+                          : 'Khóa lịch / Việc riêng'}
+                      </span>
+                      <span className="text-xs text-slate-500 font-medium">
+                        {startFormatted.date}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                      <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>
+                        {startFormatted.time} {startFormatted.date} &rarr; {endFormatted.time} {endFormatted.date}
+                      </span>
+                    </div>
+
+                    {s.reason && (
+                      <p className="text-xs text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200/60">
+                        <span className="font-semibold text-slate-500">Ghi chú:</span> {s.reason}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 pt-0.5">
+                      <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      <span>Khoảng đệm bảo dưỡng: +{selectedVehicleMaintenanceBuffer} phút sau chuyến</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/70 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowBusyDetailModal(false)}
+                className="px-5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors shadow-2xs cursor-pointer"
+              >
+                Đóng
               </button>
             </div>
           </div>

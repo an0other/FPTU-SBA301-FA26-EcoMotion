@@ -243,7 +243,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
         {/* Body content based on activeMode */}
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
           {/* ========================================================
-              MODE 1: GỢI Ý TÀI XẾ (OR-Tools Candidate Suggestions)
+              CHẾ ĐỘ 1: GỢI Ý TÀI XẾ
               ======================================================== */}
           {activeMode === 'SUGGESTION' && (
             <div className="space-y-2"><p className="text-xs text-slate-600">Gợi ý chưa lưu phân công. {suggestionResult?.solverStatus?.startsWith('FALLBACK') ? 'Đang dùng xếp hạng dự phòng: ' : 'Trạng thái bộ giải: '}{suggestionResult?.solverStatus || 'Đang chờ'}</p>
@@ -411,7 +411,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
           )}
 
           {/* ========================================================
-              MODE 2: TỰ ĐỘNG ĐIỀU PHỐI (Auto Assign via OR-Tools)
+              CHẾ ĐỘ 2: TỰ ĐỘNG ĐIỀU PHỐI
               ======================================================== */}
           {activeMode === 'AUTO' && (
             <div className="space-y-4">
@@ -502,7 +502,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
           )}
 
           {/* ========================================================
-              MODE 3: THỦ CÔNG (Manual Selection)
+              CHẾ ĐỘ 3: PHÂN CÔNG THỦ CÔNG
               ======================================================== */}
           {activeMode === 'MANUAL' && booking.canAssignDriver !== false && (
             <div className="space-y-3">
