@@ -624,11 +624,11 @@ export const BookingDetail = ({
                       <td className="py-3 px-3 font-medium text-[#14221A]">{charge.label}</td>
                       <td className="py-3 px-3 text-[#6D7A72]">{charge.description}</td>
                       <td className="py-3 px-3 text-right font-mono text-[#6D7A72]">{charge.formula}</td>
-                      <td className="py-3 px-3 text-right font-bold font-mono text-[#14221A]">
+                      <td className={`py-3 px-3 text-right font-bold font-mono ${charge.isWaived ? 'text-[#6D7A72] line-through' : 'text-[#14221A]'}`}>
                         {charge.amount.toLocaleString('vi-VN')} đ
                       </td>
                       <td className="py-3 px-3 text-[#6D7A72]">
-                        {charge.confirmationStatus === 'PENDING' ? (
+                        {charge.isWaived ? 'Đã miễn (admin)' : charge.confirmationStatus === 'PENDING' ? (
                           <button type="button" className="rounded-lg border border-[#14221A] px-2 py-1 text-[11px] font-semibold text-[#14221A]" onClick={() => onAcceptCharge?.(charge.chargeId)}>Chấp nhận</button>
                         ) : charge.confirmationStatus === 'DISPUTED' ? 'Đang tranh chấp' : 'Đã nhận'}
                       </td>

@@ -198,6 +198,16 @@ public class BookingServiceImpl implements BookingService {
     private static final Set<BookingStatus> DEPOSIT_PAYABLE_STATUSES = EnumSet.of(
             BookingStatus.AWAITING_DEPOSIT, BookingStatus.ACCEPTED);
 
+    /** Chất lượng dịch vụ/tài xế: từ lúc tài xế tới điểm đón đến sau khi hoàn tất chuyến. */
+    private static final Set<BookingStatus> SERVICE_QUALITY_DISPUTE = EnumSet.of(
+            BookingStatus.DRIVER_ARRIVED,
+            BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION,
+            BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT,
+            BookingStatus.COMPLETED);
+
     private static final Set<BookingStatus> CHARGE_DISPUTE = EnumSet.of(
             BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
             BookingStatus.AWAITING_FINAL_PAYMENT);
@@ -980,7 +990,7 @@ public class BookingServiceImpl implements BookingService {
         return switch (category) {
             case CHARGE -> CHARGE_DISPUTE.contains(booking.getStatus()) && chargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
                     .anyMatch(c -> !c.isWaived() && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT);
-            case SERVICE_QUALITY -> booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.COMPLETED;
+            case SERVICE_QUALITY -> SERVICE_QUALITY_DISPUTE.contains(booking.getStatus());
             case DEPOSIT_REFUND -> (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)
                     && paymentTransactionRepository.findByBooking_Id(booking.getId()).stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
                         && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0);

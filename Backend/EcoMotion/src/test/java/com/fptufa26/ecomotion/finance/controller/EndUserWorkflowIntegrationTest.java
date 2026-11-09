@@ -289,7 +289,13 @@ class EndUserWorkflowIntegrationTest {
         assertThat(h.getDeadline()).isEqualTo(b.getDriverEndConfirmedAt().plus(java.time.Duration.ofHours(12)));
         assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(1);
         assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+        // Trong 12 giờ khách khiếu nại được cả chất lượng dịch vụ lẫn giờ kết thúc.
+        assertThat(renterBookings.detail(renterId, code()).disputeCategories()).contains(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.SERVICE_QUALITY,
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED);
         renterBookings.confirmTripEnd(renterId, code());
+        assertThat(renterBookings.detail(renterId, code()).disputeCategories())
+                .doesNotContain(com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED);
         var confirmed=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
         assertThat(confirmed.getState()).isEqualTo("CONFIRMED");
         assertThat(confirmed.getConfirmationMethod()).isEqualTo("RENTER");
