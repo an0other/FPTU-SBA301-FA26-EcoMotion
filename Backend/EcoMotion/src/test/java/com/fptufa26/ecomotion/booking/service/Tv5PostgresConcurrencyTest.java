@@ -418,7 +418,7 @@ class Tv5PostgresConcurrencyTest {
     }
 
     @Test
-    void repeatedIpnIsSerializedAndCallbackDoesNotConfirmMoney() throws Exception {
+    void repeatedIpnIsSerializedAndSignedCallbackAppliesOnce() throws Exception {
         String ref = UUID.randomUUID().toString();
         long transaction = tx.execute(status -> {
             Booking b = bookings.findByIdForUpdate(first).orElseThrow(); b.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);
@@ -437,8 +437,9 @@ class Tv5PostgresConcurrencyTest {
         org.mockito.Mockito.when(gateway.verifyIpn(org.mockito.ArgumentMatchers.anyMap())).thenReturn(verified);
         org.mockito.Mockito.when(gateway.verifyCallback(org.mockito.ArgumentMatchers.anyMap())).thenReturn(verified);
         var params = java.util.Map.of("vnp_TxnRef", ref, "vnp_Amount", "10000000");
-        vnpay.processCallback(params);
-        assertThat(ledger.findById(transaction).orElseThrow().getStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING);
+        Long renterUser = tx.execute(status -> bookings.findById(first).orElseThrow().getRenter().getUser().getId());
+        vnpay.processCallback(renterUser, params);
+        assertThat(ledger.findById(transaction).orElseThrow().getStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.PaymentStatus.PAID);
         assertThat(race(() -> vnpay.processIpn(params), () -> vnpay.processIpn(params))).containsOnly(true);
         assertThat(ledger.findById(transaction).orElseThrow().getStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.PaymentStatus.PAID);
         assertThat(bookings.findById(first).orElseThrow().getStatus()).isEqualTo(BookingStatus.COMPLETED);

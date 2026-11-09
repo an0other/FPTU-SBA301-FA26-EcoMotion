@@ -190,7 +190,10 @@ public class VnpayPaymentGatewayStrategy implements PaymentGatewayStrategy {
                     .requestFactory(factory).build().post().uri(vnpayConfig.getApiUrl())
                     .contentType(MediaType.APPLICATION_JSON).body(request)
                     .retrieve().body(new ParameterizedTypeReference<Map<String, String>>() {});
-            if (response == null) return Optional.empty();
+            if (response == null) {
+                log.warn("VNPay QueryDR returned an empty body: txnRef={}", txnRef);
+                return Optional.empty();
+            }
             String hashData = Stream.of("vnp_ResponseId", "vnp_Command", "vnp_ResponseCode",
                             "vnp_Message", "vnp_TmnCode", "vnp_TxnRef", "vnp_Amount", "vnp_BankCode",
                             "vnp_PayDate", "vnp_TransactionNo", "vnp_TransactionType", "vnp_TransactionStatus",

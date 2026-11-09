@@ -47,7 +47,9 @@ public record TripEvidenceResponse(
                 ev.getBooking() != null ? ev.getBooking().getId() : null,
                 ev.getBooking() != null ? ev.getBooking().getBookingCode() : null,
                 ev.getEvidenceType(),
-                ev.getImageUrl(),
+                ev.getImageUrl() != null && ev.getImageUrl().startsWith("booking/")
+                        ? "/api/bookings/" + ev.getBooking().getBookingCode() + "/evidences/" + ev.getId() + "/file"
+                        : ev.getImageUrl(),
                 ev.getCloudinaryPublicId(),
                 ev.getOriginalFileName(),
                 ev.getFileSize(),

@@ -7,7 +7,7 @@ import { PickupLocationCard } from './PickupLocationCard';
 import { EditBookingRequestModal } from './EditBookingRequestModal';
 import LiveMapViewer from '../map/LiveMapViewer';
 import { HoldCountdown } from '../payments/HoldCountdown';
-import YearlyInstallmentOverview from './YearlyInstallmentOverview';
+import YearlyWorkflowPanel from '../yearly-rental/YearlyWorkflowPanel';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
@@ -20,6 +20,7 @@ export const BookingDetail = ({
   booking,
   workflow = null,
   operationalRisk = null,
+  onYearlyChanged,
   onGoBack,
   onGoToCarPage,
   onPayDeposit,
@@ -176,9 +177,12 @@ export const BookingDetail = ({
       </div>
 
       {booking.planType === 'YEARLY' && (
-        <YearlyInstallmentOverview
+        <YearlyWorkflowPanel
+          key={booking.id}
           bookingCode={booking.id}
-          onPay={() => onPayDeposit(booking)}
+          role="renter"
+          bookingStatus={booking.status}
+          onChanged={onYearlyChanged}
         />
       )}
 
@@ -217,7 +221,7 @@ export const BookingDetail = ({
                 <h2 className="text-base font-bold text-[#14221A]">Đơn đang chờ chủ xe</h2>
                 <p className="text-xs text-gray-600 mt-1">Chưa thu cọc. Bạn có thể huỷ yêu cầu.</p>
               </div>
-              {booking.canCancel ? <button
+              {booking.planType !== 'YEARLY' && booking.canCancel ? <button
                 onClick={() => setIsCancelModalOpen(true)}
                 type="button"
                 className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
@@ -255,7 +259,7 @@ export const BookingDetail = ({
               </div>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <HoldCountdown expiresAt={booking.holdExpiresAt} />
-                {booking.canPay ? (
+                {booking.planType !== 'YEARLY' && booking.canPay ? (
                   <button
                     onClick={() => onPayDeposit(booking)}
                     type="button"
@@ -281,13 +285,13 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {booking.status === 'AWAITING_FINAL_PAYMENT' && (
+          {booking.planType !== 'YEARLY' && booking.status === 'AWAITING_FINAL_PAYMENT' && (
             <div className="p-5 bg-purple-50 border border-purple-200 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-bold text-purple-900">Đã chốt quyết toán</h2>
                 <p className="text-xs text-purple-700 mt-1">Vui lòng thanh toán số dư qua chuyển khoản ngân hàng (VietQR) hoặc cổng VNPAY để hoàn tất đơn thuê.</p>
               </div>
-              {booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
+              {booking.planType !== 'YEARLY' && booking.canPay ? <button onClick={() => onPayDeposit(booking)} type="button" className="px-6 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-[12px]">
                 Thanh toán số dư
               </button> : null}
             </div>
@@ -312,7 +316,7 @@ export const BookingDetail = ({
                   />
                 ) : null}
                 <div className="flex items-center gap-2">
-                {booking.canCancel ? <button
+                {booking.planType !== 'YEARLY' && booking.canCancel ? <button
                   onClick={() => setIsCancelModalOpen(true)}
                   type="button"
                   className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
@@ -320,7 +324,7 @@ export const BookingDetail = ({
                   Huỷ đơn
                 </button> : null}
                 {booking.canEditRequest ? <button onClick={() => setEditing(true)} type="button" className="px-4 py-2 bg-white text-[#15803D] border border-[#15803D] text-xs font-semibold rounded-[12px]">Chỉnh sửa</button> : null}
-                {booking.canPay ? <button
+                {booking.planType !== 'YEARLY' && booking.canPay ? <button
                   onClick={() => onPayDeposit(booking)}
                   type="button"
                   className="px-6 py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-semibold text-sm rounded-[12px] shadow-sm transition-all cursor-pointer whitespace-nowrap"
@@ -349,7 +353,7 @@ export const BookingDetail = ({
                       : 'Khoản cọc đã được ghi nhận. Nhà xe đang tìm và phân công tài xế phù hợp trước giờ đón.'}
                 </p>
               </div>
-              {booking.canCancel ? <button
+              {booking.planType !== 'YEARLY' && booking.canCancel ? <button
                 onClick={() => setIsCancelModalOpen(true)}
                 type="button"
                 className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
@@ -368,7 +372,7 @@ export const BookingDetail = ({
                   Nhà xe đã gửi yêu cầu cho tài xế. Tên và số điện thoại chỉ hiện sau khi tài xế nhận chuyến.
                 </p>
               </div>
-              {booking.canCancel ? <button
+              {booking.planType !== 'YEARLY' && booking.canCancel ? <button
                 onClick={() => setIsCancelModalOpen(true)}
                 type="button"
                 className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
@@ -389,7 +393,7 @@ export const BookingDetail = ({
                     : 'Tài xế đã xác nhận sẵn sàng đón bạn theo lịch hẹn.'}
                 </p>
               </div>
-              {booking.canCancel ? <button
+              {booking.planType !== 'YEARLY' && booking.canCancel ? <button
                 onClick={() => setIsCancelModalOpen(true)}
                 type="button"
                 className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"

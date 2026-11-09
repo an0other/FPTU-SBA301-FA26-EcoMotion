@@ -132,6 +132,10 @@ export function MyBookingsPage() {
     setActionError('')
     setPendingActionId(booking.id)
     try {
+      if (booking.planType === 'YEARLY') {
+        navigate('/renter/bookings/' + encodeURIComponent(booking.id))
+        return
+      }
       if (action === 'PAY_DEPOSIT' || action === 'PAY_SETTLEMENT') {
         navigate(`/renter/bookings/${booking.id}/payment`)
         return

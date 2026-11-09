@@ -1,105 +1,297 @@
 package com.fptufa26.ecomotion.seed;
 
-import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.booking.entity.BookingCharge;
-import com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot;
-import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
-import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.enums.ChargeType;
-import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
-import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
-import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
-import com.fptufa26.ecomotion.booking.enums.PaymentType;
+import com.fptufa26.ecomotion.booking.entity.*;
+import com.fptufa26.ecomotion.booking.enums.*;
+import com.fptufa26.ecomotion.booking.policy.YearlyRentalRules;
 import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.service.DocumentStorageService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
-import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
-import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
-import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
-import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
-import com.fptufa26.ecomotion.finance.repository.ProviderBankAccountRepository;
+import com.fptufa26.ecomotion.finance.enums.*;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.schedule.entity.VehicleSchedule;
-import com.fptufa26.ecomotion.schedule.enums.ScheduleStatus;
-import com.fptufa26.ecomotion.schedule.enums.ScheduleType;
-import com.fptufa26.ecomotion.user.entity.Provider;
+import com.fptufa26.ecomotion.schedule.enums.*;
 import com.fptufa26.ecomotion.user.entity.Renter;
 import com.fptufa26.ecomotion.user.entity.User;
 import com.fptufa26.ecomotion.user.repository.RenterRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
-import com.fptufa26.ecomotion.vehicle.entity.RentalPlan;
-import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
-import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
-import com.fptufa26.ecomotion.vehicle.enums.PlanType;
-import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
+import com.fptufa26.ecomotion.vehicle.entity.*;
+import com.fptufa26.ecomotion.vehicle.enums.*;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.imageio.ImageIO;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.Graphics2D;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 
 @Component
 @Profile("dev")
 @RequiredArgsConstructor
+@Slf4j
 public class YearlyRentalDataSeeder {
-
-    private static final long INELIGIBLE_RENTER_ID = 108L;
-    private static final long ACTIVE_RENTER_ID = 109L;
-    private static final long FLOW_RENTER_ID = 110L;
-    private static final String ACTIVE_BOOKING_CODE = "EM-SEED-YEARLY-ACTIVE";
-    private static final String HISTORY_BOOKING_CODE = "EM-SEED-YEARLY-HISTORY";
-    private static final int YEARLY_SLOT_MINUTES = 525600;
-    private static final int INSTALLMENT_COUNT = 12;
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-
+    private static final BigDecimal YEAR_PRICE = new BigDecimal("181000000");
+    private static final BigDecimal DEPOSIT = new BigDecimal("50000000");
+    private static final long INITIAL_KM = 10000L;
     private final UserRepository userRepository;
     private final RenterRepository renterRepository;
     private final VehicleRepository vehicleRepository;
-    private final RentalPlanRepository rentalPlanRepository;
-    private final ProviderBankAccountRepository providerBankAccountRepository;
+    private final VehicleImageRepository vehicleImageRepository;
     private final FileStorageService fileStorageService;
+    private final DocumentStorageService documentStorageService;
+    private final PaymentRequestService payments;
     private final EntityManager entityManager;
-
+    private final Clock clock;
+    @Value("${booking.yearly.rounding-unit:100000}")
+    private BigDecimal roundingUnit;
     @Transactional
     public void seed() {
-        Renter ineligibleRenter = findRenter(INELIGIBLE_RENTER_ID);
-        Renter activeRenter = findRenter(ACTIVE_RENTER_ID);
-        Renter flowRenter = findRenter(FLOW_RENTER_ID);
-
-        seedLicense(ineligibleRenter, "A1");
-        seedLicense(activeRenter, "B");
-        seedLicense(flowRenter, "B");
-
-        if (!exists(ACTIVE_BOOKING_CODE)) {
-            seedActiveRental(activeRenter);
-        } else {
-            synchronizeActiveRental();
-        }
-        if (!exists(HISTORY_BOOKING_CODE)) {
-            seedCompletedRental(activeRenter);
-        }
+        YearlyRentalRules.installments(YEAR_PRICE, roundingUnit);
+        Vehicle template = vehicleRepository.findByLicensePlate("51A-11111").orElseThrow();
+        LocalDate today = LocalDate.now(clock.withZone(VIETNAM_ZONE));
+        LocalDate activeStart = today.minusMonths(3).plusDays(3);
+        demoVehicle(template, 1);
+        demoVehicle(template, 9);
+        Renter active = findRenter("renter.yearly.monthly@ecomotion.vn");
+        Renter closing = findRenter("renter.yearly.happy-end@ecomotion.vn");
+        seedLicense(active, "B");
+        seedLicense(closing, "B");
+        seedBooking(active, template, 2, "MONTHLY", activeStart, 3);
+        seedBooking(closing, template, 10, "HAPPY-END", today.minusMonths(12), 12);
+        entityManager.flush();
+        log.info("Yearly demo ready: new, monthly and happy-end renters share provider.a@ecomotion.vn. Continue reports and replacement on MONTHLY before requesting its final return. Existing progress is preserved.");
     }
 
-    private Renter findRenter(long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Yearly demo renter user is missing: " + userId));
-        return renterRepository.findByUser_Id(user.getId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Yearly demo renter profile is missing: " + userId));
+    private Renter findRenter(String email) {
+        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow();
+        return renterRepository.findByUser_Id(user.getId()).orElseThrow();
+    }
+
+    private Vehicle demoVehicle(Vehicle template, int number) {
+        String plate = "51Y-" + String.format("%05d", number);
+        var existing = vehicleRepository.findByLicensePlate(plate);
+        if (existing.isPresent()) return existing.get();
+        Vehicle v = new Vehicle();
+        v.setProvider(template.getProvider());
+        v.setLicensePlate(plate);
+        v.setChassisNo("YEARLY-DEMO-V2-CHASSIS-" + number);
+        v.setEngineNo("YEARLY-DEMO-V2-ENGINE-" + number);
+        v.setBrand(template.getBrand());
+        v.setModel(template.getModel() + " Demo Y" + number);
+        v.setManufactureYear(template.getManufactureYear());
+        v.setSeatCount(template.getSeatCount());
+        v.setTransmission(template.getTransmission());
+        v.setColor(template.getColor());
+        v.setFuelType(template.getFuelType());
+        v.setStatus(VehicleStatus.APPROVED);
+        v.setMaintenanceBufferMinutes(template.getMaintenanceBufferMinutes());
+        v.setDispatchLatitude(template.getDispatchLatitude());
+        v.setDispatchLongitude(template.getDispatchLongitude());
+        entityManager.persist(v);
+        for (var source : vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(template.getId())) {
+            VehicleImage image = new VehicleImage();
+            image.setVehicle(v);
+            image.setImageUrl(source.getImageUrl());
+            image.setDisplayOrder(source.getDisplayOrder());
+            image.setCaption("YEARLY DEMO - " + plate);
+            entityManager.persist(image);
+        }
+        RentalPlan plan = new RentalPlan();
+        plan.setVehicle(v);
+        plan.setPlanType(PlanType.YEARLY);
+        plan.setSlotLengthMinutes(525600);
+        plan.setSlotPrice(YEAR_PRICE);
+        plan.setUpfrontAmount(DEPOSIT);
+        plan.setStatus(PlanStatus.ACTIVE);
+        entityManager.persist(plan);
+        return v;
+    }
+
+    private void seedBooking(Renter renter, Vehicle template, int number, String scenario, LocalDate start, int paidMonths) {
+        String code = "EM-Y2-" + scenario;
+        Booking existing = entityManager.createQuery("select b from Booking b where b.bookingCode=:code", Booking.class)
+                .setParameter("code", code).getResultStream().findFirst().orElse(null);
+        if (existing != null) return;
+        Vehicle v = demoVehicle(template, number);
+        RentalPlan plan = entityManager.createQuery("select p from RentalPlan p where p.vehicle.id=:id and p.planType=:type", RentalPlan.class)
+                .setParameter("id", v.getId()).setParameter("type", PlanType.YEARLY).getSingleResult();
+        Instant startedAt = start.atStartOfDay(VIETNAM_ZONE).toInstant();
+        Instant createdAt = start.minusDays(7).atStartOfDay(VIETNAM_ZONE).toInstant();
+        Booking b = new Booking();
+        b.setBookingCode(code);
+        b.setVehicle(v);
+        b.setPlan(plan);
+        b.setRenter(renter);
+        b.setPickupAddress(v.getProvider().getDepotAddress());
+        b.setPickupLatitude(v.getProvider().getDepotLatitude());
+        b.setPickupLongitude(v.getProvider().getDepotLongitude());
+        b.setPassengerCount(1);
+        b.setPickupTime(startedAt);
+        b.setPlannedEndAt(YearlyRentalRules.contractEnd(startedAt));
+        b.setTotalAmount(YEAR_PRICE);
+        b.setStatus(BookingStatus.AWAITING_DEPOSIT);
+        b.setCreatedAt(createdAt);
+        b.setUpdatedAt(createdAt);
+        entityManager.persist(b);
+        b.setContractUrl(documentStorageService.store("booking", renter.getUser().getId(),
+                code + "-" + java.util.UUID.randomUUID() + ".pdf", demoContract(code), "application/pdf"));
+
+        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
+        snapshot.setBooking(b);
+        snapshot.setPlanType(PlanType.YEARLY);
+        snapshot.setSlotPrice(YEAR_PRICE);
+        snapshot.setSlotLengthMinutes(plan.getSlotLengthMinutes());
+        snapshot.setUpfrontAmount(DEPOSIT);
+        snapshot.setDepositAmount(DEPOSIT);
+        snapshot.setVehicleName(v.getBrand() + " " + v.getModel());
+        snapshot.setVehicleManufactureYear(v.getManufactureYear());
+        snapshot.setVehicleLicensePlate(v.getLicensePlate());
+        snapshot.setPickupFee(BigDecimal.ZERO);
+        snapshot.setCreatedAt(createdAt);
+        entityManager.persist(snapshot);
+
+        BookingCharge charge = new BookingCharge();
+        charge.setBooking(b);
+        charge.setChargeType(ChargeType.BASE_RENTAL);
+        charge.setDescription("YEARLY DEMO V2 - tien thue 12 thang, coc rieng");
+        charge.setQuantity(1);
+        charge.setUnitPrice(YEAR_PRICE);
+        charge.setAmount(YEAR_PRICE);
+        charge.setCreatedBy(v.getProvider().getUser());
+        charge.setCreatedAt(createdAt);
+        entityManager.persist(charge);
+
+        YearlyWorkflow workflow = new YearlyWorkflow();
+        workflow.setBookingId(b.getId());
+        workflow.setStage("TERMS_ACCEPTED");
+        workflow.setTermsAccepted(true);
+        workflow.setContractTotal(YEAR_PRICE);
+        workflow.setSecurityDeposit(DEPOSIT);
+        workflow.setRoundingUnit(roundingUnit);
+        workflow.setAnnualKm(24000L);
+        workflow.setExcessKmRate(new BigDecimal("5000"));
+        workflow.setGraceDays(1);
+        workflow.setLateDailyRate(new BigDecimal("500000"));
+        workflow.setCurrentInitialKm(INITIAL_KM);
+        entityManager.persist(workflow);
+        entityManager.flush();
+
+        payments.createDepositPaymentRequest(b);
+        var requests = entityManager.createQuery("select p from PaymentRequest p where p.booking.id=:id", PaymentRequest.class)
+                .setParameter("id", b.getId()).getResultList();
+        for (PaymentRequest request : requests) {
+            request.setCreatedAt(createdAt);
+            if (!request.isSecurityDeposit() && request.getInstallmentNumber() > paidMonths) continue;
+            Instant paidAt = request.isSecurityDeposit() ? createdAt.plusSeconds(3600)
+                    : start.plusMonths(request.getInstallmentNumber() - 1L).minusDays(1).atStartOfDay(VIETNAM_ZONE).toInstant();
+            if (paidAt.isAfter(clock.instant())) paidAt = clock.instant();
+            request.setPaidAmount(request.getAmount());
+            request.setStatus(PaymentRequestStatus.CONFIRMED);
+            request.setExpiresAt(null);
+            request.setConfirmedAt(paidAt);
+            request.setConfirmedBy(v.getProvider().getUser());
+            String reference = "Y2-" + number + "-" + request.getInstallmentNumber();
+            PaymentTransaction tx = new PaymentTransaction();
+            tx.setBooking(b);
+            tx.setCharge(request.isSecurityDeposit() ? null : charge);
+            tx.setPaymentRequest(request);
+            tx.setReceivingBankAccount(request.getReceivingBankAccount());
+            tx.setType(request.isSecurityDeposit() ? PaymentType.SECURITY_DEPOSIT : PaymentType.SETTLEMENT);
+            tx.setDirection(PaymentDirection.IN);
+            tx.setMethod(PaymentMethod.BANK_TRANSFER);
+            tx.setAmount(request.getAmount());
+            tx.setAppliedAmount(request.getAmount());
+            tx.setStatus(PaymentStatus.PAID);
+            tx.setVerificationMethod(PaymentVerificationMethod.PROVIDER_CONFIRMED);
+            tx.setConfirmedBy(v.getProvider().getUser());
+            tx.setTransactionCode(reference);
+            tx.setGatewayRef(reference);
+            tx.setBankCodeSnapshot(request.getBankCodeSnapshot());
+            tx.setBankNameSnapshot(request.getBankNameSnapshot());
+            tx.setBankAccountHolderSnapshot(request.getAccountHolderSnapshot());
+            tx.setProcessingNote("DEMO FIXTURE ONLY - historical payment; no real bank transfer");
+            tx.setPaidAt(paidAt);
+            tx.setCreatedAt(paidAt);
+            tx.setUpdatedAt(paidAt);
+            entityManager.persist(tx);
+        }
+        entityManager.flush();
+        entityManager.createNativeQuery("update payment_request set created_at=:createdAt where booking_id=:id")
+                .setParameter("createdAt", createdAt).setParameter("id", b.getId()).executeUpdate();
+        b.setStatus(BookingStatus.IN_PROGRESS);
+        b.setActualStartAt(startedAt);
+        b.setRenterStartConfirmedAt(startedAt);
+        b.setProviderConfirmedAt(createdAt);
+        TripEvidence photo = new TripEvidence();
+        photo.setBooking(b);
+        photo.setUploadedBy(v.getProvider().getUser());
+        photo.setEvidenceType(TripEvidenceType.OTHER);
+        photo.setImageUrl(vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(v.getId()).stream()
+                .findFirst().map(VehicleImage::getImageUrl).orElseThrow());
+        photo.setNote("DEMO FIXTURE ONLY - initial handover; odometer 10000 km");
+        photo.setCreatedAt(startedAt);
+        photo.setRecordedAt(startedAt);
+        entityManager.persist(photo);
+        YearlyHandover handover = new YearlyHandover();
+        handover.setBookingId(b.getId());
+        handover.setStage("RECEIVED");
+        handover.setInitialKm(INITIAL_KM);
+        handover.setReceivedOn(start);
+        handover.setDispatchedAt(startedAt);
+        handover.setArrivedAt(startedAt);
+        handover.setEvidenceId(photo.getId());
+        handover.setEvidenceUrl(photo.getImageUrl());
+        entityManager.persist(handover);
+        VehicleSchedule schedule = new VehicleSchedule();
+        schedule.setVehicle(v);
+        schedule.setBooking(b);
+        schedule.setType(ScheduleType.BOOKED);
+        schedule.setStatus(ScheduleStatus.ACTIVE);
+        schedule.setStartAt(startedAt);
+        schedule.setEndAt(YearlyRentalRules.reservationEnd(b.getPlannedEndAt()));
+        schedule.setCreatedAt(createdAt);
+        schedule.setExtension(false);
+        entityManager.persist(schedule);
+        log.info("Created yearly demo {}: renter={}, plate={}, start={}, due={}, paidMonths={}",
+                code, renter.getUser().getEmail(), v.getLicensePlate(), start,
+                start.plusMonths(12), paidMonths);
+    }
+
+    private byte[] demoContract(String code) {
+        String text = "DEMO ONLY - NOT A SIGNED CONTRACT - " + code;
+        String stream = "BT /F1 14 Tf 40 760 Td (" + text + ") Tj ET";
+        String[] objects = {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            "<< /Length " + stream.length() + " >>\nstream\n" + stream + "\nendstream"
+        };
+        StringBuilder pdf = new StringBuilder("%PDF-1.4\n");
+        int[] offsets = new int[objects.length];
+        for (int i = 0; i < objects.length; i++) {
+            offsets[i] = pdf.length();
+            pdf.append(i + 1).append(" 0 obj\n").append(objects[i]).append("\nendobj\n");
+        }
+        int xref = pdf.length();
+        pdf.append("xref\n0 6\n0000000000 65535 f \n");
+        for (int offset : offsets) pdf.append(String.format("%010d 00000 n \n", offset));
+        pdf.append("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n").append(xref).append("\n%%EOF\n");
+        return pdf.toString().getBytes(StandardCharsets.US_ASCII);
     }
 
     private void seedLicense(Renter renter, String licenseClass) {
@@ -170,328 +362,4 @@ public class YearlyRentalDataSeeder {
         }
     }
 
-    private boolean exists(String bookingCode) {
-        return entityManager.createQuery(
-                        "SELECT COUNT(b) FROM Booking b WHERE b.bookingCode = :bookingCode",
-                        Long.class)
-                .setParameter("bookingCode", bookingCode)
-                .getSingleResult() > 0;
-    }
-
-    private void seedActiveRental(Renter renter) {
-        RentalPlan plan = findYearlyPlan(6L);
-        Vehicle vehicle = plan.getVehicle();
-        Provider provider = vehicle.getProvider();
-        LocalDate startDate = activeStartDate();
-        LocalDate dueDate = startDate.plusMonths(3);
-        Instant startAt = startDate.atStartOfDay(VIETNAM_ZONE).toInstant();
-        Instant createdAt = startDate.minusDays(30).atStartOfDay(VIETNAM_ZONE).toInstant();
-        Instant endAt = startAt.plus(plan.getSlotLengthMinutes(), ChronoUnit.MINUTES);
-
-        Booking booking = createBooking(
-                ACTIVE_BOOKING_CODE,
-                renter,
-                plan,
-                BookingStatus.IN_PROGRESS,
-                startAt,
-                endAt,
-                createdAt);
-        booking.setActualStartAt(startAt);
-        entityManager.persist(booking);
-
-        BookingPolicySnapshot snapshot = createSnapshot(booking, plan);
-        entityManager.persist(snapshot);
-
-        BookingCharge baseCharge = createBaseCharge(booking, provider.getUser(), createdAt);
-        entityManager.persist(baseCharge);
-
-        for (int installment = 1; installment <= 3; installment++) {
-            Instant paidAt = startDate.plusMonths(installment - 1L)
-                    .minusDays(1)
-                    .atStartOfDay(VIETNAM_ZONE)
-                    .toInstant();
-            persistPayment(
-                    booking,
-                    baseCharge,
-                    PaymentType.SETTLEMENT,
-                    installmentAmount(plan.getSlotPrice(), installment),
-                    paidAt,
-                    "SEED-YR-ACT-" + installment);
-        }
-
-        ProviderBankAccount bankAccount = providerBankAccountRepository
-                .findByProvider_IdAndStatus(provider.getId(), BankAccountStatus.ACTIVE)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Yearly demo requires an active provider bank account"));
-        persistUpcomingInstallmentRequest(
-                booking,
-                bankAccount,
-                installmentAmount(plan.getSlotPrice(), 4),
-                dueDate.atStartOfDay(VIETNAM_ZONE).toInstant());
-
-        VehicleSchedule schedule = new VehicleSchedule();
-        schedule.setVehicle(vehicle);
-        schedule.setBooking(booking);
-        schedule.setType(ScheduleType.BOOKED);
-        schedule.setStartAt(startAt);
-        schedule.setEndAt(endAt);
-        schedule.setStatus(ScheduleStatus.ACTIVE);
-        schedule.setExtension(false);
-        schedule.setCreatedAt(createdAt);
-        entityManager.persist(schedule);
-    }
-
-    private void synchronizeActiveRental() {
-        Booking booking = entityManager.createQuery(
-                        "SELECT b FROM Booking b WHERE b.bookingCode = :bookingCode",
-                        Booking.class)
-                .setParameter("bookingCode", ACTIVE_BOOKING_CODE)
-                .getSingleResult();
-        if (booking.getPickupTime() != null
-                && booking.getCreatedAt() != null
-                && booking.getCreatedAt().isBefore(booking.getPickupTime())) {
-            return;
-        }
-        LocalDate startDate = activeStartDate();
-        LocalDate dueDate = startDate.plusMonths(3);
-        Instant startAt = startDate.atStartOfDay(VIETNAM_ZONE).toInstant();
-        Instant endAt = startAt.plus(booking.getPlan().getSlotLengthMinutes(), ChronoUnit.MINUTES);
-        Instant createdAt = startDate.minusDays(30).atStartOfDay(VIETNAM_ZONE).toInstant();
-
-        booking.setPickupTime(startAt);
-        booking.setPlannedEndAt(endAt);
-        booking.setActualStartAt(startAt);
-        booking.setCreatedAt(createdAt);
-        booking.setUpdatedAt(createdAt);
-        entityManager.createNativeQuery(
-                        "UPDATE booking SET created_at = :createdAt WHERE id = :bookingId")
-                .setParameter("createdAt", createdAt)
-                .setParameter("bookingId", booking.getId())
-                .executeUpdate();
-
-        VehicleSchedule schedule = entityManager.createQuery(
-                        "SELECT s FROM VehicleSchedule s WHERE s.booking.id = :bookingId",
-                        VehicleSchedule.class)
-                .setParameter("bookingId", booking.getId())
-                .getResultStream()
-                .findFirst()
-                .orElseGet(() -> {
-                    VehicleSchedule created = new VehicleSchedule();
-                    created.setVehicle(booking.getVehicle());
-                    created.setBooking(booking);
-                    created.setType(ScheduleType.BOOKED);
-                    created.setStatus(ScheduleStatus.ACTIVE);
-                    created.setExtension(false);
-                    entityManager.persist(created);
-                    return created;
-                });
-        schedule.setStartAt(startAt);
-        schedule.setEndAt(endAt);
-
-        PaymentRequest request = entityManager.createQuery(
-                        "SELECT r FROM PaymentRequest r WHERE r.booking.id = :bookingId AND r.paymentType = :paymentType",
-                        PaymentRequest.class)
-                .setParameter("bookingId", booking.getId())
-                .setParameter("paymentType", PaymentRequestType.MONTHLY_INSTALLMENT)
-                .getResultStream()
-                .findFirst()
-                .orElse(null);
-        if (request != null) {
-            Instant dueAt = dueDate.atStartOfDay(VIETNAM_ZONE).toInstant();
-            request.setExpiresAt(dueAt.plus(3, ChronoUnit.DAYS));
-            request.setIssueNote(
-                    "Demo seed: monthly rent installment 4/12 due "
-                            + dueDate);
-            request.setCreatedAt(dueAt.minus(7, ChronoUnit.DAYS));
-            request.setUpdatedAt(request.getCreatedAt());
-            entityManager.createNativeQuery(
-                            "UPDATE payment_request SET created_at = :createdAt WHERE id = :requestId")
-                    .setParameter("createdAt", request.getCreatedAt())
-                    .setParameter("requestId", request.getId())
-                    .executeUpdate();
-        }
-    }
-
-    private LocalDate activeStartDate() {
-        return LocalDate.now(VIETNAM_ZONE).minusMonths(3).plusDays(3);
-    }
-
-    private void seedCompletedRental(Renter renter) {
-        RentalPlan plan = findYearlyPlan(8L);
-        Vehicle vehicle = plan.getVehicle();
-        Provider provider = vehicle.getProvider();
-        LocalDate startDate = LocalDate.now(VIETNAM_ZONE).minusMonths(20);
-        Instant startAt = startDate.atStartOfDay(VIETNAM_ZONE).toInstant();
-        Instant endAt = startAt.plus(plan.getSlotLengthMinutes(), ChronoUnit.MINUTES);
-        Instant createdAt = startAt.minus(30, ChronoUnit.DAYS);
-
-        Booking booking = createBooking(
-                HISTORY_BOOKING_CODE,
-                renter,
-                plan,
-                BookingStatus.COMPLETED,
-                startAt,
-                endAt,
-                createdAt);
-        booking.setActualStartAt(startAt);
-        booking.setActualEndAt(endAt);
-        booking.setProviderConfirmedAt(createdAt.plus(1, ChronoUnit.DAYS));
-        booking.setRenterConfirmedAt(endAt);
-        entityManager.persist(booking);
-
-        BookingPolicySnapshot snapshot = createSnapshot(booking, plan);
-        entityManager.persist(snapshot);
-
-        BookingCharge baseCharge = createBaseCharge(booking, provider.getUser(), createdAt);
-        entityManager.persist(baseCharge);
-
-        for (int installment = 1; installment <= INSTALLMENT_COUNT; installment++) {
-            Instant paidAt = startDate.plusMonths(installment - 1L)
-                    .minusDays(1)
-                    .atStartOfDay(VIETNAM_ZONE)
-                    .toInstant();
-            persistPayment(
-                    booking,
-                    baseCharge,
-                    PaymentType.SETTLEMENT,
-                    installmentAmount(plan.getSlotPrice(), installment),
-                    paidAt,
-                    "SEED-YR-HISTORY-" + installment);
-        }
-    }
-
-    private RentalPlan findYearlyPlan(Long vehicleId) {
-        Vehicle vehicle = vehicleRepository.findById(vehicleId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Yearly demo vehicle is missing: " + vehicleId));
-        return rentalPlanRepository.findByVehicle_IdOrderByIdAsc(vehicle.getId()).stream()
-                .filter(plan -> plan.getStatus() == PlanStatus.ACTIVE)
-                .filter(plan -> plan.getPlanType() == PlanType.YEARLY)
-                .filter(plan -> Integer.valueOf(YEARLY_SLOT_MINUTES)
-                        .equals(plan.getSlotLengthMinutes()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "Yearly demo vehicle requires an active 365-day plan: " + vehicleId));
-    }
-
-    private Booking createBooking(
-            String bookingCode,
-            Renter renter,
-            RentalPlan plan,
-            BookingStatus status,
-            Instant startAt,
-            Instant endAt,
-            Instant createdAt) {
-        Booking booking = new Booking();
-        booking.setBookingCode(bookingCode);
-        booking.setRenter(renter);
-        booking.setVehicle(plan.getVehicle());
-        booking.setPlan(plan);
-        booking.setStatus(status);
-        booking.setPickupAddress(plan.getVehicle().getProvider().getDepotAddress());
-        booking.setPickupTime(startAt);
-        booking.setPlannedEndAt(endAt);
-        booking.setPassengerCount(1);
-        booking.setTotalAmount(plan.getSlotPrice());
-        booking.setCreatedAt(createdAt);
-        booking.setUpdatedAt(createdAt);
-        return booking;
-    }
-
-    private BookingPolicySnapshot createSnapshot(Booking booking, RentalPlan plan) {
-        BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
-        snapshot.setBooking(booking);
-        snapshot.setSlotPrice(plan.getSlotPrice());
-        snapshot.setSlotLengthMinutes(plan.getSlotLengthMinutes());
-        snapshot.setPlanType(plan.getPlanType());
-        snapshot.setDepositRatio(null);
-        snapshot.setUpfrontAmount(null);
-        snapshot.setVehicleName(
-                plan.getVehicle().getBrand() + " " + plan.getVehicle().getModel());
-        snapshot.setVehicleManufactureYear(plan.getVehicle().getManufactureYear());
-        snapshot.setVehicleLicensePlate(plan.getVehicle().getLicensePlate());
-        return snapshot;
-    }
-
-    private BookingCharge createBaseCharge(
-            Booking booking,
-            User createdBy,
-            Instant createdAt) {
-        BookingCharge charge = new BookingCharge();
-        charge.setBooking(booking);
-        charge.setChargeType(ChargeType.BASE_RENTAL);
-        charge.setDescription("Tiền thuê gói năm, thanh toán theo 12 kỳ hằng tháng.");
-        charge.setQuantity(INSTALLMENT_COUNT);
-        charge.setUnitPrice(monthlyAmount(booking.getTotalAmount()));
-        charge.setAmount(booking.getTotalAmount());
-        charge.setCreatedBy(createdBy);
-        charge.setWaived(false);
-        charge.setCreatedAt(createdAt);
-        return charge;
-    }
-
-    private void persistPayment(
-            Booking booking,
-            BookingCharge charge,
-            PaymentType type,
-            BigDecimal amount,
-            Instant paidAt,
-            String transactionCode) {
-        PaymentTransaction payment = new PaymentTransaction();
-        payment.setBooking(booking);
-        payment.setCharge(charge);
-        payment.setType(type);
-        payment.setAmount(amount);
-        payment.setAppliedAmount(amount);
-        payment.setDirection(PaymentDirection.IN);
-        payment.setMethod(PaymentMethod.BANK_TRANSFER);
-        payment.setTransactionCode(transactionCode);
-        payment.setGatewayRef(transactionCode);
-        payment.setStatus(PaymentStatus.PAID);
-        payment.setPaidAt(paidAt);
-        payment.setProcessingNote("Seeded demo rent installment");
-        payment.setCreatedAt(paidAt);
-        payment.setUpdatedAt(paidAt);
-        entityManager.persist(payment);
-    }
-
-    private void persistUpcomingInstallmentRequest(
-            Booking booking,
-            ProviderBankAccount bankAccount,
-            BigDecimal amount,
-            Instant dueAt) {
-        PaymentRequest request = new PaymentRequest();
-        request.setBooking(booking);
-        request.setPaymentType(PaymentRequestType.MONTHLY_INSTALLMENT);
-        request.setAmount(amount);
-        request.setPaidAmount(BigDecimal.ZERO);
-        request.setCurrency("VND");
-        request.setPaymentCode("YR-ACT-MONTH-04");
-        request.setTransferReference("YR-ACT-MONTH-04-TRANSFER");
-        request.setBankCodeSnapshot(bankAccount.getBankCode());
-        request.setBankNameSnapshot(bankAccount.getBankName());
-        request.setAccountNumberSnapshot(bankAccount.getAccountNumber());
-        request.setAccountHolderSnapshot(bankAccount.getAccountHolderName());
-        request.setReceivingBankAccount(bankAccount);
-        request.setStatus(PaymentRequestStatus.PENDING);
-        request.setExpiresAt(dueAt.plus(3, ChronoUnit.DAYS));
-        request.setIssueNote(
-                "Demo seed: monthly rent installment 4/12 due "
-                        + dueAt.atZone(VIETNAM_ZONE).toLocalDate());
-        request.setCreatedAt(dueAt.minus(7, ChronoUnit.DAYS));
-        request.setUpdatedAt(request.getCreatedAt());
-        entityManager.persist(request);
-    }
-
-    private BigDecimal monthlyAmount(BigDecimal total) {
-        return total.divide(BigDecimal.valueOf(INSTALLMENT_COUNT), 2, RoundingMode.DOWN);
-    }
-
-    private BigDecimal installmentAmount(BigDecimal total, int installment) {
-        BigDecimal monthly = monthlyAmount(total);
-        if (installment < INSTALLMENT_COUNT) {
-            return monthly;
-        }
-        return total.subtract(monthly.multiply(BigDecimal.valueOf(INSTALLMENT_COUNT - 1L)));
-    }
 }

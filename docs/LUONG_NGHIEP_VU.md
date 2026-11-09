@@ -1,3 +1,5 @@
+> Cập nhật chính sách thanh toán 08/11/2026: checkout dùng VietQR động/VNPay với số tiền backend tạo; không tự động hoàn phần dư. Ngoại lệ thực nhận theo sao kê đi qua đối soát thủ công. Chi tiết và giới hạn xác minh: [PAYMENT_POLICY_VI.md](PAYMENT_POLICY_VI.md).
+
 # Luồng nghiệp vụ EcoMotion
 
 Tài liệu này mô tả các luồng đang có trong code frontend và backend, kèm nhánh khi việc không đi đúng đường. Đọc như sổ tay vận hành, không phải spec môn học.
@@ -10,7 +12,7 @@ Tiền trên đơn đã tạo được tính từ bản chụp chính sách lúc
 
 Có hai kênh tiền:
 
-- Chuyển khoản hoặc VietQR vào tài khoản nhà xe. Nhà xe xác nhận trên trang tài chính.
+- VietQR động chứa số tiền/nội dung backend tạo, chuyển vào tài khoản nhà xe. Provider chỉ xác nhận sau đối chiếu ghi có ngân hàng; QR và biên lai không chứng minh tiền thực nhận. Chưa có webhook ngân hàng VietQR.
 - VNPay. Chỉ thông báo máy chủ (IPN) hoặc truy vấn cổng đã xác minh mới ghi nhận đã trả. Trang trình duyệt quay về chỉ để đọc kết quả, không tự chốt đơn.
 
 Giao diện chạy ở `http://localhost:5173`. API ở `http://localhost:8080`. Tài khoản demo chỉ có khi backend chạy profile `dev` và seeder đã chạy.
@@ -31,9 +33,9 @@ Mật khẩu chung: `EcoMotion@123`.
 | Tài xế | `driver.nam@ecomotion.vn` | Thuộc nhà xe A |
 | Tài xế | `driver.cuong@ecomotion.vn` | Thuộc nhà xe A |
 | Tài xế | `driver.kiet@ecomotion.vn` | Thuộc nhà xe A |
-| Thuê năm đang chạy | `renter.yearly.active@ecomotion.vn` | Đơn `EM-SEED-YEARLY-ACTIVE`, kỳ tháng |
-| Thuê năm tạo mới | `renter.yearly.flow@ecomotion.vn` | Đi từ đầu luồng năm |
-| GPLX bị chặn | `renter.yearly.blocked@ecomotion.vn` | Case không đủ điều kiện |
+| Thuê năm đang chạy | `renter.yearly.monthly@ecomotion.vn` | Đơn EM-Y2-MONTHLY, thanh toán kỳ tiếp theo |
+| Thuê năm kết thúc | `renter.yearly.happy-end@ecomotion.vn` | Đơn EM-Y2-HAPPY-END, kiểm định và hoàn cọc |
+| Người mới thuê năm | `renter.yearly.new@ecomotion.vn` | Quét GPLX thật, đặt xe 51Y-00001 |
 | Nhà xe chờ duyệt | `provider.pending@ecomotion.vn` | `ProviderStatus` chưa APPROVED |
 | Người thuê eKYC chờ | `renter.pending@ecomotion.vn` | Tài khoản active, eKYC pending |
 | Tài xế chờ duyệt | `driver.pending@ecomotion.vn` | `DriverStatus` PENDING |
@@ -249,17 +251,17 @@ Cọc đã `CONFIRMED` không bị xóa khi hủy. Nhà xe không được xác 
 
 ### Thanh toán chuyển khoản
 
-1. Người thuê tạo hoặc mở yêu cầu cọc, chuyển đúng nội dung, gửi ảnh biên lai.
-2. Nhà xe tại `/provider/finance` xác nhận số tiền thực nhận và mã giao dịch ngân hàng, hoặc ghi chú nếu chưa có mã.
-3. Đủ số thì yêu cầu `CONFIRMED` và đơn cọc hoặc trả trước thành `CONFIRMED`. Thiếu thì `PARTIALLY_PAID`.
-4. Chuyển thừa phần còn phải thu: phần vừa đủ được áp vào đơn, phần dư tạo hoàn `EXCESS:{giao dịch}`.
+1. Người thuê mở checkout VietQR động hoặc VNPay; backend chốt số tiền và mã tham chiếu. Checkout chuẩn không yêu cầu nhập số tiền. Ảnh biên lai chỉ hỗ trợ tra soát.
+2. Với VietQR, nhà xe tại `/provider/finance` đối chiếu sao kê tài khoản nhận rồi xác nhận đúng khoản thực nhận. Không bấm xác nhận chỉ dựa trên biên lai khách. VNPay dùng chữ ký/merchant/mã tham chiếu/số tiền và trạng thái từ IPN hoặc QueryDR đã xác thực; browser return không tự xác nhận.
+3. Đúng và đủ nghĩa vụ, còn đủ điều kiện booking/hold thì xác nhận thanh toán. Xác nhận thủ công legacy cho khoản nhận một phần vẫn ghi đúng số thực nhận là `PARTIALLY_PAID`, không xác nhận booking khi chưa đủ. Đây là ngoại lệ do provider đối chiếu, không phải checkout yêu cầu khách tự nhập tiền.
+4. Chuyển sai số tiền hoặc tiền đến muộn đã được xác minh: dùng **Tiền nhận cần đối soát** (`POST /api/provider/payment-requests/{id}/bank-reconciliation`). Lưu đầy đủ tiền thực nhận, mã ngân hàng, thời điểm ghi có, tham chiếu sao kê, người xác minh và audit; `appliedAmount = 0`, `REVIEW_REQUIRED`, không tự xác nhận booking hoặc tạo refund phần dư. Xử lý hoàn, nếu có quyết định, qua quy trình hoàn thủ công hiện có.
 
 Không đi tiếp được khi:
 
 - Đơn đang hủy, hoặc khoản đã thu đủ: không xác nhận thêm. Thông báo xử lý hoàn.
 - Yêu cầu đã từ chối hoặc đã void: không xác nhận.
 - Đã có giao dịch cần đối soát gắn với yêu cầu này: không xác nhận thu tiếp như một lần thành công mới.
-- Không có mã ngân hàng và cũng không có ghi chú: không nhận.
+- Thao tác đối soát ngoại lệ mới bắt buộc mã ngân hàng, tham chiếu sao kê, thời điểm thực nhận và xác nhận đã kiểm tra sao kê. API confirm legacy còn hỗ trợ metadata tùy chọn; đây không phải cơ chế xác minh ngân hàng tự động.
 - Mã ngân hàng đã dùng: không nhận lần hai.
 - Cùng số tiền, cùng ghi chú, không có mã ngân hàng, đã ghi một lần: bị coi là gửi lại, cần mã ngân hàng để tách khoản mới.
 - Số tiền, trạng thái đơn, giữ chỗ, tranh chấp hoặc hợp đồng năm không còn hợp lệ: tiền vẫn có thể được lưu là đã nhận nhưng số áp vào đơn bằng 0, ghi chú bắt đầu bằng `RECONCILIATION_REQUIRED`. Yêu cầu thành `REVIEW_REQUIRED`. Với khoản cọc hoặc trả trước, đơn thường sang `CANCELLATION_REVIEW` và lịch được nhả. Không coi là đặt cọc thành công. Sau đó hoàn hoặc đối soát bằng yêu cầu hoàn, thường là sự kiện tiền đến muộn.
@@ -307,12 +309,12 @@ Nhà xe cũng có thể chọn hủy và hoàn mà không chờ khách đồng �
 
 Màn hình: `/renter/yearly-rental` và `/renter/bookings/:bookingCode/yearly-rental`. GPLX cũng xem được ở `/me`.
 
-Điều kiện demo: hạng B cấp từ 01/01/2025, còn hạn đến hết ngày kết thúc kỳ 365 ngày, người thuê đủ 18 tuổi vào ngày nhận xe, xe không quá số chỗ chính sách đang cho phép. Đây là kiểm tra trong đồ án, không phải xác thực với cơ quan nhà nước.
+Điều kiện demo: nhóm B (B, B1, B2), không giới hạn ngày cấp từ 2025, còn hạn đến hết ngày kết thúc kỳ 12 tháng theo lịch, người thuê đủ 18 tuổi vào ngày nhận xe, xe không quá số chỗ chính sách đang cho phép. Đây là kiểm tra trong đồ án, không phải xác thực với cơ quan nhà nước.
 
 ### Đường đúng
 
 1. Người thuê tải ảnh mặt trước và mặt sau GPLX. Dịch vụ DocumentAI đọc giấy. Đọc đạt thì `licenseVerified` bật và điền số, họ tên, hạng, ngày cấp, ngày hết hạn. Ảnh chỉ người đã đăng nhập đúng tài khoản xem được.
-2. Chọn một gói năm đang bật, đúng một kỳ 365 ngày. Giờ nhận xe phải cách lúc gửi ít nhất 3 giờ. Chọn điểm nhận và số khách không vượt chỗ còn lại sau chỗ lái.
+2. Chọn một gói năm đang bật, đúng một kỳ 12 tháng theo lịch. Giờ nhận xe phải cách lúc gửi ít nhất 3 giờ. Chọn điểm nhận và số khách không vượt chỗ còn lại sau chỗ lái.
 3. Gửi đơn: trạng thái `PENDING`, giữ chỗ 24 giờ. Chưa có yêu cầu thanh toán, chưa có tài xế.
 4. Nhà xe chấp nhận trong 24 giờ: đơn `ACCEPTED`, mở một cửa sổ 24 giờ để nộp hợp đồng.
 5. Người thuê tải PDF hợp đồng đã ký. Hệ thống kiểm tra lại GPLX. Hợp lệ thì đơn sang `AWAITING_DEPOSIT` và tạo yêu cầu trả trước.
@@ -368,7 +370,7 @@ Các lần hệ thống tự tạo nghĩa vụ hoàn:
 | Người thuê hủy sau khi đã thu cọc | `CANCEL:{đơn}` | 100% hoặc 50% cọc theo mục 6, năm thì 0 |
 | Nhà xe hủy vì không phục vụ được | `PROVIDER_CANCEL:{đơn}` | 100% số đã nhận còn hoàn được |
 | Tiền đến nhưng không áp được vào đơn | `LATE_IPN:{mã}` | Khoản không áp dụng được |
-| Chuyển khoản thừa | `EXCESS:{giao dịch}` | Phần dư |
+| Chuyển sai số tiền đã nhận | `BANK_RECEIPT` audit + `REVIEW_REQUIRED` | Ghi đủ thực nhận, chưa phân bổ; không tự tạo hoàn. Quyết định hoàn thủ công dùng sự kiện `MANUAL:{...}` hiện có |
 | Chốt chuyến mà đã thu nhiều hơn nghĩa vụ | `SETTLE:{đơn}` | Phần thừa |
 | Admin miễn một phụ phí đã thu | `WAIVE:{khoản phí}` | Phần mở sau khi miễn |
 
@@ -508,3 +510,6 @@ flowchart TD
 - Máy trạng thái chuyến không liệt kê mọi trạng thái mà service thanh toán gán thẳng, ví dụ `CANCELLATION_REVIEW` khi đối soát. Khi hai bên lệch nhau, tin luồng service của từng việc hơn là chỉ nhìn bảng chuyển trạng thái của chuyến.
 
 Các file quyết định hành vi nếu cần đối chiếu: `DepositRefundRules`, `BookingServiceImpl`, `BookingHoldExpiryServiceImpl`, `PaymentRequestServiceImpl`, `VnpayServiceImpl`, `RefundEventService`, `ProviderBookingServiceImpl`, `DriverOptimizationServiceImpl`, `DisputeServiceImpl`, `VehicleServiceImpl`, `ProviderVehicleServiceImpl`.
+
+
+Gói năm có tài khoản riêng cho từng nhánh, được tạo cùng một lần seed; danh sách email, mã đơn và trình tự: [hướng dẫn demo năm](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).

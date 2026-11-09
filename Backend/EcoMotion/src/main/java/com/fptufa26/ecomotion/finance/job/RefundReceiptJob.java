@@ -1,6 +1,6 @@
 package com.fptufa26.ecomotion.finance.job;
 
-import com.fptufa26.ecomotion.finance.service.implement.RefundReceiptService;
+import com.fptufa26.ecomotion.finance.service.RefundReceiptService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;

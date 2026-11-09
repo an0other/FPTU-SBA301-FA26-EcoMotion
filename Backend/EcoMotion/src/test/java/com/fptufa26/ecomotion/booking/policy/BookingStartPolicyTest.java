@@ -13,6 +13,13 @@ class BookingStartPolicyTest {
         assertThatThrownBy(() -> policy.validate(limit.plusSeconds(1))).hasMessageContaining("1 tháng");
         assertThatCode(() -> new BookingStartPolicy(Clock.fixed(now, ZoneOffset.UTC), 2).validate(limit.plusSeconds(1))).doesNotThrowAnyException();
     }
+    @Test void threeMonthLimitAllowsBoundaryAndRejectsOneSecondBeyond() {
+        Instant now = Instant.parse("2026-11-08T01:00:00Z");
+        var policy = new BookingStartPolicy(Clock.fixed(now, ZoneOffset.UTC), 3);
+        Instant limit = now.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).plusMonths(3).toInstant();
+        assertThatCode(() -> policy.validate(limit)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> policy.validate(limit.plusSeconds(1))).hasMessageContaining("3 tháng");
+    }
     @Test void rejectsInvalidConfiguration() {
         assertThatIllegalArgumentException().isThrownBy(() -> new BookingStartPolicy(Clock.systemUTC(), 0));
     }

@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.finance.service.implement;
 
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
+
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
@@ -61,6 +63,7 @@ public class RefundServiceImpl implements RefundService {
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp", "application/pdf");
 
+    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
     private final RefundRequestRepository refundRequestRepository;
     private final BookingService bookingService;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
@@ -123,7 +126,9 @@ public class RefundServiceImpl implements RefundService {
         Instant now = clock.instant();
 
         if ("APPROVE".equals(action) || "CONTINUE".equals(action) || "MANUAL".equals(action)) {
-            if ("CONTINUE".equals(action) || "MANUAL".equals(action)) {
+            if ("CONTINUE".equals(action) || "MANUAL".equals(action)
+                    || refund.getPaymentTransaction() != null && refund.getPaymentTransaction().getType() == PaymentType.REFUND
+                    && Set.of(RefundStatus.UNDER_REVIEW, RefundStatus.FAILED).contains(refund.getStatus())) {
                 return toRefundResponse(refundEventService.releaseForFollowUp(refund.getId(), reviewer, "MANUAL".equals(action)));
             }
             if (refund.getPaymentTransaction() != null && refund.getPaymentTransaction().getType() == PaymentType.REFUND) {
@@ -184,6 +189,8 @@ public class RefundServiceImpl implements RefundService {
     @Override
     @Transactional(readOnly = true)
     public List<RefundResponse> listRefundsForProvider(Long currentUserId) {
+        if (requireUser(currentUserId).getRole() == Role.ADMIN)
+            return refundRequestRepository.findAll().stream().map(this::toRefundResponse).toList();
         Provider provider = userService.findProviderByUserId(currentUserId)
                 .orElseThrow(() -> new AccessDeniedException("Người dùng không phải là nhà cung cấp hợp lệ"));
         return refundRequestRepository.findByBooking_Vehicle_Provider_IdOrderByCreatedAtDesc(provider.getId()).stream()
@@ -261,16 +268,7 @@ public class RefundServiceImpl implements RefundService {
         });
 
         Booking booking = transaction.getBooking();
-        boolean outstanding = refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(booking.getId()).stream()
-                .anyMatch(r -> Set.of(RefundStatus.REQUESTED, RefundStatus.UNDER_REVIEW,
-                        RefundStatus.APPROVED, RefundStatus.PROCESSING, RefundStatus.PENDING_RECONCILIATION).contains(r.getStatus()));
-        boolean pendingMoney = bookingPaymentLedgerService.listTransactions(booking.getId()).stream()
-                .anyMatch(t -> t.getStatus() == PaymentStatus.PENDING || t.getProcessingNote() != null
-                        && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"));
-        if (booking.getStatus() == BookingStatus.CANCELLATION_REVIEW && !outstanding && !pendingMoney) {
-            booking.setStatus(BookingStatus.CANCELLED);
-            bookingPaymentLedgerService.saveBooking(booking);
-        }
+        closure.reconcile(booking.getId());
         bookingNotificationService.changed(transaction.getBooking(), "REFUND_UPDATED");
         return toProofResponse(transaction);
     }
@@ -413,7 +411,8 @@ public class RefundServiceImpl implements RefundService {
                 r.getReceiptStatus(), r.getReceiptWaitingAt(), r.getReceiptDeadline(),
                 r.getReceiptConfirmedAt(), r.getReceiptConfirmedBy(), r.getReceiptReportedAt(), r.getReceiptAutoConfirmedAt(),
                 r.getPaymentTransaction() != null && r.getPaymentTransaction().getReceiptUrl() != null
-                        && !r.getPaymentTransaction().getReceiptUrl().isBlank()
+                        && !r.getPaymentTransaction().getReceiptUrl().isBlank(),
+                r.getVersion()
         );
     }
 

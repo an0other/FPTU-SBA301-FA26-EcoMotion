@@ -9,8 +9,10 @@ import com.fptufa26.ecomotion.booking.exception.InvalidTripTransitionException;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.TripEvidenceRepository;
 import com.fptufa26.ecomotion.booking.service.TripEvidenceService;
-import com.fptufa26.ecomotion.common.cloudinary.CloudinaryService;
-import com.fptufa26.ecomotion.common.cloudinary.CloudinaryUploadResult;
+import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
+import com.fptufa26.ecomotion.common.storage.exception.FileStorageException;
+import java.io.IOException;
+import java.util.UUID;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
@@ -35,7 +37,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
 
     private final BookingRepository bookingRepository;
     private final TripEvidenceRepository tripEvidenceRepository;
-    private final CloudinaryService cloudinaryService;
+    private final FileStorageService fileStorageService;
     private final UserService userService;
     private final TransactionTemplate transactionTemplate;
 
@@ -43,12 +45,12 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
     public TripEvidenceServiceImpl(
             BookingRepository bookingRepository,
             TripEvidenceRepository tripEvidenceRepository,
-            CloudinaryService cloudinaryService,
+            FileStorageService fileStorageService,
             UserService userService,
             @Autowired(required = false) PlatformTransactionManager transactionManager) {
         this.bookingRepository = bookingRepository;
         this.tripEvidenceRepository = tripEvidenceRepository;
-        this.cloudinaryService = cloudinaryService;
+        this.fileStorageService = fileStorageService;
         this.userService = userService;
         this.transactionTemplate = transactionManager != null ? new TransactionTemplate(transactionManager) : null;
     }
@@ -56,9 +58,9 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
     public TripEvidenceServiceImpl(
             BookingRepository bookingRepository,
             TripEvidenceRepository tripEvidenceRepository,
-            CloudinaryService cloudinaryService,
+            FileStorageService fileStorageService,
             UserService userService) {
-        this(bookingRepository, tripEvidenceRepository, cloudinaryService, userService, null);
+        this(bookingRepository, tripEvidenceRepository, fileStorageService, userService, null);
     }
 
     @Override
@@ -82,9 +84,31 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
 
         Booking booking = resolveBooking(bookingIdOrCode);
         Driver assignedDriver = validateAndResolveAccess(currentUser, currentUserRole, booking);
-        validateBookingStatusForEvidenceType(booking.getStatus(), type);
+        if (booking.getPlan().getPlanType() != com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+            validateBookingStatusForEvidenceType(booking.getStatus(), type);
+        } else if (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.REJECTED) {
+            throw new InvalidTripTransitionException("Không tải minh chứng mới cho đơn đã hủy/từ chối");
+        }
 
-        CloudinaryUploadResult uploadResult = cloudinaryService.uploadTripEvidence(file, booking.getId());
+        String mediaType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(java.util.Locale.ROOT);
+        String extension = switch (mediaType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            default -> throw new IllegalArgumentException("Ảnh minh chứng chỉ hỗ trợ JPG hoặc PNG.");
+        };
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException ex) {
+            throw new FileStorageException("Không đọc được ảnh minh chứng", ex);
+        }
+        boolean validSignature = extension.equals(".jpg")
+                ? content.length >= 3 && (content[0] & 255) == 255 && (content[1] & 255) == 216 && (content[2] & 255) == 255
+                : content.length >= 8 && content[0] == (byte)137 && content[1] == 80 && content[2] == 78
+                  && content[3] == 71 && content[4] == 13 && content[5] == 10 && content[6] == 26 && content[7] == 10;
+        if (!validSignature) throw new IllegalArgumentException("Nội dung ảnh không khớp định dạng JPG/PNG.");
+        String storedPath = fileStorageService.store("booking", currentUserId,
+                "evidence-" + UUID.randomUUID() + extension, content, mediaType);
 
         Instant now = Instant.now();
         TripEvidence evidence = new TripEvidence();
@@ -92,12 +116,9 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         evidence.setDriver(assignedDriver);
         evidence.setUploadedBy(currentUser);
         evidence.setEvidenceType(type);
-        evidence.setImageUrl(uploadResult.secureUrl());
-        evidence.setCloudinaryPublicId(uploadResult.publicId());
+        evidence.setImageUrl(storedPath);
         evidence.setOriginalFileName(file.getOriginalFilename());
-        evidence.setFileSize(uploadResult.bytes());
-        evidence.setWidth(uploadResult.width());
-        evidence.setHeight(uploadResult.height());
+        evidence.setFileSize((long) content.length);
         evidence.setNote(note != null ? note.trim() : null);
         evidence.setRecordedAt(now);
         evidence.setCreatedAt(now);
@@ -109,13 +130,14 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
             } else {
                 saved = tripEvidenceRepository.save(evidence);
             }
-            log.info("Saved trip evidence #{} for booking {} with Cloudinary publicId {}",
-                    saved != null ? saved.getId() : null, booking.getBookingCode(), uploadResult.publicId());
+            log.info("Saved local trip evidence #{} for booking {}", saved != null ? saved.getId() : null, booking.getBookingCode());
             return TripEvidenceResponse.fromEntity(saved);
         } catch (Exception ex) {
-            log.error("Failed to save trip evidence record to DB for booking {}. Cleaning up Cloudinary image: {}",
-                    booking.getBookingCode(), uploadResult.publicId(), ex);
-            cloudinaryService.deleteImage(uploadResult.publicId());
+            try {
+                fileStorageService.delete(storedPath);
+            } catch (RuntimeException cleanupError) {
+                ex.addSuppressed(cleanupError);
+            }
             throw ex;
         }
     }
@@ -152,6 +174,10 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         Booking booking = resolveBooking(bookingIdOrCode);
         validateAndResolveAccess(currentUser, currentUserRole, booking);
 
+        if (booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+            throw new AccessDeniedException("Minh chứng gói năm phải được giữ để đối chiếu, không xóa trực tiếp");
+        }
+
         TripEvidence evidence = tripEvidenceRepository.findByIdAndBooking_Id(evidenceId, booking.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy minh chứng #" + evidenceId));
 
@@ -169,7 +195,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
             throw new AccessDeniedException("Bạn không có quyền xóa ảnh minh chứng này");
         }
 
-        String publicId = evidence.getCloudinaryPublicId();
+        String storedPath = evidence.getImageUrl();
 
         if (transactionTemplate != null) {
             transactionTemplate.executeWithoutResult(status -> tripEvidenceRepository.delete(evidence));
@@ -177,11 +203,27 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
             tripEvidenceRepository.delete(evidence);
         }
 
-        if (publicId != null && !publicId.isBlank()) {
-            cloudinaryService.deleteImage(publicId);
+        if (storedPath != null && storedPath.startsWith("booking/")) {
+            fileStorageService.delete(storedPath);
         }
 
         log.info("Deleted trip evidence #{} for booking {}", evidenceId, booking.getBookingCode());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EvidenceFile readEvidence(Long userId, Role role, String code, Long id) {
+        Booking booking = resolveBooking(code);
+        User user = userService.findById(userId).orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
+        validateAndResolveAccess(user, role, booking);
+        TripEvidence evidence = tripEvidenceRepository.findByIdAndBooking_Id(id, booking.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ảnh minh chứng"));
+        String path = evidence.getImageUrl();
+        if (path == null || !path.startsWith("booking/")) {
+            throw new ResourceNotFoundException("Ảnh này không được lưu local");
+        }
+        String type = path.endsWith(".png") ? "image/png" : "image/jpeg";
+        return new EvidenceFile(fileStorageService.read(path), type);
     }
 
     private Booking resolveBooking(String bookingIdOrCode) {
@@ -200,6 +242,13 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
     }
 
     private Driver validateAndResolveAccess(User currentUser, Role currentUserRole, Booking booking) {
+        if (currentUserRole == Role.RENTER) {
+            if (booking.getPlan().getPlanType() != com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+                    || !booking.getRenter().getUser().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException("Renter chỉ được truy cập minh chứng đơn năm của mình");
+            }
+            return null;
+        }
         if (currentUserRole == Role.ADMIN) {
             return booking.getDriver();
         }

@@ -162,6 +162,17 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.confirmPayment(id, principal.getUserId(), effectiveRequest));
     }
 
+    @PostMapping({"/api/v1/provider/payment-requests/{id}/bank-reconciliation",
+            "/api/provider/payment-requests/{id}/bank-reconciliation"})
+    @PreAuthorize("hasRole('PROVIDER')")
+    @Operation(summary = "Record a bank-statement-verified exception without applying payment or issuing a refund")
+    public ApiResponse<PaymentRequestResponse> recordBankTransferForReconciliation(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable Long id,
+            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request) {
+        return ApiResponse.success(paymentRequestService.recordBankTransferForReconciliation(id, principal.getUserId(), request));
+    }
+
     @PostMapping({"/api/v1/provider/payment-requests/{id}/reject", "/api/provider/payment-requests/{id}/reject"})
     @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
     @Operation(summary = "Provider rejects payment proof with reason")

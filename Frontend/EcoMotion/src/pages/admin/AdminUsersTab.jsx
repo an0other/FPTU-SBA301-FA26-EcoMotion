@@ -11,6 +11,7 @@ import ProviderDetailModal from './modals/ProviderDetailModal'
 import DriverDetailModal from './modals/DriverDetailModal'
 import EkycDetailModal from './modals/EkycDetailModal'
 import UserDetailModal from './modals/UserDetailModal'
+import AdminPopupModal from './modals/AdminPopupModal'
 
 const ROLE_LABELS = {
   RENTER: 'Khách thuê',
@@ -26,6 +27,12 @@ const STATUS_BADGES = {
   PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
   LOCKED: 'bg-rose-50 text-rose-700 border-rose-200',
   REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
+}
+
+function resolveValidImageUrl(url) {
+  if (!url || typeof url !== 'string') return null
+  if (/^\/images\/(portrait|license)-\d+\.webp$/i.test(url.trim())) return null
+  return url
 }
 
 export default function AdminUsersTab({
@@ -66,6 +73,7 @@ export default function AdminUsersTab({
   const [ekycList, setEkycList] = useState([])
   const [ekycStatus, setEkycStatus] = useState(initialFilter.status || 'ALL')
   const [previewImage, setPreviewImage] = useState(null)
+  const [popupModal, setPopupModal] = useState(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -210,33 +218,84 @@ export default function AdminUsersTab({
     initialFilter?.status,
   ])
 
-  // Handle User Status toggle (ACTIVE <-> LOCKED)
-  async function handleToggleUserStatus(user) {
+  // Handle User Status toggle (ACTIVE <-> LOCKED) via Popup Modal
+  function handleToggleUserStatus(user) {
     const nextStatus = user.status === 'LOCKED' ? 'ACTIVE' : 'LOCKED'
-    const confirmText = nextStatus === 'LOCKED'
-      ? `Bạn có chắc muốn KHÓA tài khoản ${user.email}?`
-      : `Bạn có muốn MỞ KHÓA cho tài khoản ${user.email}?`
-    if (!window.confirm(confirmText)) return
-
-    setActionLoading(true)
-    try {
-      await adminService.updateUserStatus(user.id, nextStatus)
-      setMessage({ type: 'success', text: `Đã cập nhật trạng thái người dùng sang ${nextStatus}` })
-      loadData()
-      if (onStatsUpdate) onStatsUpdate()
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Lỗi khi cập nhật tài khoản' })
-    } finally {
-      setActionLoading(false)
-    }
+    const isLocking = nextStatus === 'LOCKED'
+    setPopupModal({
+      mode: 'confirm',
+      tone: isLocking ? 'danger' : 'success',
+      title: isLocking ? 'Xác nhận khóa tài khoản' : 'Xác nhận mở khóa tài khoản',
+      message: isLocking
+        ? `Bạn có chắc muốn KHÓA tài khoản ${user.email}? Tài khoản này sẽ bị từ chối đăng nhập cho đến khi được mở khóa lại.`
+        : `Bạn có muốn MỞ KHÓA cho tài khoản ${user.email}? Người dùng sẽ có thể đăng nhập lại bình thường.`,
+      confirmText: isLocking ? 'Xác nhận khóa' : 'Xác nhận mở khóa',
+      onConfirm: async () => {
+        setActionLoading(true)
+        try {
+          await adminService.updateUserStatus(user.id, nextStatus)
+          setMessage({ type: 'success', text: `Đã cập nhật trạng thái người dùng sang ${nextStatus}` })
+          setPopupModal(null)
+          setSelectedUser(null)
+          loadData()
+          if (onStatsUpdate) onStatsUpdate()
+        } catch (err) {
+          setMessage({ type: 'error', text: err.message || 'Lỗi khi cập nhật tài khoản' })
+          setPopupModal({
+            mode: 'alert',
+            tone: 'error',
+            title: 'Không thể cập nhật tài khoản',
+            message: err.message || 'Lỗi khi cập nhật tài khoản.',
+          })
+        } finally {
+          setActionLoading(false)
+        }
+      },
+    })
   }
 
-  // Handle Provider Approval
-  async function handleUpdateProvider(id, status) {
+  // Handle Provider Approval / Lock
+  async function handleUpdateProvider(id, status, displayName = '') {
+    const normalizedStatus = status === 'REJECTED' ? 'LOCKED' : status
+    if (normalizedStatus === 'LOCKED') {
+      const targetName = displayName ? `"${displayName}"` : `#${id}`
+      setPopupModal({
+        mode: 'confirm',
+        tone: 'danger',
+        title: 'Xác nhận khóa nhà cung cấp',
+        message: `Bạn có chắc muốn từ chối / khóa nhà cung cấp ${targetName}?`,
+        confirmText: 'Khóa nhà cung cấp',
+        cancelText: 'Hủy',
+        onConfirm: async () => {
+          setActionLoading(true)
+          try {
+            await adminService.updateProviderStatus(id, 'LOCKED')
+            setMessage({ type: 'success', text: 'Đã khóa nhà cung cấp thành công' })
+            setPopupModal(null)
+            setSelectedProvider(null)
+            loadData()
+            if (onStatsUpdate) onStatsUpdate()
+          } catch (err) {
+            setMessage({ type: 'error', text: err.message || 'Lỗi cập nhật nhà cung cấp' })
+            setPopupModal({
+              mode: 'alert',
+              tone: 'error',
+              title: 'Không thể cập nhật nhà cung cấp',
+              message: err.message || 'Lỗi cập nhật nhà cung cấp.',
+            })
+          } finally {
+            setActionLoading(false)
+          }
+        },
+      })
+      return
+    }
+
     setActionLoading(true)
     try {
-      await adminService.updateProviderStatus(id, status)
-      setMessage({ type: 'success', text: `Đã cập nhật trạng thái nhà cung cấp thành công` })
+      await adminService.updateProviderStatus(id, normalizedStatus)
+      setMessage({ type: 'success', text: 'Đã phê duyệt nhà cung cấp thành công' })
+      setSelectedProvider(null)
       loadData()
       if (onStatsUpdate) onStatsUpdate()
     } catch (err) {
@@ -264,7 +323,12 @@ export default function AdminUsersTab({
   async function handleConfirmRejectDriver(e) {
     e.preventDefault()
     if (!driverRejectReason.trim()) {
-      alert('Vui lòng nhập lý do từ chối.')
+      setPopupModal({
+        mode: 'alert',
+        tone: 'warning',
+        title: 'Thiếu lý do từ chối',
+        message: 'Vui lòng nhập lý do từ chối.',
+      })
       return
     }
     setActionLoading(true)
@@ -272,6 +336,7 @@ export default function AdminUsersTab({
       await adminService.updateDriverStatus(driverRejectModal.id, 'REJECTED', driverRejectReason.trim())
       setMessage({ type: 'success', text: 'Đã từ chối tài xế với lý do đã nhập' })
       setDriverRejectModal(null)
+      setSelectedDriver(null)
       setDriverRejectReason('')
       loadData()
       if (onStatsUpdate) onStatsUpdate()
@@ -455,9 +520,9 @@ export default function AdminUsersTab({
                             className="flex cursor-pointer items-center gap-2.5 group"
                           >
                             <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-2xs">
-                              {(u.avatarUrl || u.portraitUrl) ? (
+                              {resolveValidImageUrl(u.avatarUrl || u.portraitUrl) ? (
                                 <img
-                                  src={u.avatarUrl || u.portraitUrl}
+                                  src={resolveValidImageUrl(u.avatarUrl || u.portraitUrl)}
                                   alt={u.fullName}
                                   className="h-full w-full object-cover"
                                   onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -528,7 +593,7 @@ export default function AdminUsersTab({
           <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
             <span className="text-xs font-bold text-slate-600">Lọc theo trạng thái phê duyệt:</span>
             <div className="flex gap-2">
-              {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((st) => (
+              {['ALL', 'PENDING', 'APPROVED', 'LOCKED'].map((st) => (
                 <button
                   key={st}
                   type="button"
@@ -606,20 +671,20 @@ export default function AdminUsersTab({
                       <button
                         type="button"
                         disabled={actionLoading}
-                        onClick={() => handleUpdateProvider(p.id, 'APPROVED')}
+                        onClick={() => handleUpdateProvider(p.id, 'APPROVED', p.displayName)}
                         className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white transition-all hover:bg-emerald-700"
                       >
-                        Duyệt đối tác
+                        {p.status === 'LOCKED' ? 'Mở khóa đối tác' : 'Duyệt đối tác'}
                       </button>
                     )}
-                    {p.status !== 'REJECTED' && (
+                    {p.status !== 'LOCKED' && (
                       <button
                         type="button"
                         disabled={actionLoading}
-                        onClick={() => handleUpdateProvider(p.id, 'REJECTED')}
+                        onClick={() => handleUpdateProvider(p.id, 'LOCKED', p.displayName)}
                         className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 transition-all hover:bg-rose-100"
                       >
-                        Từ chối / Khóa
+                        {p.status === 'PENDING' ? 'Từ chối / Khóa' : 'Tạm khóa'}
                       </button>
                     )}
                   </div>
@@ -667,12 +732,12 @@ export default function AdminUsersTab({
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-                        {d.portraitUrl ? (
+                        {resolveValidImageUrl(d.portraitUrl) ? (
                           <img
-                            src={d.portraitUrl}
+                            src={resolveValidImageUrl(d.portraitUrl)}
                             alt={d.userFullName || d.fullName || 'Tài xế'}
                             className="h-full w-full object-cover cursor-pointer hover:opacity-90"
-                            onClick={() => setPreviewImage(d.portraitUrl)}
+                            onClick={() => setPreviewImage(resolveValidImageUrl(d.portraitUrl))}
                             onError={(e) => { e.currentTarget.style.display = 'none' }}
                           />
                         ) : (
@@ -926,7 +991,7 @@ export default function AdminUsersTab({
 
       {/* Driver Reject Reason Modal */}
       {driverRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Từ chối tài xế</h3>
@@ -939,7 +1004,7 @@ export default function AdminUsersTab({
               </button>
             </div>
 
-            <form onSubmit={handleConfirmRejectDriver} className="mt-4 space-y-4">
+            <form noValidate onSubmit={handleConfirmRejectDriver} className="mt-4 space-y-4">
               <p className="text-xs text-slate-600">
                 Nhập lý do từ chối hồ sơ của tài xế <strong>{driverRejectModal.userFullName || driverRejectModal.fullName}</strong>. Lý do sẽ được lưu vào hệ thống và hiển thị cho tài xế/chủ xe.
               </p>
@@ -982,7 +1047,7 @@ export default function AdminUsersTab({
       {/* Image Preview Modal */}
       {previewImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setPreviewImage(null)}
         >
           <div className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-2xl bg-white p-2">
@@ -1003,10 +1068,7 @@ export default function AdminUsersTab({
         <UserDetailModal
           user={selectedUser}
           onClose={() => setSelectedUser(null)}
-          onToggleStatus={async (u) => {
-            await handleToggleUserStatus(u)
-            setSelectedUser(null)
-          }}
+          onToggleStatus={(u) => handleToggleUserStatus(u)}
           actionLoading={actionLoading}
           onPreviewImage={(url) => setPreviewImage(url)}
           onViewDriverDetail={(u) => openDriverById(u.driverId, u.id)}
@@ -1019,10 +1081,7 @@ export default function AdminUsersTab({
         <ProviderDetailModal
           provider={selectedProvider}
           onClose={() => setSelectedProvider(null)}
-          onStatusUpdate={async (id, status) => {
-            await handleUpdateProvider(id, status)
-            setSelectedProvider(null)
-          }}
+          onStatusUpdate={(id, status) => handleUpdateProvider(id, status, selectedProvider.displayName)}
           actionLoading={actionLoading}
           onSelectUser={(userId) => openUserById(userId)}
         />
@@ -1060,6 +1119,19 @@ export default function AdminUsersTab({
           onSelectUser={(userId) => openUserById(userId)}
         />
       )}
+
+      <AdminPopupModal
+        open={Boolean(popupModal)}
+        mode={popupModal?.mode}
+        tone={popupModal?.tone}
+        title={popupModal?.title}
+        message={popupModal?.message}
+        confirmText={popupModal?.confirmText}
+        cancelText={popupModal?.cancelText}
+        loading={actionLoading}
+        onClose={() => setPopupModal(null)}
+        onConfirm={popupModal?.onConfirm}
+      />
     </div>
   )
 }

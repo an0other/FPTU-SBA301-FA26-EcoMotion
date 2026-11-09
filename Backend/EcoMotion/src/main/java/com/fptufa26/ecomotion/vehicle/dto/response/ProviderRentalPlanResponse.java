@@ -20,5 +20,9 @@ public record ProviderRentalPlanResponse(
         BigDecimal weekendSurchargeRatio,
         Integer hourlyToDailyThresholdMinutes
 ) {
+    @com.fasterxml.jackson.annotation.JsonProperty("securityDepositAmount")
+    public BigDecimal securityDepositAmount() {
+        return planType == PlanType.YEARLY ? upfrontAmount : null;
+    }
 }
 

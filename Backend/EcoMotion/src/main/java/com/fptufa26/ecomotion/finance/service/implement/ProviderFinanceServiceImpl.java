@@ -249,6 +249,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         List<PaymentTransaction> allTx = bookingPaymentLedgerService.listProviderTransactions(providerId);
         BigDecimal confirmedIncoming = allTx.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                 .filter(t -> t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
                 .filter(t -> t.getProcessingNote() == null || !t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))
                 .map(PaymentTransaction::getAmount)
@@ -303,8 +304,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 totalBookings,
                 pendingBookings,
                 completedBookings,
-                receivedByMethod(allTx, PaymentMethod.BANK_TRANSFER),
-                receivedByMethod(allTx, PaymentMethod.VNPAY),
+                receivedByMethod(allTx, PaymentMethod.BANK_TRANSFER).add(receivedByMethod(allTx, PaymentMethod.VNPAY)),
                 allTx.stream().filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN
                                 && t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))
                         .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add)
@@ -373,11 +373,13 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactionsAscending(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                 .map(t -> t.getAppliedAmount() != null && t.getAppliedAmount().signum() > 0
                         ? t.getAppliedAmount()
                         : t.getAmount())
@@ -449,6 +451,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
             List<PaymentTransaction> txList = bookingPaymentLedgerService.listTransactions(b.getId());
             BigDecimal confirmedRev = txList.stream()
                     .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
+                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
                     .map(PaymentTransaction::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -555,10 +558,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 || t.getProcessingNote() != null && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))) {
             throw new PayoutIneligibleException("Đơn thuê còn giao dịch chưa đối soát");
         }
-        BigDecimal held = transactions.stream().filter(t -> t.getStatus() == PaymentStatus.PAID
-                        && t.getDirection() == PaymentDirection.IN && t.getMethod() == PaymentMethod.VNPAY
-                        && t.getVerificationMethod() == PaymentVerificationMethod.GATEWAY_VERIFIED)
-                .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        // VNPAY money is paid directly to the provider, so the platform holds no collected funds to pay out.
+        BigDecimal held = BigDecimal.ZERO;
         BigDecimal refunds = transactions.stream().filter(t -> t.getStatus() == PaymentStatus.PAID
                         && t.getType() == PaymentType.REFUND && t.getDirection() == PaymentDirection.OUT)
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -576,7 +577,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         Provider provider = booking.getVehicle().getProvider();
         BigDecimal rate = provider.getCommissionRate();
         if (eligible.signum() <= 0 || rate == null || rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) > 0) {
-            throw new PayoutIneligibleException("Không có tiền nền tảng thực thu hợp lệ hoặc thiếu tỷ lệ hoa hồng");
+            throw new PayoutIneligibleException("Tiền VNPAY đã chuyển trực tiếp cho nhà cung cấp; không có khoản chi trả qua nền tảng");
         }
         ProviderBankAccount bank = providerBankAccountRepository.findByProvider_IdAndStatus(provider.getId(), BankAccountStatus.ACTIVE)
                 .orElseThrow(() -> new PayoutIneligibleException("Chưa có tài khoản nhận tiền được kích hoạt"));

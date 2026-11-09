@@ -103,22 +103,27 @@ export const providerFinanceService = {
     if (params.page != null) query.page = params.page
     if (params.size != null) query.size = params.size
 
-    const { data } = await apiClient.get('/v1/provider/payment-requests', { params: query })
+    const { data } = await apiClient.get('/provider/payment-requests', { params: query })
     return data?.data ?? { items: [], total: 0, offset: 0, limit: 10, hasMore: false }
   },
 
   async confirmPayment(paymentRequestId, payload = {}) {
-    const { data } = await apiClient.post(`/v1/provider/payment-requests/${paymentRequestId}/confirm`, payload)
+    const { data } = await apiClient.post(`/provider/payment-requests/${paymentRequestId}/confirm`, payload)
     return data?.data
   },
 
   async rejectPayment(paymentRequestId, payload) {
-    const { data } = await apiClient.post(`/v1/provider/payment-requests/${paymentRequestId}/reject`, payload)
+    const { data } = await apiClient.post(`/provider/payment-requests/${paymentRequestId}/reject`, payload)
+    return data?.data
+  },
+
+  async recordBankReceipt(paymentRequestId, payload) {
+    const { data } = await apiClient.post(`/provider/payment-requests/${paymentRequestId}/bank-reconciliation`, payload)
     return data?.data
   },
 
   async reportIssue(paymentRequestId, payload) {
-    const { data } = await apiClient.post(`/v1/provider/payment-requests/${paymentRequestId}/report-issue`, payload)
+    const { data } = await apiClient.post(`/provider/payment-requests/${paymentRequestId}/report-issue`, payload)
     return data?.data
   },
 
@@ -129,13 +134,13 @@ export const providerFinanceService = {
   async getPaymentRequestsByBooking(identifier) {
     if (!identifier) return []
     const bookingCode = String(identifier).trim().toUpperCase()
-    const url = `/v1/renter/bookings/${encodeURIComponent(bookingCode)}/payment-requests`
+    const url = `/renter/bookings/${encodeURIComponent(bookingCode)}/payment-requests`
     const { data } = await apiClient.get(url)
     return data?.data ?? []
   },
 
   async getPaymentRequestDetail(id) {
-    const { data } = await apiClient.get(`/v1/payment-requests/${id}`)
+    const { data } = await apiClient.get(`/payment-requests/${id}`)
     return data?.data
   },
 
@@ -146,7 +151,7 @@ export const providerFinanceService = {
     if (payload.transactionReference) form.append('transactionReference', payload.transactionReference)
     if (payload.transferredAt) form.append('transferredAt', payload.transferredAt)
     if (payload.note) form.append('note', payload.note)
-    const { data } = await apiClient.post(`/v1/payment-requests/${id}/proofs/multipart`, form)
+    const { data } = await apiClient.post(`/payment-requests/${id}/proofs/multipart`, form)
     return data?.data
   },
 
@@ -157,12 +162,12 @@ export const providerFinanceService = {
   },
 
   async getPaymentEvidenceImage(id) {
-    const { data } = await apiClient.get(`/v1/payment-evidences/${id}/file`, { responseType: 'blob' })
+    const { data } = await apiClient.get(`/payment-evidences/${id}/file`, { responseType: 'blob' })
     return data
   },
 
   async getBookingPaymentHistory(bookingId) {
-    const { data } = await apiClient.get(`/v1/bookings/${bookingId}/payment-history`)
+    const { data } = await apiClient.get(`/bookings/${bookingId}/payment-history`)
     return data?.data ?? []
   },
 

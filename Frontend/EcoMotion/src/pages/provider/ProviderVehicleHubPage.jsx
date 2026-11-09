@@ -2206,7 +2206,7 @@ export default function ProviderVehicleHubPage() {
 
                     <div className="mb-3">
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        Tiền trả trước / Cọc ký quỹ (VNĐ)
+                        Tiền bảo đảm cố định cho gói năm (VNĐ)
                       </label>
                       <div className="relative">
                         <input
@@ -2227,12 +2227,16 @@ export default function ProviderVehicleHubPage() {
 
                     <ul className="text-[11px] text-slate-600 space-y-1.5 mb-4">
                       <li className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-emerald-600">all_inclusive</span>
+                        <strong className="text-emerald-700">Hạn mức km được chốt riêng trong hợp đồng năm</strong>
+                      </li>
+                      <li className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-xs text-emerald-600">verified</span>
                         <span>Hợp đồng năm: Miễn phụ phí giờ/chờ/cuối tuần</span>
                       </li>
                       <li className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-xs text-emerald-600">payments</span>
-                        <span>Cọc tính theo khoản trả trước / ký quỹ</span>
+                        <span>Cọc tính theo khoản tiền bảo đảm / ký quỹ</span>
                       </li>
                     </ul>
                   </div>

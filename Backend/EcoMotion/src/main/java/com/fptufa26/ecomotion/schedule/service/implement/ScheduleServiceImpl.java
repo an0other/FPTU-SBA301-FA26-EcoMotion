@@ -21,12 +21,57 @@ import com.fptufa26.ecomotion.common.exception.ConflictException;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ScheduleServiceImpl implements ScheduleService {
+    private static final Instant YEARLY_INSPECTION_END = java.time.LocalDate.of(9999, 12, 31)
+            .atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
 
     private final VehicleScheduleRepository vehicleScheduleRepository;
 
     @Override
+    @Transactional
+    public void markYearlyInspection(Booking booking, Vehicle vehicle, java.time.LocalDate returnedOn) {
+        boolean present = vehicleScheduleRepository.findByBooking_Id(booking.getId()).stream()
+                .anyMatch(s -> s.getVehicle().getId().equals(vehicle.getId()) && s.getStatus() == ScheduleStatus.ACTIVE
+                    && s.getType() == ScheduleType.MAINTENANCE && "YEARLY_INSPECTION".equals(s.getReason())
+                    && YEARLY_INSPECTION_END.equals(s.getEndAt()));
+        if (present) return;
+        VehicleSchedule row = new VehicleSchedule();
+        row.setBooking(booking);
+        row.setVehicle(vehicle);
+        row.setType(ScheduleType.MAINTENANCE);
+        row.setStatus(ScheduleStatus.ACTIVE);
+        row.setReason("YEARLY_INSPECTION");
+        row.setStartAt(returnedOn.atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant());
+        row.setEndAt(YEARLY_INSPECTION_END);
+        row.setExtension(false);
+        vehicleScheduleRepository.save(row);
+    }
+
+    @Override
+    @Transactional
+    public void reopenYearlyVehicle(Long bookingId, Long vehicleId, java.time.LocalDate availableOn) {
+        var rows = vehicleScheduleRepository.findByBooking_Id(bookingId).stream()
+                .filter(s -> s.getVehicle().getId().equals(vehicleId) && s.getStatus() == ScheduleStatus.ACTIVE
+                    && s.getType() == ScheduleType.MAINTENANCE && "YEARLY_INSPECTION".equals(s.getReason())
+                    && YEARLY_INSPECTION_END.equals(s.getEndAt())).toList();
+        if (rows.isEmpty()) throw new ConflictException("Xe chưa được nhận lại hoặc đã mở lịch");
+        var end = availableOn.atStartOfDay(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
+        for (var row : rows) {
+            if (!end.isAfter(row.getStartAt())) throw new ConflictException("Ngày sẵn sàng phải sau ngày nhận lại");
+            row.setEndAt(end);
+        }
+    }
+
+    private Instant reservationEnd(Booking booking, Instant end) {
+        return booking.getPlan() != null && booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+                ? com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.reservationEnd(end) : end;
+    }
+
+    @Override
     public boolean isRangeFree(Long vehicleId, Instant start, Instant end) {
-        return !vehicleScheduleRepository.existsActiveOverlap(vehicleId, start, end);
+        return !vehicleScheduleRepository.hasYearlyCustody(vehicleId, null)
+                && !vehicleScheduleRepository.hasYearlyReplacementReservation(vehicleId, null, start,
+                    end.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate().plusDays(1))
+                && !vehicleScheduleRepository.existsActiveOverlap(vehicleId, start, end);
     }
 
     @Override
@@ -45,7 +90,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         row.setBooking(booking);
         row.setType(ScheduleType.BOOKED);
         row.setStartAt(start);
-        row.setEndAt(end);
+        row.setEndAt(reservationEnd(booking, end));
         row.setExtension(false);
         row.setStatus(ScheduleStatus.ACTIVE);
         vehicleScheduleRepository.save(row);
@@ -59,7 +104,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         row.setBooking(booking);
         row.setType(ScheduleType.BOOKED);
         row.setStartAt(start);
-        row.setEndAt(end);
+        row.setEndAt(reservationEnd(booking, end));
         row.setExtension(false);
         row.setStatus(ScheduleStatus.HELD);
         row.setExpiresAt(expiresAt);
@@ -84,14 +129,14 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .filter(schedule -> schedule.getStatus() == ScheduleStatus.HELD)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Booking does not have an active vehicle hold"));
-        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(booking.getVehicle(), start, end);
+        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(booking.getVehicle(), start, reservationEnd(booking, end));
         if (vehicleScheduleRepository.existsOccupiedOverlapExcludingBooking(
                 booking.getVehicle().getId(), window.start(), window.end(), bookingId)) {
             throw new ConflictException(
                     "Vehicle is not free in the selected range (including maintenance buffer)");
         }
         row.setStartAt(start);
-        row.setEndAt(end);
+        row.setEndAt(reservationEnd(booking, end));
     }
 
     @Override
@@ -99,17 +144,24 @@ public class ScheduleServiceImpl implements ScheduleService {
     public void moveBooking(Booking booking, Vehicle vehicle, Instant start, Instant end) {
         Long bookingId = booking.getId();
         VehicleSchedule row = vehicleScheduleRepository.findByBooking_Id(bookingId).stream()
-                .filter(schedule -> schedule.getType() == ScheduleType.BOOKED)
+                .filter(schedule -> schedule.getType() == ScheduleType.BOOKED
+                        && (schedule.getStatus() == ScheduleStatus.ACTIVE || schedule.getStatus() == ScheduleStatus.HELD))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Không tìm thấy lịch xe của booking"));
+                .orElseThrow(() -> new IllegalStateException("Không tìm thấy lịch đang giữ xe của booking"));
+        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, reservationEnd(booking, end));
+        if (vehicleScheduleRepository.hasYearlyCustody(vehicle.getId(), bookingId)
+                || vehicleScheduleRepository.hasYearlyReplacementReservation(vehicle.getId(), bookingId, start,
+                    end.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate().plusDays(1))) {
+            throw new ConflictException("Xe đang được renter gói năm giữ, chưa xác nhận nhận lại");
+        }
         if (vehicleScheduleRepository.existsOccupiedOverlapExcludingBooking(
-                vehicle.getId(), start, end, bookingId)) {
+                vehicle.getId(), window.start(), window.end(), bookingId)) {
             throw new ConflictException(
                     "Xe thay thế không còn trống trong khoảng thời gian đã chọn");
         }
         row.setVehicle(vehicle);
         row.setStartAt(start);
-        row.setEndAt(end);
+        row.setEndAt(reservationEnd(booking, end));
     }
 
     @Override
@@ -194,7 +246,8 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Transactional
     public void release(Long bookingId) {
         for (VehicleSchedule row : vehicleScheduleRepository.findByBooking_Id(bookingId)) {
-            if (row.getStatus() == ScheduleStatus.ACTIVE || row.getStatus() == ScheduleStatus.HELD) {
+            if ((row.getStatus() == ScheduleStatus.ACTIVE || row.getStatus() == ScheduleStatus.HELD)
+                    && !"YEARLY_INSPECTION".equals(row.getReason())) {
                 row.setStatus(ScheduleStatus.CANCELLED);
             }
         }

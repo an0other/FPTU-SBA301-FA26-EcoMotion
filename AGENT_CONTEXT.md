@@ -1,3 +1,9 @@
+Cập nhật seed demo năm: 3 renter new/monthly/happy-end (ID 108–110) + provider.a, không tạo thêm tài khoản nhánh và không chọn scenario bằng env. Monthly thực hiện nối tiếp trả tiền, bảo trì, hư do renter, đổi xe rồi trả sớm. New có thể demo kết thúc do lỗi provider sau nhận xe; happy-end demo quyết toán cuối hợp đồng. Chỉ tạo hai booking EM-Y2-MONTHLY/EM-Y2-HAPPY-END và xe dự phòng 00009, new đặt qua web. Người dùng chủ động create-drop để chuẩn bị DB sạch; đã bỏ rename email, chuyển chủ booking và SQL dọn seed cũ. Chỉ seed trực tiếp ba email mới; không tự chạy create-drop. Hướng dẫn: docs/YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md.
+
+
+Quy ước URL gói năm: dùng /api làm tiền tố chính; apiClient FE đã có baseURL /api nên service không thêm /api hoặc /v1 lần nữa. API chung cũ có alias /api/v1 được giữ tương thích; API ảnh booking có alias /api/bookings/{code}/evidences. Tham chiếu: docs/YEARLY_RENTAL_API_REFERENCE_VI.md.
+
+
 # AGENT_CONTEXT.md — EcoMotion
 
 Quyết định bổ sung (VNPay deposit P0): BookingPaymentStateService dùng chung cho workflow và Provider Detail, chỉ tổng hợp tiền PAID đã xác minh và appliedAmount hợp lệ. Attempt PENDING cũ không che nghĩa vụ cọc đã đủ; DEPOSIT_PAID không phải FULLY_PAID hay COMPLETED. IPN/QueryDR có xác minh mới ghi ledger/request/hold/booking trong transaction, Return chỉ đọc; tiền nhận không áp dụng được giữ để đối soát. PAYMENT_VERIFIED sau commit; FE xếp hàng refetch nếu sự kiện đến lúc đang tải dữ liệu cũ. Cấu hình ứng dụng local/example mặc định DB_DDL_AUTO=update để tránh create-drop mất dữ liệu; test vẫn cô lập create-drop. Không thêm entity/migration. Xem [VNPAY_DEPOSIT_SYNC_P0](docs/VNPAY_DEPOSIT_SYNC_P0.md) về bằng chứng và regression; booking EM-2026-000040 không còn trong DB được kiểm tra, chưa xác minh được giao dịch lịch sử với gateway.

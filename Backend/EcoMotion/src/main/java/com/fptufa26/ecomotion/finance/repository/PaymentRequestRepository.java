@@ -32,13 +32,20 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequest, 
     List<PaymentRequest> findByBooking_BookingCodeOrderByCreatedAtDesc(String bookingCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT pr FROM PaymentRequest pr JOIN FETCH pr.booking b JOIN FETCH b.renter r JOIN FETCH r.user WHERE UPPER(b.bookingCode) = :bookingCode AND pr.paymentType = :paymentType")
+    @Query("SELECT pr FROM PaymentRequest pr JOIN FETCH pr.booking b JOIN FETCH b.renter r JOIN FETCH r.user WHERE UPPER(b.bookingCode) = :bookingCode AND pr.paymentType = :paymentType AND pr.installmentNumber = 0")
     Optional<PaymentRequest> findByBookingCodeAndTypeForUpdate(
             @Param("bookingCode") String bookingCode,
             @Param("paymentType") PaymentRequestType paymentType);
 
     @EntityGraph(attributePaths = {"booking", "booking.renter", "booking.renter.user", "evidences"})
-    Optional<PaymentRequest> findByBooking_IdAndPaymentType(Long bookingId, PaymentRequestType paymentType);
+    @Query("SELECT pr FROM PaymentRequest pr WHERE pr.booking.id = :bookingId AND pr.paymentType = :paymentType AND pr.installmentNumber = 0")
+    Optional<PaymentRequest> findByBooking_IdAndPaymentType(@Param("bookingId") Long bookingId, @Param("paymentType") PaymentRequestType paymentType);
+
+    Optional<PaymentRequest> findByBooking_IdAndPaymentTypeAndInstallmentNumber(
+            Long bookingId, PaymentRequestType paymentType, Integer installmentNumber);
+
+    List<PaymentRequest> findByBooking_IdAndPaymentTypeOrderByInstallmentNumberAsc(
+            Long bookingId, PaymentRequestType paymentType);
 
     @EntityGraph(attributePaths = {"booking", "booking.renter", "booking.renter.user", "evidences"})
     Optional<PaymentRequest> findByTransferReference(String transferReference);

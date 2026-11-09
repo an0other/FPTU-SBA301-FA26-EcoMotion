@@ -93,7 +93,6 @@ public class DevDataSeeder implements ApplicationRunner {
     private final RenterPaymentDataSeeder renterPaymentDataSeeder;
     private final RenterReviewDataSeeder renterReviewDataSeeder;
     private final RenterCompletedLifecycleSeeder renterCompletedLifecycleSeeder;
-    private final RenterYearlyBookingDataSeeder renterYearlyBookingDataSeeder;
 
     private static final long PROVIDER_A_USER_ID = 2L;
     private static final long PROVIDER_B_USER_ID = 4L;
@@ -161,9 +160,9 @@ public class DevDataSeeder implements ApplicationRunner {
         seedUser(105L, "long.hoang@ecomotion.vn", "0901000025", "Hoàng Bảo Long", Role.RENTER);
         seedUser(106L, "cuong.nguyen@ecomotion.vn", "0901000026", "Nguyễn Việt Cường", Role.RENTER);
         seedUser(107L, "mai.truong@ecomotion.vn", "0901000027", "Trương Thanh Mai", Role.RENTER);
-        seedUser(108L, "renter.yearly.blocked@ecomotion.vn", "0901000108", "Nguyễn An Khôi", Role.RENTER);
-        seedUser(109L, "renter.yearly.active@ecomotion.vn", "0901000109", "Trần Minh Nhật", Role.RENTER);
-        seedUser(110L, "renter.yearly.flow@ecomotion.vn", "0901000110", "Lê Gia Hân", Role.RENTER);
+        seedUser(108L, "renter.yearly.new@ecomotion.vn", "0901000108", "Nguyễn An Khôi", Role.RENTER);
+        seedUser(109L, "renter.yearly.monthly@ecomotion.vn", "0901000109", "Trần Minh Nhật", Role.RENTER);
+        seedUser(110L, "renter.yearly.happy-end@ecomotion.vn", "0901000110", "Lê Gia Hân", Role.RENTER);
 
         User driverUser1 = seedUser(201L, "driver.nam@ecomotion.vn", "0901000031", "Nguyễn Văn Nam", Role.DRIVER);
         User driverUser2 = seedUser(202L, "driver.cuong@ecomotion.vn", "0901000032", "Trương Hùng Cường", Role.DRIVER);
@@ -295,7 +294,6 @@ public class DevDataSeeder implements ApplicationRunner {
         renterCompletedLifecycleSeeder.seed();
         yearlyRentalDataSeeder.seed();
         realignPinnedIdentitySequences();
-        renterYearlyBookingDataSeeder.seed();
     }
 
     private void seedBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {

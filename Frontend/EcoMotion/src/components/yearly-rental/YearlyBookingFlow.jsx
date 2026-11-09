@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useVehicle } from '../../hooks/useVehicle'
-import { createBooking, quotePickup } from '../../services/bookingService'
+import { createBooking, quotePickup, getBookingStartPolicy } from '../../services/bookingService'
 import { readErrorMessage } from '../../services/apiClient'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { BookingErrorDialog } from '../booking/BookingErrorDialog'
 import { PickupStep } from '../booking/PickupStep'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-const YEAR_MS = 365 * DAY_MS
+function calendarYearEnd(date) {
+  const local = new Date(date.getTime() + 7 * 60 * 60 * 1000)
+  const year = local.getUTCFullYear() + 1
+  const month = local.getUTCMonth()
+  const day = Math.min(local.getUTCDate(), new Date(Date.UTC(year, month + 1, 0)).getUTCDate())
+  local.setUTCDate(1)
+  local.setUTCFullYear(year, month, day)
+  return new Date(local.getTime() - 7 * 60 * 60 * 1000)
+}
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000
 
 function vietnamInputValue(timestamp) {
@@ -42,6 +49,8 @@ export default function YearlyBookingFlow({
   const navigate = useNavigate()
   const { vehicle, loading, error: vehicleError, notFound, reload } = useVehicle(vehicleId)
   const [step, setStep] = useState(1)
+  const [startPolicy, setStartPolicy] = useState(null)
+  const [startPolicyError, setStartPolicyError] = useState('')
   const [start, setStart] = useState(() => vietnamInputValue(Date.now() + 30 * 60 * 60 * 1000))
   const [pickup, setPickup] = useState({ address: '', latitude: null, longitude: null })
   const [passengerCount, setPassengerCount] = useState(1)
@@ -52,9 +61,22 @@ export default function YearlyBookingFlow({
     vietnamInputValue(Date.now() + 3 * 60 * 60 * 1000),
   )
 
+  useEffect(() => {
+    let active = true
+    getBookingStartPolicy().then(data => {
+      if (active) setStartPolicy(data)
+    }).catch(e => { if (active) setStartPolicyError(readErrorMessage(e)) })
+    return () => { active = false }
+  }, [])
+
+  const maximumStart = startPolicy?.latestPickupTime
+    ? vietnamInputValue(new Date(startPolicy.latestPickupTime).getTime()) : undefined
   const plan = vehicle?.plans?.find((item) => String(item.id) === String(planId))
   const pickupTime = useMemo(() => parseVietnamInput(start), [start])
-  const plannedEnd = pickupTime ? new Date(pickupTime.getTime() + YEAR_MS) : null
+  const withinStartWindow = Boolean(pickupTime && startPolicy
+    && pickupTime.getTime() <= new Date(startPolicy.latestPickupTime).getTime()
+    && pickupTime.getTime() >= new Date(minimumStart + ':00+07:00').getTime())
+  const plannedEnd = pickupTime ? calendarYearEnd(pickupTime) : null
   const licenseCoversTerm = Boolean(
     license?.yearlyBookingEligible
       && plannedEnd
@@ -104,6 +126,11 @@ export default function YearlyBookingFlow({
     if (!vehicle || !plan || !pickupTime || !plannedEnd || !pickupQuote || submitting) return
     if (pickupTime.getTime() < Date.now() + 3 * 60 * 60 * 1000) {
       setError('Thời gian nhận xe phải cách lúc gửi yêu cầu ít nhất 3 giờ.')
+      setStep(1)
+      return
+    }
+    if (!withinStartWindow) {
+      setError('Ngày nhận xe vượt giới hạn đặt trước của hệ thống. Vui lòng chọn lại.')
       setStep(1)
       return
     }
@@ -164,7 +191,7 @@ export default function YearlyBookingFlow({
   const vehicleName = [vehicle.brand, vehicle.model].filter(Boolean).join(' ')
   const coverImage = vehicle.imageUrls?.[0]
   const planPrice = Number(plan.slotPrice ?? 0)
-  const upfrontAmount = Number(plan.upfrontAmount ?? 0)
+  const upfrontAmount = Number(plan.securityDepositAmount ?? plan.upfrontAmount ?? 0)
   const pickupFee = Number(pickupQuote?.pickupFee ?? 0)
 
   return (
@@ -181,10 +208,10 @@ export default function YearlyBookingFlow({
             <img src={coverImage} alt={vehicleName} className="h-24 w-36 rounded-lg bg-slate-100 object-cover" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Thuê tự lái · 365 ngày</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Thuê tự lái · 12 tháng</p>
             <h2 className="mt-1 text-lg font-bold text-slate-900">{vehicleName}</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Tổng giá kỳ thuê: {formatCurrency(planPrice)} · Trả trước sau khi ký hợp đồng: {formatCurrency(upfrontAmount)}
+              Tổng giá kỳ thuê: {formatCurrency(planPrice)} · Tiền bảo đảm riêng: {formatCurrency(upfrontAmount)}
             </p>
           </div>
         </div>
@@ -193,7 +220,7 @@ export default function YearlyBookingFlow({
           <li className={`rounded-lg p-3 ${step === 1 ? 'bg-brand-50 font-semibold text-brand-800' : 'bg-slate-50'}`}>1. Chọn ngày nhận</li>
           <li className={`rounded-lg p-3 ${step === 2 ? 'bg-brand-50 font-semibold text-brand-800' : 'bg-slate-50'}`}>2. Điểm nhận xe</li>
           <li className={`rounded-lg p-3 ${step === 3 ? 'bg-brand-50 font-semibold text-brand-800' : 'bg-slate-50'}`}>3. Xem lại yêu cầu</li>
-          <li className="rounded-lg bg-slate-50 p-3">4. Nhà cung cấp duyệt → ký hợp đồng → trả trước</li>
+          <li className="rounded-lg bg-slate-50 p-3">4. Nhà cung cấp duyệt → chốt điều khoản → ký hợp đồng → cọc và tháng đầu</li>
         </ol>
       </div>
 
@@ -206,6 +233,7 @@ export default function YearlyBookingFlow({
               type="datetime-local"
               value={start}
               min={minimumStart}
+              max={maximumStart}
               onChange={(event) => {
                 setStart(event.target.value)
                 setStep(1)
@@ -213,6 +241,9 @@ export default function YearlyBookingFlow({
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"
             />
           </label>
+          {startPolicyError && <p role="alert" className="mt-2 text-sm text-red-700">Chưa tải được giới hạn ngày: {startPolicyError}. Vui lòng tải lại trang.</p>}
+          {startPolicy && <p className="mt-2 text-sm text-slate-600">Ngày nhận xe cách hiện tại ít nhất 3 giờ và tối đa {startPolicy.maxAdvanceMonths} tháng.</p>}
+          {startPolicy && pickupTime && !withinStartWindow && <p role="alert" className="mt-2 text-sm text-red-700">Ngày nhận xe phải nằm trong giới hạn đặt trước.</p>}
           {pickupTime && plannedEnd && (
             <p className="mt-3 text-sm text-slate-600">
               Thời hạn dự kiến: {formatVietnamDateTime(pickupTime)} đến {formatVietnamDateTime(plannedEnd)}
@@ -225,7 +256,7 @@ export default function YearlyBookingFlow({
             {licenseCoversTerm
               ? `GPLX hạng ${license.licenseClass} còn hạn đến hết kỳ thuê dự kiến.`
               : license?.yearlyBookingIneligibleReason
-                || 'Cần GPLX đạt chính sách demo và còn hạn đến hết thời gian thuê 365 ngày.'}
+                || 'Cần GPLX đạt chính sách demo và còn hạn đến hết thời gian thuê 12 tháng.'}
             {license?.licenseVerified && !licenseCoversTerm && (
               <span> Kiểm tra ngày hết hạn theo thời gian thuê trước khi gửi yêu cầu.</span>
             )}
@@ -245,7 +276,7 @@ export default function YearlyBookingFlow({
           <button
             type="button"
             onClick={() => setStep(2)}
-            disabled={!licenseCoversTerm || vehicle.seatCount > 9 || !pickupTime || pickupTime < new Date(minimumStart + ':00+07:00')}
+            disabled={!licenseCoversTerm || vehicle.seatCount > 9 || !withinStartWindow}
             className="mt-5 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Tiếp tục chọn điểm nhận
@@ -280,16 +311,16 @@ export default function YearlyBookingFlow({
           <h3 className="text-lg font-bold text-slate-900">Kiểm tra yêu cầu thuê năm</h3>
           <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
             <div><dt className="text-slate-500">Xe</dt><dd className="font-semibold">{vehicleName}</dd></div>
-            <div><dt className="text-slate-500">Thời gian</dt><dd className="font-semibold">{formatVietnamDateTime(pickupTime)} · 365 ngày</dd></div>
+            <div><dt className="text-slate-500">Thời gian</dt><dd className="font-semibold">{formatVietnamDateTime(pickupTime)} · 12 tháng</dd></div>
             <div><dt className="text-slate-500">Điểm nhận</dt><dd className="font-semibold">{pickup.address}</dd></div>
             <div><dt className="text-slate-500">Hành khách ngoài người lái</dt><dd className="font-semibold">{effectivePassengers}</dd></div>
             <div><dt className="text-slate-500">Giá thuê cả kỳ</dt><dd className="font-semibold">{formatCurrency(planPrice)}</dd></div>
             <div><dt className="text-slate-500">Phí giao/nhận dự kiến</dt><dd className="font-semibold">{formatCurrency(pickupFee)}</dd></div>
-            <div><dt className="text-slate-500">Khoản trả trước sau khi có hợp đồng</dt><dd className="font-semibold">{formatCurrency(upfrontAmount)}</dd></div>
+            <div><dt className="text-slate-500">Tiền bảo đảm (chưa gồm tiền thuê tháng đầu)</dt><dd className="font-semibold">{formatCurrency(upfrontAmount)}</dd></div>
           </dl>
           <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-600">
             Gửi yêu cầu chưa phát sinh thanh toán. Nhà cung cấp có 24 giờ để phản hồi; nếu chấp nhận, bạn cần tải hợp đồng đã ký
-            trong thời hạn giữ xe, sau đó thanh toán khoản trả trước. Đơn thuê năm tự lái, không phân công tài xế.
+            trong thời hạn giữ xe, sau đó thanh toán tiền bảo đảm và tiền thuê tháng đầu. Đơn thuê năm tự lái, không phân công tài xế.
           </p>
           <div className="mt-5 flex flex-wrap justify-between gap-3">
             <button type="button" onClick={() => setStep(2)} className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm font-semibold">

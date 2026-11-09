@@ -35,6 +35,18 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
     private final jakarta.persistence.EntityManager entityManager;
 
     @Override
+    public Optional<java.math.BigDecimal> yearlyRoundingUnit(Long bookingId) {
+        var policy = entityManager.find(com.fptufa26.ecomotion.booking.entity.YearlyWorkflow.class, bookingId);
+        var booking = entityManager.find(Booking.class, bookingId);
+        var snapshot = snapshotRepository.findByBooking_Id(bookingId).orElse(null);
+        boolean valid = policy != null && policy.isTermsAccepted() && policy.getContractTotal() != null
+                && policy.getSecurityDeposit() != null && booking != null && snapshot != null
+                && policy.getContractTotal().compareTo(booking.getTotalAmount()) == 0
+                && snapshot.getDepositAmount() != null && policy.getSecurityDeposit().compareTo(snapshot.getDepositAmount()) == 0;
+        return valid ? Optional.of(policy.getRoundingUnit()) : Optional.empty();
+    }
+
+    @Override
     public Booking requireBooking(Long bookingId) {
         return bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy booking"));

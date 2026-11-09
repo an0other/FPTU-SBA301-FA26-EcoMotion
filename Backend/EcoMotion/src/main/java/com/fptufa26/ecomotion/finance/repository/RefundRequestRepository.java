@@ -12,6 +12,9 @@ import java.util.Optional;
 
 public interface RefundRequestRepository extends JpaRepository<RefundRequest, Long> {
 
+    @Query("select r.booking.id from RefundRequest r where r.id = :id")
+    Optional<Long> findBookingIdById(@Param("id") Long id);
+
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from RefundRequest r where r.id = :id")
     Optional<RefundRequest> findByIdForUpdate(@Param("id") Long id);

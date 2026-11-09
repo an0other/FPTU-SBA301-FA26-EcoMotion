@@ -148,3 +148,5 @@ upload/
 
 # Local AI / Agent configs
 .agents/
+
+qa-audit/

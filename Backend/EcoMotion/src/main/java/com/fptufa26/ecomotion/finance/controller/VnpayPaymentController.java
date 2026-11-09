@@ -79,8 +79,11 @@ public class VnpayPaymentController {
 
     @GetMapping("/callback")
     @Operation(summary = "Process browser return from VNPAY")
-    public ApiResponse<VnpayCallbackResultResponse> processCallback(@RequestParam Map<String, String> allParams) {
-        VnpayCallbackResultResponse response = vnpayService.processCallback(allParams);
+    public ApiResponse<VnpayCallbackResultResponse> processCallback(
+            @AuthenticationPrincipal SecurityUser principal,
+            @RequestParam Map<String, String> allParams) {
+        VnpayCallbackResultResponse response = vnpayService.processCallback(
+                principal == null ? null : principal.getUserId(), allParams);
         return ApiResponse.success(response);
     }
 

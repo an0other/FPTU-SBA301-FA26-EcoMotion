@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
+
 import com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest;
 import com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest;
 import com.fptufa26.ecomotion.booking.dto.response.OperationalResolutionResponse;
@@ -114,7 +116,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final com.fptufa26.ecomotion.booking.repository.BookingChargeEvidenceRepository chargeEvidenceRepository;
     private final com.fptufa26.ecomotion.booking.service.ChargeEvidenceValidator chargeEvidenceValidator;
     private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
-    private final com.fptufa26.ecomotion.finance.service.implement.RefundEventService refundEventService;
+    private final com.fptufa26.ecomotion.finance.service.RefundEventService refundEventService;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final DriverAssignmentService driverAssignmentService;
@@ -439,7 +441,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 throw new ConflictException("Thời hạn yêu cầu thuê năm đã hết. Người thuê cần gửi yêu cầu mới.");
             }
             DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
-                    booking.getRenter(), booking.getVehicle(), booking.getPickupTime(), end);
+                    booking.getRenter(), booking.getVehicle(), booking.getPickupTime(), yearly ? com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.reservationEnd(end) : end);
             scheduleService.release(booking.getId());
         }
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
@@ -508,6 +510,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new ConflictException("Chỉ có thể phân công tài xế sau khi khoản cọc đã được xác nhận");
         }
 
+        if (booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+            throw new ConflictException("Gói năm tự lái không phân công tài xế");
+        }
         Long selectedDriverId = driverId;
         if (mode == DriverAssignmentMode.AUTO) {
             DriverCandidateResponse suggested = driverOptimizationService.suggestDriver(booking.getId(), provider.getId()).suggestedDriver();
@@ -773,6 +778,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
 
+        if (paymentRequestService.findPaymentRequest(booking.getId(), com.fptufa26.ecomotion.finance.enums.PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit).isPresent()) {
+            throw new ConflictException("Dùng API quyết toán gói năm mới");
+        }
         if (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT) {
             PaymentRequest existing = paymentRequestService.createFinalBalancePaymentRequest(booking.getId());
             return new SettlementResultResponse(
@@ -1162,6 +1171,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             Long currentUserId, String bookingCodeOrId, ResolveOperationalRiskRequest request) {
         Provider provider = resolveProvider(currentUserId);
         Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
+        if (paymentRequestService.findPaymentRequest(booking.getId(), com.fptufa26.ecomotion.finance.enums.PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit).isPresent()) {
+            throw new ConflictException("Dùng report và yêu cầu đổi xe/kết thúc của gói năm");
+        }
         requireOperationallyMutable(booking);
 
         if (request.resolution() != OperationalResolutionType.CANCEL_AND_REFUND) {

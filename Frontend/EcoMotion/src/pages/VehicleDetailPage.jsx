@@ -396,7 +396,7 @@ export default function VehicleDetailPage() {
                         {selectedPlan.upfrontAmount !== null &&
                           selectedPlan.upfrontAmount !== undefined && (
                             <div className="flex items-center justify-between gap-3">
-                              <dt className="text-slate-500">Trả trước</dt>
+                              <dt className="text-slate-500">{selectedPlan.planType === 'YEARLY' ? 'Tiền bảo đảm riêng' : 'Trả trước'}</dt>
                               <dd className="font-semibold text-slate-900">
                                 {formatCurrency(selectedPlan.upfrontAmount)}
                               </dd>

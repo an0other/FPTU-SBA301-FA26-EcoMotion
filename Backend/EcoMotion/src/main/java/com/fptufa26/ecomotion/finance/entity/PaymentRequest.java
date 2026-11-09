@@ -33,7 +33,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "payment_request", uniqueConstraints =
-        @UniqueConstraint(name = "uk_payment_request_booking_type", columnNames = {"booking_id", "payment_type"}))
+        @UniqueConstraint(name = "uk_payment_request_booking_type_period", columnNames = {"booking_id", "payment_type", "installment_number"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -50,6 +50,18 @@ public class PaymentRequest {
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_type", nullable = false, length = 30)
     private PaymentRequestType paymentType;
+
+    @Column(name = "installment_number", nullable = false)
+    private Integer installmentNumber = 0;
+
+    @Column(name = "security_deposit", nullable = false)
+    private boolean securityDeposit = false;
+
+    @Column(name = "period_start")
+    private java.time.LocalDate periodStart;
+
+    @Column(name = "period_end")
+    private java.time.LocalDate periodEnd;
 
     @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal amount;

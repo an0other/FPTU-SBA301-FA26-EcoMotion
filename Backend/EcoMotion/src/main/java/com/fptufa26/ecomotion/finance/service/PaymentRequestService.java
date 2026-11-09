@@ -22,6 +22,23 @@ import java.time.Instant;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface PaymentRequestService {
+    record YearlyCash(BigDecimal rentPaid, BigDecimal depositHeld) {}
+    YearlyCash yearlyCash(Long bookingId);
+    void finalizeYearlyObligations(Long bookingId, BigDecimal balance);
+    boolean yearlyBalancePaid(Long bookingId, BigDecimal balance);
+    void recordYearlyRefund(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long renterUserId);
+
+
+    boolean yearlyInitialPaymentsComplete(Long bookingId);
+
+    void rebaseYearlyInstallments(Long bookingId, java.time.LocalDate start);
+
+    List<YearlyPaymentItem> yearlyPayments(Long userId, String bookingCode);
+
+    record YearlyPaymentItem(Long id, String purpose, int installmentNumber,
+            java.time.LocalDate periodStart, java.time.LocalDate periodEnd,
+            BigDecimal amount, BigDecimal paidAmount, String status, String transferReference, java.time.LocalDate dueOn, boolean overdue, BigDecimal remainingAmount) {}
+
 
     Optional<PaymentRequest> findByBookingIdAndPaymentType(Long bookingId, PaymentRequestType paymentType);
 
@@ -57,6 +74,9 @@ public interface PaymentRequestService {
     PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, int offset, int limit);
 
     PaymentRequestResponse confirmPayment(Long paymentRequestId, Long currentUserId, ConfirmPaymentRequest request);
+
+    PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
+            com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request);
 
     PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request);
 

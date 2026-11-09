@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { providerFinanceService } from '../../services/providerFinanceService'
 
 export function PaymentEvidenceImage({ evidence, className = '', alt = 'Biên lai chuyển khoản' }) {
-  const protectedEvidence = evidence?.proofImageUrl?.startsWith('/api/v1/payment-evidences/')
+  const protectedEvidence = /^\/api\/(?:v1\/)?payment-evidences\//.test(evidence?.proofImageUrl || '')
   const [source, setSource] = useState(
     protectedEvidence ? '' : evidence?.proofImageUrl,
   )

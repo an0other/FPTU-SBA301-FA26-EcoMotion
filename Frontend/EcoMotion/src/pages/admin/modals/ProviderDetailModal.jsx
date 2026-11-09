@@ -32,7 +32,7 @@ export default function ProviderDetailModal({
                   {provider.displayName || 'Hồ sơ Nhà cung cấp'}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Mã đối tác: #{provider.id} • Loại hình: {provider.providerType === 'COMPANY' ? 'Doanh nghiệp' : 'Hộ kinh doanh / Cá nhân'}
+                  Mã đối tác: #{provider.id} • Loại hình: {provider.providerType === 'BUSINESS' || provider.providerType === 'COMPANY' ? 'Doanh nghiệp' : 'Hộ kinh doanh / Cá nhân'}
                 </p>
               </div>
             </div>
@@ -200,15 +200,15 @@ export default function ProviderDetailModal({
               </button>
             )}
 
-            {(provider.status === 'APPROVED' || provider.status === 'ACTIVE') && (
+            {provider.status !== 'LOCKED' && (
               <button
                 type="button"
                 disabled={actionLoading}
-                onClick={() => onStatusUpdate(provider.id, 'REJECTED')}
+                onClick={() => onStatusUpdate(provider.id, 'LOCKED')}
                 className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
               >
                 <IconLock className="h-4 w-4" />
-                <span>Tạm khóa nhà cung cấp</span>
+                <span>{provider.status === 'PENDING' ? 'Từ chối / Khóa đối tác' : 'Tạm khóa nhà cung cấp'}</span>
               </button>
             )}
           </div>

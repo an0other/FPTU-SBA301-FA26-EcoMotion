@@ -53,12 +53,16 @@ export function SubmittedBookingPage() {
       getMyBooking(bookingCode),
       providerFinanceService.getPaymentRequestsByBooking(bookingCode).catch(() => []),
     ])
+    if (detail.planType === 'YEARLY') {
+      navigate('/renter/bookings/' + encodeURIComponent(bookingCode), { replace: true })
+      return detail
+    }
     const depositRequest = (paymentRequests || []).find((item) => item.paymentType === 'DEPOSIT') || null
     setDepositPaymentStatus(depositRequest?.status ?? null)
     const holdExpiresAt = depositRequest?.expiresAt ?? detail.holdExpiresAt
     setBooking(fromDetail({ ...detail, holdExpiresAt }))
     return detail
-  }, [bookingCode])
+  }, [bookingCode, navigate])
 
   useEffect(() => {
     let cancelled = false

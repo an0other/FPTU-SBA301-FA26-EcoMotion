@@ -30,6 +30,10 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
     private final com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository transactions;
     private final com.fptufa26.ecomotion.booking.service.BookingNotificationService notifications;
 
+    /** How long a PENDING VNPAY payment may hold the deposit open before the hold expires. */
+    @org.springframework.beans.factory.annotation.Value("${app.vnpay.pending-grace:PT30M}")
+    private java.time.Duration vnpayPendingGrace;
+
     @Override
     @Transactional
     public void expireDueHolds(Instant now) {
@@ -59,9 +63,11 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
                     PaymentRequestStatus.REVIEW_REQUIRED).contains(depositRequest.get().getStatus())) {
                 continue;
             }
+            Instant pendingCutoff = now.minus(vnpayPendingGrace);
             if (transactions.findByBooking_Id(bookingId).stream().anyMatch(t ->
                     t.getMethod() == com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY
-                            && t.getStatus() == com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING)) continue;
+                            && t.getStatus() == com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING
+                            && t.getCreatedAt() != null && t.getCreatedAt().isAfter(pendingCutoff))) continue;
             if (!paymentRequestService.expireDepositWithoutProof(bookingId)) {
                 continue;
             }

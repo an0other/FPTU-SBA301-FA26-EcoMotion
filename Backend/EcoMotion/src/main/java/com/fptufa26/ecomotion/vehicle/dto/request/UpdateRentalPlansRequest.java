@@ -72,6 +72,7 @@ public record UpdateRentalPlansRequest(
             PlanStatus status,
 
             @DecimalMin(value = "0.0", message = "Tiền trả trước phải >= 0")
+            @com.fasterxml.jackson.annotation.JsonAlias("securityDepositAmount")
             BigDecimal upfrontAmount,
 
             @Min(value = 1, message = "Ngưỡng chuyển ngày phải > 0")

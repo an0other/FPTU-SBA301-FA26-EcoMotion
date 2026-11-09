@@ -92,6 +92,11 @@ public class VnpayServiceImpl implements VnpayService {
         Booking booking = bookingQueryService.lockBookingForPayment(resolveBooking(request.bookingCode()).getId());
 
         validateRenterAccess(booking, currentUserId);
+        if (paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit).isPresent()) {
+            throw new InvalidPaymentOperationException("Hợp đồng năm mới thanh toán trực tiếp cho provider; không dùng VNPAY");
+        }
+
 
         boolean isFinalPayment = "FINAL_PAYMENT".equalsIgnoreCase(request.paymentType())
                 || "FINAL_BALANCE".equalsIgnoreCase(request.paymentType())
@@ -718,54 +723,87 @@ public class VnpayServiceImpl implements VnpayService {
      * trình duyệt. Không để transaction DB mở trong lúc gọi HTTP tới VNPay.
      */
     @Override
-    public VnpayCallbackResultResponse processCallback(Map<String, String> params) {
+    public VnpayCallbackResultResponse processCallback(Long userId, Map<String, String> params) {
         TransactionTemplate readOnly = new TransactionTemplate(transactionManager);
         readOnly.setReadOnly(true);
-        // Pha 1 (đọc): xác minh chữ ký, số tiền, trạng thái. Không gọi HTTP trong transaction này.
-        CallbackPrecheck precheck = readOnly.execute(status -> precheckCallback(params));
+        // Phase 1 (read only): every check runs before any write. A signed VNPAY return is the verification source.
+        CallbackPrecheck precheck = readOnly.execute(status -> precheckCallback(userId, params));
         if (precheck.response() != null) return precheck.response();
-
-        // Pha 2 (HTTP): chỉ khi còn PENDING, hỏi VNPay bằng QueryDR phía server.
-        Optional<Map<String, String>> queried = paymentGatewayResolver.resolve(PaymentMethod.VNPAY)
-                .queryTransaction(precheck.txnRef(), precheck.createdAt(), clock.instant());
-        if (queried.isPresent()) {
-            Map<String, String> verifiedQuery = queried.get();
-            // Pha 3 (ghi): khóa booking và áp dụng kết quả QueryDR đã xác thực, giống IPN.
-            return new TransactionTemplate(transactionManager)
-                    .execute(status -> applyVerifiedQuery(precheck.txnRef(), verifiedQuery));
-        }
-        // VNPay chưa trả lời được: giữ PENDING_VERIFICATION, IPN hoặc đối soát định kỳ sẽ xử lý sau.
-        return readOnly.execute(status -> bookingQueryService.findTransactionByVnpTxnRef(precheck.txnRef())
-                .map(this::transactionResult)
-                .orElseGet(() -> invalidCallback("Giao dịch không tồn tại")));
+        // Phase 2 (write): lock the booking and transaction, then apply the signed result once.
+        return new TransactionTemplate(transactionManager)
+                .execute(status -> applySignedBrowserResult(precheck.txnRef(), params));
     }
 
-    private record CallbackPrecheck(VnpayCallbackResultResponse response, String txnRef, Instant createdAt) {}
+    private record CallbackPrecheck(VnpayCallbackResultResponse response, String txnRef) {}
 
-    private CallbackPrecheck precheckCallback(Map<String, String> params) {
+    private CallbackPrecheck precheckCallback(Long userId, Map<String, String> params) {
+        if (userId == null) {
+            return new CallbackPrecheck(invalidCallback("Cần đăng nhập để xác nhận kết quả thanh toán"), null);
+        }
+        for (String required : List.of("vnp_TxnRef", "vnp_ResponseCode", "vnp_Amount", "vnp_TmnCode", "vnp_SecureHash")) {
+            if (params.get(required) == null || params.get(required).isBlank()) {
+                return new CallbackPrecheck(invalidCallback("Thiếu tham số bắt buộc"), null);
+            }
+        }
         PaymentVerificationResult verification = paymentGatewayResolver.resolve(PaymentMethod.VNPAY).verifyCallback(params);
         if (!verification.validSignature()) {
-            return new CallbackPrecheck(invalidCallback("Chữ ký hoặc thông tin merchant không hợp lệ"), null, null);
+            return new CallbackPrecheck(invalidCallback("Chữ ký hoặc thông tin merchant không hợp lệ"), null);
         }
         String vnpTxnRef = verification.txnRef();
-        if (vnpTxnRef == null || vnpTxnRef.isBlank()) {
-            return new CallbackPrecheck(invalidCallback("Mã tham chiếu giao dịch không tồn tại"), null, null);
+        PaymentTransaction candidate = vnpTxnRef == null || vnpTxnRef.isBlank() ? null
+                : bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(null);
+        if (candidate == null) {
+            return new CallbackPrecheck(invalidCallback("Giao dịch không tồn tại"), null);
         }
-        PaymentTransaction candidate = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(null);
-        if (candidate == null) return new CallbackPrecheck(invalidCallback("Giao dịch không tồn tại"), null, null);
+        var renter = candidate.getBooking().getRenter();
+        if (renter == null || renter.getUser() == null || !renter.getUser().getId().equals(userId)) {
+            return new CallbackPrecheck(invalidCallback("Giao dịch không thuộc tài khoản này"), null);
+        }
         try {
             String amount = params.get("vnp_Amount");
-            if (amount == null || !amount.matches("[0-9]+")
-                    || new BigDecimal(amount).compareTo(candidate.getAmount().movePointRight(2)) != 0) {
-                return new CallbackPrecheck(invalidCallback("Số tiền giao dịch không khớp"), null, null);
+            if (!amount.matches("[0-9]+") || new BigDecimal(amount).compareTo(candidate.getAmount().movePointRight(2)) != 0) {
+                return new CallbackPrecheck(invalidCallback("Số tiền giao dịch không khớp"), null);
             }
         } catch (NumberFormatException ex) {
-            return new CallbackPrecheck(invalidCallback("Số tiền giao dịch không hợp lệ"), null, null);
+            return new CallbackPrecheck(invalidCallback("Số tiền giao dịch không hợp lệ"), null);
         }
         if (candidate.getStatus() != PaymentStatus.PENDING) {
-            return new CallbackPrecheck(transactionResult(candidate), null, null);
+            return new CallbackPrecheck(transactionResult(candidate), null);
         }
-        return new CallbackPrecheck(null, vnpTxnRef, candidate.getCreatedAt());
+        return new CallbackPrecheck(null, vnpTxnRef);
+    }
+
+    // Runs in its own transaction: locks the booking the same way the IPN does, then applies the signed result.
+    private VnpayCallbackResultResponse applySignedBrowserResult(String vnpTxnRef, Map<String, String> params) {
+        PaymentTransaction candidate = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef).orElse(null);
+        if (candidate == null) return invalidCallback("Giao dịch không tồn tại");
+        bookingQueryService.lockBookingForPayment(candidate.getBooking().getId());
+        PaymentTransaction transaction = bookingQueryService.findTransactionByVnpTxnRefForUpdate(vnpTxnRef).orElse(null);
+        if (transaction == null) return invalidCallback("Giao dịch không tồn tại");
+        // A settled result is never changed: a repeated or late return only reports what is already stored.
+        if (transaction.getStatus() != PaymentStatus.PENDING) return transactionResult(transaction);
+
+        String responseCode = params.get("vnp_ResponseCode");
+        String transactionStatus = params.get("vnp_TransactionStatus");
+        boolean success = "00".equals(responseCode) && (transactionStatus == null || "00".equals(transactionStatus));
+        if (success) {
+            PaymentVerificationResult verification = new PaymentVerificationResult(true, true, vnpTxnRef,
+                    params.get("vnp_TransactionNo"), "00", transaction.getAmount(),
+                    params.get("vnp_BankCode"), params.get("vnp_CardType"), params.get("vnp_PayDate"),
+                    "Chữ ký VNPAY hợp lệ khi khách quay về website");
+            applyVerifiedPayment(transaction, verification, params);
+        } else {
+            transaction.setVnpResponseCode(responseCode);
+            transaction.setStatus(PaymentStatus.FAILED);
+            transaction.setVerificationMethod(PaymentVerificationMethod.GATEWAY_VERIFIED);
+            transaction.setUpdatedAt(clock.instant());
+            bookingQueryService.saveTransaction(transaction);
+        }
+        if (transaction.getStatus() == PaymentStatus.PENDING) {
+            // Success was signed but could not be applied (for example, a missing gateway transaction number).
+            return invalidCallback("Chưa ghi nhận được kết quả thanh toán. Vui lòng kiểm tra trong Đơn của tôi");
+        }
+        return transactionResult(transaction);
     }
 
     // Chạy trong transaction riêng: khóa booking giống IPN rồi áp dụng kết quả QueryDR đã xác thực.
@@ -804,7 +842,6 @@ public class VnpayServiceImpl implements VnpayService {
     }
 
     @Override
-    @Transactional
     public VnpayCallbackResultResponse queryTransactionForUser(Long userId, String bookingCode, String vnpTxnRef) {
         Booking booking = resolveBooking(bookingCode);
         validateAccessToBooking(booking, userId);
@@ -812,35 +849,48 @@ public class VnpayServiceImpl implements VnpayService {
     }
 
     @Override
-    @Transactional
     public VnpayCallbackResultResponse queryTransaction(String bookingCode, String vnpTxnRef) {
-        PaymentTransaction candidate = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch"));
-        if (!candidate.getBooking().getBookingCode().equals(bookingCode)) {
-            throw new ResourceNotFoundException("Giao dịch không thuộc đơn thuê");
-        }
-        bookingQueryService.lockBookingForPayment(candidate.getBooking().getId());
-        PaymentTransaction transaction = bookingQueryService.findTransactionByVnpTxnRefForUpdate(vnpTxnRef).orElseThrow();
+        // Phase 1 (short write): check ownership and the query interval, then claim this query under the locks.
         Instant now = clock.instant();
-        if (transaction.getStatus() == PaymentStatus.PENDING && transaction.getCreatedAt() != null
-                && (transaction.getUpdatedAt() == null || !transaction.getUpdatedAt().plus(vnpayConfig.getQueryInterval()).isAfter(now))) {
+        Instant createdAt = new TransactionTemplate(transactionManager).execute(status -> {
+            PaymentTransaction candidate = bookingQueryService.findTransactionByVnpTxnRef(vnpTxnRef)
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch"));
+            if (!candidate.getBooking().getBookingCode().equals(bookingCode)) {
+                throw new ResourceNotFoundException("Giao dịch không thuộc đơn thuê");
+            }
+            bookingQueryService.lockBookingForPayment(candidate.getBooking().getId());
+            PaymentTransaction transaction = bookingQueryService.findTransactionByVnpTxnRefForUpdate(vnpTxnRef).orElseThrow();
+            if (transaction.getStatus() != PaymentStatus.PENDING || transaction.getCreatedAt() == null) return null;
+            if (transaction.getUpdatedAt() != null
+                    && transaction.getUpdatedAt().plus(vnpayConfig.getQueryInterval()).isAfter(now)) return null;
             transaction.setUpdatedAt(now);
             bookingQueryService.saveTransaction(transaction);
-            paymentGatewayResolver.resolve(PaymentMethod.VNPAY).queryTransaction(vnpTxnRef, transaction.getCreatedAt(), now)
-                    .ifPresent(params -> {
-                        boolean success = "00".equals(params.get("vnp_TransactionStatus"));
-                        PaymentVerificationResult verification = new PaymentVerificationResult(true, success, vnpTxnRef,
-                                params.get("vnp_TransactionNo"), success ? "00" : "99", transaction.getAmount(),
-                                params.get("vnp_BankCode"), params.get("vnp_CardType"), params.get("vnp_PayDate"), "");
-                        applyVerifiedPayment(transaction, verification, params);
-                    });
+            return transaction.getCreatedAt();
+        });
+        if (createdAt == null) {
+            return readResult(vnpTxnRef);
         }
-        return transactionResult(transaction);
+        // Phase 2 (network, no database locks held): ask VNPAY. A timeout or an unsigned answer leaves the payment PENDING.
+        Optional<Map<String, String>> queried = paymentGatewayResolver.resolve(PaymentMethod.VNPAY)
+                .queryTransaction(vnpTxnRef, createdAt, now);
+        if (queried.isEmpty()) {
+            return readResult(vnpTxnRef);
+        }
+        // Phase 3 (write): apply only the signed, verified answer, under the same locks as the IPN.
+        return new TransactionTemplate(transactionManager)
+                .execute(status -> applyVerifiedQuery(vnpTxnRef, queried.get()));
+    }
+
+    private VnpayCallbackResultResponse readResult(String vnpTxnRef) {
+        return new TransactionTemplate(transactionManager).execute(status -> bookingQueryService
+                .findTransactionByVnpTxnRef(vnpTxnRef)
+                .map(this::transactionResult)
+                .orElseGet(() -> invalidCallback("Giao dịch không tồn tại")));
     }
 
     private VnpayCallbackResultResponse invalidCallback(String message) {
         return new VnpayCallbackResultResponse(null, null, null, null, BigDecimal.ZERO, null, null, null, null,
-                false, message, "PENDING_VERIFICATION", false);
+                false, message, "INVALID", false);
     }
 
     private VnpayCallbackResultResponse transactionResult(PaymentTransaction transaction) {

@@ -1,5 +1,7 @@
+import { AdminYearlyReviewPanel } from '../../../components/booking/FinancialReviewPanels'
 import { useState } from 'react'
 import { IconX, IconAlertTriangle, IconCheckCircle, IconShield, IconCar, IconUsers } from '../../../components/icons/Icons'
+import AdminPopupModal from './AdminPopupModal'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -14,6 +16,7 @@ const DISPUTE_STATUS_BADGES = {
 }
 
 export default function DisputeDetailModal({ dispute, ...props }) {
+  if (dispute && ['YEARLY_SETTLEMENT', 'YEARLY_CANCELLATION'].includes(dispute.category)) return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><section role="dialog" aria-modal="true" aria-label="Phân xử hợp đồng năm" className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-5"><button type="button" onClick={props.onClose} className="mb-3 rounded-lg border px-3 py-2">Đóng</button><p className="mb-3">{dispute.description}</p>{['OPEN', 'IN_REVIEW'].includes(dispute.status) ? <AdminYearlyReviewPanel dispute={dispute} onChanged={() => { props.onChanged?.(); props.onClose?.() }} /> : <p>{dispute.resolution}</p>}</section></div>
   return dispute ? <DisputeDetailForm key={dispute.id} dispute={dispute} {...props} /> : null
 }
 
@@ -31,6 +34,7 @@ function DisputeDetailForm({
     resolution: dispute.resolution || '',
   })
   const [previewImage, setPreviewImage] = useState(null)
+  const [popupModal, setPopupModal] = useState(null)
 
   const evidenceUrls = (() => {
     if (!dispute?.evidenceUrls) return []
@@ -51,7 +55,13 @@ function DisputeDetailForm({
   function handleSubmit(e) {
     e.preventDefault()
     if (!form.resolution.trim()) {
-      alert('Vui lòng nhập nội dung phán quyết / giải pháp phân xử.')
+      setPopupModal({
+        mode: 'alert',
+        tone: 'warning',
+        title: 'Thiếu nội dung phán quyết',
+        message: 'Vui lòng nhập nội dung phán quyết / giải pháp phân xử.',
+        confirmText: 'Đã hiểu',
+      })
       return
     }
     onResolve(dispute.id, form.status,
@@ -328,7 +338,7 @@ function DisputeDetailForm({
             </div>
           ) : (
             /* Resolution Form */
-            <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
               <h4 className="font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                 <IconShield className="h-4 w-4 text-brand-600" /> Biểu mẫu Phán quyết &amp; Giải quyết tranh chấp
               </h4>
@@ -464,6 +474,18 @@ function DisputeDetailForm({
           </div>
         </div>
       )}
+
+      <AdminPopupModal
+        open={Boolean(popupModal)}
+        mode={popupModal?.mode}
+        tone={popupModal?.tone}
+        title={popupModal?.title}
+        message={popupModal?.message}
+        confirmText={popupModal?.confirmText}
+        cancelText={popupModal?.cancelText}
+        onClose={() => setPopupModal(null)}
+        onConfirm={popupModal?.onConfirm}
+      />
     </div>
   )
 }

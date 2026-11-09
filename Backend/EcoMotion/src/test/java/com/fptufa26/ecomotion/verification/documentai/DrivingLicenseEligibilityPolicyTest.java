@@ -17,23 +17,20 @@ class DrivingLicenseEligibilityPolicyTest {
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     @Test
-    void onlyCurrentClassBWithFiniteCurrentExpiryIsAutoEligible() {
-        assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental(
-                " b ",
-                LocalDate.of(2025, 1, 1),
-                LocalDate.now(VIETNAM_ZONE).plusYears(1),
-                false)).isTrue();
-
-        assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental(
-                "B2",
-                LocalDate.of(2024, 12, 31),
-                LocalDate.now(VIETNAM_ZONE).plusYears(1),
-                false)).isFalse();
-        assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental(
-                "B",
-                LocalDate.of(2025, 1, 1),
-                null,
-                true)).isFalse();
+    void supportedBClassesIgnoreIssueDateAndRequireFiniteCurrentExpiry() {
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+        for (String licenseClass : new String[]{" b ", "B1", "b2"}) {
+            for (LocalDate issue : new LocalDate[]{null, LocalDate.of(2024, 12, 31), LocalDate.of(2025, 1, 1)}) {
+                assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental(licenseClass, issue, today, false)).isTrue();
+                assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental(licenseClass, issue, today.minusDays(1), false)).isFalse();
+            }
+        }
+        for (String licenseClass : new String[]{null, "", "A1", "C", "B3"}) {
+            assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental(licenseClass, null, today.plusYears(1), false)).isFalse();
+        }
+        assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental("B", null, null, false)).isFalse();
+        assertThat(DrivingLicenseEligibilityPolicy.isEligibleForYearlyRental("B1", null, today.plusYears(1), true)).isFalse();
+        assertThat(DrivingLicenseEligibilityPolicy.supportedClasses()).hasSize(3);
     }
 
     @Test
