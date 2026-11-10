@@ -53,6 +53,7 @@ import java.util.stream.Collectors;
 public class ProviderVehicleServiceImpl implements ProviderVehicleService {
 
     private static final BigDecimal DEPOSIT_EXAMPLE_TOTAL = new BigDecimal("10000000.00");
+    private static final BigDecimal MAX_SLOT_PRICE = new BigDecimal("999999999");
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final UserService userService;
@@ -547,6 +548,24 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         Provider provider = findProviderByUserId(userId);
         Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
+
+        BigDecimal activeHourlyPrice = null;
+        BigDecimal activeDailyPrice = null;
+        for (UpdateRentalPlansRequest.PlanItemRequest item : request.plans()) {
+            if (item.slotPrice() != null && item.slotPrice().compareTo(MAX_SLOT_PRICE) > 0) {
+                throw new IllegalArgumentException("Đơn giá gói cước không được vượt quá 999,999,999 VNĐ");
+            }
+            if (item.status() == PlanStatus.ACTIVE && item.slotPrice() != null) {
+                if (item.planType() == PlanType.HOURLY) {
+                    activeHourlyPrice = item.slotPrice();
+                } else if (item.planType() == PlanType.DAILY) {
+                    activeDailyPrice = item.slotPrice();
+                }
+            }
+        }
+        if (activeHourlyPrice != null && activeDailyPrice != null && activeHourlyPrice.compareTo(activeDailyPrice) >= 0) {
+            throw new IllegalArgumentException("Đơn giá gói thuê theo giờ không được lớn hơn hoặc bằng đơn giá gói thuê theo ngày");
+        }
 
         for (UpdateRentalPlansRequest.PlanItemRequest item : request.plans()) {
             if (item.status() == PlanStatus.ACTIVE) {
