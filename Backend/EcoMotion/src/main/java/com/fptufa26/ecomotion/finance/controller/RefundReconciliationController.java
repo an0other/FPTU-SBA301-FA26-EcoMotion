@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import com.fptufa26.ecomotion.finance.dto.response.RefundResponse;
 
 @RestController
 @RequiredArgsConstructor
@@ -19,7 +20,7 @@ public class RefundReconciliationController {
     private final RefundReconciliationService reviews;
     private final RefundService refunds;
     @GetMapping
-    public ApiResponse<List<com.fptufa26.ecomotion.finance.dto.response.RefundResponse>> list(@AuthenticationPrincipal SecurityUser user) {
+    public ApiResponse<List<RefundResponse>> list(@AuthenticationPrincipal SecurityUser user) {
         return ApiResponse.success(refunds.listRefundsForProvider(user.getUserId()));
     }
     @PostMapping("/{id}/reconcile")

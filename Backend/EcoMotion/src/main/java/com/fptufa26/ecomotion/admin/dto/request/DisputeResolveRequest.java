@@ -24,4 +24,7 @@ public class DisputeResolveRequest {
     private BigDecimal refundAwardTotal;
 
     private String tripEndAction;
+
+    /** Khiếu nại giờ kết thúc, phán quyết ACCEPT_RENTER_TIME: giờ kết thúc đúng do admin xác minh. */
+    private java.time.Instant correctedEndAt;
 }

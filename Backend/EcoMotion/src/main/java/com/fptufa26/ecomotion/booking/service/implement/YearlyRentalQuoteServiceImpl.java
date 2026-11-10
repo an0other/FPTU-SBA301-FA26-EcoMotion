@@ -14,17 +14,18 @@ import java.util.ArrayList;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 
 @Service
 public class YearlyRentalQuoteServiceImpl implements YearlyRentalQuoteService {
     private final BookingRepository bookings;
     private final BookingPolicySnapshotRepository snapshots;
     private final BigDecimal roundingUnit;
-    private final com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService ledger;
+    private final BookingPaymentLedgerService ledger;
 
     @org.springframework.beans.factory.annotation.Autowired
     public YearlyRentalQuoteServiceImpl(BookingRepository bookings,
-            BookingPolicySnapshotRepository snapshots, com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService ledger,
+            BookingPolicySnapshotRepository snapshots, BookingPaymentLedgerService ledger,
             @Value("${booking.yearly.rounding-unit:100000}") BigDecimal roundingUnit) {
         if (roundingUnit.signum() <= 0) throw new IllegalArgumentException("Invalid yearly rounding unit");
         this.bookings = bookings;

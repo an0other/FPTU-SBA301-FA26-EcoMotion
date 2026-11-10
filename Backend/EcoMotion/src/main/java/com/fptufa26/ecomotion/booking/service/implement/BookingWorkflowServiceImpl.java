@@ -29,12 +29,16 @@ import com.fptufa26.ecomotion.finance.enums.RefundStatus;
 import java.util.Comparator;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import com.fptufa26.ecomotion.booking.service.BookingPaymentStateService;
+import com.fptufa26.ecomotion.dispute.entity.Dispute;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.finance.entity.RefundRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +49,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     private final BookingRepository bookings;
     private final DriverAssignmentRepository assignments;
     private final BookingPaymentLedgerService ledger;
-    private final com.fptufa26.ecomotion.booking.service.BookingPaymentStateService paymentStates;
+    private final BookingPaymentStateService paymentStates;
     private final ProviderBookingService providerBookings;
     private final BookingNotificationService notifications;
     private final RefundService refunds;
@@ -55,6 +59,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     private final EntityManager entityManager;
     private final Clock clock;
     private final TripEndConfirmationService endConfirmations;
+    private final RentalPricingService rentalPricing;
 
     @Override
     public BookingWorkflowResponse getWorkflow(Long currentUserId, String bookingCode) {
@@ -98,12 +103,12 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         return new BookingWorkflowResponse(booking.getBookingCode(), booking.getStatus(), payment, driver, trip, settlement,
                 paid, returned, pendingRefund, refunds.refundableAmount(currentUserId, booking.getBookingCode()), remaining,
                 booking.getPickupTime(), booking.getAssignmentExpiresAt(), needsDriver,
-                provider && MUTABLE.contains(booking.getStatus()), nextAction(booking, provider, payment, settlement, needsDriver, proposal),
+                provider && MUTABLE.contains(booking.getStatus()), nextAction(booking, provider, payment, settlement, needsDriver, proposal, refundRows),
                 proposal, feedback, refundRows, booking.getUpdatedAt(),
                 disputes.getDisputesByBookingId(booking.getId()).stream()
-                    .sorted(Comparator.comparing(com.fptufa26.ecomotion.dispute.entity.Dispute::getCreatedAt).reversed())
+                    .sorted(Comparator.comparing(Dispute::getCreatedAt).reversed())
                     .map(d -> {
-                        var ids = d.getRelatedRefunds().stream().map(com.fptufa26.ecomotion.finance.entity.RefundRequest::getId).sorted().toList();
+                        var ids = d.getRelatedRefunds().stream().map(RefundRequest::getId).sorted().toList();
                         var linked = refundRows.stream().filter(r -> ids.contains(r.id())).toList();
                         return new DisputeResponse(d.getId(), d.getCategory(), d.getCharge() == null ? null : d.getCharge().getId(),
                             d.getCharge() == null ? null : d.getCharge().getDescription(), d.getDescription(), d.getEvidenceUrlList(),
@@ -126,7 +131,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     public OperationalResolutionResponse proposeAlternative(Long userId, String code, ResolveOperationalRiskRequest request) {
         Booking booking = booking(code, true);
         User user = participant(userId, booking);
-        if (booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+        if (booking.getPlan().getPlanType() == PlanType.YEARLY) {
             throw new ConflictException("Gói năm dùng quy trình hợp đồng và đổi xe riêng");
         }
 
@@ -148,8 +153,16 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         } else if (request.resolution() == OperationalResolutionType.RESCHEDULE) {
             if (request.newPickupTime() == null || !request.newPickupTime().isAfter(clock.instant().plus(Duration.ofHours(1))))
                 throw new IllegalArgumentException("Giờ nhận mới phải sau hiện tại ít nhất 1 giờ");
+        } else if (request.resolution() == OperationalResolutionType.OTHER) {
+            if (request.reason().trim().length() < 10)
+                throw new IllegalArgumentException("Phương án khác cần mô tả cụ thể ít nhất 10 ký tự");
         } else throw new IllegalArgumentException("Phương án không hợp lệ");
         OperationalProposal current = booking.getOperationalProposal();
+        if (current == null || current.getRespondedAt() != null) {
+            // Never trust the vehicle status the UI displayed: re-check the booking window on the server.
+            // (A still-pending proposal is handled just below: idempotent repeat, or rejected as an overwrite.)
+            providerBookings.requireProposalTargetReady(userId, code, request);
+        }
         if (current != null && current.getRespondedAt() == null) {
             if (current.getResolution() == request.resolution() && Objects.equals(current.getVehicleId(), request.replacementVehicleId())
                     && Objects.equals(current.getPickupTime(), request.newPickupTime()) && current.getReason().equals(request.reason().trim()))
@@ -176,7 +189,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         else if ("REJECT".equals(request.action())) accept = false;
         else throw new IllegalArgumentException("Phản hồi phải là ACCEPT hoặc REJECT");
         OperationalProposal proposal = booking.getOperationalProposal();
-        if (proposal == null || !proposal.getId().equals(id)) throw new ConflictException("Đề xuất đã thay đổi; hãy tải lại đơn");
+        if (proposal == null || !proposal.getId().equals(id)) throw new ConflictException("Đề xuất đã thay đổi, vui lòng tải lại trang.");
         if (proposal.getRespondedAt() != null) {
             if (Objects.equals(proposal.getRespondedBy(), userId) && Boolean.TRUE.equals(proposal.getAccepted()) == accept)
                 return getWorkflow(userId, code);
@@ -184,6 +197,13 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         }
         if (!MUTABLE.contains(booking.getStatus())) throw new ConflictException("Đề xuất không còn áp dụng cho trạng thái hiện tại");
         if (request.reason() != null && request.reason().length() > 500) throw new IllegalArgumentException("Lý do tối đa 500 ký tự");
+        // B1: xe thay thế chất lượng thấp hơn chỉ được đổi khi khách xác nhận rõ; không tự động đổi.
+        if (accept && proposal.getResolution() == OperationalResolutionType.CHANGE_VEHICLE) {
+            var notes = lowerQualityNotes(booking, proposal);
+            if (!notes.isEmpty() && !Boolean.TRUE.equals(request.acknowledgeLowerQuality()))
+                throw new ConflictException("Xe thay thế có chất lượng thấp hơn (" + String.join("; ", notes)
+                        + "). Cần khách xác nhận đồng ý trước khi đổi xe");
+        }
         respond(booking, userId, accept, request.reason());
         proposal = booking.getOperationalProposal();
         if (accept) {
@@ -194,6 +214,13 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         }
         bookings.saveAndFlush(booking); notifications.changed(booking, "OPERATIONAL_PROPOSAL_CHANGED");
         return getWorkflow(userId, code);
+    }
+
+    private List<String> lowerQualityNotes(Booking booking, OperationalProposal proposal) {
+        if (proposal.getResolution() != OperationalResolutionType.CHANGE_VEHICLE || proposal.getVehicleId() == null) return List.of();
+        return vehicles.findVehicleById(proposal.getVehicleId())
+                .map(v -> com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.qualityDowngrades(booking.getVehicle(), v))
+                .orElse(List.of());
     }
 
     private void respond(Booking booking, Long userId, boolean accepted, String reason) {
@@ -247,7 +274,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
 
     private BigDecimal sum(List<PaymentTransaction> payments, PaymentDirection direction, PaymentStatus status, PaymentType type) {
         return payments.stream().filter(t -> t.getDirection() == direction && t.getStatus() == status && (type == null || t.getType() == type)
-                        && t.getVerificationMethod() != com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.MOCK_SIMULATED)
+                        && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -259,17 +286,44 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         String status = proposal.getRespondedAt() == null ? MUTABLE.contains(booking.getStatus()) ? "PENDING" : "EXPIRED"
                 : Boolean.TRUE.equals(proposal.getAccepted()) ? "ACCEPTED"
                 : Objects.equals(proposal.getRespondedBy(), proposal.getCreatedBy()) ? "WITHDRAWN" : "REJECTED";
+        var quality = lowerQualityNotes(booking, proposal);
+        // Đã đổi: giá xe mới lấy từ bản chốt trên booking. Chưa đổi: chỉ báo hợp đồng, khách không bị thu thêm.
+        boolean changed = "ACCEPTED".equals(status) && proposal.getResolution() == OperationalResolutionType.CHANGE_VEHICLE
+                && booking.getVehicleChangeNewAmount() != null;
+        String current = changed ? vehicles.findVehicleById(booking.getPreviousVehicleId())
+                .map(v -> v.getBrand() + " " + v.getModel() + " · " + v.getLicensePlate()).orElse(null)
+                : booking.getVehicle().getBrand() + " " + booking.getVehicle().getModel() + " · " + booking.getVehicle().getLicensePlate();
+        // Đang chờ khách: trả sẵn ước tính giá xe mới và khoản giảm trừ (cùng công thức lúc đổi) để khách thấy trước khi quyết định.
+        BigDecimal proposedAmount = changed ? booking.getVehicleChangeNewAmount() : null;
+        BigDecimal reduction = changed ? booking.vehicleChangeCredit() : null;
+        if (!changed && "PENDING".equals(status) && proposal.getResolution() == OperationalResolutionType.CHANGE_VEHICLE
+                && proposal.getVehicleId() != null && booking.getPlannedEndAt() != null && booking.getPickupTime() != null) {
+            try {
+                proposedAmount = rentalPricing.rentalAmountFor(proposal.getVehicleId(), booking.getPickupTime(), booking.getPlannedEndAt());
+                reduction = com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.discount(booking.getTotalAmount(), proposedAmount);
+            } catch (RuntimeException e) {
+                proposedAmount = null; reduction = null; // không đủ dữ liệu giá: không hiển thị ước tính, không làm hỏng việc đọc workflow
+            }
+        }
         return new BookingWorkflowResponse.Proposal(proposal.getId(), proposal.getResolution(), proposal.getVehicleId(), vehicle,
-                proposal.getPickupTime(), proposal.getReason(), status, proposal.getCreatedAt(), proposal.getRespondedAt(), proposal.getResponseReason());
+                proposal.getPickupTime(), proposal.getReason(), status, proposal.getCreatedAt(), proposal.getRespondedAt(), proposal.getResponseReason(),
+                current, !quality.isEmpty(), quality, booking.getTotalAmount(), proposedAmount, reduction);
     }
 
-    private String nextAction(Booking booking, boolean provider, String payment, String settlement, boolean needsDriver, BookingWorkflowResponse.Proposal proposal) {
+    private String nextAction(Booking booking, boolean provider, String payment, String settlement, boolean needsDriver, BookingWorkflowResponse.Proposal proposal, List<RefundResponse> refundRows) {
         if (Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW, BookingStatus.REJECTED).contains(booking.getStatus())
                 && "DISPUTED".equals(settlement)) {
             return "REFUNDED".equals(payment)
                     ? "Nhà xe đã xác nhận chuyển khoản hoàn tiền theo chính sách. Yêu cầu xem xét của bạn vẫn đang mở và được xử lý riêng; kiểm tra tài khoản nhận tiền và biên lai."
                     : "Đơn đã hủy. Yêu cầu xem xét của bạn đang được xử lý; theo dõi tiến trình hoàn tiền và phản hồi của bộ phận hỗ trợ.";
         }
+        boolean needsRefundAccount = !provider
+                && Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus())
+                && refundRows.stream().anyMatch(r -> r.refundMethod() != PaymentMethod.VNPAY
+                    && r.status() != RefundStatus.REFUNDED && r.status() != RefundStatus.REJECTED
+                    && (r.recipientAccountNumber() == null || r.recipientAccountNumber().isBlank()));
+        if (needsRefundAccount)
+            return "Nhập tài khoản nhận hoàn để nhà xe chuyển khoản hoàn tiền theo chính sách.";
         if ("REFUNDED".equals(payment) && Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus()))
             return "Nhà xe đã xác nhận chuyển khoản hoàn tiền theo chính sách. Bạn có thể kiểm tra tài khoản nhận tiền và biên lai hoàn tiền.";
         if ("RECONCILIATION_REQUIRED".equals(payment)) return "Tiền đã được ghi nhận nhưng đơn cần đối soát. Không thanh toán lại; liên hệ nhà xe hoặc hỗ trợ để xử lý tiền đã nhận.";
@@ -281,13 +335,13 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         if ("VERIFYING".equals(payment)) return "Đang xác minh thanh toán với máy chủ. Không thanh toán lại trong lúc chờ kết quả.";
         return switch (booking.getStatus()) {
             case PENDING -> provider ? "Xem yêu cầu để chấp nhận hoặc từ chối." : "Chờ nhà xe duyệt. Bạn chưa cần thanh toán cọc.";
-            case ACCEPTED -> booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+            case ACCEPTED -> booking.getPlan().getPlanType() == PlanType.YEARLY
                     ? provider
                         ? "Chờ người thuê tải hợp đồng đã ký lên trong thời gian giữ xe."
                         : "Tải hợp đồng đã ký lên để tạo yêu cầu thanh toán trả trước."
                     : provider ? "Chờ khách thanh toán trong thời gian giữ lịch."
                         : "Thanh toán cọc trước khi hết thời gian giữ lịch.";
-            case AWAITING_DEPOSIT -> booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+            case AWAITING_DEPOSIT -> booking.getPlan().getPlanType() == PlanType.YEARLY
                     ? provider ? "Chờ người thuê thanh toán khoản trả trước."
                         : "Thanh toán khoản trả trước để xác nhận lịch thuê năm."
                     : provider ? "Chờ khách thanh toán trong thời gian giữ lịch."

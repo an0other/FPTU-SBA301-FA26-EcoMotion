@@ -64,6 +64,13 @@ public class YearlyWorkflow {
     private BigDecimal depositHeld = BigDecimal.ZERO;
     @Column(precision = 14, scale = 2)
     private BigDecimal depositDeduction = BigDecimal.ZERO;
+    /** Giảm trừ do đổi xe rẻ hơn, tính lại từ đầu mỗi lần lập quyết toán nên không cộng dồn. */
+    @Column(precision = 14, scale = 2)
+    private BigDecimal vehicleChangeDiscount = BigDecimal.ZERO;
+
+    public BigDecimal getVehicleChangeDiscount() {
+        return vehicleChangeDiscount == null ? BigDecimal.ZERO : vehicleChangeDiscount;
+    }
     @Column(precision = 14, scale = 2)
     private BigDecimal balanceDue = BigDecimal.ZERO;
     @Column(precision = 14, scale = 2)

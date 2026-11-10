@@ -54,11 +54,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
+import com.fptufa26.ecomotion.booking.service.DriverSelectionService;
+import com.fptufa26.ecomotion.user.service.DriverStatusService;
+import com.fptufa26.ecomotion.location.service.MapLocationService;
+import com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException;
+import com.fptufa26.ecomotion.booking.config.OptimizationProperties;
 
 @Service
 @RequiredArgsConstructor
 public class DriverOptimizationServiceImpl implements DriverOptimizationService {
-    private final com.fptufa26.ecomotion.location.service.MapLocationService roadMaps;
+    private final MapLocationService roadMaps;
 
     private static final Logger log = LoggerFactory.getLogger(DriverOptimizationServiceImpl.class);
 
@@ -83,11 +89,11 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
     private final MapGeocodingService mapGeocodingService;
     private final NotificationStreamService notificationStreamService;
     private final Clock clock;
-    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
-    private final com.fptufa26.ecomotion.booking.config.OptimizationProperties optimizationProperties;
-    private final com.fptufa26.ecomotion.booking.service.DriverSelectionService driverSelectionService;
+    private final BookingNotificationService bookingNotificationService;
+    private final OptimizationProperties optimizationProperties;
+    private final DriverSelectionService driverSelectionService;
     private final DriverAvailabilityService driverAvailabilityService;
-    private final com.fptufa26.ecomotion.user.service.DriverStatusService driverStatusService;
+    private final DriverStatusService driverStatusService;
 
     @Override
     @Transactional(readOnly = true)
@@ -669,7 +675,7 @@ public class DriverOptimizationServiceImpl implements DriverOptimizationService 
             var route=roadMaps.route(driverLat,driverLon,pickupPoint.latitude(),pickupPoint.longitude());
             if(route==null) return new DistanceAndEta(null,null,"Chưa có tuyến ô tô hợp lệ");
             return new DistanceAndEta(route.distanceMeters()/1000.0,(int)Math.ceil(route.durationSeconds()/60.0),source+" · VIETMAP đường bộ");
-        } catch(com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException | IllegalArgumentException ex) {
+        } catch(MapLocationUnavailableException | IllegalArgumentException ex) {
             return new DistanceAndEta(null,null,"Định tuyến ô tô chưa khả dụng; có thể phân công thủ công sau khi kiểm tra");
         }
     }

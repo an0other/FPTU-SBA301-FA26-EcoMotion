@@ -3,8 +3,6 @@ package com.fptufa26.ecomotion.finance.service.implement;
 import com.fptufa26.ecomotion.booking.enums.*;
 import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
-import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
-import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
 import com.fptufa26.ecomotion.finance.enums.*;
 import com.fptufa26.ecomotion.finance.repository.*;
 import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
@@ -13,8 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Set;
+import com.fptufa26.ecomotion.dispute.service.DisputeQueryService;
 
 @Service
 @RequiredArgsConstructor
@@ -22,7 +20,7 @@ public class CancellationClosureServiceImpl implements CancellationClosureServic
     private final BookingPaymentLedgerService ledger;
     private final RefundRequestRepository refunds;
     private final PaymentRequestRepository requests;
-    private final DisputeRepository disputes;
+    private final org.springframework.beans.factory.ObjectProvider<DisputeQueryService> disputeQueries;
     private final BookingNotificationService notifications;
 
     @Override
@@ -67,7 +65,7 @@ public class CancellationClosureServiceImpl implements CancellationClosureServic
                 || t.getDirection() == PaymentDirection.IN && RefundMath.unapplied(t.getProcessingNote()));
         open |= requests.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream().anyMatch(r ->
                 Set.of(PaymentRequestStatus.PROOF_SUBMITTED, PaymentRequestStatus.REVIEW_REQUIRED).contains(r.getStatus()));
-        open |= disputes.existsByBooking_IdAndStatusIn(bookingId, List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
+        open |= disputeQueries.getObject().hasActiveDispute(bookingId);
         var next = open ? BookingStatus.CANCELLATION_REVIEW : BookingStatus.CANCELLED;
         if (booking.getStatus() != next) {
             booking.setStatus(next);

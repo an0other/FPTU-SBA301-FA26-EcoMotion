@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { providerService } from '../../services/providerService'
 import { providerBookingService } from '../../services/providerBookingService'
 import { vehicleService } from '../../services/vehicleService'
-import { vietnamInputToInstant } from '../../utils/bookingWorkflow'
+import { minRescheduleInput, validateRescheduleInput } from '../../utils/bookingWorkflow'
 import { overlapsOccupied } from '../../utils/bookingAvailability'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
+import { formatCurrency } from '../../utils/formatCurrency'
 
 const SLOT_TYPE_LABELS = { BOOKED: 'Đã có chuyến', MAINTENANCE: 'Bảo trì', BLOCKED: 'Bị khóa' }
 
@@ -12,8 +13,12 @@ function slotLabel(slot) {
   return `${formatBookingWhen(slot.startAt)} → ${formatBookingWhen(slot.endAt)} · ${SLOT_TYPE_LABELS[slot.type] ?? slot.type}`
 }
 
-function safeInstant(value) {
-  try { return vietnamInputToInstant(value) } catch { return null }
+function formatDurationMs(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return 'Chưa xác định'
+  const totalHours = Math.round(ms / 3600000)
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  return [days ? `${days} ngày` : '', hours ? `${hours} giờ` : ''].filter(Boolean).join(' ') || '0 giờ'
 }
 
 export default function OperationalRiskPanel({ booking, risk, workflow, onSuccess }) {
@@ -30,6 +35,12 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
   // Lịch xe: lưu kèm khóa khoảng thời gian để không dùng kết quả của khoảng cũ.
   const [vehicleAvailability, setVehicleAvailability] = useState({})
   const [rescheduleAvailability, setRescheduleAvailability] = useState(null)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(timer)
+  }, [])
 
   const pendingProposal = workflow?.proposal?.status === 'PENDING'
   const awaitingDeposit = booking?.status === 'AWAITING_DEPOSIT' || booking?.status === 'ACCEPTED'
@@ -44,7 +55,9 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
   const durationMs = hasWindow ? new Date(rentalEnd).getTime() - new Date(rentalStart).getTime() : 0
 
   // Dời lịch: khoảng mới = giờ nhận mới + đúng độ dài khoảng thuê hiện tại.
-  const newStart = resolution === 'RESCHEDULE' && pickup ? safeInstant(pickup) : null
+  // B6: giờ nhận mới phải sau hiện tại hơn 1 giờ (giờ Việt Nam, cùng quy tắc với backend); `now` được cập nhật định kỳ.
+  const pickupCheck = resolution === 'RESCHEDULE' ? validateRescheduleInput(pickup, now) : null
+  const newStart = pickupCheck?.valid ? pickupCheck.instant : null
   const newEnd = newStart && durationMs > 0 ? new Date(new Date(newStart).getTime() + durationMs).toISOString() : null
   const rescheduleKey = newStart && newEnd ? `${newStart}|${newEnd}` : null
 
@@ -124,18 +137,85 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
     event.preventDefault()
     if (submitting) return
     if (resolution === 'CANCEL_AND_REFUND' && !window.confirm('Hủy đơn và bắt đầu xử lý hoàn tiền theo chính sách? Thao tác này chưa tự chuyển tiền vào tài khoản khách.')) return
+    // B6: kiểm tra lại đúng lúc gửi, phòng trường hợp mở form lâu nên giờ chọn đã quá gần hiện tại.
+    let newPickupTime
+    if (resolution === 'RESCHEDULE') {
+      const check = validateRescheduleInput(pickup, Date.now())
+      if (!check.valid) {
+        setNow(Date.now())
+        setError(check.message || 'Chọn giờ nhận xe mới hợp lệ.')
+        return
+      }
+      newPickupTime = check.instant
+    }
     setSubmitting(true)
     setError('')
     try {
       const result = await providerBookingService.resolveOperationalRisk(booking.bookingCode, {
         resolution, reason: reason.trim(),
         ...(resolution === 'CHANGE_VEHICLE' ? { replacementVehicleId: Number(vehicleId) } : {}),
-        ...(resolution === 'RESCHEDULE' ? { newPickupTime: vietnamInputToInstant(pickup) } : {}),
+        ...(resolution === 'RESCHEDULE' ? { newPickupTime } : {}),
       })
       await onSuccess(result)
       setOpen(false)
     } catch (err) { setError(err.message || 'Không thể lưu phương án xử lý.') }
     finally { setSubmitting(false) }
+  }
+
+  // Đơn chưa cọc: không có gì để "đề xuất phương án" — chỉ cần huỷ đơn kèm lý do, không phát sinh hoàn tiền.
+  const simpleCancel = awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver && !workflow?.proposal
+    && !(Number(workflow?.confirmedPaid) > 0)
+  if (simpleCancel) {
+    const cancelUnpaid = async (event) => {
+      event.preventDefault()
+      if (submitting || !reason.trim()) return
+      setSubmitting(true)
+      setError('')
+      try {
+        const result = await providerBookingService.resolveOperationalRisk(booking.bookingCode, {
+          resolution: 'CANCEL_AND_REFUND', reason: reason.trim(),
+        })
+        await onSuccess(result)
+        setOpen(false)
+      } catch (err) { setError(err.message || 'Không thể huỷ đơn.') }
+      finally { setSubmitting(false) }
+    }
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-slate-900">Không nhận được chuyến này?</h2>
+            <p className="mt-0.5 text-xs text-slate-600">
+              Khách chưa đặt cọc nên không phát sinh hoàn tiền. Huỷ đơn sẽ giải phóng lịch xe và báo cho khách.
+            </p>
+          </div>
+          {!open && (
+            <button type="button" onClick={() => setOpen(true)}
+              className="h-10 shrink-0 rounded-lg border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 hover:bg-rose-50">
+              Huỷ đơn (khách chưa cọc)
+            </button>
+          )}
+        </div>
+        {open && (
+          <form onSubmit={cancelUnpaid} className="mt-3 space-y-2">
+            <label className="block text-xs font-semibold text-slate-700">Lý do huỷ (khách sẽ thấy)
+              <textarea required maxLength={500} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={submitting}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
+            </label>
+            <p className="text-[11px] text-amber-800">Nếu khách vừa báo đã chuyển khoản, hãy kiểm tra sao kê trước khi huỷ.</p>
+            {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setOpen(false)} disabled={submitting}
+                className="h-9 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700">Không huỷ</button>
+              <button type="submit" disabled={submitting || !reason.trim()}
+                className="h-9 rounded-lg bg-rose-700 px-4 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-50">
+                {submitting ? 'Đang huỷ...' : 'Xác nhận huỷ đơn'}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    )
   }
 
   const windowText = hasWindow
@@ -148,8 +228,21 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
         <div className="min-w-0">
           <h2 className="text-sm font-bold">{panelTitle}</h2>
           <p className="mt-0.5 line-clamp-2 text-xs text-amber-900">
-            {risk?.message || 'Chọn phương án xử lý và gửi cho khách thuê.'}
+            {(risk?.userMessage || risk?.message) || 'Chọn phương án xử lý và gửi cho khách thuê.'}
           </p>
+          {risk?.atRisk && risk?.blockingBookingCode ? (
+            <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs text-amber-950 sm:grid-cols-3">
+              <div><dt className="text-amber-800">Chuyến đang giữ xe</dt><dd className="font-mono font-semibold">{risk.blockingBookingCode}</dd></div>
+              <div><dt className="text-amber-800">Lịch trả xe của chuyến đó</dt><dd className="font-semibold">{formatBookingWhen(risk.blockingPlannedEndAt)}</dd></div>
+              <div>
+                <dt className="text-amber-800">Dự kiến sẵn sàng</dt>
+                <dd className="font-semibold">
+                  {formatBookingWhen(risk.estimatedReadyAt)}
+                  {risk.estimatedDelayMinutes ? <span className="text-red-700"> · trễ ~{risk.estimatedDelayMinutes} phút</span> : null}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
         </div>
         <button
           type="button"
@@ -186,7 +279,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
             <p className="mt-1">
               {awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver
                 ? 'Khách chưa cọc hoặc chưa gửi biên lai. Nếu nhà xe không nhận chuyến, chọn Hủy và hoàn tiền — không dùng nút Từ chối ở tab Tài chính khi chưa có biên lai.'
-                : (risk?.message || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.')}
+                : ((risk?.userMessage || risk?.message) || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.')}
             </p>
             {pendingProposal && <p className="mt-2 text-xs">Đang chờ khách phản hồi; không thể gửi đè một đề xuất khác. Nếu không tiếp tục cung cấp dịch vụ, nhà xe có thể hủy và bắt đầu hoàn tiền.</p>}
 
@@ -194,14 +287,19 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
               <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900">
                 Phương án
                 <select aria-label="Phương án xử lý" value={resolution} onChange={e => setResolution(e.target.value)} disabled={submitting} className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
-                  <option value="CHANGE_VEHICLE">Đề xuất đổi xe</option><option value="RESCHEDULE">Đề xuất dời lịch</option><option value="CANCEL_AND_REFUND">Hủy và hoàn tiền</option>
+                  <option value="CHANGE_VEHICLE">Đề xuất đổi xe</option><option value="RESCHEDULE">Đề xuất dời lịch</option><option value="CANCEL_AND_REFUND">Hủy và hoàn tiền</option><option value="OTHER">Khác (tự mô tả phương án)</option>
                 </select>
               </label>
+              {resolution === 'OTHER' && (
+                <p className="self-end text-[11px] text-amber-900 sm:col-span-1">
+                  Mô tả cụ thể phương án ở ô bên dưới (tối thiểu 10 ký tự). Khách đồng ý thì phương án được ghi nhận; hệ thống không tự đổi xe hay giờ.
+                </p>
+              )}
 
               {resolution === 'RESCHEDULE' && (
                 <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900">
                   Giờ nhận xe mới
-                  <input aria-label="Giờ nhận xe mới" type="datetime-local" required value={pickup} onChange={e => setPickup(e.target.value)} disabled={submitting} className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  <input aria-label="Giờ nhận xe mới" type="datetime-local" required min={minRescheduleInput(now)} aria-invalid={Boolean(pickup && !pickupCheck?.valid)} value={pickup} onChange={e => { setPickup(e.target.value); setNow(Date.now()) }} disabled={submitting} className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
                 </label>
               )}
 
@@ -216,7 +314,10 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
                     {vehicles.map((vehicle) => {
                       const status = vehicleStatus(vehicle.id)
                       const entry = vehicleAvailability[vehicle.id]
-                      const selectable = status === 'free' && !submitting
+                      // Quy ước hệ thống: 1 chỗ dành cho tài xế => cần số chỗ >= số khách + 1 (Backend vẫn kiểm tra lại).
+                      const seatsNeeded = (booking?.passengerCount ?? 0) + 1
+                      const enoughSeats = vehicle.seatCount == null || vehicle.seatCount >= seatsNeeded
+                      const selectable = status === 'free' && enoughSeats && !submitting
                       const checked = String(vehicleId) === String(vehicle.id)
                       return (
                         <label
@@ -238,6 +339,8 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
                             <div className="font-semibold text-slate-900">
                               {vehicle.licensePlate} · {vehicle.brand} {vehicle.model}
                             </div>
+                            <div className="text-[11px] text-slate-500">{vehicle.seatCount ?? '?'} chỗ</div>
+                            {!enoughSeats && <div className="text-xs font-semibold text-rose-700">Không đủ chỗ (cần ít nhất {seatsNeeded} chỗ: {booking?.passengerCount} khách + tài xế)</div>}
                             {status === 'loading' && <div className="text-xs text-slate-500">Đang kiểm tra lịch…</div>}
                             {status === 'free' && <div className="text-xs font-semibold text-emerald-700">Trống trong khoảng thuê</div>}
                             {status === 'error' && <div className="text-xs font-semibold text-red-700">Không kiểm tra được lịch xe</div>}
@@ -259,9 +362,25 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
 
               {resolution === 'RESCHEDULE' && (
                 <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-white p-3 text-xs">
+                  <div className="grid grid-cols-1 gap-2 pb-2 sm:grid-cols-2">
+                    <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-2">
+                      <div className="text-[10px] font-bold uppercase text-slate-500">Lịch hiện tại</div>
+                      <div className="mt-0.5 text-slate-800">Nhận: {hasWindow ? formatBookingWhen(rentalStart) : 'Chưa xác định'}</div>
+                      <div className="text-slate-800">Trả: {hasWindow ? formatBookingWhen(rentalEnd) : 'Chưa xác định'}</div>
+                      <div className="text-slate-600">Thời lượng thuê: {formatDurationMs(durationMs)}</div>
+                      <div className="text-slate-600">Giá thuê: {booking?.totalAmount != null ? formatCurrency(booking.totalAmount) : 'Chưa xác định'}</div>
+                    </div>
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2">
+                      <div className="text-[10px] font-bold uppercase text-slate-500">Lịch đề xuất</div>
+                      <div className="mt-0.5 text-slate-800">Nhận mới: {newStart ? formatBookingWhen(newStart) : 'Chọn giờ nhận xe mới'}</div>
+                      <div className="text-slate-800">Trả mới (tự tính): {newEnd ? formatBookingWhen(newEnd) : '—'}</div>
+                      <div className="text-slate-600">Thời lượng thuê: {formatDurationMs(durationMs)} (giữ nguyên)</div>
+                      <div className="text-slate-600">Giá thuê: {booking?.totalAmount != null ? `${formatCurrency(booking.totalAmount)} (giữ nguyên)` : 'Giữ nguyên'}</div>
+                    </div>
+                  </div>
                   <div className="font-semibold text-amber-900">Lịch xe hiện tại trong khoảng giờ mới</div>
                   {!pickup && <p className="mt-1 text-slate-600">Chọn giờ nhận xe mới để kiểm tra lịch.</p>}
-                  {pickup && !newStart && <p className="mt-1 text-slate-600">Giờ chưa hợp lệ.</p>}
+                  {pickup && !newStart && <p role="alert" className="mt-1 font-semibold text-rose-700">{pickupCheck?.message || 'Giờ chưa hợp lệ.'}</p>}
                   {newStart && !rescheduleStatus && <p className="mt-1 text-slate-600">Đang kiểm tra lịch xe…</p>}
                   {rescheduleStatus?.status === 'free' && <p className="mt-1 font-semibold text-emerald-700">Xe trống trong khoảng giờ mới.</p>}
                   {rescheduleStatus?.status === 'error' && <p className="mt-1 font-semibold text-red-700">Không kiểm tra được lịch xe.</p>}
@@ -278,7 +397,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900 sm:col-span-2">
                 <span className="flex items-center justify-between">
-                  <span>Lý do</span>
+                  <span>{resolution === 'OTHER' ? 'Phương án đề xuất cho khách' : 'Lý do'}</span>
                   <span className="font-normal text-amber-800">{reason.length}/500</span>
                 </span>
                 <textarea aria-label="Lý do xử lý" required maxLength={500} rows={2} value={reason} onChange={e => setReason(e.target.value)} disabled={submitting} className="w-full resize-y rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
@@ -290,6 +409,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
                   disabled={
                     submitting
                     || !reason.trim()
+                    || (resolution === 'OTHER' && reason.trim().length < 10)
                     || (pendingProposal && resolution !== 'CANCEL_AND_REFUND')
                     || (resolution === 'CHANGE_VEHICLE' && (!vehicleId || loading || selectedVehicleStatus !== 'free'))
                     || (resolution === 'RESCHEDULE' && (!newStart || rescheduleStatus?.status !== 'free'))

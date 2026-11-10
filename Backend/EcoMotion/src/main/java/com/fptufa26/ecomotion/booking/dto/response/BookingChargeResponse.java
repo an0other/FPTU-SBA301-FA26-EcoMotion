@@ -18,8 +18,18 @@ public record BookingChargeResponse(
         String evidenceUrl,
         String createdByName,
         Instant createdAt,
-        ChargeConfirmationStatus confirmationStatus
+        ChargeConfirmationStatus confirmationStatus,
+        /** Ai miễn khoản này: PROVIDER_WITHDRAWN (nhà xe rút), ADMIN_DISPUTE (admin phân xử), SYSTEM. */
+        String waivedSource
 ) {
+    public BookingChargeResponse(Long id, ChargeType chargeType, String description, Integer quantity,
+                                 BigDecimal unitPrice, BigDecimal appliedRate, BigDecimal amount, boolean waived,
+                                 String evidenceUrl, String createdByName, Instant createdAt,
+                                 ChargeConfirmationStatus confirmationStatus) {
+        this(id, chargeType, description, quantity, unitPrice, appliedRate, amount, waived, evidenceUrl,
+                createdByName, createdAt, confirmationStatus, null);
+    }
+
     public BookingChargeResponse(Long id, ChargeType chargeType, String description, Integer quantity,
                                  BigDecimal unitPrice, BigDecimal appliedRate, BigDecimal amount, boolean waived,
                                  String evidenceUrl, String createdByName, Instant createdAt) {

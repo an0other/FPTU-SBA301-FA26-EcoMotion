@@ -276,7 +276,7 @@ export default function VehicleDetailPage() {
                   <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-brand-50/50 px-4 py-3">
                     <IconStar className="h-5 w-5 text-amber-500" />
                     <span className="text-xl font-extrabold text-ink">{hasRating ? ratingAvg.toFixed(1) : 'Mới'}</span>
-                    {hasRating && <span className="text-xs text-slate-500">({ratingCount} đánh giá xe)</span>}
+                    {hasRating && <Link to={`/vehicles/${vehicle.id ?? id}/reviews`} className="text-xs font-semibold text-brand-700 hover:underline">({ratingCount} đánh giá xe · Xem tất cả)</Link>}
                   </div>
                 </div>
                 {provider?.depotAddress && <p className="mt-3 flex items-start gap-2 text-sm text-slate-500"><IconMapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />{provider.depotAddress}</p>}

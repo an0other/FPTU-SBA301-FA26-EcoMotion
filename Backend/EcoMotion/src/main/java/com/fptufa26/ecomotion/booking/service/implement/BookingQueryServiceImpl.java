@@ -21,6 +21,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.common.exception.NotFoundException;
+import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
+import com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget;
 
 @Service
 @RequiredArgsConstructor
@@ -28,12 +32,12 @@ public class BookingQueryServiceImpl implements BookingQueryService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget> pendingGatewayPayments(int limit) {
+    public List<PaymentReconciliationTarget> pendingGatewayPayments(int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("Reconciliation batch must be between 1 and 100");
         return paymentTransactionRepository.findByMethodAndStatusAndVnpTxnRefIsNotNullOrderByUpdatedAtAscCreatedAtAsc(
-                com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY, PaymentStatus.PENDING,
+                PaymentMethod.VNPAY, PaymentStatus.PENDING,
                 org.springframework.data.domain.PageRequest.of(0, limit)).stream()
-                .map(t -> new com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget(t.getBooking().getBookingCode(), t.getVnpTxnRef())).toList();
+                .map(t -> new PaymentReconciliationTarget(t.getBooking().getBookingCode(), t.getVnpTxnRef())).toList();
     }
 
     private final BookingRepository bookingRepository;
@@ -46,7 +50,7 @@ public class BookingQueryServiceImpl implements BookingQueryService {
     @Transactional
     public Booking lockBookingForPayment(Long id) {
         Booking booking = entityManager.find(Booking.class, id);
-        if (booking == null) throw new com.fptufa26.ecomotion.common.exception.NotFoundException("Không tìm thấy booking");
+        if (booking == null) throw new NotFoundException("Không tìm thấy booking");
         entityManager.refresh(booking, LockModeType.PESSIMISTIC_WRITE);
         return booking;
     }
@@ -219,19 +223,19 @@ public class BookingQueryServiceImpl implements BookingQueryService {
 
     @Override
     @Transactional(readOnly = true)
-    public boolean existsByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status) {
+    public boolean existsByDriverIdAndStatus(Long driverId, BookingStatus status) {
         return bookingRepository.existsByDriver_IdAndStatus(driverId, status);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<Booking> findFirstByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status) {
+    public Optional<Booking> findFirstByDriverIdAndStatus(Long driverId, BookingStatus status) {
         return bookingRepository.findFirstByDriver_IdAndStatus(driverId, status);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<Booking> findUpcomingDriverBookings(Long driverId, java.util.Collection<com.fptufa26.ecomotion.booking.enums.BookingStatus> statuses, java.time.Instant now) {
+    public List<Booking> findUpcomingDriverBookings(Long driverId, java.util.Collection<BookingStatus> statuses, java.time.Instant now) {
         return bookingRepository.findUpcomingDriverBookings(driverId, statuses, now);
     }
 }

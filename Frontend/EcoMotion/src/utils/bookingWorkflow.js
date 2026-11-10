@@ -32,6 +32,35 @@ export function shouldShowRefundDetailsList(refunds = [], { provider = false } =
   return false
 }
 
+// B4: khách không thấy đề xuất đã bị nhà xe rút hoặc đã hết hiệu lực; nhà xe vẫn thấy lịch sử xử lý.
+export function visibleProposal(proposal, { provider = false } = {}) {
+  if (!proposal) return null
+  if (!provider && (proposal.status === 'WITHDRAWN' || proposal.status === 'EXPIRED')) return null
+  return proposal
+}
+
+// B6: backend (BookingWorkflowServiceImpl) chỉ nhận giờ nhận mới SAU hiện tại hơn 1 giờ (đúng 1 giờ bị từ chối).
+export const MIN_RESCHEDULE_LEAD_MS = 60 * 60 * 1000
+export const RESCHEDULE_LEAD_MESSAGE = 'Giờ nhận mới phải sau hiện tại ít nhất 1 giờ.'
+const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000
+
+/** Giá trị `min` cho input datetime-local (giờ Việt Nam): phút nguyên đầu tiên sau hiện tại + 1 giờ. */
+export function minRescheduleInput(nowMs = Date.now()) {
+  const earliest = Math.floor((nowMs + MIN_RESCHEDULE_LEAD_MS) / 60000) * 60000 + 60000
+  return new Date(earliest + VIETNAM_OFFSET_MS).toISOString().slice(0, 16)
+}
+
+/** Kiểm tra giờ nhận mới (giờ Việt Nam, định dạng datetime-local) theo cùng quy tắc với backend. */
+export function validateRescheduleInput(value, nowMs = Date.now()) {
+  if (!value) return { valid: false, instant: null, message: '' }
+  let instant
+  try { instant = vietnamInputToInstant(value) } catch { return { valid: false, instant: null, message: 'Giờ chưa hợp lệ.' } }
+  if (new Date(instant).getTime() <= nowMs + MIN_RESCHEDULE_LEAD_MS) {
+    return { valid: false, instant: null, message: RESCHEDULE_LEAD_MESSAGE }
+  }
+  return { valid: true, instant, message: '' }
+}
+
 export function vietnamInputToInstant(value) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error('Chọn ngày và giờ hợp lệ theo giờ Việt Nam.')
   const instant = new Date(`${value}:00+07:00`)

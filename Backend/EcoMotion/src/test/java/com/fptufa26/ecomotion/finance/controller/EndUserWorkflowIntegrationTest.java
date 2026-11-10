@@ -27,6 +27,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import com.fptufa26.ecomotion.booking.entity.BookingCharge;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -84,6 +86,29 @@ class EndUserWorkflowIntegrationTest {
                 com.fptufa26.ecomotion.dispute.enums.DisputeStatus.REJECTED,
                 com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE, "Contradictory ruling"))
                 .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    @Test void partialWaiveReducesChargeAndRejectsFullOrZeroReduction() {
+        ready();
+        long[] ids = tx.execute(s -> {
+            var b = em.find(Booking.class, bookingId);
+            var charge = new BookingCharge(); charge.setBooking(b); charge.setChargeType(ChargeType.PARKING);
+            charge.setDescription("Phí gửi xe"); charge.setQuantity(1); charge.setUnitPrice(new BigDecimal("50000"));
+            charge.setAmount(new BigDecimal("50000")); charge.setCreatedBy(b.getRenter().getUser()); em.persist(charge);
+            var opened = disputes.open(b, b.getRenter().getUser(), com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE, charge);
+            return new long[]{charge.getId(), opened.disputeId()};
+        });
+        var partial = com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.PARTIAL_WAIVE;
+        var resolved = com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED;
+        assertThatThrownBy(() -> disputes.resolveDispute(ids[1], adminId, resolved, partial, "Giảm toàn bộ", new BigDecimal("50000")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThatThrownBy(() -> disputes.resolveDispute(ids[1], adminId, resolved, partial, "Thiếu số tiền", null))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        disputes.resolveDispute(ids[1], adminId, resolved, partial, "Chỉ tính nửa phí gửi xe", new BigDecimal("20000"));
+        BookingCharge charge = tx.execute(s -> em.find(BookingCharge.class, ids[0]));
+        assertThat(charge.getAmount()).isEqualByComparingTo("30000");
+        assertThat(charge.isWaived()).isFalse();
+        assertThat(charge.getConfirmationStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
     }
 
     @Test void adminDepositAwardCreatesOnlyMissingRefundAndExposesRulingToParticipants() throws Exception {
@@ -276,19 +301,115 @@ class EndUserWorkflowIntegrationTest {
         long[] driver=ready();optimization.manualAssign(bookingId,driver[0],driver[2]);trips.confirmTrip(driver[1],code());
         trips.arriveAtPickup(driver[1],code());trips.startTrip(driver[1],code());trips.finishTrip(driver[1],code());
     }
-    @Test void driverEndFinalizesTripImmediatelyWithoutRenterConfirmation() {
+    @Test void driverEndMovesToChargesAndOpensTwelveHourRenterWindow() {
         reportTripEnd();
         var b=bookings.findById(bookingId).orElseThrow();
+        // Không chặn luồng: đơn sang bước phụ phí ngay khi tài xế kết thúc.
         assertThat(b.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         assertThat(b.getActualEndAt()).isEqualTo(b.getDriverEndConfirmedAt());
         assertThat(b.getRenterConfirmedAt()).isNull();
         assertThat(b.getEndConfirmationMethod()).isEqualTo("DRIVER");
         var h=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
-        assertThat(h.getState()).isEqualTo("CONFIRMED");
-        assertThat(h.getConfirmationMethod()).isEqualTo("DRIVER");
+        assertThat(h.getState()).isEqualTo("WAITING");
+        assertThat(h.getDeadline()).isEqualTo(b.getDriverEndConfirmedAt().plus(java.time.Duration.ofHours(12)));
         assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(1);
         assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+        // Trong 12 giờ khách khiếu nại được cả chất lượng dịch vụ lẫn giờ kết thúc.
+        assertThat(renterBookings.detail(renterId, code()).disputeCategories()).contains(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.SERVICE_QUALITY,
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED);
+        renterBookings.confirmTripEnd(renterId, code());
+        assertThat(renterBookings.detail(renterId, code()).disputeCategories())
+                .doesNotContain(com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED);
+        var confirmed=endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow();
+        assertThat(confirmed.getState()).isEqualTo("CONFIRMED");
+        assertThat(confirmed.getConfirmationMethod()).isEqualTo("RENTER");
     }
+    /** Đơn đã kết thúc, tài xế báo trễ 3 slot quá giờ; nhà xe đã thêm phí quá giờ 3 slot. */
+    long tripEndedWithOvertime() {
+        reportTripEnd();
+        return tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId);
+            b.setPlannedEndAt(b.getActualEndAt().minus(java.time.Duration.ofMinutes(170)));
+            b.setActualStartAt(b.getActualEndAt().minus(java.time.Duration.ofHours(6)));
+            snapshots.findByBooking_Id(bookingId).ifPresent(p -> { p.setSlotLengthMinutes(60); p.setAllowedOvertimeMinutes(0); });
+            BookingCharge overtime = new BookingCharge(); overtime.setBooking(b); overtime.setChargeType(ChargeType.OVERTIME);
+            overtime.setDescription("Quá giờ 3 slot"); overtime.setQuantity(3); overtime.setUnitPrice(new BigDecimal("100000"));
+            overtime.setAmount(new BigDecimal("300000")); overtime.setCreatedBy(b.getRenter().getUser());
+            overtime.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING);
+            em.persist(overtime);
+            return overtime.getId();
+        });
+    }
+
+    long openEndComplaint() {
+        return renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED, (Long) null, "Tôi trả xe sớm hơn giờ tài xế báo")).disputeId();
+    }
+
+    @Test void acceptingRenterEndTimeSettlesTimeAndReducesOvertimeOnly() {
+        long chargeId = tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        var planned = bookings.findById(bookingId).orElseThrow().getPlannedEndAt();
+        Instant corrected = planned.plus(java.time.Duration.ofMinutes(50));
+        disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null,
+                "GPS cho thấy xe về bãi lúc khách báo", null, "ACCEPT_RENTER_TIME", corrected);
+        assertThat(bookings.findById(bookingId).orElseThrow().getActualEndAt()).isEqualTo(corrected);
+        assertThat(endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow().getState()).isEqualTo("CONFIRMED");
+        BookingCharge overtime = tx.execute(s -> em.find(BookingCharge.class, chargeId));
+        assertThat(overtime.getQuantity()).as("50 phút quá giờ = 1 slot").isEqualTo(1);
+        assertThat(overtime.getAmount()).isEqualByComparingTo("100000");
+        assertThat(overtime.isWaived()).isFalse();
+    }
+
+    @Test void acceptingRenterTimeWithinPlanWaivesOvertimeAsAdmin() {
+        long chargeId = tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        Instant corrected = bookings.findById(bookingId).orElseThrow().getPlannedEndAt().minusSeconds(60);
+        disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null,
+                "Khách trả xe đúng giờ", null, "ACCEPT_RENTER_TIME", corrected);
+        BookingCharge overtime = tx.execute(s -> em.find(BookingCharge.class, chargeId));
+        assertThat(overtime.isWaived()).isTrue();
+        assertThat(overtime.getWaivedSource()).isEqualTo("ADMIN_DISPUTE");
+    }
+
+    @Test void renterTimeLaterThanDriverReportIsRejected() {
+        tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        Instant later = bookings.findById(bookingId).orElseThrow().getActualEndAt().plusSeconds(600);
+        assertThatThrownBy(() -> disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED,
+                null, "Sai giờ", null, "ACCEPT_RENTER_TIME", later)).isInstanceOf(RuntimeException.class);
+    }
+
+    @Test void keepingDriverTimeSettlesWithoutTouchingCharges() {
+        long chargeId = tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        var reported = bookings.findById(bookingId).orElseThrow().getActualEndAt();
+        var resolved = disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.REJECTED, null,
+                "Bằng chứng không đủ", null, "KEEP_DRIVER_TIME", null);
+        assertThat(resolved.getTripEndAction()).isEqualTo("KEEP_DRIVER_TIME");
+        assertThat(bookings.findById(bookingId).orElseThrow().getActualEndAt()).isEqualTo(reported);
+        assertThat(endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow().getState()).isEqualTo("CONFIRMED");
+        assertThat(tx.execute(s -> em.find(BookingCharge.class, chargeId)).getQuantity()).isEqualTo(3);
+    }
+
+    @Test void otherVerdictKeepsComplaintOpenAndWindowPaused() {
+        tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.IN_REVIEW, null,
+                "Chờ nhà xe gửi log GPS", null, null, null);
+        assertThat(endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow().getState()).isEqualTo("PAUSED");
+    }
+
+    @Test void otherComplaintNeedsDescription() {
+        ready();
+        assertThatThrownBy(() -> renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.OTHER, (Long) null, "ngắn"))).isInstanceOf(RuntimeException.class);
+        var opened = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.OTHER, (Long) null, "Tài xế hút thuốc trong xe dù tôi đã nhắc"));
+        assertThat(opened.category()).isEqualTo(com.fptufa26.ecomotion.dispute.enums.DisputeCategory.OTHER);
+    }
+
     @Test void unassignedDriverCannotStartOrEndTrip() {
         long[] assigned = ready(); long[] other = ready();
         optimization.manualAssign(bookingId, assigned[0], assigned[2]);
@@ -344,6 +465,7 @@ class EndUserWorkflowIntegrationTest {
         disputes.resolveDispute(dispute.disputeId(), adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED,
                 com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE, "Evidence confirms no waiting charge");
         providerBookings.finalizeSettlement(providerId, code());
+        renterBookings.confirmTripEnd(renterId, code());
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("SETTLED");
     }
     @Autowired com.fptufa26.ecomotion.booking.service.BookingWorkflowService workflow;
@@ -437,7 +559,7 @@ class EndUserWorkflowIntegrationTest {
             org.springframework.beans.BeanUtils.copyProperties(b.getVehicle(), replacement, "id", "createdAt", "updatedAt");
             replacement.setLicensePlate(UUID.randomUUID().toString().substring(0, 15));
             replacement.setChassisNo(UUID.randomUUID().toString()); replacement.setEngineNo(UUID.randomUUID().toString());
-            replacement.setModel("Accepted replacement"); em.persist(replacement);
+            replacement.setModel("Accepted replacement"); em.persist(replacement); persistPlan(replacement, "100000");
             snapshots.findByBooking_Id(bookingId).orElseThrow().setVehicleName("Original snapshot vehicle");
             return replacement.getId();
         });
@@ -449,6 +571,371 @@ class EndUserWorkflowIntegrationTest {
         workflow.respondToProposal(renterId, code(), workflow.getWorkflow(renterId, code()).proposal().id(), response("ACCEPT"));
         assertThat(renterBookings.detail(renterId, code()).vehicleName()).contains("Accepted replacement");
         assertThat(renterBookings.detail(renterId, code()).totalAmount()).isEqualByComparingTo("100000");
+    }
+
+    @Test void acceptingVehicleChangeWithAssignedDriverMovesBookingAndScheduleTogether() {
+        long[] driver = ready();
+        optimization.manualAssign(bookingId, driver[0], driver[2]);
+        trips.confirmTrip(driver[1], code());
+        long vehicleId = tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId);
+            Vehicle replacement = new Vehicle();
+            org.springframework.beans.BeanUtils.copyProperties(b.getVehicle(), replacement, "id", "createdAt", "updatedAt");
+            replacement.setLicensePlate(UUID.randomUUID().toString().substring(0, 15));
+            replacement.setChassisNo(UUID.randomUUID().toString()); replacement.setEngineNo(UUID.randomUUID().toString());
+            replacement.setModel("Driver replacement"); em.persist(replacement); persistPlan(replacement, "100000");
+            return replacement.getId();
+        });
+        workflow.proposeAlternative(providerId, code(), new com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest(
+                OperationalResolutionType.CHANGE_VEHICLE, vehicleId, null, "Equivalent replacement"));
+        workflow.respondToProposal(renterId, code(), workflow.getWorkflow(renterId, code()).proposal().id(), response("ACCEPT"));
+        var after = bookings.findById(bookingId).orElseThrow();
+        assertThat(after.getVehicle().getId()).isEqualTo(vehicleId);
+        java.util.List<Long> scheduledVehicles = tx.execute(s -> em.createQuery(
+                "select s.vehicle.id from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s where s.booking.id = :id", Long.class)
+                .setParameter("id", bookingId).getResultList());
+        assertThat(scheduledVehicles).containsOnly(vehicleId);
+    }
+
+    // B1: fixture - xe thay thế cần gói giá giờ để tính chênh lệch.
+    void persistPlan(Vehicle v, String price) {
+        RentalPlan plan = new RentalPlan(); plan.setVehicle(v); plan.setPlanType(PlanType.HOURLY);
+        plan.setSlotLengthMinutes(60); plan.setSlotPrice(new BigDecimal(price)); em.persist(plan);
+    }
+
+    long replacementVehicle(String model, int seats) { return replacementVehicle(model, seats, "100000", null); }
+
+    long replacementVehicle(String model, int seats, String hourlyPrice, Integer year) {
+        return tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId);
+            Vehicle replacement = new Vehicle();
+            org.springframework.beans.BeanUtils.copyProperties(b.getVehicle(), replacement, "id", "createdAt", "updatedAt");
+            replacement.setLicensePlate(UUID.randomUUID().toString().substring(0, 15));
+            replacement.setChassisNo(UUID.randomUUID().toString()); replacement.setEngineNo(UUID.randomUUID().toString());
+            replacement.setModel(model); replacement.setSeatCount(seats); if (year != null) replacement.setManufactureYear(year);
+            em.persist(replacement); persistPlan(replacement, hourlyPrice);
+            return replacement.getId();
+        });
+    }
+
+    /** A second booking on {@code vehicleId} in the given state, created directly (as seeded/legacy data would be). */
+    void otherBooking(long vehicleId, BookingStatus status, Instant pickup, Instant plannedEnd) {
+        tx.executeWithoutResult(s -> {
+            Booking base = em.find(Booking.class, bookingId);
+            Booking o = new Booking(); o.setBookingCode(UUID.randomUUID().toString().substring(0, 30).toUpperCase(java.util.Locale.ROOT));
+            o.setRenter(base.getRenter()); o.setVehicle(em.find(Vehicle.class, vehicleId)); o.setPlan(base.getPlan()); o.setStatus(status);
+            o.setPickupTime(pickup); o.setPlannedEndAt(plannedEnd); o.setPickupAddress("Other"); o.setPassengerCount(1);
+            o.setTotalAmount(new BigDecimal("100000")); em.persist(o);
+        });
+    }
+
+    com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest changeVehicle(long vehicleId) {
+        return new com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest(
+                OperationalResolutionType.CHANGE_VEHICLE, vehicleId, null, "Replacement");
+    }
+
+    @Test void acceptWorksForBookingThatHasNoScheduleRowLikeSeededData() {
+        ready();
+        long vehicleId = replacementVehicle("No schedule row", 4);
+        tx.executeWithoutResult(s -> em.createQuery("delete from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s where s.booking.id = :id")
+                .setParameter("id", bookingId).executeUpdate());
+        workflow.proposeAlternative(providerId, code(), changeVehicle(vehicleId));
+        workflow.respondToProposal(renterId, code(), workflow.getWorkflow(renterId, code()).proposal().id(), response("ACCEPT"));
+        assertThat(bookings.findById(bookingId).orElseThrow().getVehicle().getId()).isEqualTo(vehicleId);
+        java.util.List<Long> scheduled = tx.execute(s -> em.createQuery(
+                "select s.vehicle.id from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s where s.booking.id = :id", Long.class)
+                .setParameter("id", bookingId).getResultList());
+        assertThat(scheduled).containsExactly(vehicleId);
+    }
+
+    private com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest accept(boolean acknowledged) {
+        return new com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest("ACCEPT", "Renter decision", acknowledged);
+    }
+
+    private void swapTo(long vehicleId) {
+        workflow.proposeAlternative(providerId, code(), changeVehicle(vehicleId));
+        workflow.respondToProposal(renterId, code(), workflow.getWorkflow(renterId, code()).proposal().id(), accept(true));
+    }
+
+    // B1: các test b1* kiểm tra xe đắt hơn/rẻ hơn/bằng giá, chưa xác nhận chất lượng thấp hơn, xe thiếu gói giá.
+    @Test void b1PricierReplacementDoesNotChargeRenterOrChangeContractOrDeposit() {
+        ready();
+        var depositBefore = snapshots.findByBooking_Id(bookingId).orElseThrow().getDepositAmount();
+        swapTo(replacementVehicle("Pricier", 4, "150000", null));
+        var after = bookings.findById(bookingId).orElseThrow();
+        assertThat(after.getTotalAmount()).isEqualByComparingTo("100000");
+        assertThat(after.vehicleChangeCredit()).isEqualByComparingTo("0");
+        assertThat(after.getVehicleChangeNewAmount()).isEqualByComparingTo("150000");
+        assertThat(after.getVehicleChangeOldAmount()).isEqualByComparingTo("100000");
+        assertThat(snapshots.findByBooking_Id(bookingId).orElseThrow().getDepositAmount()).isEqualTo(depositBefore);
+        var settlement = vnpay.getSettlementDetails(renterId, code());
+        assertThat(settlement.baseRental()).isEqualByComparingTo("100000");
+        assertThat(settlement.vehicleChangeDiscount()).isEqualByComparingTo("0");
+        assertThat(settlement.finalPayable()).isEqualByComparingTo("0");
+        assertThat(settlement.overpayment()).isEqualByComparingTo("0");
+    }
+
+    @Test void b1CheaperReplacementIsDeductedFromFinalBillWithoutTouchingPaymentsOrContract() {
+        ready();
+        long txBefore = ledger.findByBooking_Id(bookingId).size();
+        swapTo(replacementVehicle("Cheaper", 4, "70000", null));
+        var after = bookings.findById(bookingId).orElseThrow();
+        assertThat(after.getTotalAmount()).isEqualByComparingTo("100000");
+        assertThat(after.vehicleChangeCredit()).isEqualByComparingTo("30000");
+        assertThat(after.getPreviousVehicleId()).isNotNull();
+        var settlement = vnpay.getSettlementDetails(renterId, code());
+        assertThat(settlement.baseRental()).isEqualByComparingTo("100000");
+        assertThat(settlement.vehicleChangeDiscount()).isEqualByComparingTo("30000");
+        assertThat(settlement.overpayment()).isEqualByComparingTo("30000");   // đã trả 100000, nghĩa vụ còn 70000
+        // không tự động hoàn tiền/ghi giao dịch mới
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize((int) txBefore);
+        // tính lại nhiều lần không cộng dồn
+        assertThat(vnpay.getSettlementDetails(renterId, code()).vehicleChangeDiscount()).isEqualByComparingTo("30000");
+        assertThat(vnpay.getSettlementDetails(renterId, code()).overpayment()).isEqualByComparingTo("30000");
+    }
+
+    @Test void b1EqualPriceCreatesNoDifference() {
+        ready();
+        swapTo(replacementVehicle("Same price", 4, "100000", null));
+        assertThat(bookings.findById(bookingId).orElseThrow().vehicleChangeCredit()).isEqualByComparingTo("0");
+        assertThat(vnpay.getSettlementDetails(renterId, code()).overpayment()).isEqualByComparingTo("0");
+    }
+
+    @Test void b1LowerQualityVehicleIsNotSwappedWithoutRenterAcknowledgement() {
+        ready();
+        long oldVehicle = bookings.findById(bookingId).orElseThrow().getVehicle().getId();
+        long older = replacementVehicle("Older", 4, "90000", 2020);
+        workflow.proposeAlternative(providerId, code(), changeVehicle(older));
+        var proposal = workflow.getWorkflow(renterId, code()).proposal();
+        assertThat(proposal.lowerQuality()).isTrue();
+        assertThat(proposal.qualityNotes()).isNotEmpty();
+        assertThatThrownBy(() -> workflow.respondToProposal(renterId, code(), proposal.id(), accept(false)))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        var unchanged = bookings.findById(bookingId).orElseThrow();
+        assertThat(unchanged.getVehicle().getId()).isEqualTo(oldVehicle);
+        assertThat(unchanged.vehicleChangeCredit()).isEqualByComparingTo("0");
+        workflow.respondToProposal(renterId, code(), proposal.id(), accept(true));
+        assertThat(bookings.findById(bookingId).orElseThrow().getVehicle().getId()).isEqualTo(older);
+    }
+
+    @Test void b1ReplacementWithoutComparablePlanCannotBeProposed() {
+        ready();
+        long noPlan = tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId);
+            Vehicle v = new Vehicle();
+            org.springframework.beans.BeanUtils.copyProperties(b.getVehicle(), v, "id", "createdAt", "updatedAt");
+            v.setLicensePlate(UUID.randomUUID().toString().substring(0, 15));
+            v.setChassisNo(UUID.randomUUID().toString()); v.setEngineNo(UUID.randomUUID().toString());
+            em.persist(v); return v.getId();
+        });
+        assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), changeVehicle(noPlan)))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    @Test void b7VehicleMustDifferAndHaveSeatsForPassengersPlusDriver() {
+        ready();
+        long currentVehicle = bookings.findById(bookingId).orElseThrow().getVehicle().getId();
+        tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setPassengerCount(3));
+        long tooSmall = replacementVehicle("Four seats", 3);       // 3 passengers + driver = 4 seats needed
+        for (long id : new long[]{currentVehicle, tooSmall})
+            assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), changeVehicle(id)))
+                    .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class)
+                    .hasMessage("Xe đề xuất phải khác xe hiện tại và đủ chỗ");
+        long enough = replacementVehicle("Enough seats", 4);
+        workflow.proposeAlternative(providerId, code(), changeVehicle(enough));
+        assertThat(workflow.getWorkflow(renterId, code()).proposal().status()).isEqualTo("PENDING");
+    }
+
+    @Test void b8BusyReplacementVehicleIsRejectedByBackendWhenProposing() {
+        ready();
+        Instant pickup = bookings.findById(bookingId).orElseThrow().getPickupTime();
+        long busy = replacementVehicle("Busy", 4);
+        otherBooking(busy, BookingStatus.CONFIRMED, pickup.minusSeconds(1800), pickup.plusSeconds(1800));
+        assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), changeVehicle(busy)))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThat(workflow.getWorkflow(renterId, code()).proposal()).isNull();
+    }
+
+    @Test void b6RescheduleRejectedWhenSameVehicleHasUnreturnedEarlierTripOrOverlappingBooking() {
+        ready();
+        Booking base = bookings.findById(bookingId).orElseThrow();
+        long vehicleId = base.getVehicle().getId(); Instant pickup = base.getPickupTime();
+        otherBooking(vehicleId, BookingStatus.IN_PROGRESS, pickup.minusSeconds(7200), pickup.minusSeconds(3600)); // overdue, never returned
+        assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), proposal(pickup.plusSeconds(86400))))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class)
+                .hasMessageContaining("chưa được trả về");
+        assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), proposal(clockNowPlus(1800))))
+                .isInstanceOf(RuntimeException.class);   // < 1h from now
+        assertThat(workflow.getWorkflow(renterId, code()).proposal()).isNull();
+    }
+
+    @Test void b6RescheduleRejectedWhenNewWindowOverlapsAnotherBooking() {
+        ready();
+        Booking base = bookings.findById(bookingId).orElseThrow();
+        Instant next = base.getPickupTime().plusSeconds(86400);
+        otherBooking(base.getVehicle().getId(), BookingStatus.CONFIRMED, next.plusSeconds(600), next.plusSeconds(7200));
+        assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), proposal(next)))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    Instant clockNowPlus(long seconds) { return Instant.now().plusSeconds(seconds); }
+
+    @Test void b9StaleTabCannotAcceptWithdrawnProposalNorOverwriteTheNewOne() {
+        ready();
+        Instant pickup = bookings.findById(bookingId).orElseThrow().getPickupTime();
+        workflow.proposeAlternative(providerId, code(), proposal(pickup.plusSeconds(86400)));
+        String staleId = workflow.getWorkflow(renterId, code()).proposal().id();
+        workflow.withdrawProposal(providerId, code(), staleId);
+        workflow.proposeAlternative(providerId, code(), proposal(pickup.plusSeconds(2 * 86400)));
+        String currentId = workflow.getWorkflow(renterId, code()).proposal().id();
+        assertThat(currentId).isNotEqualTo(staleId);
+        assertThatThrownBy(() -> workflow.respondToProposal(renterId, code(), staleId, response("ACCEPT")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class)
+                .hasMessage("Đề xuất đã thay đổi, vui lòng tải lại trang.");
+        assertThat(bookings.findById(bookingId).orElseThrow().getPickupTime()).isEqualTo(pickup);
+        var still = workflow.getWorkflow(renterId, code()).proposal();
+        assertThat(still.id()).isEqualTo(currentId); assertThat(still.status()).isEqualTo("PENDING");
+    }
+
+    @Test void b10CannotProposeAfterTripStarted() {
+        ready();
+        tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.IN_PROGRESS));
+        long vehicleId = replacementVehicle("Too late", 4);
+        assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), changeVehicle(vehicleId)))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThatThrownBy(() -> workflow.proposeAlternative(providerId, code(), proposal(Instant.now().plusSeconds(86400 * 2))))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    // B1: khoản giảm trừ phải hiện cho khách ngay khi đề xuất còn chờ (trước khi đồng ý), và khớp con số sau khi đồng ý.
+    @Test void b1RenterSeesDeductionWhileProposalIsStillPendingAndItMatchesAfterAcceptance() {
+        ready();
+        tx.executeWithoutResult(s -> { Booking b = em.find(Booking.class, bookingId); b.setPlannedEndAt(b.getPickupTime().plusSeconds(3600)); });
+        workflow.proposeAlternative(providerId, code(), changeVehicle(replacementVehicle("Cheaper pending", 4, "80000", null)));
+        var pending = workflow.getWorkflow(renterId, code()).proposal();
+        assertThat(pending.status()).isEqualTo("PENDING");
+        assertThat(pending.contractAmount()).isEqualByComparingTo("100000");
+        assertThat(pending.proposedAmount()).isEqualByComparingTo("80000");
+        assertThat(pending.priceReduction()).isEqualByComparingTo("20000");
+        var untouched = bookings.findById(bookingId).orElseThrow();
+        assertThat(untouched.getVehicleChangeDiscount()).isNull();       // chỉ là ước tính, chưa ghi gì vào booking
+        assertThat(untouched.getTotalAmount()).isEqualByComparingTo("100000");
+        workflow.respondToProposal(renterId, code(), pending.id(), accept(true));
+        var accepted = workflow.getWorkflow(renterId, code()).proposal();
+        assertThat(accepted.priceReduction()).isEqualByComparingTo(pending.priceReduction());
+        assertThat(accepted.proposedAmount()).isEqualByComparingTo(pending.proposedAmount());
+    }
+
+    @Test void b1PricierPendingProposalShowsNoDeduction() {
+        ready();
+        tx.executeWithoutResult(s -> { Booking b = em.find(Booking.class, bookingId); b.setPlannedEndAt(b.getPickupTime().plusSeconds(3600)); });
+        workflow.proposeAlternative(providerId, code(), changeVehicle(replacementVehicle("Pricier pending", 4, "150000", null)));
+        var pending = workflow.getWorkflow(renterId, code()).proposal();
+        assertThat(pending.proposedAmount()).isEqualByComparingTo("150000");
+        assertThat(pending.priceReduction()).isEqualByComparingTo("0");
+    }
+
+    // B4: nhà xe rút đề xuất; khách vẫn nhận API trạng thái WITHDRAWN (FE ẩn) nhưng không thể ACCEPT/REJECT và booking không đổi.
+    @Test void b4RenterCannotRespondToWithdrawnProposalAndBookingIsUntouched() {
+        ready();
+        Booking before = bookings.findById(bookingId).orElseThrow();
+        var rowsBefore = scheduleRows();
+        workflow.proposeAlternative(providerId, code(), proposal(before.getPickupTime().plusSeconds(86400)));
+        String id = workflow.getWorkflow(renterId, code()).proposal().id();
+        assertThat(workflow.getWorkflow(renterId, code()).proposal().status()).isEqualTo("PENDING");
+        workflow.withdrawProposal(providerId, code(), id);
+        assertThat(workflow.getWorkflow(renterId, code()).proposal().status()).isEqualTo("WITHDRAWN");
+        for (String action : new String[]{"ACCEPT", "REJECT"})
+            assertThatThrownBy(() -> workflow.respondToProposal(renterId, code(), id, response(action)))
+                    .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        Booking after = bookings.findById(bookingId).orElseThrow();
+        assertThat(after.getPickupTime()).isEqualTo(before.getPickupTime());
+        assertThat(after.getPlannedEndAt()).isEqualTo(before.getPlannedEndAt());
+        assertThat(after.getVehicle().getId()).isEqualTo(before.getVehicle().getId());
+        assertThat(after.getTotalAmount()).isEqualByComparingTo(before.getTotalAmount());
+        assertThat(scheduleRows()).isEqualTo(rowsBefore);
+        assertThat(workflow.getWorkflow(renterId, code()).proposal().status()).isEqualTo("WITHDRAWN");
+        assertThat(workflow.getWorkflow(providerId, code()).proposal().status()).isEqualTo("WITHDRAWN");
+    }
+
+    /** Dòng lịch của booking dưới dạng chuỗi so sánh được: xe, khoảng thời gian, trạng thái. */
+    java.util.List<String> scheduleRows() {
+        return tx.execute(s -> em.createQuery(
+                "select s.vehicle.id, s.startAt, s.endAt, s.status from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s where s.booking.id = :id order by s.id",
+                Object[].class).setParameter("id", bookingId).getResultList().stream()
+                .map(r -> r[0] + "|" + r[1] + "|" + r[2] + "|" + r[3]).toList());
+    }
+
+    // B2: khách đồng ý dời giờ thành công phải giữ thời lượng, giá và cọc; lịch xe dời đúng một dòng, không nhân đôi.
+    @Test void b2RescheduleAcceptKeepsDurationPriceDepositAndMovesTheSingleScheduleRow() {
+        ready();
+        Instant pickup = tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId);
+            b.setPlannedEndAt(b.getPickupTime().plusSeconds(2 * 3600));
+            em.createQuery("update com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s set s.endAt = :end where s.booking.id = :id")
+                    .setParameter("end", b.getPickupTime().plusSeconds(2 * 3600)).setParameter("id", bookingId).executeUpdate();
+            return b.getPickupTime();
+        });
+        Booking before = bookings.findById(bookingId).orElseThrow();
+        var depositBefore = snapshots.findByBooking_Id(bookingId).orElseThrow().getDepositAmount();
+        long rowsBefore = scheduleRows().size();
+        Instant next = pickup.plusSeconds(86400);
+        workflow.proposeAlternative(providerId, code(), proposal(next));
+        workflow.respondToProposal(renterId, code(), workflow.getWorkflow(renterId, code()).proposal().id(), response("ACCEPT"));
+
+        Booking after = bookings.findById(bookingId).orElseThrow();
+        assertThat(after.getPickupTime()).isEqualTo(next);
+        assertThat(after.getPlannedEndAt()).isEqualTo(next.plusSeconds(2 * 3600));
+        assertThat(java.time.Duration.between(after.getPickupTime(), after.getPlannedEndAt()))
+                .isEqualTo(java.time.Duration.between(before.getPickupTime(), before.getPlannedEndAt()));
+        assertThat(after.getTotalAmount()).isEqualByComparingTo(before.getTotalAmount());
+        assertThat(snapshots.findByBooking_Id(bookingId).orElseThrow().getDepositAmount()).isEqualTo(depositBefore);
+        assertThat(after.getVehicle().getId()).isEqualTo(before.getVehicle().getId());
+        assertThat(after.getStatus()).isEqualTo(before.getStatus());
+
+        var window = tx.execute(s -> com.fptufa26.ecomotion.booking.service.AvailabilityPolicy.bufferedWindow(
+                em.find(Vehicle.class, after.getVehicle().getId()), next, next.plusSeconds(2 * 3600)));
+        var rows = scheduleRows();
+        assertThat(rows).hasSize((int) rowsBefore).hasSize(1);
+        assertThat(rows.getFirst()).isEqualTo(after.getVehicle().getId() + "|" + window.start() + "|" + window.end() + "|ACTIVE");
+        assertThat(workflow.getWorkflow(renterId, code()).proposal().status()).isEqualTo("ACCEPTED");
+    }
+
+    // B8: xe thay thế bị booking khác chiếm sau khi gửi đề xuất, trước khi khách đồng ý.
+    @Test void b8ReplacementTakenBeforeAcceptanceIsRejectedAndLeavesEverythingUntouched() throws Exception {
+        ready();
+        long contested = replacementVehicle("Contested", 4);
+        workflow.proposeAlternative(providerId, code(), changeVehicle(contested));
+        String id = workflow.getWorkflow(renterId, code()).proposal().id();
+        Booking before = bookings.findById(bookingId).orElseThrow();
+        Instant pickup = before.getPickupTime();
+        var rowsBefore = scheduleRows();
+        // Booking B chiếm xe thay thế trong cùng khoảng thuê (đúng khoảng sau khi đổi).
+        otherBooking(contested, BookingStatus.CONFIRMED, pickup.minusSeconds(600), pickup.plusSeconds(1800));
+
+        String token = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, renterId)));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/renter/bookings/" + code() + "/operational-proposal/" + id)
+                        .header("Authorization", "Bearer " + token).contentType("application/json")
+                        .content("{\"action\":\"ACCEPT\",\"acknowledgeLowerQuality\":true}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isConflict());
+
+        Booking after = bookings.findById(bookingId).orElseThrow();
+        assertThat(after.getVehicle().getId()).isEqualTo(before.getVehicle().getId());
+        assertThat(after.getPreviousVehicleId()).isNull();
+        assertThat(after.getVehicleChangeAt()).isNull();
+        assertThat(after.getVehicleChangeNewAmount()).isNull();
+        assertThat(after.getTotalAmount()).isEqualByComparingTo(before.getTotalAmount());
+        assertThat(after.getPickupTime()).isEqualTo(pickup);
+        assertThat(after.getStatus()).isEqualTo(before.getStatus());
+        assertThat(scheduleRows()).isEqualTo(rowsBefore);
+        var proposal = workflow.getWorkflow(renterId, code()).proposal();
+        assertThat(proposal.status()).isEqualTo("PENDING");
+        assertThat(after.getOperationalProposal().getAccepted()).isNull();
+        assertThat(after.getOperationalProposal().getRespondedAt()).isNull();
+        // Không có schedule nào của booking A nằm trên xe bị chiếm; booking B là booking duy nhất giữ xe đó.
+        assertThat(scheduleRows()).noneMatch(r -> r.startsWith(contested + "|"));
+        assertThat(bookings.findAll().stream().filter(b -> b.getVehicle().getId().equals(contested)).count()).isEqualTo(1);
     }
 
     com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter queue(String action) {
@@ -604,7 +1091,7 @@ class EndUserWorkflowIntegrationTest {
     }
 
     com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest response(String action) {
-        return new com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest(action, "Renter decision");
+        return new com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest(action, "Renter decision", true);
     }
 
     @Test void proposalLeavesOriginalUntouchedUntilRenterAcceptsAndDuplicateResponseIsIdempotent() {
@@ -633,6 +1120,8 @@ class EndUserWorkflowIntegrationTest {
                     .forEach(t -> t.setMethod(PaymentMethod.BANK_TRANSFER));
         });
         renterBookings.cancel(renterId, code());
+        renterBookings.updateRefundAccount(renterId, code(),
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank", "NGUYEN VAN TEST", "0123456789"));
         var pending = workflow.getWorkflow(renterId, code());
         assertThat(pending.paymentStatus()).isEqualTo("REFUND_PENDING");
         refunds.completeRefund(providerId, pending.refunds().getFirst().paymentTransactionId(),
@@ -746,7 +1235,7 @@ class EndUserWorkflowIntegrationTest {
         assertThat(bookings.findById(bookingId).orElseThrow().getPickupTime().equals(next)).isEqualTo(decision.status().equals("ACCEPTED"));
     }
 
-    @Test void driverEndOnlyEndsTripThenProviderSettlesWithoutRenterConfirmation() {
+    @Test void providerSettlementCompletesAfterRenterConfirmsEndTime() {
         long[] driver = ready(); optimization.manualAssign(bookingId, driver[0], driver[2]);
         trips.confirmTrip(driver[1], code()); trips.arriveAtPickup(driver[1], code());
         trips.startTrip(driver[1], code());
@@ -754,6 +1243,9 @@ class EndUserWorkflowIntegrationTest {
         assertThat(workflow.getWorkflow(renterId, code()).tripStatus()).isEqualTo("ENDED");
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("REVIEWING_CHARGES");
         providerBookings.finalizeSettlement(providerId, code());
+        // Số dư 0 nhưng khách còn trong 12 giờ xác nhận giờ kết thúc: chưa hoàn tất.
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isNotEqualTo(BookingStatus.COMPLETED);
+        renterBookings.confirmTripEnd(renterId, code());
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("SETTLED");
     }
     @Autowired EntityManager em;

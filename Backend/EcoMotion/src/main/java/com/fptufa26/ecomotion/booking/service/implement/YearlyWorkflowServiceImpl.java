@@ -24,6 +24,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
+import com.fptufa26.ecomotion.dispute.service.DisputeService;
+import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
+import com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy;
+import com.fptufa26.ecomotion.finance.service.FinancialAuditService;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
+import com.fptufa26.ecomotion.finance.service.RefundMath;
+import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
+import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
+import com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests;
+import com.fptufa26.ecomotion.booking.policy.YearlySettlementMath;
 
 @Service
 @Transactional
@@ -41,23 +54,25 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
     private final BookingNotificationService notifications;
     private final Clock clock;
     private final BigDecimal unit;
+    private final com.fptufa26.ecomotion.booking.service.RentalPricingService pricing;
     private final BookingPaymentLedgerService ledger;
-    private final com.fptufa26.ecomotion.dispute.service.DisputeService disputes;
-    private final com.fptufa26.ecomotion.finance.service.FinancialAuditService audit;
-    private final com.fptufa26.ecomotion.user.service.UserService users;
-    private final com.fptufa26.ecomotion.finance.service.RefundEventService refunds;
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    private final DisputeService disputes;
+    private final FinancialAuditService audit;
+    private final UserService users;
+    private final RefundEventService refunds;
+    private final CancellationClosureService closure;
 
     public YearlyWorkflowServiceImpl(BookingRepository bookings, YearlyWorkflowRepository workflows,
             YearlyIncidentRepository incidents, YearlyReplacementRepository replacements,
             YearlyHandoverRepository handovers, TripEvidenceService evidence, PaymentRequestService payments,
             ScheduleService schedules, VehicleService vehicles, BookingNotificationService notifications,
             Clock clock, BookingPaymentLedgerService ledger,
-            com.fptufa26.ecomotion.dispute.service.DisputeService disputes,
-            com.fptufa26.ecomotion.finance.service.FinancialAuditService audit,
-            com.fptufa26.ecomotion.user.service.UserService users,
-            com.fptufa26.ecomotion.finance.service.RefundEventService refunds,
-            com.fptufa26.ecomotion.finance.service.CancellationClosureService closure, @Value("${booking.yearly.rounding-unit:100000}") BigDecimal unit) {
+            DisputeService disputes,
+            FinancialAuditService audit,
+            UserService users,
+            RefundEventService refunds,
+            CancellationClosureService closure,
+            RentalPricingService pricing, @Value("${booking.yearly.rounding-unit:100000}") BigDecimal unit) {
         this.bookings = bookings;
         this.workflows = workflows;
         this.incidents = incidents;
@@ -71,6 +86,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         this.clock = clock;
         if (unit == null || unit.signum() <= 0) throw new IllegalArgumentException("Invalid yearly rounding unit");
         this.unit = unit;
+        this.pricing = pricing;
         this.ledger = ledger; this.disputes = disputes; this.audit = audit; this.users = users; this.refunds = refunds; this.closure = closure;
     }
 
@@ -98,10 +114,11 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         BigDecimal early = "EARLY".equals(r.mode()) ? YearlyRentalRules.earlyTerminationFee(b.getTotalAmount(), rent, s.getRoundingUnit()) : BigDecimal.ZERO;
         BigDecimal late = YearlyRentalRules.lateFee(due, r.returnedOn(), s.getGraceDays(), s.getLateDailyRate());
         var cash = payments.yearlyCash(b.getId());
-        var result = com.fptufa26.ecomotion.booking.policy.YearlySettlementMath.settle(rent.add(early).add(late), cash.rentPaid(), cash.depositHeld(), BigDecimal.ZERO);
+        BigDecimal vehicleDiscount = vehicleChangeDiscount(b, started(b), due, "FULL_CONTRACT".equals(r.mode()) || r.returnedOn().isAfter(due) ? due : r.returnedOn());
+        var result = YearlySettlementMath.settle(rent.add(early).add(late).subtract(vehicleDiscount).max(BigDecimal.ZERO), cash.rentPaid(), cash.depositHeld(), BigDecimal.ZERO);
         return new Preview(r.returnedOn(), new Money(rent, early, late, BigDecimal.ZERO, BigDecimal.ZERO,
                 cash.rentPaid(), cash.depositHeld(), result.rentRefund(), result.depositRefund(), result.balanceDue(),
-                BigDecimal.ZERO, "Chưa gồm phí vượt km và chi phí kiểm tra xe"), "ESTIMATE_ONLY");
+                BigDecimal.ZERO, vehicleDiscount, "Chưa gồm phí vượt km và chi phí kiểm tra xe"), "ESTIMATE_ONLY");
     }
 
     @Override
@@ -264,7 +281,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         require(!disputes.hasOpenDispute(b.getId()), "Còn khiếu nại chưa được giải quyết");
         require(!refunds.hasOpenRefunds(b.getId()), "Còn nghĩa vụ hoàn tiền chưa xử lý");
         require(ledger.listTransactions(b.getId()).stream().noneMatch(tx -> tx.getStatus() == PaymentStatus.PENDING
-                || com.fptufa26.ecomotion.finance.service.RefundMath.unapplied(tx.getProcessingNote())), "Còn giao dịch đang đối soát");
+                || RefundMath.unapplied(tx.getProcessingNote())), "Còn giao dịch đang đối soát");
         require(Set.of("SETTLEMENT_ACCEPTED", "REFUND_RECEIVED").contains(s.getStage()), "Chưa đủ bước quyết toán");
         require(s.getRentRefund().add(s.getDepositRefund()).signum() == 0 || "REFUND_RECEIVED".equals(s.getStage()), "Renter chưa xác nhận nhận tiền hoàn");
         require(payments.yearlyBalancePaid(b.getId(), s.getBalanceDue()), "Còn khoản thanh toán bổ sung");
@@ -504,12 +521,23 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         require(replacements.findByBookingIdOrderByIdAsc(b.getId()).stream().allMatch(x -> Set.of("COMPLETED", "CANCELLED").contains(x.getStatus())), "Đã có yêu cầu đổi xe đang mở");
         var target = vehicles.findVehicleByIdForUpdate(r.vehicleId()).orElseThrow(() -> conflict("Không tìm thấy xe thay thế"));
         require(target.getProvider().getId().equals(b.getVehicle().getProvider().getId()) && !target.getId().equals(b.getVehicle().getId()), "Phải chọn xe khác cùng provider");
-        require(target.getStatus() == com.fptufa26.ecomotion.vehicle.enums.VehicleStatus.APPROVED, "Xe chưa được duyệt");
-        com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
+        require(target.getStatus() == VehicleStatus.APPROVED, "Xe chưa được duyệt");
+        DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
                 b.getRenter(), target, clock.instant(), b.getPlannedEndAt());
         var window = AvailabilityPolicy.bufferedWindow(target, r.plannedOn().atStartOfDay(ZONE).toInstant(), YearlyRentalRules.reservationEnd(b.getPlannedEndAt()));
         require(schedules.isRangeFree(target.getId(), window.start(), window.end()), "Xe thay thế đã có lịch");
+        // B1: ghi nhận giá xe cũ/xe mới và chất lượng để khách xác nhận trước khi đổi; không đổi hợp đồng/cọc.
+        var downgrades = com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.qualityDowngrades(b.getVehicle(), target);
+        BigDecimal currentPrice = replacements.findByBookingIdOrderByIdAsc(b.getId()).stream()
+                .filter(y -> "COMPLETED".equals(y.getStatus()) && y.getNewPlanPrice() != null)
+                .max(java.util.Comparator.comparing(YearlyReplacement::getExchangedOn)).map(YearlyReplacement::getNewPlanPrice)
+                .orElse(b.getTotalAmount());
         YearlyReplacement x = new YearlyReplacement();
+        x.setOldPlanPrice(currentPrice);
+        x.setNewPlanPrice(pricing.yearlyPlanPrice(target.getId()));
+        x.setLowerQuality(!downgrades.isEmpty());
+        x.setQualityNotes(downgrades.isEmpty() ? null : String.join("; ", downgrades));
+        x.setQualityAcknowledged(false);
         x.setBookingId(b.getId());
         x.setIncidentId(i.getId());
         x.setOldVehicleId(b.getVehicle().getId());
@@ -535,12 +563,15 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
     }
 
     @Override
-    public Replacement acceptReplacement(Long userId, String code, Long id, Version r) {
+    public Replacement acceptReplacement(Long userId, String code, Long id, AcceptReplacement r) {
         Booking b = booking(userId, code, true, false);
         require(!disputes.hasOpenDispute(b.getId()), "Chờ kết luận Admin trước khi thay đổi xe thay thế");
         YearlyReplacement x = exchange(b, id);
         version(x.getVersion(), r.version());
         require("PROPOSED".equals(x.getStatus()), "Yêu cầu đổi xe không còn chờ xác nhận");
+        require(!Boolean.TRUE.equals(x.getLowerQuality()) || Boolean.TRUE.equals(r.acknowledgeLowerQuality()),
+                "Xe thay thế có chất lượng thấp hơn (" + x.getQualityNotes() + "). Cần khách xác nhận đồng ý trước khi đổi xe");
+        x.setQualityAcknowledged(Boolean.TRUE.equals(r.acknowledgeLowerQuality()));
         x.setStatus("ACCEPTED");
         replacements.flush();
         return replacement(x);
@@ -580,14 +611,15 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         YearlyReplacement x = exchange(b, id);
         version(x.getVersion(), r.version());
         require("HANDOVER_PROPOSED".equals(x.getStatus()) && "TERMS_ACCEPTED".equals(s.getStage()), "Chưa có biên bản đổi xe");
+        require(!Boolean.TRUE.equals(x.getLowerQuality()) || Boolean.TRUE.equals(x.getQualityAcknowledged()), "Khách chưa xác nhận xe chất lượng thấp hơn");
         long first = Math.min(x.getOldVehicleId(), x.getNewVehicleId());
         long second = Math.max(x.getOldVehicleId(), x.getNewVehicleId());
         vehicles.findVehicleByIdForUpdate(first).orElseThrow(() -> conflict("Không tìm thấy xe"));
         vehicles.findVehicleByIdForUpdate(second).orElseThrow(() -> conflict("Không tìm thấy xe"));
         var target = vehicles.findVehicleById(x.getNewVehicleId()).orElseThrow(() -> conflict("Không tìm thấy xe"));
         require(target.getProvider().getId().equals(b.getVehicle().getProvider().getId())
-                && target.getStatus() == com.fptufa26.ecomotion.vehicle.enums.VehicleStatus.APPROVED, "Xe thay thế không còn hợp lệ");
-        com.fptufa26.ecomotion.verification.documentai.DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
+                && target.getStatus() == VehicleStatus.APPROVED, "Xe thay thế không còn hợp lệ");
+        DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
                 b.getRenter(), target, clock.instant(), b.getPlannedEndAt());
         var oldVehicle = b.getVehicle();
         require(oldVehicle.getId().equals(x.getOldVehicleId()), "Xe đang sử dụng đã thay đổi");
@@ -624,10 +656,13 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         long allowance = BigDecimal.valueOf(s.getAnnualKm()).multiply(BigDecimal.valueOf(used))
                 .divide(BigDecimal.valueOf(12), 0, RoundingMode.DOWN).longValueExact();
         BigDecimal km = BigDecimal.valueOf(Math.max(0, s.getTotalKm() - allowance)).multiply(s.getExcessKmRate());
-        BigDecimal obligation = rent.add(early).add(late).add(km).add(r.otherCharges());
-        com.fptufa26.ecomotion.booking.policy.YearlySettlementMath.Result result;
+        // B1: giảm trừ do đổi xe rẻ hơn theo số ngày thực tế dùng từng xe; xe đắt hơn không thu thêm.
+        LocalDate usedUntil = "FULL_CONTRACT".equals(s.getReturnMode()) || s.getReturnedOn().isAfter(due) ? due : s.getReturnedOn();
+        BigDecimal vehicleDiscount = vehicleChangeDiscount(b, started(b), due, usedUntil);
+        BigDecimal obligation = rent.add(early).add(late).add(km).add(r.otherCharges()).subtract(vehicleDiscount).max(BigDecimal.ZERO);
+        YearlySettlementMath.Result result;
         try {
-            result = com.fptufa26.ecomotion.booking.policy.YearlySettlementMath.settle(obligation, cash.rentPaid(), cash.depositHeld(), r.depositDeduction());
+            result = YearlySettlementMath.settle(obligation, cash.rentPaid(), cash.depositHeld(), r.depositDeduction());
         } catch (IllegalArgumentException ex) {
             throw conflict("Khoản khấu trừ vượt cọc hoặc bị tính trùng với tiền đã thanh toán");
         }
@@ -641,6 +676,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         s.setRentPaid(cash.rentPaid());
         s.setDepositHeld(cash.depositHeld());
         s.setDepositDeduction(r.depositDeduction());
+        s.setVehicleChangeDiscount(vehicleDiscount);
         s.setBalanceDue(result.balanceDue());
         s.setRentRefund(result.rentRefund());
         s.setDepositRefund(result.depositRefund());
@@ -671,42 +707,42 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
     }
 
     private void requireAdmin(Long id) {
-        if (users.findById(id).filter(u -> u.getRole() == Role.ADMIN && u.getStatus() == com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE).isEmpty())
+        if (users.findById(id).filter(u -> u.getRole() == Role.ADMIN && u.getStatus() == UserStatus.ACTIVE).isEmpty())
             throw new AccessDeniedException("Chỉ admin đang hoạt động được phân xử");
     }
 
     @Override
-    public View disputeSettlement(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Complaint r) {
+    public View disputeSettlement(Long userId, String code, YearlyReviewRequests.Complaint r) {
         var b = booking(userId, code, true, false); var s = state(b);
         if (audit.replay("YEARLY", b.getId(), r.requestId(), userId, r.toString())) return view(b, s);
         version(s.getVersion(), r.version());
         require(Set.of("RETURN_INSPECTED", "SETTLEMENT_PROPOSED").contains(s.getStage()), "Chỉ phản đối kiểm định hoặc quyết toán đang đề xuất");
         var image = photo(userId, b, r.evidenceId(), false);
-        disputes.open(b, b.getRenter().getUser(), com.fptufa26.ecomotion.dispute.enums.DisputeCategory.YEARLY_SETTLEMENT, null,
+        disputes.open(b, b.getRenter().getUser(), DisputeCategory.YEARLY_SETTLEMENT, null,
                 r.note(), List.of(image));
         audit.record("YEARLY", b.getId(), r.requestId(), userId, "DISPUTE", r.toString(), s.getStage());
         return changed(b, s);
     }
 
     @Override
-    public View replyReview(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Reply r) {
+    public View replyReview(Long userId, String code, YearlyReviewRequests.Reply r) {
         var b = booking(userId, code, true, true); var s = state(b);
         if (audit.replay("YEARLY", b.getId(), r.requestId(), userId, r.toString())) return view(b, s);
         var d = disputes.getDisputeById(r.disputeId()).orElseThrow(() -> conflict("Không có khiếu nại"));
-        require(d.getBooking().getId().equals(b.getId()) && Set.of(com.fptufa26.ecomotion.dispute.enums.DisputeStatus.OPEN,
-                com.fptufa26.ecomotion.dispute.enums.DisputeStatus.IN_REVIEW).contains(d.getStatus()), "Khiếu nại không còn mở trên hợp đồng");
+        require(d.getBooking().getId().equals(b.getId()) && Set.of(DisputeStatus.OPEN,
+                DisputeStatus.IN_REVIEW).contains(d.getStatus()), "Khiếu nại không còn mở trên hợp đồng");
         photo(userId, b, r.evidenceId(), true);
         audit.record("YEARLY", b.getId(), r.requestId(), userId, "PROVIDER_REPLY", r.toString(), s.getStage());
         return changed(b, s);
     }
 
     @Override
-    public View adjudicateSettlement(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.SettlementRuling r) {
+    public View adjudicateSettlement(Long adminId, String code, YearlyReviewRequests.SettlementRuling r) {
         var b = adminBooking(adminId, code); var s = state(b);
         if (audit.replay("YEARLY", b.getId(), r.requestId(), adminId, r.toString())) return view(b, s);
         version(s.getVersion(), r.version());
         var d = disputes.getDisputeById(r.disputeId()).orElseThrow(() -> conflict("Không có khiếu nại"));
-        require(d.getBooking().getId().equals(b.getId()) && d.getCategory() == com.fptufa26.ecomotion.dispute.enums.DisputeCategory.YEARLY_SETTLEMENT,
+        require(d.getBooking().getId().equals(b.getId()) && d.getCategory() == DisputeCategory.YEARLY_SETTLEMENT,
                 "Hồ sơ không phải quyết toán năm của hợp đồng");
         require(Set.of("RETURN_INSPECTED", "SETTLEMENT_PROPOSED").contains(s.getStage()), "Quyết toán đã được chốt");
         require(!r.returnedOn().isBefore(started(b)) && !r.returnedOn().isAfter(today()) && r.finalKm() >= initialKm(b,s), "Ngày trả hoặc km không hợp lệ");
@@ -730,15 +766,15 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
     }
 
     @Override
-    public void adjudicateCancellation(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.CancellationRuling r) {
+    public void adjudicateCancellation(Long adminId, String code, YearlyReviewRequests.CancellationRuling r) {
         var b = adminBooking(adminId,code);
         if (audit.replay("YEARLY",b.getId(),r.requestId(),adminId,r.toString())) return;
         require(b.getCancelledAt()!=null && b.getActualStartAt()==null && b.getStatus()==BookingStatus.CANCELLATION_REVIEW,"Không phải hủy năm trước nhận xe");
         var d=disputes.getDisputeById(r.disputeId()).orElseThrow(()->conflict("Không có hồ sơ"));
-        require(d.getBooking().getId().equals(b.getId()) && d.getCategory()==com.fptufa26.ecomotion.dispute.enums.DisputeCategory.YEARLY_CANCELLATION,"Sai hồ sơ hủy năm");
+        require(d.getBooking().getId().equals(b.getId()) && d.getCategory()==DisputeCategory.YEARLY_CANCELLATION,"Sai hồ sơ hủy năm");
         require(r.refundAmount().signum()>=0 && r.refundAmount().compareTo(refunds.remainingReceived(b.getId()))<=0,"Số hoàn vượt nguồn thực nhận");
         require(ledger.listTransactions(b.getId()).stream().noneMatch(tx -> tx.getStatus()==PaymentStatus.PENDING
-                || com.fptufa26.ecomotion.finance.service.RefundMath.unapplied(tx.getProcessingNote())),"Cần đối soát giao dịch chưa rõ kết quả trước");
+                || RefundMath.unapplied(tx.getProcessingNote())),"Cần đối soát giao dịch chưa rõ kết quả trước");
         refunds.reserve(b.getId(),"YEARLY_CANCEL_RULING:"+r.disputeId(),r.refundAmount(),r.note(),users.findById(adminId).orElseThrow());
         disputes.resolveYearlyReview(r.disputeId(),adminId,r.note());
         audit.record("YEARLY",b.getId(),r.requestId(),adminId,"CANCELLATION_RULING",r.toString(),b.getStatus().name());
@@ -747,7 +783,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
 
     @Override
     @Transactional(readOnly=true)
-    public List<com.fptufa26.ecomotion.finance.service.FinancialAuditService.Entry> reviewHistory(Long userId,String code) {
+    public List<FinancialAuditService.Entry> reviewHistory(Long userId,String code) {
         var u=users.findById(userId).orElseThrow(()->new AccessDeniedException("Không có tài khoản"));
         Booking b;
         if(u.getRole()==Role.ADMIN) { requireAdmin(userId); b=bookings.findByBookingCode(code.trim().toUpperCase(java.util.Locale.ROOT)).orElseThrow(); }
@@ -800,8 +836,21 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         notifications.changed(b, "BOOKING_CHANGED");
         return view(b, s);
     }
+    private BigDecimal vehicleChangeDiscount(Booking b, LocalDate start, LocalDate due, LocalDate usedUntil) {
+        var done = replacements.findByBookingIdOrderByIdAsc(b.getId()).stream()
+                .filter(x -> "COMPLETED".equals(x.getStatus()) && x.getExchangedOn() != null && x.getNewPlanPrice() != null)
+                .sorted(java.util.Comparator.comparing(YearlyReplacement::getExchangedOn).thenComparing(YearlyReplacement::getId)).toList();
+        var segments = new java.util.ArrayList<com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.Segment>();
+        for (int i = 0; i < done.size(); i++) {
+            LocalDate to = i + 1 < done.size() ? done.get(i + 1).getExchangedOn() : usedUntil;
+            segments.add(new com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.Segment(done.get(i).getNewPlanPrice(), done.get(i).getExchangedOn(), to));
+        }
+        return com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.yearlyDiscount(b.getTotalAmount(), start, due, segments);
+    }
     private Incident incident(YearlyIncident i) { return new Incident(i.getId(), i.getVersion(), i.getCategory(), i.getOccurredOn(), i.getDescription(), i.getEvidenceId(), i.getInvoiceAmount(), i.getStatus(), i.getOutcome(), i.getResolutionNote(), i.getApprovedAmount(), i.getTransferEvidenceId(), i.getBankReference()); }
-    private Replacement replacement(YearlyReplacement x) { return new Replacement(x.getId(), x.getVersion(), x.getIncidentId(), x.getOldVehicleId(), x.getNewVehicleId(), x.getPlannedOn(), x.getExchangedOn(), x.getOldFinalKm(), x.getNewInitialKm(), x.getOldEvidenceId(), x.getNewEvidenceId(), x.getStatus()); }
+    private String vehicleName(Long id) { return vehicles.findVehicleById(id).map(v -> v.getBrand() + " " + v.getModel() + " · " + v.getLicensePlate()).orElse("Xe #" + id); }
+    private Replacement replacement(YearlyReplacement x) { return new Replacement(x.getId(), x.getVersion(), x.getIncidentId(), x.getOldVehicleId(), x.getNewVehicleId(), x.getPlannedOn(), x.getExchangedOn(), x.getOldFinalKm(), x.getNewInitialKm(), x.getOldEvidenceId(), x.getNewEvidenceId(), x.getStatus(),
+            vehicleName(x.getOldVehicleId()), vehicleName(x.getNewVehicleId()), x.getOldPlanPrice(), x.getNewPlanPrice(), Boolean.TRUE.equals(x.getLowerQuality()), x.getQualityNotes(), Boolean.TRUE.equals(x.getQualityAcknowledged())); }
     private View view(Booking b, YearlyWorkflow s) {
         String stage = "TERMS_ACCEPTED".equals(s.getStage()) && b.getActualStartAt() != null ? "ACTIVE" : s.getStage();
         var contract = new Contract(s.getContractTotal() == null ? b.getTotalAmount() : s.getContractTotal(), s.getSecurityDeposit(),
@@ -810,7 +859,7 @@ public class YearlyWorkflowServiceImpl implements YearlyWorkflowService {
         Long currentInitialKm = s.getCurrentInitialKm() != null ? s.getCurrentInitialKm()
                 : handovers.findById(b.getId()).filter(h -> "RECEIVED".equals(h.getStage())).map(YearlyHandover::getInitialKm).orElse(null);
         return new View(s.getVersion() == null ? 0L : s.getVersion(), stage, contract, s.isTermsAccepted(), s.getAnnualKm(), s.getExcessKmRate(), s.getGraceDays(), s.getLateDailyRate(), s.getRoundingUnit(), s.getReturnMode(), s.getReturnedOn(), s.getFailureOn(), s.getFinalKm(), s.getReturnEvidenceId(), s.getTotalKm(), s.getCompletedKm(), currentInitialKm,
-                new Money(s.getRentDue(), s.getEarlyFee(), s.getLateFee(), s.getExcessKmFee(), s.getOtherCharges(), s.getRentPaid(), s.getDepositHeld(), s.getRentRefund(), s.getDepositRefund(), s.getBalanceDue(), s.getDepositDeduction(), s.getSettlementNote()),
+                new Money(s.getRentDue(), s.getEarlyFee(), s.getLateFee(), s.getExcessKmFee(), s.getOtherCharges(), s.getRentPaid(), s.getDepositHeld(), s.getRentRefund(), s.getDepositRefund(), s.getBalanceDue(), s.getDepositDeduction(), s.getVehicleChangeDiscount(), s.getSettlementNote()),
                 s.getSettlementEvidenceId(), s.getRefundEvidenceId(), s.getRefundReference(), incidents.findByBookingIdOrderByIdAsc(b.getId()).stream().map(this::incident).toList(), replacements.findByBookingIdOrderByIdAsc(b.getId()).stream().map(this::replacement).toList(),
                 s.getRefundVerifiedReceived() == null ? BigDecimal.ZERO : s.getRefundVerifiedReceived(),
                 s.getRentRefund().add(s.getDepositRefund()).subtract(s.getRefundVerifiedReceived() == null ? BigDecimal.ZERO : s.getRefundVerifiedReceived()).max(BigDecimal.ZERO));

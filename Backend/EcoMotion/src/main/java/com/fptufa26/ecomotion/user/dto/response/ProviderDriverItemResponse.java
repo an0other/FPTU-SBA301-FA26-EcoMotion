@@ -31,6 +31,7 @@ public record ProviderDriverItemResponse(
         BigDecimal ratingAvg,
         Integer ratingCount,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        int upcomingTripCount
 ) {
 }

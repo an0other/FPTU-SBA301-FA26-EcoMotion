@@ -16,9 +16,12 @@ public record BookingWorkflowResponse(
         Instant assignmentExpiresAt, boolean needsDriver, boolean canProposeAlternative,
         String nextAction, Proposal proposal, List<DriverFeedback> driverFeedback,
         List<RefundResponse> refunds, Instant updatedAt, List<DisputeResponse> disputes, List<TripEndHistoryResponse> endConfirmations) {
+    // B1: Proposal bổ sung xe hiện tại, cờ/ghi chú chất lượng thấp hơn, giá hợp đồng, giá xe mới và khoản giảm trừ.
     public record Proposal(String id, OperationalResolutionType resolution, Long vehicleId,
             String vehicleName, Instant pickupTime, String reason, String status,
-            Instant createdAt, Instant respondedAt, String responseReason) { }
+            Instant createdAt, Instant respondedAt, String responseReason,
+            String currentVehicleName, boolean lowerQuality, List<String> qualityNotes,
+            BigDecimal contractAmount, BigDecimal proposedAmount, BigDecimal priceReduction) { }
     public record DriverFeedback(String driverName, String status, Instant respondedAt,
             String reason) { }
 }

@@ -3,13 +3,14 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import ReferencePlanPrices from './ReferencePlanPrices'
 import { slotDurationLabel } from '../../utils/planLabels'
 import { formatBookingWhen, parseVietnamDateTime } from '../../utils/bookingDateTime'
-import { MIN_RENTAL_DURATION_HOURS, rentalDurationLabel, rentalEndTimeConstraints } from '../../utils/rentalPricing'
+import { MIN_RENTAL_DURATION_HOURS, rentalDurationLabel, rentalEndTimeConstraints, rentalStartTimeConstraints } from '../../utils/rentalPricing'
 
 export function ChoosePlanStep({ plans, start, end, onStart, onEnd, quote, pending, error,
   selected, requestedEnd, onSelect, onWindow, onNext, onYearly, timeError }) {
   const lowestPrice = Math.min(...(quote?.options ?? []).map(option => Number(option.rentalAmount)))
   const [startDate, startHour] = start.split('T')
   const pickupTime = parseVietnamDateTime(startDate, startHour)
+  const startConstraints = rentalStartTimeConstraints()
   const endConstraints = rentalEndTimeConstraints(start)
   const inputClass = 'mt-2 w-full rounded-xl border border-[#D9DFD9] bg-white px-4 py-3 focus-visible:outline-2 focus-visible:outline-brand-700'
   return <div className="space-y-6">
@@ -18,7 +19,8 @@ export function ChoosePlanStep({ plans, start, end, onStart, onEnd, quote, pendi
     <ReferencePlanPrices plans={plans} onYearly={onYearly} />
     <div className="grid gap-4 sm:grid-cols-2">
       <RentalTimeInput legend="Giờ nhận xe (giờ Việt Nam)" dateLabel="Ngày nhận xe" hourLabel="Giờ nhận xe"
-        value={start} onChange={onStart} inputClass={inputClass} />
+        value={start} onChange={onStart} inputClass={inputClass}
+        minDate={startConstraints.minDate} minHourForDate={startConstraints.minHourForDate} />
       <RentalTimeInput legend="Giờ trả mong muốn (giờ Việt Nam)" dateLabel="Ngày trả xe" hourLabel="Giờ trả xe"
         value={end} onChange={onEnd} inputClass={inputClass} invalid={Boolean(timeError)}
         minDate={endConstraints.minDate} minHourForDate={endConstraints.minHourForDate} />

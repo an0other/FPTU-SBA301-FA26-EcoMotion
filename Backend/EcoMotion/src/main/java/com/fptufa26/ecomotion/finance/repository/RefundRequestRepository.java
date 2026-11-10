@@ -21,6 +21,8 @@ public interface RefundRequestRepository extends JpaRepository<RefundRequest, Lo
 
     List<RefundRequest> findByBooking_IdOrderByCreatedAtDesc(Long bookingId);
 
+    boolean existsBySourcePaymentTransaction_IdAndStatusIn(Long sourcePaymentTransactionId, java.util.Collection<RefundStatus> statuses);
+
     Optional<RefundRequest> findByPaymentTransaction_Id(Long paymentTransactionId);
 
     List<RefundRequest> findByBooking_Vehicle_Provider_IdOrderByCreatedAtDesc(Long providerId);

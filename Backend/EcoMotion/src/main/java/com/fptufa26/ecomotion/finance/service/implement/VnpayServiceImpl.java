@@ -66,6 +66,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
+import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService;
 
 @Service
 @RequiredArgsConstructor
@@ -83,6 +87,7 @@ public class VnpayServiceImpl implements VnpayService {
     private final DriverOptimizationService driverOptimizationService;
     private final PaymentCodeGenerator paymentCodeGenerator;
     private final Clock clock;
+    private final TripEndConfirmationService endConfirmations;
     private final VnpayConfig vnpayConfig;
     private final PlatformTransactionManager transactionManager;
 
@@ -210,6 +215,7 @@ public class VnpayServiceImpl implements VnpayService {
 
             // If final payable is 0, complete obligations immediately without creating 0 VND VNPay txn (TC09)
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                endConfirmations.confirmedByPayment(booking, currentUserId);
                 booking.setStatus(BookingStatus.COMPLETED);
                 bookingQueryService.saveBooking(booking);
                 paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
@@ -348,14 +354,15 @@ public class VnpayServiceImpl implements VnpayService {
 
         BigDecimal extraCharges = charges.stream()
                 .filter(c -> !c.isWaived()
-                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
+                        && c.getConfirmationStatus() == ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
                         && c.getChargeType() != ChargeType.BASE_RENTAL
                         && c.getChargeType() != ChargeType.WEEKEND)
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal totalObligation = baseRental.add(extraCharges);
+        // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+        BigDecimal totalObligation = baseRental.subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO).add(extraCharges);
 
         List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingId(booking.getId());
         BigDecimal depositPaid = transactions.stream()
@@ -402,6 +409,7 @@ public class VnpayServiceImpl implements VnpayService {
                 booking.getBookingCode(),
                 booking.getStatus(),
                 baseRental,
+                booking.vehicleChangeCredit(),
                 chargeLines,
                 extraCharges,
                 depositPaid,
@@ -538,7 +546,7 @@ public class VnpayServiceImpl implements VnpayService {
                             booking.getPickupTime(), booking.getPlannedEndAt());
                     requireYearlyContractBeforePayment(booking);
                 } catch (InvalidPaymentOperationException
-                         | com.fptufa26.ecomotion.common.exception.ConflictException ex) {
+                         | ConflictException ex) {
                     return recordPaymentForReconciliation(
                             transaction, "Yearly license or signed-contract eligibility changed before payment confirmation");
                 }
@@ -593,7 +601,7 @@ public class VnpayServiceImpl implements VnpayService {
                             paymentRequestRepository.save(pr);
                         });
 
-                if (booking.getDriver() == null && booking.getAssignmentMode() == com.fptufa26.ecomotion.booking.enums.AssignmentMode.FULL_AUTO)
+                if (booking.getDriver() == null && booking.getAssignmentMode() == AssignmentMode.FULL_AUTO)
                     assignDriverAfterCommit(booking.getId());
             } else {
                 return recordPaymentForReconciliation(transaction, "Booking state not eligible after gateway payment");
@@ -639,6 +647,7 @@ public class VnpayServiceImpl implements VnpayService {
             transaction.setPaidAt(clock.instant());
             bookingQueryService.saveTransaction(transaction);
             if (booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT) {
+                endConfirmations.confirmedByPayment(booking, booking.getRenter().getUser().getId());
                 booking.setStatus(BookingStatus.COMPLETED);
                 bookingQueryService.saveBooking(booking);
             }
@@ -1018,14 +1027,15 @@ public class VnpayServiceImpl implements VnpayService {
         List<BookingCharge> charges = bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(booking.getId());
         BigDecimal extraCharges = charges.stream()
                 .filter(c -> !c.isWaived()
-                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
+                        && c.getConfirmationStatus() == ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
                         && c.getChargeType() != ChargeType.BASE_RENTAL
                         && c.getChargeType() != ChargeType.WEEKEND)
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal totalObligation = baseRental.add(extraCharges);
+        // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+        BigDecimal totalObligation = baseRental.subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO).add(extraCharges);
 
         List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingId(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()

@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest;
 
 @RestController
 @RequiredArgsConstructor
@@ -92,11 +93,11 @@ public class PaymentRequestController {
 
     @PostMapping(value = {"/api/v1/payment-requests/{id}/proofs/multipart",
             "/api/payment-requests/{id}/proofs/multipart"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Customer uploads an image proof of bank transfer")
+    @Operation(summary = "Customer marks a bank transfer as sent (receipt image optional)")
     public ApiResponse<PaymentEvidenceResponse> uploadPaymentProof(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(required = false) BigDecimal transferredAmount,
             @RequestParam(required = false) String transactionReference,
             @RequestParam(required = false) Instant transferredAt,
@@ -104,6 +105,14 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.submitPaymentProof(
                 id, principal.getUserId(), file, transferredAmount,
                 transactionReference, transferredAt, note));
+    }
+
+    @PostMapping("/api/payment-requests/{id}/acknowledge")
+    @Operation(summary = "Renter confirms the amount the provider recorded is correct")
+    public ApiResponse<PaymentRequestResponse> acknowledgeReceipt(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable Long id) {
+        return ApiResponse.success(paymentRequestService.acknowledgeReceipt(id, principal.getUserId()));
     }
 
     @GetMapping({"/api/v1/payment-evidences/{id}/file", "/api/payment-evidences/{id}/file"})
@@ -139,6 +148,7 @@ public class PaymentRequestController {
     public ApiResponse<PageResponse<PaymentRequestResponse>> listProviderPaymentRequests(
             @AuthenticationPrincipal SecurityUser principal,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String bookingCode,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) Integer page,
@@ -146,7 +156,7 @@ public class PaymentRequestController {
         int effectiveLimit = (size != null && size > 0) ? size : limit;
         int effectiveOffset = (page != null && page >= 0) ? page * effectiveLimit : offset;
         return ApiResponse.success(paymentRequestService.listProviderPaymentRequests(
-                principal.getUserId(), status, effectiveOffset, effectiveLimit));
+                principal.getUserId(), status, bookingCode, effectiveOffset, effectiveLimit));
     }
 
     @PostMapping({"/api/v1/provider/payment-requests/{id}/confirm", "/api/provider/payment-requests/{id}/confirm"})
@@ -169,7 +179,7 @@ public class PaymentRequestController {
     public ApiResponse<PaymentRequestResponse> recordBankTransferForReconciliation(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
-            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request) {
+            @Valid @RequestBody BankTransferReconciliationRequest request) {
         return ApiResponse.success(paymentRequestService.recordBankTransferForReconciliation(id, principal.getUserId(), request));
     }
 

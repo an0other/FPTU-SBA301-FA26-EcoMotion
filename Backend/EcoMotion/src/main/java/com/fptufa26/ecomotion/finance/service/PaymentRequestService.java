@@ -20,6 +20,9 @@ import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.springframework.web.multipart.MultipartFile;
+import com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest;
+import com.fptufa26.ecomotion.finance.entity.RefundRequest;
+import com.fptufa26.ecomotion.user.entity.User;
 
 public interface PaymentRequestService {
     record YearlyCash(BigDecimal rentPaid, BigDecimal depositHeld) {}
@@ -74,10 +77,15 @@ public interface PaymentRequestService {
 
     PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, int offset, int limit);
 
+    /** Lọc theo mã đơn (deep-link từ chi tiết đơn sang trang tài chính); bookingCode rỗng = như bản không lọc. */
+    default PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, String bookingCode, int offset, int limit) {
+        return listProviderPaymentRequests(currentUserId, status, offset, limit);
+    }
+
     PaymentRequestResponse confirmPayment(Long paymentRequestId, Long currentUserId, ConfirmPaymentRequest request);
 
     PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
-            com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request);
+            BankTransferReconciliationRequest request);
 
     PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request);
 
@@ -93,4 +101,14 @@ public interface PaymentRequestService {
 
     /** Đóng yêu cầu cọc khi nhà xe hủy chuyến trước khi ghi nhận tiền. */
     void voidUnpaidDepositIfProviderWithdraws(Long bookingId);
+
+    /**
+     * Admin chấp nhận khiếu nại sai lệch: ghi nhận phần tiền khách đã chuyển mà nhà xe chưa ghi nhận
+     * (verifiedTotal − đã ghi nhận). Phần còn thiếu của yêu cầu được áp vào, phần dư thành khoản phải hoàn.
+     */
+    java.util.List<RefundRequest> applyMismatchResolution(
+            Long paymentRequestId, java.math.BigDecimal verifiedTotal, User admin, Long disputeId);
+
+    /** Khách xác nhận số tiền nhà xe ghi nhận cho yêu cầu này là đúng. */
+    PaymentRequestResponse acknowledgeReceipt(Long paymentRequestId, Long currentUserId);
 }

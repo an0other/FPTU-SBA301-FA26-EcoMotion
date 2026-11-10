@@ -26,7 +26,40 @@ const DOC_TYPE_LABELS = {
   REGISTRATION: 'Đăng ký xe (Cà-vẹt)',
   INSPECTION: 'Giấy chứng nhận Đăng kiểm',
   INSURANCE: 'Bảo hiểm xe bắt buộc',
+  BUSINESS_BADGE: 'Phù hiệu xe hợp đồng / Kinh doanh',
   OTHER: 'Giấy tờ pháp lý khác',
+}
+
+function classifyVehicleDocuments(documents = []) {
+  if (!Array.isArray(documents) || documents.length === 0) {
+    return { latestDocs: [], olderDocs: [], countByType: {} }
+  }
+  const maxIdByType = {}
+  const countByType = {}
+  for (const d of documents) {
+    const typeKey = d.docType || 'OTHER'
+    countByType[typeKey] = (countByType[typeKey] || 0) + 1
+    const numId = Number(d.id || 0)
+    if (maxIdByType[typeKey] === undefined || numId > maxIdByType[typeKey]) {
+      maxIdByType[typeKey] = numId
+    }
+  }
+
+  const latestDocs = []
+  const olderDocs = []
+  for (const d of documents) {
+    const typeKey = d.docType || 'OTHER'
+    const isLatest =
+      typeof d.isLatest === 'boolean'
+        ? d.isLatest
+        : Number(d.id || 0) === maxIdByType[typeKey]
+    if (isLatest) {
+      latestDocs.push(d)
+    } else {
+      olderDocs.push(d)
+    }
+  }
+  return { latestDocs, olderDocs, countByType }
 }
 
 export default function VehicleDetailModal({
@@ -232,68 +265,192 @@ export default function VehicleDetailModal({
             </div>
           </div>
 
-          {/* Section 4: Mandatory Legal Documents (3 Documents) */}
+          {/* Section 4: Mandatory Legal Documents */}
           <div>
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center justify-between">
+            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-1.5">
                 <span>📑</span> Hồ sơ pháp lý xe ({vehicle.documents?.length || 0} tài liệu)
               </span>
-              <span className="text-[11px] font-normal text-slate-400">Yêu cầu Đăng ký, Đăng kiểm và Bảo hiểm hợp lệ</span>
+              <span className="text-[11px] font-normal text-slate-400">
+                Phân loại rõ bản đăng ký mới (hiện hành) và bản đăng ký cũ (lịch sử trước đó)
+              </span>
             </h4>
 
             {(!vehicle.documents || vehicle.documents.length === 0) ? (
               <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/50 p-4 text-center text-rose-700 font-medium">
                 ⚠️ Cảnh báo: Chủ xe chưa tải lên bất kỳ giấy tờ pháp lý nào! Cần yêu cầu bổ sung trước khi duyệt mở bán.
               </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {vehicle.documents.map((doc) => {
-                  const isDocExpired = doc.expiryDate ? new Date(doc.expiryDate) < new Date() : false
-                  return (
-                    <div
-                      key={doc.id}
-                      className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs"
-                    >
-                      <div className="space-y-1">
-                        <span className="block text-[11px] font-bold text-brand-700">
-                          {DOC_TYPE_LABELS[doc.docType] || doc.docType}
+            ) : (() => {
+              const { latestDocs, olderDocs, countByType } = classifyVehicleDocuments(vehicle.documents)
+              return (
+                <div className="space-y-4">
+                  {/* Latest / New Registration Documents */}
+                  <div className="rounded-2xl border border-indigo-200/80 bg-indigo-50/30 p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-lg bg-indigo-600 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                          Bản đăng ký mới / Hiện hành ({latestDocs.length})
                         </span>
-                        <div className="text-xs text-slate-800">
-                          <strong>Số hiệu:</strong> <span className="font-mono">{doc.docNumber || '—'}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                          <span>Hạn dùng:</span>
-                          <strong className={isDocExpired ? 'text-rose-600 font-bold' : 'text-slate-700'}>
-                            {doc.expiryDate || 'Vô thời hạn'}
-                          </strong>
-                          {isDocExpired && (
-                            <span className="rounded bg-rose-100 px-1 text-[10px] text-rose-700 font-bold">Hết hạn</span>
-                          )}
-                        </div>
-                        <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                            STATUS_BADGES[doc.status] || 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {doc.status}
+                        <span className="text-xs font-bold text-slate-800">
+                          Hồ sơ pháp lý đang áp dụng thẩm định
                         </span>
                       </div>
-
-                      {doc.fileUrl && (
-                        <button
-                          type="button"
-                          onClick={() => onPreviewDoc(doc.fileUrl)}
-                          className="mt-3 flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                        >
-                          <IconEye className="h-3.5 w-3.5" />
-                          <span>Xem ảnh tài liệu</span>
-                        </button>
+                      {olderDocs.length > 0 && (
+                        <span className="text-[11px] font-medium text-indigo-700">
+                          Đã tách riêng {olderDocs.length} giấy tờ đăng ký cũ ở mục lịch sử bên dưới
+                        </span>
                       )}
                     </div>
-                  )
-                })}
-              </div>
-            )}
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {latestDocs.map((doc) => {
+                        const isDocExpired = doc.expiryDate ? new Date(doc.expiryDate) < new Date() : false
+                        const hasOlderVersion = (countByType[doc.docType || 'OTHER'] || 0) > 1
+                        return (
+                          <div
+                            key={doc.id}
+                            className={`flex flex-col justify-between rounded-2xl border p-3.5 shadow-xs ${
+                              doc.status === 'PENDING' || hasOlderVersion
+                                ? 'border-indigo-300 bg-white ring-1 ring-indigo-500/20'
+                                : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap items-center justify-between gap-1">
+                                <span className="block text-[11px] font-bold text-brand-700">
+                                  {DOC_TYPE_LABELS[doc.docType] || doc.docType}
+                                </span>
+                                {hasOlderVersion || doc.status === 'PENDING' ? (
+                                  <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-white">
+                                    Đăng ký mới
+                                  </span>
+                                ) : (
+                                  <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-700">
+                                    Hiện hành
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-800">
+                                <strong>Số hiệu:</strong> <span className="font-mono font-semibold">{doc.docNumber || '—'}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                <span>Hạn dùng:</span>
+                                <strong className={isDocExpired ? 'text-rose-600 font-bold' : 'text-slate-700'}>
+                                  {doc.expiryDate || 'Vô thời hạn'}
+                                </strong>
+                                {isDocExpired && (
+                                  <span className="rounded bg-rose-100 px-1 text-[10px] text-rose-700 font-bold">Hết hạn</span>
+                                )}
+                              </div>
+                              {doc.createdAt && (
+                                <div className="text-[10px] text-slate-400">
+                                  Ngày tải lên: {new Date(doc.createdAt).toLocaleDateString('vi-VN')}
+                                </div>
+                              )}
+                              <div className="pt-0.5 flex items-center gap-1.5">
+                                <span
+                                  className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+                                    STATUS_BADGES[doc.status] || 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {doc.status}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">Doc #{doc.id}</span>
+                              </div>
+                            </div>
+
+                            {doc.fileUrl && (
+                              <button
+                                type="button"
+                                onClick={() => onPreviewDoc(doc.fileUrl)}
+                                className="mt-3 flex items-center justify-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50/70 py-1.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
+                              >
+                                <IconEye className="h-3.5 w-3.5" />
+                                <span>Xem tài liệu mới</span>
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Older / Previous Registration Documents */}
+                  {olderDocs.length > 0 && (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-lg bg-slate-500 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                            Bản đăng ký cũ ({olderDocs.length})
+                          </span>
+                          <span className="text-xs font-bold text-slate-700">
+                            Lịch sử hồ sơ pháp lý đã nộp trước đó (Đã có bản mới thay thế)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {olderDocs.map((doc) => {
+                          const isDocExpired = doc.expiryDate ? new Date(doc.expiryDate) < new Date() : false
+                          return (
+                            <div
+                              key={doc.id}
+                              className="flex flex-col justify-between rounded-2xl border border-dashed border-slate-300 bg-white/80 p-3.5 opacity-85"
+                            >
+                              <div className="space-y-1.5">
+                                <div className="flex flex-wrap items-center justify-between gap-1">
+                                  <span className="block text-[11px] font-bold text-slate-600">
+                                    {DOC_TYPE_LABELS[doc.docType] || doc.docType}
+                                  </span>
+                                  <span className="rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-slate-600">
+                                    Bản cũ (Trước đó)
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-700">
+                                  <strong>Số hiệu cũ:</strong> <span className="font-mono">{doc.docNumber || '—'}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                  <span>Hạn dùng:</span>
+                                  <strong className={isDocExpired ? 'text-rose-600 font-bold' : 'text-slate-600'}>
+                                    {doc.expiryDate || 'Vô thời hạn'}
+                                  </strong>
+                                </div>
+                                {doc.createdAt && (
+                                  <div className="text-[10px] text-slate-400">
+                                    Ngày lưu cũ: {new Date(doc.createdAt).toLocaleDateString('vi-VN')}
+                                  </div>
+                                )}
+                                <div className="pt-0.5 flex items-center gap-1.5">
+                                  <span
+                                    className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+                                      STATUS_BADGES[doc.status] || 'bg-slate-100 text-slate-700'
+                                    }`}
+                                  >
+                                    {doc.status}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">Doc #{doc.id}</span>
+                                </div>
+                              </div>
+
+                              {doc.fileUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => onPreviewDoc(doc.fileUrl)}
+                                  className="mt-3 flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-100 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
+                                >
+                                  <IconEye className="h-3.5 w-3.5" />
+                                  <span>Xem bản lưu cũ</span>
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Section 5: Rental Pricing Plans */}
@@ -322,7 +479,7 @@ export default function VehicleDetailModal({
                     )}
                     {plan.overtimeSurchargeRatio != null && (
                       <div className="text-[11px] text-slate-500">
-                        Hệ số ngoài giờ: <strong>{plan.overtimeSurchargeRatio}x</strong>
+                        Phụ thu quá giờ: <strong>+{Math.round(Number(plan.overtimeSurchargeRatio) * 100)}%</strong>
                       </div>
                     )}
                   </div>

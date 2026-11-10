@@ -7,6 +7,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptufa26.ecomotion.dispute.entity.Dispute;
 
 @Service
 @RequiredArgsConstructor
@@ -18,5 +19,10 @@ public class DisputeQueryServiceImpl implements DisputeQueryService {
     public boolean hasActiveDispute(Long bookingId) {
         return disputeRepository.existsByBooking_IdAndStatusIn(bookingId,
                 List.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW));
+    }
+
+    @Override
+    public List<Dispute> findByBooking(Long bookingId) {
+        return disputeRepository.findByBooking_Id(bookingId);
     }
 }

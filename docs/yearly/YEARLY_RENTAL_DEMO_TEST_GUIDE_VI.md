@@ -1,5 +1,8 @@
 # Demo gói năm: 3 renter, một tuyến chính và các nhánh kiểm tra
 
+
+> Đối chiếu sau gộp conflict với main `56a47dc`, ngày 10/11/2026. Đây là hướng dẫn UAT theo implementation hiện có, chưa phải xác nhận team đã chốt toàn bộ nghiệp vụ sự cố/đổi xe. Frontend đã đạt 178 unit tests và build; backend compile và 17 test policy/ngoại lệ năm đạt. Chưa xác nhận E2E trên DB demo thật. Build thành công không thay thế việc đối chiếu tiền.
+
 Cập nhật 10/11/2026, sau khi cập nhật YearlyRentalDataSeeder. Các trạng thái bên dưới là dữ liệu khi tạo fixture mới; seed không đặt lại tiến trình đã chạy. Đây là kịch bản UAT, không phải báo cáo tất cả bước đã được kiểm thử trên database thật.
 
 ## 1. Tài khoản và nguyên tắc trình diễn
@@ -44,7 +47,7 @@ Các booking mới có snapshot giá, pricing item, 13 payment request, giao d�
 ## 3. Chuẩn bị một lần trước buổi demo
 
 1. Chạy backend profile dev. Không có yêu cầu bật app.demo-seed.enabled hoặc chọn scenario bằng env.
-2. Áp dụng các migration cần thiết, gồm 20261110_yearly_provider_business_closure.sql cho nhóm phân xử mới.
+2. Áp dụng các migration cần thiết, gồm 20261110_yearly_provider_business_closure.sql cho nhóm phân xử mới và 20261110_b1_vehicle_change_price_difference.sql cho dữ liệu giá/chất lượng đổi xe. Đối chiếu schema/migration đã áp dụng; không chạy lại schema.sql để khắc phục lỗi thiếu cột.
 3. Nếu giữ tiến trình thì dùng DB_DDL_AUTO=update. Chỉ khởi tạo lại trên database demo riêng khi chủ động muốn xóa dữ liệu; không chạy schema.sql hoặc create/create-drop vào DB cần giữ.
 4. Đọc log: phải có đủ MONTHLY, HAPPY-END và CANCEL hoặc biết rõ fixture nào được giữ/bỏ qua. Kiểm tra xe 00001 và 00009 chưa bị sử dụng.
 5. Kiểm tra Provider có tài khoản nhận tiền; chưa có sẽ bị chặn chấp nhận đơn.
@@ -98,9 +101,9 @@ Dừng tại đây để chuyển sang MONTHLY; nhánh kết thúc do Provider �
 2. Gửi biên lai kỳ 4 là 15,1 triệu, mã giao dịch mới. Provider xác nhận → tiền thuê đã nhận 60,4 triệu; tiền bảo đảm vẫn 50 triệu.
 3. Báo hao mòn OWNER_MAINTENANCE, hóa đơn 500.000 đ. Provider chọn REIMBURSE 500.000 → ghi nhận chuyển → renter xác nhận. Report đóng; không tự giảm tiền tháng 5.
 4. Nếu cần chứng minh trách nhiệm renter: tạo RENTER_DAMAGE, hóa đơn 300.000 đ → Provider chọn RENTER_PAID, approvedAmount=0 → renter xác nhận. Không thu lại khoản renter đã thanh toán.
-5. Tạo một report hao mòn khác để đổi xe → Provider chọn REPLACE, approvedAmount=0 → chọn xe 00009 → renter đồng ý.
+5. Tạo một report hao mòn khác để đổi xe → Provider chọn REPLACE, approvedAmount=0 → chọn xe 00009 → đọc giá cũ/mới và cảnh báo chất lượng → renter đồng ý. Nếu lowerQuality=true thì phải chọn xác nhận nhận xe chất lượng thấp hơn; không chỉ tick xác nhận thao tác chung.
 6. Provider ghi giao nhận: xe cũ kết thúc 14.000 km, xe mới bắt đầu 2.000 km, có ảnh riêng. Renter xác nhận.
-7. Kiểm tra giá/cọc/hạn/kỳ tiền giữ nguyên. Quãng đường xe cũ là 4.000 km; không lấy đồng hồ xe mới trừ mốc xe cũ.
+7. Kiểm tra giá hợp đồng gốc/cọc/hạn/kỳ tiền giữ nguyên. Với fixture mới chưa chỉnh sửa, xe 00009 cùng giá năm 181 triệu nên giảm trừ đổi xe dự kiến bằng 0. Nếu dữ liệu cũ hoặc giá đã đổi, đọc oldPlanPrice/newPlanPrice và vehicleChangeDiscount; không dùng nguyên các con số quyết toán mẫu phía dưới. Quãng đường xe cũ là 4.000 km; không lấy đồng hồ xe mới trừ mốc xe cũ.
 
 Chỉ tạo report tiếp theo khi report trước đã đóng. Nếu ít thời gian, chọn một nhánh sửa chữa và nhánh đổi xe để thao tác; mở lịch sử/phần chính sách để giải thích nhánh còn lại.
 
@@ -192,3 +195,24 @@ Không khẳng định mọi hủy trước bàn giao mặc định hoàn toàn 
 - Khôi phục DB cần kèm thư mục file đúng snapshot. Chỉ khôi phục trên môi trường demo được chủ động chọn.
 - Các fixture/cọc/biên lai/PDF mô phỏng không chứng minh giao nhận hoặc chuyển tiền ngoài đời.
 - Luồng đăng ký Provider demo riêng một lần theo docs/provider-register. Gói năm dùng Provider đã sẵn sàng để không phụ thuộc kết quả AI đăng ký ngay trong buổi trình bày.
+
+
+## 11. Checklist sau merge — tách tuyến demo và bài hồi quy
+
+Tuyến A–D ưu tiên fixture cùng giá, không phát sinh giảm trừ đổi xe. Trước buổi trình bày kiểm tra config, tình trạng xe, giá snapshot và tiền đã nhận trên chính DB đang dùng; seed không reset dữ liệu cũ.
+
+| Bài kiểm tra riêng | Kỳ vọng/điểm đối chiếu | Trạng thái hướng dẫn |
+| --- | --- | --- |
+| Đổi xe cùng giá 00009 | Giá hợp đồng/cọc/hạn/kỳ tiền không đổi; giảm trừ 0, km cộng từng chặng | Tuyến chính, cần UAT trên fixture thực |
+| Xe thay thế chất lượng thấp | UI cảnh báo; gọi accept không acknowledgeLowerQuality=true phải bị chặn; không tự đổi xe khi mới accept | Có code kiểm tra, chưa xác nhận E2E |
+| Đổi xe đắt hơn/rẻ hơn | Code hiện giữ giá gốc: đắt hơn không thu thêm; rẻ hơn tính giảm trừ theo chặng khi quyết toán | Nhánh sau merge, chính sách còn cần team xác nhận |
+| Xe rẻ hơn rồi kết thúc PROVIDER_FAILURE | Đối chiếu để không giảm thêm trên tháng đã miễn toàn bộ tiền thuê; không lấy công thức hiện tại làm expected độc lập | Rủi ro đã phát hiện, chưa xác nhận đã sửa; không demo như case đạt |
+| Ngày trả trước lần đổi xe đã hoàn tất | Timeline cần nhất quán; nếu API vẫn nhận là lỗi cần ghi lại, không gọi đó là kết quả đúng | Cần hồi quy, chưa xác nhận đã chặn |
+| Admin đang xem xét | Các nút đổi xe/xác nhận bị khóa theo reviewOpen và API có kiểm tra; dùng đúng hồ sơ YEARLY_* | Cần test UI và gọi API trực tiếp |
+| Hủy đề nghị đổi xe đang treo khi có tranh chấp | Kiểm tra đường hủy và khả năng Admin tiếp tục phân xử, không tự suy ra mọi thao tác đều được khóa | Chính sách/đường xử lý cần rà riêng |
+| Hoàn thiếu rồi chuyển phần còn lại | Xem refundVerifiedReceived/refundRemaining; số đã xác minh là cộng dồn, không cộng lại số renter tự khai | Nhánh Admin mục 8, cần UAT |
+| Trước nhận xe: hủy khi đang chờ đối soát tiền | Theo dõi receipt/refund theo luồng tài chính dùng chung mới; không tái dùng công thức EARLY | Bài hồi quy riêng, không chốt mặc định hoàn 100% mọi trường hợp |
+
+Phân xử YEARLY_INCIDENT/YEARLY_REFUND đi qua panel/API năm riêng; không dùng lựa chọn OTHER của luồng tranh chấp chung thay cho chúng. Với lỗi tiền hoặc trạng thái, lưu request/response, ảnh và log; không chỉnh SQL hoặc thay expected để demo tiếp như thành công.
+
+Kiểm tra sau cùng: cùng một chi phí sửa chữa không bị thu lại qua otherCharges/cọc; hoàn ứng không cộng thành rentPaid; tổng tiền hoàn được xác minh không vượt tổng nghĩa vụ. Hai hướng khác nhau phải dùng booking/snapshot demo riêng, không đảo trạng thái booking đã kết thúc.

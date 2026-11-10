@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
-import { REFUND_WORKFLOW_LABELS, shouldShowRefundDetailsList } from '../../utils/bookingWorkflow'
+import { REFUND_WORKFLOW_LABELS, shouldShowRefundDetailsList, visibleProposal } from '../../utils/bookingWorkflow'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import BookingProgressStepper from './BookingProgressStepper'
 import DisputeHistory from './DisputeHistory'
@@ -19,6 +19,35 @@ function Icon({ name, className = '' }) {
   )
 }
 
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return 'Chưa xác định'
+  const totalHours = Math.round(ms / 3600000)
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  return [days ? `${days} ngày` : '', hours ? `${hours} giờ` : ''].filter(Boolean).join(' ') || '0 giờ'
+}
+
+// Lịch hiện tại vs lịch đề xuất. Giờ trả mới luôn = giờ nhận mới + đúng thời lượng thuê hiện tại.
+function buildComparison(proposal, booking) {
+  const start = booking?.pickupTime ? new Date(booking.pickupTime) : null
+  const endRaw = booking?.plannedEndAt || booking?.endTime
+  const end = endRaw ? new Date(endRaw) : null
+  const duration = start && end ? end.getTime() - start.getTime() : NaN
+  const rescheduled = proposal.resolution === 'RESCHEDULE' && proposal.pickupTime
+  const newStart = rescheduled ? new Date(proposal.pickupTime) : start
+  const newEnd = newStart && Number.isFinite(duration) ? new Date(newStart.getTime() + duration) : null
+  const vehicleNow = booking?.vehicleName
+    ? `${booking.vehicleName}${booking.licensePlate ? ` · ${booking.licensePlate}` : ''}`
+    : 'Xe hiện tại'
+  return {
+    current: { vehicle: vehicleNow, start, end, duration: formatDuration(duration) },
+    proposed: {
+      vehicle: proposal.resolution === 'CHANGE_VEHICLE' ? proposal.vehicleName : vehicleNow,
+      start: newStart, end: newEnd, duration: formatDuration(duration),
+    },
+  }
+}
+
 export default function BookingWorkflowSummary({
   workflow,
   booking = {},
@@ -29,6 +58,8 @@ export default function BookingWorkflowSummary({
 }) {
   const [decision, setDecision] = useState(null)
   const [responseReason, setResponseReason] = useState('')
+  // B1: ackLower - khách phải tích xác nhận khi xe thay thế có chất lượng thấp hơn.
+  const [ackLower, setAckLower] = useState(false)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
   const [message, setMessage] = useState('')
@@ -44,7 +75,8 @@ export default function BookingWorkflowSummary({
     ) : null
   }
 
-  const proposal = workflow?.proposal
+  // B4: đề xuất đã rút/hết hiệu lực không hiển thị cho khách (dữ liệu vẫn được lưu và nhà xe vẫn xem được).
+  const proposal = visibleProposal(workflow?.proposal, { provider })
   const pendingProposal = proposal?.status === 'PENDING'
   const when = (value) => formatBookingWhen(value) || 'Chưa xác định'
 
@@ -54,8 +86,9 @@ export default function BookingWorkflowSummary({
     setActionError('')
     setMessage('')
     try {
-      await bookingWorkflowService.respond(workflow.bookingCode, proposal.id, decision, responseReason.trim())
+      await bookingWorkflowService.respond(workflow.bookingCode, proposal.id, decision, responseReason.trim(), ackLower)
       setDecision(null)
+      setAckLower(false)
       await onRefresh()
       setMessage(
         decision === 'ACCEPT'
@@ -90,7 +123,9 @@ export default function BookingWorkflowSummary({
             <Icon name="swap_horiz" className="text-lg text-amber-700" />
             <h3 className="font-bold text-sm">
               {pendingProposal
-                ? 'Phương án đang chờ khách đồng ý'
+                ? provider
+                  ? 'Phương án đang chờ khách đồng ý'
+                  : proposal.resolution === 'CHANGE_VEHICLE' ? 'Nhà xe đề xuất đổi xe' : 'Nhà xe đề xuất dời lịch thuê'
                 : proposal.status === 'REJECTED'
                   ? 'Khách đã từ chối phương án'
                   : proposal.status === 'ACCEPTED'
@@ -99,23 +134,88 @@ export default function BookingWorkflowSummary({
             </h3>
           </div>
 
+          {pendingProposal && (
+            <p className="rounded-lg bg-amber-100 px-2.5 py-1.5 font-semibold text-amber-900">
+              {provider
+                ? 'Đang chờ khách phản hồi. Xe và giờ đón hiện tại được giữ nguyên cho đến khi khách đồng ý.'
+                : 'Đang chờ bạn phản hồi. Chưa có thay đổi nào được áp dụng cho đến khi bạn đồng ý.'}
+            </p>
+          )}
+
+          {pendingProposal && (() => {
+            const cmp = buildComparison(proposal, booking)
+            const rows = [
+              ...(proposal.resolution === 'CHANGE_VEHICLE' ? [['Xe', cmp.current.vehicle, cmp.proposed.vehicle]] : []),
+              ['Giờ nhận xe', cmp.current.start && when(cmp.current.start), cmp.proposed.start && when(cmp.proposed.start)],
+              ['Giờ trả xe', cmp.current.end && when(cmp.current.end), cmp.proposed.end && when(cmp.proposed.end)],
+              ['Thời lượng thuê', cmp.current.duration, cmp.proposed.duration],
+              ['Giá thuê', booking?.totalAmount != null ? formatCurrency(booking.totalAmount) : 'Chưa xác định',
+                booking?.totalAmount != null
+                  ? `${formatCurrency(booking.totalAmount)} (${provider ? 'giữ nguyên hợp đồng' : 'giữ nguyên, bạn không phải trả thêm'})`
+                  : (provider ? 'Giữ nguyên hợp đồng' : 'Giữ nguyên, bạn không phải trả thêm')],
+            ]
+            return (
+              <div className="overflow-hidden rounded-lg border border-amber-200/70 bg-white/80">
+                <div className="grid grid-cols-[7.5rem_1fr_1fr] gap-x-2 border-b border-amber-200/70 bg-amber-100/60 px-2.5 py-1.5 text-[10px] font-bold uppercase text-slate-600">
+                  <span /> <span>Hiện tại</span> <span>Đề xuất</span>
+                </div>
+                {rows.map(([label, now, next]) => (
+                  <div key={label} className="grid grid-cols-[7.5rem_1fr_1fr] gap-x-2 border-b border-amber-100 px-2.5 py-1.5 last:border-b-0">
+                    <span className="text-[11px] font-semibold text-slate-500">{label}</span>
+                    <span className="text-slate-700">{now || 'Chưa xác định'}</span>
+                    <strong className={next && next !== now ? 'text-amber-800' : 'text-slate-900'}>{next || 'Chưa xác định'}</strong>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
             <div className="rounded-lg bg-white/80 p-2.5 border border-amber-200/70">
               <span className="text-[10px] text-slate-500 uppercase font-bold block">Nội dung thay đổi</span>
               <strong className="text-slate-900 block mt-0.5">
                 {proposal.resolution === 'CHANGE_VEHICLE'
                   ? `Xe đề xuất: ${proposal.vehicleName}`
-                  : `Giờ đón đề xuất: ${when(proposal.pickupTime)}`}
+                  : proposal.resolution === 'OTHER'
+                    ? 'Phương án khác (xem mô tả)'
+                    : `Giờ đón đề xuất: ${when(proposal.pickupTime)}`}
               </strong>
             </div>
             <div className="rounded-lg bg-white/80 p-2.5 border border-amber-200/70">
-              <span className="text-[10px] text-slate-500 uppercase font-bold block">Lý do điều chỉnh</span>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">{proposal.resolution === 'OTHER' ? 'Mô tả phương án' : 'Lý do điều chỉnh'}</span>
               <span className="text-slate-800 block mt-0.5">{proposal.reason}</span>
             </div>
           </div>
 
+          {pendingProposal && proposal.resolution === 'CHANGE_VEHICLE' && proposal.lowerQuality && (
+            <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-rose-900">
+              <strong className="block">
+                {provider ? 'Xe đề xuất có chất lượng thấp hơn xe hiện tại' : 'Xe thay thế có chất lượng thấp hơn xe hiện tại của bạn'}
+              </strong>
+              <ul className="mt-1 list-disc pl-4">
+                {(proposal.qualityNotes || []).map((note) => <li key={note}>{note}</li>)}
+              </ul>
+              <span className="mt-1 block">
+                {provider
+                  ? 'Hệ thống chỉ đổi xe sau khi khách xác nhận rõ là đồng ý nhận xe này; chưa có xác nhận thì xe hiện tại được giữ nguyên.'
+                  : 'Xe sẽ không được đổi nếu bạn chưa xác nhận đồng ý.'}
+              </span>
+            </div>
+          )}
+
+          {proposal.resolution === 'CHANGE_VEHICLE' && (proposal.status === 'ACCEPTED' || pendingProposal) && Number(proposal.priceReduction) > 0 && (
+            <p className="rounded-lg bg-emerald-50 px-2.5 py-1.5 font-semibold text-emerald-900">
+              {pendingProposal
+                ? `Xe mới có giá thuê thấp hơn (${formatCurrency(proposal.proposedAmount)} so với ${formatCurrency(proposal.contractAmount)}): nếu ${provider ? 'khách đồng ý, khách sẽ' : 'bạn đồng ý, bạn sẽ'} được giảm trừ ${formatCurrency(proposal.priceReduction)} vào hóa đơn cuối cùng.`
+                : `Xe mới có giá thuê thấp hơn: ${provider ? 'khách được giảm trừ' : 'bạn được giảm trừ'} ${formatCurrency(proposal.priceReduction)} vào hóa đơn cuối cùng.`}
+              {' '}Giá trị hợp đồng và tiền cọc không thay đổi.
+            </p>
+          )}
+
           <p className="text-[11px] text-amber-800 leading-normal">
-            Giá thuê và chính sách đã chốt được giữ nguyên. Lịch và tài xế chỉ được áp dụng khi khách thuê đồng ý.
+            {provider
+              ? 'Giá trị hợp đồng và tiền cọc được giữ nguyên. Nếu xe mới đắt hơn, nhà xe chịu phần chênh lệch; nếu rẻ hơn, phần chênh lệch được trừ vào hóa đơn cuối cùng của khách. Lịch và tài xế chỉ được áp dụng khi khách thuê đồng ý.'
+              : 'Giá trị hợp đồng và tiền cọc của bạn không thay đổi. Nếu xe mới đắt hơn, bạn không phải trả thêm; nếu rẻ hơn, phần chênh lệch được trừ vào hóa đơn cuối cùng của bạn. Lịch và tài xế chỉ được áp dụng khi bạn đồng ý.'}
           </p>
 
           {proposal.responseReason && (
@@ -265,8 +365,19 @@ export default function BookingWorkflowSummary({
               {decision === 'ACCEPT' ? 'Xác nhận đồng ý phương án thay thế?' : 'Xác nhận từ chối phương án thay thế?'}
             </h3>
             <p className="text-xs text-slate-600">
-              {proposal.resolution === 'CHANGE_VEHICLE' ? proposal.vehicleName : when(proposal.pickupTime)}
+              {proposal.resolution === 'CHANGE_VEHICLE' ? proposal.vehicleName : proposal.resolution === 'OTHER' ? proposal.reason : when(proposal.pickupTime)}
             </p>
+            {decision === 'ACCEPT' && proposal.resolution === 'CHANGE_VEHICLE' && Number(proposal.priceReduction) > 0 && (
+              <p className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900">
+                Bạn sẽ được giảm trừ {formatCurrency(proposal.priceReduction)} vào hóa đơn cuối cùng. Giá trị hợp đồng và tiền cọc không thay đổi.
+              </p>
+            )}
+            {decision === 'ACCEPT' && proposal.resolution === 'CHANGE_VEHICLE' && proposal.lowerQuality && (
+              <label className="flex gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-900">
+                <input type="checkbox" checked={ackLower} disabled={busy} onChange={(e) => setAckLower(e.target.checked)} />
+                <span>Tôi đã đọc thông tin và đồng ý đổi sang xe có chất lượng thấp hơn: {(proposal.qualityNotes || []).join('; ')}.</span>
+              </label>
+            )}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Ghi chú phản hồi (tùy chọn)
@@ -294,7 +405,7 @@ export default function BookingWorkflowSummary({
               <button
                 type="button"
                 onClick={respond}
-                disabled={busy}
+                disabled={busy || (decision === 'ACCEPT' && proposal.lowerQuality && proposal.resolution === 'CHANGE_VEHICLE' && !ackLower)}
                 className="rounded-lg bg-brand-700 px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50 shadow-2xs"
               >
                 {busy ? 'Đang gửi...' : 'Xác nhận phản hồi'}

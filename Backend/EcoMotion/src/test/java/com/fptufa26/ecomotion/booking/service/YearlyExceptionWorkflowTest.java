@@ -47,7 +47,7 @@ class YearlyExceptionWorkflowTest {
         service = new YearlyWorkflowServiceImpl(bookings, workflows, incidents, replacements,
                 mock(YearlyHandoverRepository.class), evidence, payments, mock(ScheduleService.class),
                 mock(VehicleService.class), mock(BookingNotificationService.class), clock, ledger, disputes,
-                audit, users, mock(RefundEventService.class), mock(CancellationClosureService.class), BigDecimal.valueOf(100000));
+                audit, users, mock(RefundEventService.class), mock(CancellationClosureService.class), mock(RentalPricingService.class), BigDecimal.valueOf(100000));
         var providerUser = new User(); providerUser.setId(2L);
         var provider = new Provider(); provider.setUser(providerUser);
         var vehicle = new Vehicle(); vehicle.setId(5L); vehicle.setProvider(provider);

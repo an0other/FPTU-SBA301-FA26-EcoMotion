@@ -20,7 +20,6 @@ import com.fptufa26.ecomotion.common.response.PageResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -39,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import com.fptufa26.ecomotion.booking.dto.request.ConfirmDriverAssignmentRequest;
 
 @RestController
 @RequestMapping({"/api/v1/driver/trips", "/api/driver/trips", "/api/driver/schedule"})
@@ -105,6 +105,12 @@ public class DriverTripController {
         return ApiResponse.success(response);
     }
 
+    @GetMapping("/counts")
+    @Operation(summary = "Count trips per schedule tab for current driver")
+    public ApiResponse<java.util.Map<String, Long>> countTrips(@AuthenticationPrincipal SecurityUser principal) {
+        return ApiResponse.success(driverTripService.countDriverTripsByView(principal.getUserId()));
+    }
+
     @GetMapping("/{tripId}")
     @Operation(summary = "Get trip detail for current driver")
     public ApiResponse<DriverTripDetailResponse> getTripDetail(
@@ -119,7 +125,7 @@ public class DriverTripController {
     public ApiResponse<DriverTripDetailResponse> confirmTrip(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("tripId") String tripId,
-            @org.springframework.web.bind.annotation.RequestBody(required = false) com.fptufa26.ecomotion.booking.dto.request.ConfirmDriverAssignmentRequest request) {
+            @org.springframework.web.bind.annotation.RequestBody(required = false) ConfirmDriverAssignmentRequest request) {
         DriverTripDetailResponse response = driverTripService.confirmTrip(principal.getUserId(), tripId, request == null ? null : request.assignedAt());
         return ApiResponse.success(response);
     }

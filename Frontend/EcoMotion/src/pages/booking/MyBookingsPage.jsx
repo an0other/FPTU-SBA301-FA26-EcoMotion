@@ -41,6 +41,8 @@ function toCard(item) {
     pickupAddress: item.pickupAddress,
     totalAmount: Number(item.totalAmount),
     depositAmount: item.depositAmount == null ? null : Number(item.depositAmount),
+    paidAmount: Number(item.paidAmount) || 0,
+    estimatedTotal: item.estimatedTotal == null ? null : Number(item.estimatedTotal),
     canPay: Boolean(item.canPay),
     actionKind: item.actionKind || 'NONE',
     depositPaymentStatus: item.depositPaymentStatus ?? null,

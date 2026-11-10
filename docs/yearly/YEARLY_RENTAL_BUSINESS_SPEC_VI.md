@@ -1,5 +1,8 @@
 # Đặc tả nghiệp vụ thuê xe năm — bản chốt phục vụ triển khai
 
+
+> **Trạng thái sau merge main 56a47dc — 10/11/2026:** tài liệu này là baseline nghiệp vụ trước đợt gộp. Code hiện đã bổ sung đổi xe khác giá, giảm trừ xe rẻ hơn và xác nhận xe chất lượng thấp hơn. Những phần đó chưa được team chốt/kiểm thử đầy đủ và khác scope mục 11 bên dưới; không dùng bản spec này để khẳng định code hiện chỉ cho xe cùng giá. Lần gộp giữ cả bảo vệ tranh chấp và số tiền hoàn đã xác minh của nhánh năm. Các đề xuất thảo luận về xác nhận trách nhiệm chưa mặc nhiên trở thành tính năng đã triển khai. Xem checklist mục 11 trong hướng dẫn demo; chỉ sửa baseline sau khi có quyết định nghiệp vụ và test phù hợp.
+
 Cập nhật: 07/11/2026. Tài liệu tổng hợp các quyết định trong phiên trao đổi với người dùng.
 
 Đây là đặc tả đích, không phải báo cáo rằng toàn bộ chức năng đã có. Code EcoMotion được đối chiếu tại commit `bbdfab2`; tài liệu được lưu trong workspace DocumentAI để cùng tham khảo. Không sửa code nghiệp vụ trong lần viết tài liệu này.

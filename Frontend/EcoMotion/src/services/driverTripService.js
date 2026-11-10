@@ -5,7 +5,7 @@ export function createDriverTripService(client = apiClient) {
   return {
     async listTrips(options = {}) {
       const params = serializeTripFilters(options)
-      const { data } = await client.get('/v1/driver/trips', { params })
+      const { data } = await client.get('/driver/trips', { params })
       return (
         data?.data ?? {
           items: [],
@@ -20,9 +20,22 @@ export function createDriverTripService(client = apiClient) {
     // Banner chỉ hiện chuyến đang thực sự diễn ra (IN_PROGRESS). Không lấy item đầu tiên của view ACTIVE
     // vì nó có thể là chuyến DRIVER_ARRIVED, khiến chuyến IN_PROGRESS bị bỏ sót.
     async getActiveTrip() {
-      const { data } = await client.get('/v1/driver/trips', { params: { view: 'ACTIVE', size: 20 } })
+      const { data } = await client.get('/driver/trips', { params: { view: 'ACTIVE', size: 20 } })
       const items = data?.data?.items || []
       return items.find((item) => item?.status === 'IN_PROGRESS') || null
+    },
+
+    // Số chuyến theo từng tab: { TODAY, REQUESTS, UPCOMING, ACTIVE, HISTORY }
+    async getTripCounts() {
+      const { data } = await client.get('/driver/trips/counts')
+      return data?.data || {}
+    },
+
+    // Chuyến tài xế đang làm dở (đã đến điểm đón / đang chạy, chưa kết thúc) — dùng để khoá thao tác chuyến khác.
+    async getBusyTrips() {
+      const { data } = await client.get('/driver/trips', { params: { view: 'ACTIVE', size: 20 } })
+      const items = data?.data?.items || []
+      return items.filter((item) => ['DRIVER_ARRIVED', 'AWAITING_START_CONFIRMATION', 'IN_PROGRESS'].includes(item?.status))
     },
 
     async getTripDetail(tripIdOrCode) {
@@ -30,45 +43,45 @@ export function createDriverTripService(client = apiClient) {
         throw new Error('Mã chuyến đi không hợp lệ')
       }
       const { data } = await client.get(
-        `/v1/driver/trips/${encodeURIComponent(tripIdOrCode)}`
+        `/driver/trips/${encodeURIComponent(tripIdOrCode)}`
       )
       return data?.data
     },
 
     async confirmTrip(tripId, assignedAt) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/confirm`, assignedAt ? { assignedAt } : undefined)
+      const { data } = await client.post(`/driver/trips/${encodeURIComponent(tripId)}/confirm`, assignedAt ? { assignedAt } : undefined)
       return data?.data
     },
 
     async arriveTrip(tripId) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/arrive`)
+      const { data } = await client.post(`/driver/trips/${encodeURIComponent(tripId)}/arrive`)
       return data?.data
     },
 
     async startTrip(tripId) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/start`)
+      const { data } = await client.post(`/driver/trips/${encodeURIComponent(tripId)}/start`)
       return data?.data
     },
 
     async finishTrip(tripId) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/finish`)
+      const { data } = await client.post(`/driver/trips/${encodeURIComponent(tripId)}/finish`)
       return data?.data
     },
 
     async reportUnavailable(tripId, reason) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/report-unavailable`, { reason })
+      const { data } = await client.post(`/driver/trips/${encodeURIComponent(tripId)}/report-unavailable`, { reason })
       return data?.data
     },
 
     async rejectTrip(tripId, rejectPayload) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const { data } = await client.post(
-        `/v1/driver/trips/${encodeURIComponent(tripId)}/reject`,
+        `/driver/trips/${encodeURIComponent(tripId)}/reject`,
         rejectPayload
       )
       return data?.data
@@ -77,7 +90,7 @@ export function createDriverTripService(client = apiClient) {
     async reportIncident(tripId, incidentPayload) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const { data } = await client.post(
-        `/v1/driver/trips/${encodeURIComponent(tripId)}/incidents`,
+        `/driver/trips/${encodeURIComponent(tripId)}/incidents`,
         incidentPayload
       )
       return data?.data
@@ -86,7 +99,7 @@ export function createDriverTripService(client = apiClient) {
     async listIncidents(tripId) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const { data } = await client.get(
-        `/v1/driver/trips/${encodeURIComponent(tripId)}/incidents`
+        `/driver/trips/${encodeURIComponent(tripId)}/incidents`
       )
       return data?.data ?? []
     },
@@ -95,8 +108,8 @@ export function createDriverTripService(client = apiClient) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const isFormData = typeof FormData !== 'undefined' && evidencePayload instanceof FormData
       const endpoint = isFormData
-        ? `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence/upload`
-        : `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence`
+        ? `/driver/trips/${encodeURIComponent(tripId)}/evidence/upload`
+        : `/driver/trips/${encodeURIComponent(tripId)}/evidence`
       // options có thể chứa onUploadProgress (tiến trình upload); các lời gọi cũ không truyền options.
       const config = options.onUploadProgress ? { onUploadProgress: options.onUploadProgress } : undefined
       const { data } = await client.post(endpoint, evidencePayload, config)
@@ -106,7 +119,7 @@ export function createDriverTripService(client = apiClient) {
     async listEvidence(tripId) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
       const { data } = await client.get(
-        `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence`
+        `/driver/trips/${encodeURIComponent(tripId)}/evidence`
       )
       return data?.data ?? []
     },
@@ -114,20 +127,20 @@ export function createDriverTripService(client = apiClient) {
     async deleteEvidence(tripId, evidenceId) {
       if (!tripId || !evidenceId) throw new Error('Mã chuyến đi hoặc ID minh chứng không hợp lệ')
       const { data } = await client.delete(
-        `/v1/driver/trips/${encodeURIComponent(tripId)}/evidence/${encodeURIComponent(evidenceId)}`
+        `/driver/trips/${encodeURIComponent(tripId)}/evidence/${encodeURIComponent(evidenceId)}`
       )
       return data?.data
     },
 
     async sendLocation(tripId, locationPayload) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.post(`/v1/driver/trips/${encodeURIComponent(tripId)}/locations`, locationPayload)
+      const { data } = await client.post(`/driver/trips/${encodeURIComponent(tripId)}/locations`, locationPayload)
       return data?.data
     },
 
     async getTripTracking(tripId) {
       if (!tripId) throw new Error('Mã chuyến đi không hợp lệ')
-      const { data } = await client.get(`/v1/driver/trips/${encodeURIComponent(tripId)}/tracking`)
+      const { data } = await client.get(`/driver/trips/${encodeURIComponent(tripId)}/tracking`)
       return data?.data
     },
   }

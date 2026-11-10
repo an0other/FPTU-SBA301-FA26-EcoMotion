@@ -5,10 +5,14 @@ export const TV5_REALTIME_EVENTS = Object.fromEntries([
   'BOOKING_CONFIRMED', 'BOOKING_CHANGED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED',
   'DRIVER_ACCEPTED', 'DRIVER_REJECTED', 'DRIVER_REASSIGNED', 'DRIVER_TIMEOUT', 'DRIVER_UNAVAILABLE',
   'DRIVER_ARRIVED', 'DRIVER_STATUS_CHANGED', 'TRIP_STARTED', 'TRIP_COMPLETED',
-  'DRIVER_INCIDENT', 'INCIDENT_RESOLVED', 'TRIP_END_CONFIRMATION_CHANGED', 'DISPUTE_OPENED', 'DISPUTE_UPDATED', 'CHARGES_CHANGED', 'PAYMENT_VERIFIED', 'PAYMENT_RECONCILIATION_REQUIRED', 'REFUND_UPDATED', 'OPERATIONAL_PROPOSAL_CHANGED',
+  'DRIVER_INCIDENT', 'INCIDENT_RESOLVED', 'TRIP_END_CONFIRMATION_CHANGED', 'DISPUTE_OPENED', 'DISPUTE_UPDATED', 'CHARGES_CHANGED', 'PAYMENT_VERIFIED', 'PAYMENT_RECONCILIATION_REQUIRED', 'PAYMENT_PROOF_SUBMITTED', 'PAYMENT_OVERPAID', 'PAYMENT_ISSUE_REPORTED', 'REFUND_UPDATED', 'OPERATIONAL_PROPOSAL_CHANGED',
 ].map(name => [name, name]))
 
 const REALTIME_EVENT_NAMES = new Set(Object.values(TV5_REALTIME_EVENTS))
+
+// Khi SSE kết nối lại liên tục (stream đóng sớm, proxy lỗi) mỗi lần 'open' không được kéo dữ liệu lại;
+// chỉ đồng bộ nếu lần đồng bộ gần nhất đã cũ hơn ngưỡng này.
+export const RECONNECT_RESYNC_MIN_GAP_MS = 30000
 
 export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 15000, enabled = true } = {}) {
   const [isConnected, setIsConnected] = useState(false)
@@ -17,6 +21,7 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
   const handlersRef = useRef(handlers)
   const onResyncRef = useRef(onResync)
   const pending = useRef(false)
+  const lastSyncAt = useRef(0)
   const queued = useRef(false)
   const active = useRef(enabled)
   useEffect(() => {
@@ -33,6 +38,7 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
       do {
         queued.current = false
         await onResyncRef.current?.()
+        lastSyncAt.current = Date.now()
         if (active.current) setLastSyncedAt(new Date())
       } while (queued.current && active.current)
     } finally {
@@ -70,7 +76,7 @@ export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 1500
         return
       }
       if (event.type === 'open') {
-        triggerSync().catch(() => {})
+        if (Date.now() - lastSyncAt.current >= RECONNECT_RESYNC_MIN_GAP_MS) triggerSync().catch(() => {})
         return
       }
       if (event.type !== 'message' && !REALTIME_EVENT_NAMES.has(event.type)) return

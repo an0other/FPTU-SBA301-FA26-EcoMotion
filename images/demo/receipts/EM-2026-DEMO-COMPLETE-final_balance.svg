@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="720" viewBox="0 0 390 720">
+  <rect width="390" height="720" fill="#F1F5F9"/>
+  <rect x="0" y="0" width="390" height="210" fill="#047857"/>
+  <circle cx="195" cy="78" r="34" fill="#FFFFFF"/>
+  <path d="M178 78 L190 90 L213 66" stroke="#047857" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <g font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif" text-anchor="middle">
+    <text x="195" y="140" fill="#D1FAE5" font-size="16">Chuyển khoản thành công</text>
+    <text x="195" y="182" fill="#FFFFFF" font-size="32" font-weight="700">845.000 đ</text>
+  </g>
+  <rect x="20" y="230" width="350" height="400" rx="16" fill="#FFFFFF"/>
+  <g font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14">
+    <text x="40" y="270" fill="#64748B">Người nhận</text>
+    <text x="350" y="270" fill="#0F172A" text-anchor="end" font-weight="600">NGUYEN VAN A</text>
+    <text x="40" y="314" fill="#64748B">Ngân hàng</text>
+    <text x="350" y="314" fill="#0F172A" text-anchor="end" font-weight="600">Vietcombank</text>
+    <text x="40" y="358" fill="#64748B">Số tài khoản</text>
+    <text x="350" y="358" fill="#0F172A" text-anchor="end" font-weight="600">•••• 6789</text>
+    <text x="40" y="402" fill="#64748B">Nội dung</text>
+    <text x="350" y="402" fill="#0F172A" text-anchor="end" font-weight="600">EM2026DEMOCOMPLETEFINAL</text>
+    <text x="40" y="446" fill="#64748B">Thời gian</text>
+    <text x="350" y="446" fill="#0F172A" text-anchor="end" font-weight="600">19:20 26/09/2026</text>
+    <text x="40" y="490" fill="#64748B">Mã giao dịch</text>
+    <text x="350" y="490" fill="#0F172A" text-anchor="end" font-weight="600">FT446898456</text>
+    <line x1="40" y1="528" x2="350" y2="528" stroke="#E2E8F0" stroke-dasharray="6 6"/>
+    <text x="195" y="572" fill="#94A3B8" text-anchor="middle" font-size="12">Ảnh chụp màn hình minh hoạ cho dữ liệu demo</text>
+  </g>
+</svg>

@@ -3,7 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { providerService } from "../../services/providerService";
 import ProviderHeader from "../../components/provider/ProviderHeader";
 import Toast from "../../components/Toast";
+import FilePreviewLightbox from "../../components/common/FilePreviewLightbox";
 import { formatLicensePlateInput } from "../../utils/validation";
+import { getErrorMessage } from "../../utils/errorMessage";
 
 const DEFAULT_VEHICLE_PREVIEW =
   'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500"><rect width="100%" height="100%" fill="%23f1f5f9"/><text x="50%" y="50%" fill="%2394a3b8" font-size="24" font-family="sans-serif" text-anchor="middle">Chưa có ảnh bìa xe</text></svg>';
@@ -38,6 +40,12 @@ export default function ProviderVehicleCreatePage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showTierModal, setShowTierModal] = useState(false);
+  const [previewFile, setPreviewFile] = useState({
+    isOpen: false,
+    fileUrl: "",
+    fileName: "",
+    title: "",
+  });
   const [errors, setErrors] = useState({});
 
   const [form, setForm] = useState({
@@ -53,7 +61,9 @@ export default function ProviderVehicleCreatePage() {
     color: "",
     maintenanceBufferMinutes: 60,
     coverImageUrl: "",
+    galleryImageUrls: [],
   });
+  const [uploadingGallery, setUploadingGallery] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -95,11 +105,36 @@ export default function ProviderVehicleCreatePage() {
     }
   }
 
+  function blockNegativeAndExponentKeys(e, allowDecimal = true) {
+    if (["-", "+", "e", "E"].includes(e.key)) {
+      e.preventDefault();
+      return;
+    }
+    if (!allowDecimal && [".", ","].includes(e.key)) {
+      e.preventDefault();
+    }
+  }
+
+  function handleBufferInputChange(val) {
+    const clean = val.replace(/\D/g, "");
+    setForm((prev) => ({ ...prev, maintenanceBufferMinutes: clean }));
+  }
+
+  function handleBufferInputBlur() {
+    setForm((prev) => {
+      let num = parseInt(prev.maintenanceBufferMinutes, 10);
+      if (isNaN(num) || num < 60) num = 60;
+      if (num > 240) num = 240;
+      return { ...prev, maintenanceBufferMinutes: num };
+    });
+  }
+
   function adjustBuffer(delta) {
     setForm((prev) => {
+      const current = parseInt(prev.maintenanceBufferMinutes, 10) || 60;
       const next = Math.max(
-        30,
-        Math.min(240, (prev.maintenanceBufferMinutes ?? 60) + delta),
+        60,
+        Math.min(240, current + delta),
       );
       return { ...prev, maintenanceBufferMinutes: next };
     });
@@ -147,6 +182,95 @@ export default function ProviderVehicleCreatePage() {
       await processImageUpload(file);
     }
     e.target.value = "";
+  }
+
+  const MAX_GALLERY_IMAGES = 5;
+
+  async function handleGalleryFilesSelected(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const currentCount = form.galleryImageUrls?.length || 0;
+    const availableSlots = MAX_GALLERY_IMAGES - currentCount;
+
+    if (availableSlots <= 0) {
+      setToast({
+        message: `Thư viện ảnh đã đạt giới hạn tối đa ${MAX_GALLERY_IMAGES} ảnh chi tiết.`,
+        type: "error",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    const filesToUpload = files.slice(0, availableSlots);
+    if (files.length > availableSlots) {
+      setToast({
+        message: `Chỉ có thể tải thêm ${availableSlots} ảnh để không vượt quá giới hạn ${MAX_GALLERY_IMAGES} ảnh.`,
+        type: "warning",
+      });
+    }
+
+    const validFiles = [];
+    for (const file of filesToUpload) {
+      const isValidType = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
+      if (!isValidType) {
+        setToast({
+          message: `Tệp "${file.name}" không hợp lệ. Chỉ chấp nhận JPG, PNG, WEBP.`,
+          type: "error",
+        });
+        continue;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        setToast({
+          message: `Tệp "${file.name}" vượt quá dung lượng tối đa 8MB.`,
+          type: "error",
+        });
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (!validFiles.length) {
+      e.target.value = "";
+      return;
+    }
+
+    try {
+      setUploadingGallery(true);
+      const uploadedUrls = [];
+      for (const file of validFiles) {
+        const res = await providerService.uploadVehicleImage(file);
+        if (res?.imageUrl) {
+          uploadedUrls.push(res.imageUrl);
+        }
+      }
+      if (uploadedUrls.length > 0) {
+        setForm((prev) => ({
+          ...prev,
+          galleryImageUrls: [...(prev.galleryImageUrls || []), ...uploadedUrls],
+        }));
+        setToast({
+          message: `Đã tải lên thành công ${uploadedUrls.length} ảnh chi tiết!`,
+          type: "success",
+        });
+      }
+    } catch (err) {
+      console.error("Gallery upload error:", err);
+      setToast({
+        message: err.response?.data?.message || err.message || "Lỗi khi tải ảnh chi tiết",
+        type: "error",
+      });
+    } finally {
+      setUploadingGallery(false);
+      e.target.value = "";
+    }
+  }
+
+  function handleRemoveGalleryImage(indexToRemove) {
+    setForm((prev) => ({
+      ...prev,
+      galleryImageUrls: prev.galleryImageUrls.filter((_, idx) => idx !== indexToRemove),
+    }));
   }
 
   async function handleSubmit(e) {
@@ -256,6 +380,7 @@ export default function ProviderVehicleCreatePage() {
         color: cleanColor,
         maintenanceBufferMinutes: Number(form.maintenanceBufferMinutes),
         coverImageUrl: form.coverImageUrl.trim(),
+        galleryImageUrls: form.galleryImageUrls || [],
       };
 
       const created = await providerService.createVehicle(payload);
@@ -269,12 +394,18 @@ export default function ProviderVehicleCreatePage() {
       }, 1500);
     } catch (err) {
       console.error("Create vehicle failed:", err);
+      const friendlyMsg = getErrorMessage(
+        err,
+        "Không thể đăng ký xe. Vui lòng kiểm tra lại thông tin."
+      );
       const serverMsg =
+        friendlyMsg ||
         err.original?.response?.data?.message ||
         err.response?.data?.message ||
         err.message ||
         "Không thể đăng ký xe. Vui lòng kiểm tra lại thông tin.";
 
+      const cleanServerMsg = serverMsg.replace(/^licensePlate[:\s-]*/i, "");
       const serverErrors = {};
       const lower = serverMsg.toLowerCase();
       if (
@@ -282,7 +413,7 @@ export default function ProviderVehicleCreatePage() {
         lower.includes("licenseplate") ||
         lower.includes("license")
       ) {
-        serverErrors.licensePlate = serverMsg;
+        serverErrors.licensePlate = cleanServerMsg;
         document
           .getElementById("license_plate")
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -337,7 +468,7 @@ export default function ProviderVehicleCreatePage() {
       if (Object.keys(serverErrors).length > 0) {
         setErrors((prev) => ({ ...prev, ...serverErrors }));
       }
-      setToast({ message: serverMsg, type: "error" });
+      setToast({ message: friendlyMsg, type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -654,7 +785,7 @@ export default function ProviderVehicleCreatePage() {
                           id="license_plate"
                           type="text"
                           required
-                          maxLength={20}
+                          maxLength={12}
                           value={form.licensePlate}
                           onChange={(e) => handleChange("licensePlate", formatLicensePlateInput(e.target.value, form.licensePlate))}
                           placeholder="51K-334.12"
@@ -720,7 +851,9 @@ export default function ProviderVehicleCreatePage() {
                                 VIETNAM
                               </span>
                             </div>
-                            <span className="font-mono font-bold text-[24px] tracking-widest text-[#0b1c30] leading-tight select-none my-0.5">
+                            <span className={`w-full max-w-[90%] truncate text-center font-mono font-bold tracking-widest text-[#0b1c30] leading-tight select-none my-0.5 ${
+                              (displayPlate || '').length > 10 ? 'text-[18px] sm:text-[20px]' : 'text-[24px]'
+                            }`}>
                               {displayPlate}
                             </span>
                             <div
@@ -1057,8 +1190,7 @@ export default function ProviderVehicleCreatePage() {
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-bold text-[#0b1c30]">
-                            Khoảng đệm bảo trì giữa các chuyến (Maintenance
-                            Buffer)
+                            Khoảng đệm bảo trì giữa các chuyến
                           </span>
                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-semibold border border-emerald-200">
                             Đặc quyền EcoMotion
@@ -1073,37 +1205,51 @@ export default function ProviderVehicleCreatePage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
-                      <div className="bg-white border border-emerald-200 rounded-xl px-5 py-2 flex items-baseline gap-1.5 shadow-xs min-w-[110px] justify-center">
-                        <span className="text-2xl font-bold text-emerald-800 tracking-tight">
-                          {form.maintenanceBufferMinutes}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-500">
-                          phút
-                        </span>
-                      </div>
-                      <div className="flex flex-col bg-white border border-emerald-200 rounded-xl overflow-hidden shadow-xs">
-                        <button
-                          type="button"
-                          aria-label="Tăng 15 phút"
-                          onClick={() => adjustBuffer(15)}
-                          className="w-8 h-6 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 transition-colors border-b border-emerald-100 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">
-                            keyboard_arrow_up
+                    <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="60"
+                            max="240"
+                            step="15"
+                            value={form.maintenanceBufferMinutes}
+                            onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                            onChange={(e) => handleBufferInputChange(e.target.value)}
+                            onBlur={handleBufferInputBlur}
+                            className="w-28 h-11 text-center font-bold text-lg text-emerald-800 bg-white border border-emerald-300 rounded-xl pr-9 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 pointer-events-none">
+                            phút
                           </span>
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Giảm 15 phút"
-                          onClick={() => adjustBuffer(-15)}
-                          className="w-8 h-6 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">
-                            keyboard_arrow_down
-                          </span>
-                        </button>
+                        </div>
+
+                        <div className="flex flex-col bg-white border border-emerald-200 rounded-xl overflow-hidden shadow-xs">
+                          <button
+                            type="button"
+                            aria-label="Tăng 15 phút"
+                            onClick={() => adjustBuffer(15)}
+                            className="w-8 h-5 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 transition-colors border-b border-emerald-100 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">
+                              keyboard_arrow_up
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Giảm 15 phút"
+                            onClick={() => adjustBuffer(-15)}
+                            className="w-8 h-5 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">
+                              keyboard_arrow_down
+                            </span>
+                          </button>
+                        </div>
                       </div>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Tối thiểu 60 phút, tối đa 240 phút
+                      </span>
                     </div>
                   </div>
 
@@ -1137,6 +1283,27 @@ export default function ProviderVehicleCreatePage() {
                           </span>
                           <span>ẢNH BÌA CHÍNH THỨC · 16:9</span>
                         </div>
+                        {form.coverImageUrl && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewFile({
+                                isOpen: true,
+                                fileUrl: form.coverImageUrl,
+                                fileName: `cover_${form.licensePlate || "vehicle"}.jpg`,
+                                title: `Ảnh bìa xe ${form.brand} ${form.model || ""}`,
+                              });
+                            }}
+                            className="absolute top-3 right-3 px-2.5 py-1 rounded-md bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition-all cursor-pointer opacity-90 hover:opacity-100 z-10"
+                            title="Xem phóng to ảnh bìa"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              zoom_in
+                            </span>
+                            <span>Xem lớn</span>
+                          </button>
+                        )}
                         {uploadingImage && (
                           <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white z-10 gap-2">
                             <div className="w-8 h-8 rounded-full border-3 border-emerald-400 border-t-transparent animate-spin"></div>
@@ -1228,6 +1395,112 @@ export default function ProviderVehicleCreatePage() {
                         {errors.coverImageUrl}
                       </span>
                     )}
+
+                    {/* KHỐI ALBUM ẢNH CHI TIẾT CỦA XE (TÙY CHỌN) */}
+                    <div className="pt-6 border-t border-slate-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                        <div>
+                          <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-2">
+                            <span>Album ảnh chi tiết của xe</span>
+                            <span className="text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              Tùy chọn · Tối đa 5 ảnh
+                            </span>
+                          </label>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Tải thêm ảnh chụp thực tế: nội thất ghế ngồi, khoang lái, cốp sau, góc nghiêng... Giúp xe thu hút và tăng độ tin cậy với khách thuê.
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold text-slate-500 font-mono self-start sm:self-auto">
+                          {form.galleryImageUrls?.length || 0}/5 ảnh
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {/* Danh sách ảnh đã upload */}
+                        {form.galleryImageUrls?.map((url, idx) => (
+                          <div
+                            key={`${url}-${idx}`}
+                            className="group relative aspect-video rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shadow-2xs hover:shadow-sm transition-all"
+                          >
+                            <img
+                              src={url}
+                              alt={`Ảnh chi tiết ${idx + 1}`}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = DEFAULT_VEHICLE_PREVIEW;
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewFile({
+                                  isOpen: true,
+                                  fileUrl: url,
+                                  fileName: `detail_${idx + 1}.jpg`,
+                                  title: `Ảnh chi tiết #${idx + 1} - ${form.brand} ${form.model || ""}`,
+                                })}
+                                className="w-8 h-8 rounded-full bg-emerald-700 text-white flex items-center justify-center hover:bg-emerald-800 transition-colors shadow-sm cursor-pointer"
+                                title="Xem phóng to ảnh"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">zoom_in</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveGalleryImage(idx)}
+                                className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
+                                title="Xóa ảnh này"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                              </button>
+                            </div>
+                            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-bold font-mono">
+                              #{idx + 1}
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Nút thêm ảnh nếu chưa đạt giới hạn 5 ảnh */}
+                        {(form.galleryImageUrls?.length || 0) < MAX_GALLERY_IMAGES && (
+                          <div>
+                            <input
+                              id="galleryImagesInput"
+                              type="file"
+                              accept="image/png, image/jpeg, image/webp"
+                              multiple
+                              className="hidden"
+                              disabled={uploadingGallery}
+                              onChange={handleGalleryFilesSelected}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => !uploadingGallery && document.getElementById("galleryImagesInput")?.click()}
+                              disabled={uploadingGallery}
+                              className={`w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center p-2 transition-all cursor-pointer ${
+                                uploadingGallery
+                                  ? "bg-emerald-50/50 border-emerald-400 cursor-wait"
+                                  : "bg-slate-50 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/30 text-slate-600 hover:text-emerald-700"
+                              }`}
+                            >
+                              {uploadingGallery ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <div className="w-5 h-5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin"></div>
+                                  <span className="text-[10px] font-semibold text-emerald-800">Đang tải...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="material-symbols-outlined text-[22px] mb-0.5 text-slate-400 group-hover:text-emerald-600">
+                                    add_photo_alternate
+                                  </span>
+                                  <span className="text-xs font-semibold">Thêm ảnh</span>
+                                  <span className="text-[10px] text-slate-500">Tối đa 8MB/ảnh</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </section>
 
@@ -1382,6 +1655,15 @@ export default function ProviderVehicleCreatePage() {
           </div>
         </div>
       )}
+
+      {/* File / Image Preview Lightbox (Nested Modal) */}
+      <FilePreviewLightbox
+        isOpen={previewFile.isOpen}
+        onClose={() => setPreviewFile((prev) => ({ ...prev, isOpen: false }))}
+        fileUrl={previewFile.fileUrl}
+        fileName={previewFile.fileName}
+        title={previewFile.title}
+      />
     </div>
   );
 }

@@ -22,6 +22,7 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 import java.util.Locale;
+import com.fptufa26.ecomotion.booking.entity.YearlyWorkflow;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +37,7 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
 
     @Override
     public Optional<java.math.BigDecimal> yearlyRoundingUnit(Long bookingId) {
-        var policy = entityManager.find(com.fptufa26.ecomotion.booking.entity.YearlyWorkflow.class, bookingId);
+        var policy = entityManager.find(YearlyWorkflow.class, bookingId);
         var booking = entityManager.find(Booking.class, bookingId);
         var snapshot = snapshotRepository.findByBooking_Id(bookingId).orElse(null);
         boolean valid = policy != null && policy.isTermsAccepted() && policy.getContractTotal() != null
@@ -148,6 +149,11 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
         var transaction = transactionRepository.findByIdForUpdate(transactionId);
         transaction.ifPresent(t -> entityManager.refresh(t, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE));
         return transaction;
+    }
+
+    @Override
+    public Optional<PaymentTransaction> findTransactionByManualConfirmationId(String confirmationId) {
+        return transactionRepository.findFirstByManualConfirmationId(confirmationId);
     }
 
     @Override

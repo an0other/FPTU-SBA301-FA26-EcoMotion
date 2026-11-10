@@ -123,6 +123,10 @@ public class Booking {
     @Column(name = "provider_confirmed_at")
     private Instant providerConfirmedAt;
 
+    /** Nhà xe đã chốt quyết toán nhưng chờ Renter chốt giờ kết thúc (cửa sổ 12 giờ) mới hoàn tất. */
+    @Column(name = "settlement_requested_at")
+    private Instant settlementRequestedAt;
+
     @Column(name = "driver_replacement_required", nullable = false, columnDefinition = "boolean default false")
     private boolean driverReplacementRequired;
 
@@ -199,6 +203,28 @@ public class Booking {
 
     @Column(name = "previous_pickup_time")
     private Instant previousPickupTime;
+
+    // B1: 4 cột vehicleChange* lưu xe cũ/xe mới, giá hai xe và giảm trừ tại thời điểm đổi; không đổi totalAmount và cọc.
+    /** Thời điểm đổi xe đã được khách chấp thuận (xe cũ nằm ở previousVehicleId). */
+    @Column(name = "vehicle_change_at")
+    private Instant vehicleChangeAt;
+
+    /** Giá thuê xe cũ = giá trị hợp đồng ban đầu (totalAmount), không đổi sau khi đổi xe. */
+    @Column(name = "vehicle_change_old_amount", precision = 14, scale = 2)
+    private BigDecimal vehicleChangeOldAmount;
+
+    /** Giá thuê xe mới cho cùng khoảng thời gian, chốt tại thời điểm đổi. */
+    @Column(name = "vehicle_change_new_amount", precision = 14, scale = 2)
+    private BigDecimal vehicleChangeNewAmount;
+
+    /** Giảm trừ vào hóa đơn cuối = max(0, giá xe cũ - giá xe mới). Xe đắt hơn thì bằng 0. */
+    @Column(name = "vehicle_change_discount", precision = 14, scale = 2)
+    private BigDecimal vehicleChangeDiscount;
+
+    /** Giảm trừ do đổi xe; ZERO nếu chưa có. Chỉ dùng khi tính nghĩa vụ cuối, không đổi totalAmount. */
+    public BigDecimal vehicleChangeCredit() {
+        return vehicleChangeDiscount == null ? BigDecimal.ZERO : vehicleChangeDiscount;
+    }
 
     @jakarta.persistence.Embedded
     private OperationalProposal operationalProposal;

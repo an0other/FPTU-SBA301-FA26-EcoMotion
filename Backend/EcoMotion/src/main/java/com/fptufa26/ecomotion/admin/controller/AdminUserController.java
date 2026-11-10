@@ -8,6 +8,7 @@ import com.fptufa26.ecomotion.admin.dto.response.AdminDriverDto;
 import com.fptufa26.ecomotion.admin.dto.response.AdminEkycDto;
 import com.fptufa26.ecomotion.admin.dto.response.AdminProviderDto;
 import com.fptufa26.ecomotion.admin.dto.response.AdminUserDto;
+import com.fptufa26.ecomotion.common.crypto.DeterministicCipher;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
@@ -43,6 +44,7 @@ import java.util.List;
 public class AdminUserController {
 
     private final UserService userService;
+    private final DeterministicCipher deterministicCipher;
 
     @GetMapping("/users")
     @Operation(summary = "Danh sách người dùng hệ thống (lọc theo role, status, keyword)")
@@ -101,10 +103,10 @@ public class AdminUserController {
     }
 
     @GetMapping("/ekyc")
-    @Operation(summary = "Danh sách hồ sơ eKYC (chờ duyệt hoặc tất cả)")
+    @Operation(summary = "Danh sách hồ sơ eKYC của khách thuê (chờ duyệt hoặc tất cả)")
     public ResponseEntity<ApiResponse<List<AdminEkycDto>>> listEkyc(
             @RequestParam(required = false) EkycStatus status) {
-        List<User> users = userService.listAdminUsers(null, null, null);
+        List<User> users = userService.listAdminUsers(Role.RENTER, null, null);
         List<AdminEkycDto> dtos = users.stream()
                 .filter(u -> status == null || u.getEkycStatus() == status)
                 .map(this::mapEkycDto)
@@ -212,6 +214,7 @@ public class AdminUserController {
 
     private AdminEkycDto mapEkycDto(User u) {
         Renter renter = userService.findRenterProfile(u.getId()).orElse(null);
+        String cccdNo = renter != null ? normalizeCccdNo(renter.getCccdNo()) : null;
         return AdminEkycDto.builder()
                 .userId(u.getId())
                 .email(u.getEmail())
@@ -219,7 +222,7 @@ public class AdminUserController {
                 .phone(u.getPhone())
                 .role(u.getRole())
                 .ekycStatus(u.getEkycStatus())
-                .cccdNo(renter != null ? renter.getCccdNo() : null)
+                .cccdNo(cccdNo)
                 .dateOfBirth(renter != null ? renter.getDateOfBirth() : null)
                 .gender(renter != null ? renter.getGender() : null)
                 .address(renter != null ? renter.getAddress() : null)
@@ -228,5 +231,24 @@ public class AdminUserController {
                 .portraitUrl(renter != null ? renter.getPortraitUrl() : null)
                 .createdAt(u.getCreatedAt())
                 .build();
+    }
+
+    private String normalizeCccdNo(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.matches("\\d{9,12}")) {
+            return trimmed;
+        }
+        try {
+            String decrypted = deterministicCipher.decrypt(trimmed);
+            if (decrypted != null && !decrypted.isBlank()) {
+                return decrypted.trim();
+            }
+        } catch (Exception ignored) {
+            // Fall through if not valid ciphertext
+        }
+        return trimmed;
     }
 }

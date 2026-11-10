@@ -1,4 +1,5 @@
 import { AdminRefundReviewPanel } from '../../components/booking/FinancialReviewPanels'
+import { disputeVerdictLabel } from '../../utils/disputeVerdict'
 import { useState, useEffect } from 'react'
 import { adminService } from '../../services/adminService'
 import {
@@ -202,7 +203,7 @@ export default function AdminOperationsTab({
   }
 
   // Dispute Resolve
-  async function handleResolveDispute(disputeId, status, decision, resolution, refundAwardTotal, tripEndAction) {
+  async function handleResolveDispute(disputeId, status, decision, resolution, refundAwardTotal, tripEndAction, correctedEndAt) {
     setActionLoading(true)
     try {
       await adminService.resolveDispute(
@@ -212,6 +213,7 @@ export default function AdminOperationsTab({
         resolution,
         refundAwardTotal,
         tripEndAction,
+        correctedEndAt,
       )
       setMessage({ type: 'success', text: 'Đã cập nhật phân xử tranh chấp thành công!' })
       setResolvingDispute(null)
@@ -306,7 +308,7 @@ export default function AdminOperationsTab({
             }`}
           >
             <IconWallet className="h-4 w-4" />
-            <span>Thanh toán &amp; Hoàn tiền (Refund)</span>
+            <span>Lịch sử thanh toán</span>
           </button>
         </div>
 
@@ -575,8 +577,21 @@ export default function AdminOperationsTab({
                             {d.status}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 max-w-[200px] truncate text-slate-700" title={d.resolution}>
-                          {d.resolution || <span className="text-slate-400 italic">Chưa có kết luận</span>}
+                        <td className="px-5 py-3.5 max-w-[240px] text-slate-700" title={d.resolution}>
+                          {disputeVerdictLabel(d) && (
+                            <div className="mb-1">
+                              <span className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${d.status === 'RESOLVED'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                                {disputeVerdictLabel(d)}
+                              </span>
+                            </div>
+                          )}
+                          {d.status === 'IN_REVIEW' && d.resolution && (
+                            <div className="mb-1"><span className="inline-block rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-800">Đang xử lý theo phương án khác</span></div>
+                          )}
+                          <div className="truncate">
+                            {d.resolution || <span className="text-slate-400 italic">Chưa có kết luận</span>}
+                          </div>
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <button
@@ -601,28 +616,16 @@ export default function AdminOperationsTab({
         </div>
       )}
 
-      {/* 3. PAYMENTS & REFUND TAB */}
+      {/* 3. PAYMENTS HISTORY TAB */}
       {subTab === 'payments' && (
         <div className="space-y-4">
-          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <span className="text-xs font-bold text-slate-500">Giám sát dòng tiền &amp; Thanh toán</span>
+              <span className="text-xs font-bold text-slate-800 block">Lịch sử thanh toán &amp; Dòng tiền giao dịch</span>
               <p className="text-xs text-slate-600">
-                Lịch sử thanh toán cọc, tiền thuê, phụ phí và tính năng hoàn tiền cho khách.
+                Tra cứu lịch sử thanh toán tiền cọc, tiền thuê cơ bản, phụ phí phát sinh và các giao dịch hoàn trả trên hệ thống.
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setShowRefundModal(true)
-                setRefundForm({ bookingId: '', amount: '', reason: '' })
-              }}
-              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-rose-700 active:scale-95"
-            >
-              <IconWallet className="h-4 w-4" />
-              <span>Tạo hoàn tiền (Mock Refund)</span>
-            </button>
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
@@ -713,10 +716,6 @@ export default function AdminOperationsTab({
       <BookingDetailModal
         booking={selectedBooking}
         onClose={() => setSelectedBooking(null)}
-        onOpenRefund={(bookingId) => {
-          setShowRefundModal(true)
-          setRefundForm((prev) => ({ ...prev, bookingId: String(bookingId) }))
-        }}
         onSelectRenter={(b) => navigateToUser(b.renterUserId, b.renterEmail)}
         onSelectVehicle={(vehicleId) => navigateToVehicle(vehicleId)}
         onSelectProvider={(providerId) => navigateToProvider(providerId)}

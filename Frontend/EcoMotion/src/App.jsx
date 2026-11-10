@@ -25,6 +25,7 @@ import RegisterPage from './pages/RegisterPage'
 import VehicleDetailPage from './pages/VehicleDetailPage'
 import VehicleListPage from './pages/VehicleListPage'
 import VnpayCallbackPage from './pages/VnpayCallbackPage'
+import PublicReviewsPage from './pages/PublicReviewsPage'
 import YearlyRentalPage from './pages/YearlyRentalPage'
 
 import ProviderHomePage from './pages/provider/ProviderHomePage'
@@ -65,6 +66,8 @@ export default function App() {
       <Routes>
       <Route path="/" element={<VehicleListPage />} />
       <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
+      <Route path="/vehicles/:id/reviews" element={<PublicReviewsPage kind="vehicle" />} />
+      <Route path="/drivers/:id/reviews" element={<PublicReviewsPage kind="driver" />} />
       <Route path="/renter" element={<Navigate to="/" replace />} />
 
       <Route path="/login" element={<LoginPage />} />

@@ -1,5 +1,6 @@
 import AdminYearlyExceptionPanel from '../../../components/booking/AdminYearlyExceptionPanel'
 import { AdminYearlyReviewPanel } from '../../../components/booking/FinancialReviewPanels'
+import { TRIP_END_ADVANCED, buildDisputeResolution, defaultVerdict, disputeVerdictLabel, verdictOptions } from '../../../utils/disputeVerdict'
 import { useState } from 'react'
 import { IconX, IconAlertTriangle, IconCheckCircle, IconShield, IconCar, IconUsers } from '../../../components/icons/Icons'
 import AdminPopupModal from './AdminPopupModal'
@@ -30,6 +31,8 @@ function DisputeDetailForm({
   const [form, setForm] = useState({
     status: isResolvedOrRejected ? dispute.status : 'RESOLVED',
     decision: dispute.decision || 'WAIVE_CHARGE',
+    verdict: defaultVerdict(dispute.category),
+    correctedEndAt: '',
     refundAwardTotal: dispute.refundAwardTotal ?? '',
     tripEndAction: '',
     resolution: dispute.resolution || '',
@@ -65,10 +68,18 @@ function DisputeDetailForm({
       })
       return
     }
-    onResolve(dispute.id, form.status,
-      dispute.category === 'CHARGE' && form.status !== 'IN_REVIEW' ? form.decision : undefined,
-      form.resolution.trim(), dispute.category === 'DEPOSIT_REFUND' && form.status === 'RESOLVED' ? Number(form.refundAwardTotal) : undefined,
-      dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' ? form.tripEndAction || undefined : undefined)
+    if (isResolvedOrRejected) {
+      onResolve(dispute.id, dispute.status, dispute.decision || undefined, form.resolution.trim(),
+        dispute.refundAwardTotal ?? undefined, form.tripEndAction || undefined)
+      return
+    }
+    const payload = buildDisputeResolution(dispute.category, form)
+    if (payload.error) {
+      setPopupModal({ mode: 'alert', tone: 'warning', title: 'Thiếu thông tin phán quyết', message: payload.error, confirmText: 'Đã hiểu' })
+      return
+    }
+    onResolve(dispute.id, payload.status, payload.decision, payload.resolution, payload.refundAwardTotal,
+      payload.tripEndAction, payload.correctedEndAt)
   }
 
   return (
@@ -269,6 +280,14 @@ function DisputeDetailForm({
             </p>
           </div>
 
+          {dispute.category === 'PAYMENT_MISMATCH' && (
+            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-xs sm:grid-cols-3">
+              <div><p className="font-semibold text-amber-900">Loại sai lệch</p><p className="mt-1 font-bold text-slate-900">{{ OVERPAID: 'Khách chuyển dư', UNDER_RECORDED: 'Nhà xe ghi thiếu', OTHER: 'Khác' }[dispute.mismatchType] || '—'}</p></div>
+              <div><p className="font-semibold text-amber-900">Khách khai đã chuyển</p><p className="mt-1 font-bold text-slate-900">{dispute.claimedAmount != null ? formatVND(dispute.claimedAmount) : '—'}</p></div>
+              <div><p className="font-semibold text-amber-900">Nhà xe đã ghi nhận</p><p className="mt-1 font-bold text-slate-900">{dispute.recordedAmount != null ? formatVND(dispute.recordedAmount) : '—'}</p></div>
+            </div>
+          )}
+
           {/* Evidence Photos Gallery */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
             <div className="flex items-center justify-between">
@@ -306,38 +325,155 @@ function DisputeDetailForm({
           </div>
 
           {/* Charge in Dispute */}
-          {dispute.chargeId && (
-            <div className="rounded-2xl border border-purple-200 bg-purple-50/40 p-4 space-y-1">
-              <span className="block font-bold text-purple-900 uppercase tracking-wider text-[11px]">
-                Khoản phụ phí đang tranh chấp #{dispute.chargeId}
-              </span>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-700 font-medium">{dispute.chargeDescription || 'Phụ phí phát sinh'}</span>
-                <span className="text-base font-extrabold text-purple-700">
-                  {formatVND(dispute.chargeAmount)}
-                </span>
+          {dispute.chargeId && (() => {
+            const resolvedChargeDecision =
+              dispute.decision ||
+              (isResolvedOrRejected
+                ? dispute.chargeWaived === true || dispute.status === 'RESOLVED'
+                  ? 'WAIVE_CHARGE'
+                  : 'KEEP_CHARGE'
+                : null)
+            const isChargeWaived =
+              resolvedChargeDecision === 'WAIVE_CHARGE' || dispute.chargeWaived === true
+
+            return (
+              <div className="rounded-2xl border border-purple-200 bg-purple-50/40 p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="block font-bold text-purple-900 uppercase tracking-wider text-[11px]">
+                    Khoản phụ phí đang tranh chấp #{dispute.chargeId}
+                  </span>
+                  {isResolvedOrRejected && (
+                    <span
+                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                        isChargeWaived
+                          ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                          : 'border-amber-300 bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {isChargeWaived
+                        ? 'Đã miễn giảm phụ phí (0 ₫ phải trả)'
+                        : 'Giữ nguyên phụ phí (Khách phải trả)'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-slate-700 font-medium">{dispute.chargeDescription || 'Phụ phí phát sinh'}</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-base font-extrabold ${
+                        isResolvedOrRejected && isChargeWaived
+                          ? 'line-through text-slate-400'
+                          : 'text-purple-700'
+                      }`}
+                    >
+                      {formatVND(dispute.chargeAmount)}
+                    </span>
+                    {isResolvedOrRejected && isChargeWaived && (
+                      <span className="text-sm font-black text-emerald-700">→ 0 ₫ (Đã gạch bỏ)</span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* If already resolved, show resolution card */}
-          {isResolvedOrRejected ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-emerald-900">
-                <IconCheckCircle className="h-4 w-4 text-emerald-600" />
-                <span>Tranh chấp đã được phân xử xong</span>
+          {isResolvedOrRejected ? (() => {
+            const effectiveDecision =
+              dispute.decision ||
+              (dispute.category === 'CHARGE' || dispute.chargeId
+                ? dispute.chargeWaived === true || dispute.status === 'RESOLVED'
+                  ? 'WAIVE_CHARGE'
+                  : 'KEEP_CHARGE'
+                : null)
+            const isWaivedDecision = effectiveDecision === 'WAIVE_CHARGE' || effectiveDecision === 'PARTIAL_WAIVE'
+            const isPartialDecision = effectiveDecision === 'PARTIAL_WAIVE'
+
+            return (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-bold text-emerald-900">
+                    <IconCheckCircle className="h-4 w-4 text-emerald-600" />
+                    <span>Tranh chấp đã được phân xử xong</span>
+                  </div>
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                      dispute.status === 'RESOLVED'
+                        ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                        : 'border-rose-300 bg-rose-100 text-rose-800'
+                    }`}
+                  >
+                    {disputeVerdictLabel(dispute)}
+                  </span>
+                </div>
+
+                {/* Explicit Decision Ruling Box for Charge Disputes (C9 / C10) */}
+                {(dispute.category === 'CHARGE' || dispute.chargeId || effectiveDecision) && (
+                  <div
+                    className={`rounded-xl border p-3.5 ${
+                      isWaivedDecision
+                        ? 'border-emerald-300 bg-emerald-100/60 text-emerald-950'
+                        : 'border-amber-300 bg-amber-50/90 text-amber-950'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold uppercase tracking-wider opacity-75">
+                      Quyết định xử lý đã chốt trước đó:
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-lg px-2.5 py-1 text-xs font-extrabold text-white ${
+                          isWaivedDecision ? 'bg-emerald-700' : 'bg-amber-700'
+                        }`}
+                      >
+                        {isPartialDecision
+                          ? `GIẢM MỘT PHẦN (${formatVND(dispute.refundAwardTotal)})`
+                          : isWaivedDecision
+                          ? 'MIỄN GIẢM PHỤ PHÍ (WAIVE_CHARGE)'
+                          : 'GIỮ NGUYÊN PHỤ PHÍ (KEEP_CHARGE)'}
+                      </span>
+                      <span className="text-xs font-bold">
+                        {isPartialDecision
+                          ? `Khoản phụ phí đã giảm ${formatVND(dispute.refundAwardTotal)}; khách trả phần còn lại`
+                          : isWaivedDecision
+                          ? `Đã gạch bỏ khoản phụ phí ${formatVND(dispute.chargeAmount)} khỏi quyết toán của khách thuê`
+                          : `Giữ nguyên khoản phụ phí ${formatVND(dispute.chargeAmount)} — Khách thuê phải thanh toán`}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[11px] opacity-90">
+                      {isPartialDecision
+                        ? 'Số tiền phụ phí đã được cập nhật trong quyết toán; phần khách đã trả dư (nếu có) được tạo khoản hoàn.'
+                        : isWaivedDecision
+                        ? 'Hệ thống đã cập nhật trạng thái miễn phí (waived = true) cho khoản phụ phí này trong hóa đơn quyết toán của đơn thuê.'
+                        : 'Khoản phụ phí vẫn được giữ hiệu lực thu (waived = false) trong hóa đơn quyết toán để khách thuê thanh toán số tiền còn thiếu.'}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Nội dung phán quyết / Ghi chú của Admin:
+                  </span>
+                  <p className="rounded-xl border border-emerald-200 bg-white p-3 font-medium text-slate-800">
+                    {dispute.resolution || 'Chưa ghi nhận'}
+                  </p>
+                </div>
+
+                <p className="mt-2 text-xs text-slate-600">
+                  Người xử lý: <strong>{dispute.handledByName || 'Admin'}</strong> · Thời điểm phân xử:{' '}
+                  <strong>
+                    {dispute.resolvedAt
+                      ? new Date(dispute.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+                      : 'Chưa ghi nhận'}
+                  </strong>
+                </p>
+                {dispute.category === 'TRIP_NOT_CONFIRMED' && !dispute.tripEndAction && <form onSubmit={handleSubmit} className="space-y-2 border-t pt-3">
+                  <label className="block">Hành động sau xác minh<select required value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="block w-full rounded-lg border p-2"><option value="">Chọn hành động</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option></select></label>
+                  {error && <p role="alert">{error}</p>}<button disabled={actionLoading} className="min-h-11 rounded-lg bg-emerald-800 px-4 text-white">Áp dụng hành động với chuyến</button>
+                </form>}
+                {dispute.refundAwardTotal != null && <p className="mt-2 text-sm font-semibold">Tổng mức hoàn theo phán quyết: {formatVND(dispute.refundAwardTotal)}</p>}
               </div>
-              <p className="rounded-xl border border-emerald-200 bg-white p-3 font-medium text-slate-800">
-                {dispute.resolution || 'Chưa ghi nhận'}
-              </p>
-              <p className="mt-2 text-xs text-slate-600">Người xử lý: {dispute.handledByName || 'Chưa ghi nhận'} · Thời điểm phân xử: {dispute.resolvedAt ? new Date(dispute.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa ghi nhận'}</p>
-              {dispute.category === 'TRIP_NOT_CONFIRMED' && !dispute.tripEndAction && <form onSubmit={handleSubmit} className="space-y-2 border-t pt-3">
-                <label className="block">Hành động sau xác minh<select required value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="block w-full rounded-lg border p-2"><option value="">Chọn hành động</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option></select></label>
-                {error && <p role="alert">{error}</p>}<button disabled={actionLoading} className="min-h-11 rounded-lg bg-emerald-800 px-4 text-white">Áp dụng hành động với chuyến</button>
-              </form>}
-              {dispute.refundAwardTotal != null && <p className="mt-2 text-sm font-semibold">Tổng mức hoàn theo phán quyết: {formatVND(dispute.refundAwardTotal)}</p>}
-            </div>
-          ) : (
+            )
+          })() : (
             /* Resolution Form */
             <form onSubmit={handleSubmit} noValidate className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
               <h4 className="font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
@@ -345,77 +481,67 @@ function DisputeDetailForm({
               </h4>
 
               {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-              {/* Status Selector */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Trạng thái sau khi xử lý:
+              {/* Phán quyết theo loại khiếu nại */}
+              <fieldset className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <legend className="px-1 font-bold text-slate-700">Phán quyết</legend>
+                {verdictOptions(dispute.category).map((option) => (
+                  <label key={option.value} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 ${form.verdict === option.value ? 'border-purple-400 bg-white' : 'border-transparent'}`}>
+                    <input type="radio" name="verdict" value={option.value} checked={form.verdict === option.value}
+                      onChange={() => setForm((prev) => ({ ...prev, verdict: option.value }))} className="mt-0.5" />
+                    <span>
+                      <strong className="block text-slate-900">{option.label}</strong>
+                      {option.hint && <span className="text-[11px] text-slate-500">{option.hint}</span>}
+                    </span>
+                  </label>
+                ))}
+                {dispute.category === 'TRIP_NOT_CONFIRMED' && (
+                  <details className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <summary className="cursor-pointer text-[11px] font-semibold text-slate-600">Tuỳ chọn nâng cao</summary>
+                    <div className="mt-2 space-y-1.5">
+                      {TRIP_END_ADVANCED.map((option) => (
+                        <label key={option.value} className="flex cursor-pointer items-center gap-2 text-[11px]">
+                          <input type="radio" name="verdict" value={option.value} checked={form.verdict === option.value}
+                            onChange={() => setForm((prev) => ({ ...prev, verdict: option.value }))} />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </fieldset>
+
+              {dispute.category === 'TRIP_NOT_CONFIRMED' && form.verdict === 'ACCEPT_RENTER_TIME' && (
+                <label className="block space-y-1 font-semibold text-slate-800">
+                  <span>Giờ kết thúc đúng (theo xác minh GPS / bằng chứng)</span>
+                  <input type="datetime-local" required value={form.correctedEndAt}
+                    onChange={(e) => setForm((prev) => ({ ...prev, correctedEndAt: e.target.value }))}
+                    className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
                 </label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value, decision: e.target.value === 'REJECTED' ? 'KEEP_CHARGE' : 'WAIVE_CHARGE' }))}
-                  className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-brand-500"
-                >
-                  <option value="RESOLVED">RESOLVED (Đã phân xử chấp thuận)</option>
-                  <option value="REJECTED">REJECTED (Bác bỏ khiếu nại)</option>
-                  <option value="IN_REVIEW">IN_REVIEW (Đang điều tra thêm)</option>
-                </select>
-              </div>
-
-              {/* Decision Radio for Charges */}
-              {dispute.category === 'CHARGE' && form.status !== 'IN_REVIEW' && (
-                <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                  <span className="block font-bold text-slate-700">Phương án xử lý khoản tiền:</span>
-                  <div className="space-y-2">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="decision"
-                        value="KEEP_CHARGE"
-                        disabled={form.status !== 'REJECTED'}
-                        checked={form.decision === 'KEEP_CHARGE'}
-                        onChange={(e) => setForm((prev) => ({ ...prev, decision: e.target.value }))}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <strong className="block text-slate-900">KEEP_CHARGE (Giữ nguyên khoản phụ phí)</strong>
-                        <span className="text-slate-500 text-[11px]">
-                          Khách thuê phải thanh toán khoản phí này cho nhà cung cấp theo đúng hợp đồng.
-                        </span>
-                      </div>
-                    </label>
-
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="decision"
-                        value="WAIVE_CHARGE"
-                        disabled={form.status !== 'RESOLVED'}
-                        checked={form.decision === 'WAIVE_CHARGE'}
-                        onChange={(e) => setForm((prev) => ({ ...prev, decision: e.target.value }))}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <strong className="block text-emerald-800">WAIVE_CHARGE (Miễn giảm khoản phụ phí)</strong>
-                        <span className="text-slate-500 text-[11px]">
-                          Hệ thống sẽ gạch bỏ phụ phí này khỏi quyết toán của khách thuê.
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
+              )}
+              {dispute.category === 'CHARGE' && form.verdict === 'PARTIAL_WAIVE' && (
+                <label className="block space-y-1 font-semibold text-slate-800">
+                  <span>Số tiền giảm (đ){dispute.chargeAmount != null ? ` — phụ phí hiện tại ${formatVND(dispute.chargeAmount)}` : ''}</span>
+                  <input type="number" min="1" step="1" required value={form.refundAwardTotal}
+                    onChange={(e) => setForm((prev) => ({ ...prev, refundAwardTotal: e.target.value }))}
+                    className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
+                </label>
               )}
 
-              {dispute.category === 'DEPOSIT_REFUND' && form.status === 'RESOLVED' && <label className="block space-y-2 font-semibold text-slate-800">
+              {dispute.category === 'DEPOSIT_REFUND' && form.verdict === 'RESOLVED' && <label className="block space-y-2 font-semibold text-slate-800">
                 <span>Tổng tiền cọc khách được hoàn (đ)</span>
                 <input type="number" required min="0.01" step="0.01" value={form.refundAwardTotal}
                   onChange={e => setForm(prev => ({ ...prev, refundAwardTotal: e.target.value }))}
                   className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
                 <span className="block text-xs font-normal text-slate-600">Nhập tổng mức hoàn theo phán quyết. Hệ thống trừ phần đã hoàn hoặc đang xử lý để chỉ tạo phần thiếu; chưa chuyển tiền ở bước này.</span>
               </label>}
-              {dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' && <label className="block">Hành động với chuyến
-                <select value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="mt-2 block w-full rounded-lg border p-3">
-                  <option value="">Chỉ ghi kết luận, giữ nguyên tạm dừng</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option>
-                </select></label>}
+              {dispute.category === 'PAYMENT_MISMATCH' && form.verdict === 'RESOLVED' && <label className="block space-y-2 font-semibold text-slate-800">
+                <span>Tổng số khách thực chuyển cho khoản này (đ) — đã đối chiếu sao kê</span>
+                <input type="number" min="1" step="1" value={form.refundAwardTotal}
+                  onChange={e => setForm(prev => ({ ...prev, refundAwardTotal: e.target.value }))}
+                  placeholder={dispute.claimedAmount != null ? String(Math.round(Number(dispute.claimedAmount))) : ''}
+                  className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
+                <span className="block text-xs font-normal text-slate-600">Hệ thống ghi nhận phần chênh lệch so với số nhà xe đã ghi: phần còn thiếu của khoản được áp vào, phần dư thành khoản nhà xe bắt buộc hoàn cho khách. Để trống nếu chỉ ghi kết luận.</span>
+              </label>}
               {/* Resolution Notes */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">

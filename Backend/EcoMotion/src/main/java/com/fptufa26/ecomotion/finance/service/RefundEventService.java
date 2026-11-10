@@ -8,6 +8,10 @@ public interface RefundEventService {
     int updateRecipientAccount(Long bookingId, RefundAccountRequest account);
     BigDecimal reservedForEvent(Long bookingId, String eventId);
     boolean hasOpenRefunds(Long bookingId);
+    /** Còn khoản khách chuyển dư chưa hoàn xong (hoặc khách báo chưa nhận) — chặn hoàn tất đơn. */
+    boolean hasOpenExcessRefunds(Long bookingId);
+    /** Giao dịch tiền vào đã được dùng làm nguồn cho một khoản hoàn đang giữ chỗ / đã hoàn. */
+    boolean isSourceReserved(Long sourceTransactionId);
     List<RefundRequest> reserve(Long bookingId, String sourceEventId, BigDecimal amount, String reason, User actor);
     List<RefundRequest> reserveOnTransaction(Long bookingId, String sourceEventId, BigDecimal amount, String reason, User actor, Long sourceTransactionId);
     List<RefundRequest> awardDepositRefund(Long bookingId, Long disputeId, BigDecimal award, User actor);

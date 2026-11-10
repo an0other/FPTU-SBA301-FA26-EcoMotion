@@ -281,10 +281,13 @@ export const RequestSubmitted = ({
                   Cọc giữ chỗ — trả trước và được <strong className="font-semibold text-[#14221A]/70">trừ vào tổng chi phí</strong>, không phải khoản cộng thêm ngoài tổng tiền thuê.
                   {booking.totalAmount > 0 ? (
                     <span className="mt-1 block">
-                      Tổng thuê ước tính {formatCurrency(booking.totalAmount)}
-                      {booking.totalAmount > booking.depositAmount
-                        ? ` · còn lại dự kiến sau cọc ${formatCurrency(booking.totalAmount - booking.depositAmount)}`
-                        : ''}
+                      {(() => {
+                        const grand = booking.estimatedTotal ?? booking.totalAmount
+                        const label = grand > booking.totalAmount ? 'Tổng dự kiến (gồm phí đón)' : 'Tổng thuê ước tính'
+                        return `${label} ${formatCurrency(grand)}${grand > booking.depositAmount
+                          ? ` · còn lại dự kiến sau cọc ${formatCurrency(grand - booking.depositAmount)}`
+                          : ''}`
+                      })()}
                       .
                     </span>
                   ) : null}

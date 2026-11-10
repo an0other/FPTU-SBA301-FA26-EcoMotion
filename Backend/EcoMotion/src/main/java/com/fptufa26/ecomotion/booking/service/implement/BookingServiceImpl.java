@@ -111,11 +111,18 @@ import com.fptufa26.ecomotion.booking.service.RentalPricingService;
 import com.fptufa26.ecomotion.common.cloudinary.CloudinaryService;
 import java.util.stream.Collectors;
 import org.springframework.web.multipart.MultipartFile;
+import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
+import com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage;
+import com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException;
+import com.fptufa26.ecomotion.booking.service.YearlyRentalQuoteService;
+import com.fptufa26.ecomotion.booking.policy.YearlyRentalRules;
 
 @Service
 @RequiredArgsConstructor
 public class BookingServiceImpl implements BookingService {
-    private final com.fptufa26.ecomotion.booking.service.YearlyRentalQuoteService yearlyQuotes;
+    private final YearlyRentalQuoteService yearlyQuotes;
     private final TripEndConfirmationService endConfirmations;
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -155,8 +162,9 @@ public class BookingServiceImpl implements BookingService {
     private final BookingStartPolicy bookingStartPolicy;
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
+    private final EvidenceImageStorage evidenceImageStorage;
     private final RefundEventService refundEventService;
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService cancellationClosure;
+    private final CancellationClosureService cancellationClosure;
 
     @Override
     @Transactional(readOnly = true)
@@ -197,6 +205,24 @@ public class BookingServiceImpl implements BookingService {
 
     private static final Set<BookingStatus> DEPOSIT_PAYABLE_STATUSES = EnumSet.of(
             BookingStatus.AWAITING_DEPOSIT, BookingStatus.ACCEPTED);
+
+    /** Chất lượng dịch vụ/tài xế: từ lúc tài xế tới điểm đón đến sau khi hoàn tất chuyến. */
+    /** Khiếu nại "Khác": từ khi đã cọc đến khi hoàn tất hoặc bị huỷ. */
+    private static final Set<BookingStatus> OTHER_DISPUTE = EnumSet.of(
+            BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED,
+            BookingStatus.DRIVER_ARRIVED, BookingStatus.AWAITING_START_CONFIRMATION, BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION, BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT, BookingStatus.COMPLETED, BookingStatus.CANCELLED,
+            BookingStatus.CANCELLATION_REVIEW);
+
+    private static final Set<BookingStatus> SERVICE_QUALITY_DISPUTE = EnumSet.of(
+            BookingStatus.DRIVER_ARRIVED,
+            BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION,
+            BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT,
+            BookingStatus.COMPLETED);
 
     private static final Set<BookingStatus> CHARGE_DISPUTE = EnumSet.of(
             BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
@@ -239,7 +265,7 @@ public class BookingServiceImpl implements BookingService {
             throw new BadRequestException("Vui lòng chọn tọa độ điểm đón hợp lệ");
         }
         var route=mapLocationService.route(originLat.doubleValue(),originLng.doubleValue(),latitude.doubleValue(),longitude.doubleValue());
-        if(route==null) throw new com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException("Chưa có tuyến ô tô để chốt phí đón");
+        if(route==null) throw new MapLocationUnavailableException("Chưa có tuyến ô tô để chốt phí đón");
         double distance=route.distanceMeters()/1000.0;
         int chargeableKm = (int) Math.ceil(Math.max(0, distance - freeRadiusKm));
         return new PickupQuoteResponse(distance, freeRadiusKm, chargeableKm, rate,
@@ -252,6 +278,7 @@ public class BookingServiceImpl implements BookingService {
         if (rows.size() > 1) {
             rows.stream().skip(1).forEach(extra -> {
                 extra.setWaived(true);
+                extra.setWaivedSource("SYSTEM");
                 chargeRepository.save(extra);
             });
         }
@@ -268,9 +295,10 @@ public class BookingServiceImpl implements BookingService {
         if (quote.pickupFee().signum() == 0) {
             if (charge != null && charge.getId() != null) {
                 charge.setWaived(true);
+                charge.setWaivedSource("SYSTEM");
                 charge.setAmount(BigDecimal.ZERO);
                 charge.setQuantity(1);
-                charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+                charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
                 chargeRepository.save(charge);
             }
             return;
@@ -286,7 +314,7 @@ public class BookingServiceImpl implements BookingService {
         charge.setUnitPrice(quote.outOfRadiusRate());
         charge.setAmount(quote.pickupFee());
         charge.setWaived(false);
-        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
         if (charge.getCreatedBy() == null) {
             charge.setCreatedBy(actor);
         }
@@ -324,7 +352,7 @@ public class BookingServiceImpl implements BookingService {
         if (start.isBefore(clock.instant().plus(MINIMUM_BOOKING_LEAD_TIME))) {
             throw new ConflictException("Đơn thuê phải được tạo trước giờ nhận xe ít nhất 3 giờ");
         }
-        Instant end = yearly ? com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.contractEnd(start) : mixed ? selection.plannedEndAt() : start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
+        Instant end = yearly ? YearlyRentalRules.contractEnd(start) : mixed ? selection.plannedEndAt() : start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
         if (!end.isAfter(start)) {
             throw new ConflictException("Khoảng thời gian thuê không hợp lệ");
         }
@@ -343,7 +371,7 @@ public class BookingServiceImpl implements BookingService {
                 vehicle.getProvider().getId(), vehicle, start, end, null).isEmpty()) {
             throw new ConflictException("Không có tài xế phù hợp và còn trống trong thời gian đã chọn");
         }
-        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, yearly ? com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.reservationEnd(end) : end);
+        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, yearly ? YearlyRentalRules.reservationEnd(end) : end);
         if (!scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
             throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn, bao gồm thời gian đệm");
         }
@@ -519,6 +547,17 @@ public class BookingServiceImpl implements BookingService {
                 result.getTotalElements(), offset, size, result.hasNext());
     }
 
+    private static final Set<BookingStatus> LIST_ACTION_STATUSES = EnumSet.of(
+            BookingStatus.ACCEPTED, BookingStatus.AWAITING_DEPOSIT, BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.AWAITING_END_CONFIRMATION, BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT);
+    private static final Set<BookingStatus> LIST_ACTIVE_STATUSES = EnumSet.of(
+            BookingStatus.IN_PROGRESS, BookingStatus.DRIVER_ARRIVED);
+    private static final Set<BookingStatus> LIST_UPCOMING_STATUSES = EnumSet.of(
+            BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED);
+    private static final Set<BookingStatus> LIST_ENDED_STATUSES = EnumSet.of(
+            BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.REJECTED);
+
     private boolean isActionNeededGroup(String group) {
         return group != null && "ACTION_NEEDED".equalsIgnoreCase(group.trim());
     }
@@ -545,19 +584,26 @@ public class BookingServiceImpl implements BookingService {
             query.orderBy(builder.desc(root.get("createdAt")), builder.desc(root.get("id")));
             return;
         }
-        Expression<Integer> upcomingBucket = builder.<Integer>selectCase()
-                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), 0)
-                .otherwise(1);
-        Expression<Instant> upcomingPickup = builder.<Instant>selectCase()
-                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), root.get("pickupTime"))
+        // Nhóm trạng thái trước: cần thao tác → đang thuê → sắp tới → chờ nhà xe → đã kết thúc.
+        var status = root.get("status");
+        Expression<Integer> statusBucket = builder.<Integer>selectCase()
+                .when(status.in(LIST_ACTION_STATUSES), 0)
+                .when(status.in(LIST_ACTIVE_STATUSES), 1)
+                .when(status.in(LIST_UPCOMING_STATUSES), 2)
+                .when(status.in(LIST_ENDED_STATUSES), 4)
+                .otherwise(3);
+        Predicate ended = status.in(LIST_ENDED_STATUSES);
+        // Trong nhóm đang diễn ra: ngày nhận gần nhất lên trước; nhóm đã kết thúc: mới nhất lên trước.
+        Expression<Instant> openPickup = builder.<Instant>selectCase()
+                .when(builder.not(ended), root.get("pickupTime"))
                 .otherwise(builder.nullLiteral(Instant.class));
-        Expression<Instant> pastPickup = builder.<Instant>selectCase()
-                .when(builder.lessThan(root.get("pickupTime"), now), root.get("pickupTime"))
+        Expression<Instant> endedPickup = builder.<Instant>selectCase()
+                .when(ended, root.get("pickupTime"))
                 .otherwise(builder.nullLiteral(Instant.class));
         query.orderBy(
-                builder.asc(upcomingBucket),
-                builder.asc(upcomingPickup),
-                builder.desc(pastPickup),
+                builder.asc(statusBucket),
+                builder.asc(openPickup),
+                builder.desc(endedPickup),
                 builder.desc(root.get("createdAt")));
     }
 
@@ -565,6 +611,8 @@ public class BookingServiceImpl implements BookingService {
             Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
         return builder.or(
                 payableDepositPredicate(root, query, builder, now),
+                builder.and(root.get("status").in(DEPOSIT_PAYABLE_STATUSES),
+                        builder.exists(partialDepositRequestExists(root, query, builder, now))),
                 payableSettlementPredicate(root, query, builder, now));
     }
 
@@ -613,6 +661,19 @@ public class BookingServiceImpl implements BookingService {
                 builder.equal(request.get("paymentType"), type),
                 request.get("status").in(PaymentRequestStatus.PENDING, PaymentRequestStatus.REJECTED),
                 unexpired);
+        return subquery;
+    }
+
+    /** Cọc mới được ghi nhận một phần, còn hạn: khách cần chuyển phần còn thiếu. */
+    private Subquery<Long> partialDepositRequestExists(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentRequest> request = subquery.from(PaymentRequest.class);
+        subquery.select(request.get("id")).where(
+                builder.equal(request.get("booking").get("id"), root.get("id")),
+                builder.equal(request.get("paymentType"), PaymentRequestType.DEPOSIT),
+                builder.equal(request.get("status"), PaymentRequestStatus.PARTIALLY_PAID),
+                builder.or(builder.isNull(request.get("expiresAt")), builder.greaterThan(request.get("expiresAt"), now)));
         return subquery;
     }
 
@@ -715,8 +776,8 @@ public class BookingServiceImpl implements BookingService {
             throw new ConflictException("Gói năm đã được chấp nhận, không sửa trực tiếp điều kiện đặt xe");
         }
         bookingStartPolicy.validate(request.pickupTime());
-        if (!request.pickupTime().isAfter(Instant.now())) {
-            throw new ConflictException("Thời gian đón phải ở tương lai");
+        if (request.pickupTime().isBefore(clock.instant().plus(MINIMUM_BOOKING_LEAD_TIME))) {
+            throw new ConflictException("Giờ nhận xe phải sau thời điểm hiện tại ít nhất 3 giờ");
         }
         int passengerLimit = Math.max(0, booking.getVehicle().getSeatCount() - 1);
         if (request.passengerCount() > passengerLimit) {
@@ -889,10 +950,14 @@ public class BookingServiceImpl implements BookingService {
             if (charge.isWaived()) {
                 throw new ConflictException("Khoản phí này đã được miễn");
             }
-            charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.DISPUTED);
+            charge.setConfirmationStatus(ChargeConfirmationStatus.DISPUTED);
             chargeRepository.save(charge);
         }
         requireDisputeAllowed(booking, request.category());
+        if (request.category() == DisputeCategory.PAYMENT_MISMATCH) validatePaymentMismatch(booking, request);
+        if (request.category() == DisputeCategory.OTHER
+                && (request.description() == null || request.description().trim().length() < 10))
+            throw new BadRequestException("Khiếu nại \"Khác\" cần mô tả cụ thể ít nhất 10 ký tự");
         PaymentRequest finalRequest = null;
         if (request.category() == DisputeCategory.CHARGE) {
             finalRequest = paymentRequestService
@@ -906,6 +971,10 @@ public class BookingServiceImpl implements BookingService {
         DisputeOpenedResponse response = disputeService.open(
                 booking, booking.getRenter().getUser(), request.category(), charge,
                 request.description(), request.resolvedEvidenceUrls());
+        if (request.category() == DisputeCategory.PAYMENT_MISMATCH) {
+            disputeService.attachPaymentMismatch(response.disputeId(), request.paymentRequestId(),
+                    request.claimedAmount().setScale(2, RoundingMode.HALF_UP), request.mismatchType());
+        }
         if (finalRequest != null) {
             finalRequest.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
             finalRequest.setIssueNote("Payment held while a charge dispute is reviewed");
@@ -916,17 +985,29 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId) {
+    public BookingDetailResponse confirmTripEnd(Long userId, String bookingCode) {
+        Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
+                .orElseThrow(() -> new NotFoundException("Booking not found"));
+        if (booking.getDriverEndConfirmedAt() == null) {
+            throw new ConflictException("Tài xế chưa kết thúc chuyến");
+        }
+        endConfirmations.renterConfirm(booking, userId);
+        return toDetail(booking);
+    }
+
+    @Override
+    @Transactional
+    public BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
         BookingCharge charge = chargeRepository.findByIdAndBooking_Id(chargeId, booking.getId())
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy khoản phí"));
-        if (charge.getConfirmationStatus() != com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING) {
+        if (charge.getConfirmationStatus() != ChargeConfirmationStatus.PENDING) {
             throw new ConflictException("Khoản phí không còn chờ xác nhận");
         }
-        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
         chargeRepository.save(charge);
-        return new com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse(
+        return new BookingChargeResponse(
                 charge.getId(), charge.getChargeType(), charge.getDescription(), charge.getQuantity(),
                 charge.getUnitPrice(), charge.getAppliedRate(), charge.getAmount(), charge.isWaived(),
                 charge.getEvidenceUrl(), null, charge.getCreatedAt(), charge.getConfirmationStatus());
@@ -937,11 +1018,7 @@ public class BookingServiceImpl implements BookingService {
     public String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException("Vui lòng chọn hình ảnh để tải lên");
-        }
-        var uploadResult = cloudinaryService.uploadDisputeEvidence(file, booking.getId());
-        return uploadResult.secureUrl();
+        return evidenceImageStorage.store(file, userId, "dispute-" + booking.getId()).url();
     }
 
     private BookingDetailResponse toDetail(Booking booking) {
@@ -973,14 +1050,47 @@ public class BookingServiceImpl implements BookingService {
         return switch (category) {
             case CHARGE -> CHARGE_DISPUTE.contains(booking.getStatus()) && chargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
                     .anyMatch(c -> !c.isWaived() && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT);
-            case SERVICE_QUALITY -> booking.getStatus() == BookingStatus.IN_PROGRESS || booking.getStatus() == BookingStatus.COMPLETED;
+            case SERVICE_QUALITY -> SERVICE_QUALITY_DISPUTE.contains(booking.getStatus());
             case DEPOSIT_REFUND -> (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)
                     && paymentTransactionRepository.findByBooking_Id(booking.getId()).stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
                         && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0);
             case YEARLY_SETTLEMENT, YEARLY_CANCELLATION, YEARLY_REFUND, YEARLY_INCIDENT -> false;
-            case TRIP_NOT_CONFIRMED -> booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
-                    && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null));
+            case PAYMENT_MISMATCH -> paymentMismatchAllowed(booking);
+            case OTHER -> OTHER_DISPUTE.contains(booking.getStatus());
+            case TRIP_NOT_CONFIRMED -> endConfirmations.canObject(booking)
+                    || (booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
+                    && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null)));
         };
+    }
+
+    /** Có khoản chuyển khoản đã được xác nhận; sau khi đơn hoàn tất vẫn báo được trong 3 ngày kể từ lần xác nhận cuối. */
+    private boolean paymentMismatchAllowed(Booking booking) {
+        Instant latest = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .filter(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
+                        && t.getMethod() == PaymentMethod.BANK_TRANSFER
+                        && t.getPaymentRequest() != null && t.getPaidAt() != null)
+                .map(PaymentTransaction::getPaidAt).max(Instant::compareTo).orElse(null);
+        if (latest == null) return false;
+        if (booking.getStatus() != BookingStatus.COMPLETED && booking.getStatus() != BookingStatus.CANCELLED) return true;
+        return !latest.plus(Duration.ofDays(3)).isBefore(clock.instant());
+    }
+
+    /** Khách báo số tiền nhà xe ghi nhận không đúng: phải chỉ rõ yêu cầu thanh toán, số đã chuyển và ảnh chuyển khoản. */
+    private void validatePaymentMismatch(Booking booking, OpenDisputeRequest request) {
+        if (request.paymentRequestId() == null) throw new BadRequestException("Cần chọn khoản thanh toán bị sai lệch");
+        boolean confirmed = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .anyMatch(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
+                        && t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(request.paymentRequestId()));
+        if (!confirmed) throw new BadRequestException("Khoản thanh toán này chưa được nhà xe xác nhận");
+        if (request.claimedAmount() == null || request.claimedAmount().compareTo(new BigDecimal("1000")) < 0
+                || request.claimedAmount().scale() > 2 || request.claimedAmount().compareTo(new BigDecimal("1000000000")) > 0)
+            throw new BadRequestException("Số tiền bạn đã chuyển không hợp lệ");
+        if (request.mismatchType() == null || !OpenDisputeRequest.MISMATCH_TYPES.contains(request.mismatchType()))
+            throw new BadRequestException("Loại sai lệch không hợp lệ");
+        if (request.resolvedEvidenceUrls().isEmpty())
+            throw new BadRequestException("Cần đính kèm ảnh chuyển khoản làm bằng chứng");
+        if ("OTHER".equals(request.mismatchType()) && (request.description() == null || request.description().isBlank()))
+            throw new BadRequestException("Vui lòng mô tả sai lệch");
     }
 
     private void requireDisputeAllowed(Booking booking, DisputeCategory category) {
@@ -1059,6 +1169,7 @@ public class BookingServiceImpl implements BookingService {
                 case CHANGE_VEHICLE -> "Nhà cung cấp đã đổi xe";
                 case RESCHEDULE -> "Nhà cung cấp đã dời giờ nhận xe";
                 case CANCEL_AND_REFUND -> providerCancelTimelineTitle(payments);
+                case OTHER -> "Nhà cung cấp áp dụng phương án khác";
             };
             steps.add(new TimelineStepResponse(
                     title,
@@ -1165,7 +1276,28 @@ public class BookingServiceImpl implements BookingService {
                 assignedDriverName(booking),
                 actionKind(booking),
                 depositPaymentStatus(booking),
-                depositRejectionReason(booking));
+                depositRejectionReason(booking),
+                estimatedTotal(booking),
+                paidAmount(booking));
+    }
+
+    private BigDecimal paidAmount(Booking booking) {
+        return paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .filter(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
+                        && t.getType() != PaymentType.SECURITY_DEPOSIT)
+                .map(t -> RefundMath.appliedPortion(t.getAmount(), t.getAppliedAmount(), t.getProcessingNote()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** Tiền thuê + phụ phí chưa miễn (gồm phí đón ngoài bán kính) — khớp "Tổng chi phí dự kiến" ở trang chi tiết. */
+    private BigDecimal estimatedTotal(Booking booking) {
+        BigDecimal base = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
+        BigDecimal extras = chargeRepository.findByBooking_IdOrderByIdAsc(booking.getId()).stream()
+                .filter(c -> !c.isWaived() && c.getAmount() != null
+                        && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT)
+                .map(BookingCharge::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return base.add(extras);
     }
 
     private String depositPaymentStatus(Booking booking) {
@@ -1437,6 +1569,15 @@ public class BookingServiceImpl implements BookingService {
                     && !hasUploadedYearlyContract(booking)) {
                 return false;
             }
+            Optional<PaymentRequest> depositReq = paymentRequestService
+                    .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT);
+            // Nhà xe mới ghi nhận một phần cọc: khách vẫn phải (và được) chuyển phần còn thiếu.
+            if (depositReq.isPresent() && depositReq.get().getStatus() == PaymentRequestStatus.PARTIALLY_PAID) {
+                PaymentRequest partial = depositReq.get();
+                BigDecimal paid = partial.getPaidAmount() == null ? BigDecimal.ZERO : partial.getPaidAmount();
+                boolean open = partial.getExpiresAt() == null || partial.getExpiresAt().isAfter(now);
+                return open && partial.getAmount().compareTo(paid) > 0;
+            }
             boolean alreadyPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
                     .anyMatch(tx -> (tx.getType() == PaymentType.DEPOSIT_PAY
                             || tx.getType() == PaymentType.UPFRONT_PAY)
@@ -1444,8 +1585,6 @@ public class BookingServiceImpl implements BookingService {
             if (alreadyPaid) {
                 return false;
             }
-            Optional<PaymentRequest> depositReq = paymentRequestService
-                    .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT);
             if (depositReq.isPresent()) {
                 PaymentRequest request = depositReq.get();
                 if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(now)) {

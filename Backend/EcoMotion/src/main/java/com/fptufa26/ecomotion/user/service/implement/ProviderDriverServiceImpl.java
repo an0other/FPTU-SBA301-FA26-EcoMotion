@@ -303,18 +303,19 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
         User u = d.getUser();
         DriverOperationalStatus opStatus = driverStatusService.calculateOperationalStatus(d);
 
-        String currentTripBookingCode = null;
-        if (opStatus == DriverOperationalStatus.ON_TRIP) {
-            currentTripBookingCode = bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.IN_PROGRESS)
-                    .map(Booking::getBookingCode)
-                    .orElse(null);
-        }
+        // Chuyến đang làm dở: đang chạy, hoặc đã tới điểm đón / chờ khách xác nhận bắt đầu.
+        String currentTripBookingCode = bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.IN_PROGRESS)
+                .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.AWAITING_START_CONFIRMATION))
+                .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.DRIVER_ARRIVED))
+                .map(Booking::getBookingCode)
+                .orElse(null);
 
         String nextTripBookingCode = null;
         Instant nextTripPickupTime = null;
+        final String current = currentTripBookingCode;
         List<Booking> upcoming = bookingQueryService.findUpcomingDriverBookings(d.getId(), List.of(
                 BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED, BookingStatus.DRIVER_ARRIVED
-        ), clock.instant());
+        ), clock.instant()).stream().filter(b -> !b.getBookingCode().equals(current)).toList();
         if (!upcoming.isEmpty()) {
             Booking next = upcoming.getFirst();
             nextTripBookingCode = next.getBookingCode();
@@ -347,7 +348,8 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
                 d.getRatingAvg() != null ? d.getRatingAvg() : BigDecimal.ZERO,
                 d.getRatingCount() != null ? d.getRatingCount() : 0,
                 d.getCreatedAt(),
-                d.getUpdatedAt()
+                d.getUpdatedAt(),
+                upcoming.size()
         );
     }
 }

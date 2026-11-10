@@ -57,5 +57,8 @@ public class AdminVehicleDto {
         private LocalDate expiryDate;
         private String fileUrl;
         private DocumentStatus status;
+        private Instant createdAt;
+        private Instant updatedAt;
+        private Boolean isLatest;
     }
 }

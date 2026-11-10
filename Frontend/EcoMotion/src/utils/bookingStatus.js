@@ -109,7 +109,7 @@ export const BOOKING_FILTERS = [
 ]
 
 export const BOOKING_SORTS = [
-  { id: 'PICKUP', label: 'Gần ngày nhận' },
+  { id: 'PICKUP', label: 'Theo trạng thái' },
   { id: 'NEWEST', label: 'Mới tạo' },
 ]
 

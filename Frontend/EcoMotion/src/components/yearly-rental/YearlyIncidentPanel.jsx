@@ -51,9 +51,13 @@ export default function YearlyIncidentPanel({ role, view, busy, run, act, upload
     </article>)}
     {replacements.map(r => <article key={r.id} className="space-y-3 rounded-xl border border-emerald-200 p-4">
       <h4 className="font-semibold">Đổi xe · dự kiến {yearlyDate(r.plannedOn)}</h4>
-      <p className="text-sm">Xe cũ mã {r.oldVehicleId} → xe thay thế mã {r.newVehicleId}</p>
+      <p className="text-sm">Xe cũ {r.oldVehicleName || `mã ${r.oldVehicleId}`} → xe thay thế {r.newVehicleName || `mã ${r.newVehicleId}`}</p>
+      {r.oldPlanPrice != null && r.newPlanPrice != null && <p className="text-sm text-slate-600">Giá thuê năm: {yearlyMoney(r.oldPlanPrice)} → {yearlyMoney(r.newPlanPrice)}. {Number(r.newPlanPrice) > Number(r.oldPlanPrice) ? 'Xe mới đắt hơn: khách không phải trả thêm.' : Number(r.newPlanPrice) < Number(r.oldPlanPrice) ? 'Xe mới rẻ hơn: phần chênh lệch theo số ngày dùng xe mới được trừ vào quyết toán.' : 'Không phát sinh chênh lệch.'}</p>}
+      {r.lowerQuality && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-sm text-rose-900">Xe thay thế có chất lượng thấp hơn: {r.qualityNotes}. Chỉ đổi khi người thuê xác nhận đồng ý{r.qualityAcknowledged ? ' (đã xác nhận)' : ''}.</p>}
       <p className="text-sm">{({ PROPOSED: 'Chờ người thuê đồng ý', ACCEPTED: 'Đã đồng ý, chờ bàn giao', HANDOVER_PROPOSED: 'Chờ xác nhận nhận xe mới', COMPLETED: 'Đã đổi xe', CANCELLED: 'Đã hủy' })[r.status]}</p>
-      {!reviewOpen && role === 'renter' && r.status === 'PROPOSED' && <ActionForm title="Đồng ý đổi xe, giữ nguyên giá, cọc và hạn hợp đồng" confirm busy={busy} onSubmit={() => run(() => act('replacements/' + r.id + '/accept', { version: r.version }))} />}
+      {!reviewOpen && role === 'renter' && r.status === 'PROPOSED' && <ActionForm title="Đồng ý đổi xe, giữ nguyên giá, cọc và hạn hợp đồng" confirm busy={busy}
+        fields={r.lowerQuality ? [{ name: 'ack', label: 'Xe thay thế có chất lượng thấp hơn. Bạn có đồng ý nhận xe này?', type: 'select', options: [['yes', 'Tôi đồng ý nhận xe có chất lượng thấp hơn']] }] : []}
+        onSubmit={d => run(() => act('replacements/' + r.id + '/accept', { version: r.version, acknowledgeLowerQuality: d.get('ack') === 'yes' }))} />}
       {!reviewOpen && role === 'provider' && ['ACCEPTED', 'HANDOVER_PROPOSED'].includes(r.status) && <ActionForm title="Ghi nhận bàn giao xe thay thế" busy={busy} fields={[
         { name: 'exchangedOn', label: 'Ngày đổi xe', type: 'date' }, { name: 'oldFinalKm', label: 'Công-tơ-mét xe cũ (km)', type: 'number' },
         { name: 'newInitialKm', label: 'Công-tơ-mét xe mới (km)', type: 'number' },

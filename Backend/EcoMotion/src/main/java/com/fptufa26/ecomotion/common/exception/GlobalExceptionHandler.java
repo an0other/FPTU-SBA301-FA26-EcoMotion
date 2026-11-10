@@ -127,7 +127,9 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(this::describeFieldError)
-                .collect(Collectors.joining(", "));
+                .filter(msg -> msg != null && !msg.isBlank())
+                .distinct()
+                .collect(Collectors.joining("; "));
 
         return build(
                 HttpStatus.BAD_REQUEST,
@@ -383,7 +385,44 @@ public class GlobalExceptionHandler {
     }
 
     private String describeFieldError(FieldError fieldError) {
-        return fieldError.getField() + " " + fieldError.getDefaultMessage();
+        String defaultMessage = fieldError.getDefaultMessage();
+        if (defaultMessage == null || defaultMessage.isBlank()) {
+            return translateFieldName(fieldError.getField()) + " không hợp lệ";
+        }
+        boolean hasVietnamese = defaultMessage.chars().anyMatch(c -> c > 127);
+        if (hasVietnamese) {
+            return defaultMessage;
+        }
+        return switch (defaultMessage) {
+            case "must not be blank" -> "Vui lòng không để trống " + translateFieldName(fieldError.getField());
+            case "must not be null" -> "Vui lòng cung cấp " + translateFieldName(fieldError.getField());
+            default -> {
+                if (defaultMessage.startsWith("size must be")) {
+                    yield translateFieldName(fieldError.getField()) + " có độ dài không hợp lệ";
+                }
+                yield translateFieldName(fieldError.getField()) + ": " + defaultMessage;
+            }
+        };
+    }
+
+    private String translateFieldName(String field) {
+        if (field == null) {
+            return "thông tin";
+        }
+        return switch (field) {
+            case "licensePlate" -> "biển số xe";
+            case "chassisNo" -> "số khung (VIN)";
+            case "engineNo" -> "số máy";
+            case "brand" -> "hãng xe";
+            case "model" -> "dòng xe";
+            case "manufactureYear" -> "năm sản xuất";
+            case "seatCount" -> "số chỗ ngồi";
+            case "color" -> "màu xe";
+            case "transmission" -> "hộp số";
+            case "fuelType" -> "loại nhiên liệu";
+            case "maintenanceBufferMinutes" -> "khoảng đệm bảo trì";
+            default -> field;
+        };
     }
 
     private ResponseEntity<ErrorResponse> build(

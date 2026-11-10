@@ -60,7 +60,8 @@ public interface BookingMapper {
                 charge.isWaived(),
                 charge.isWaived() ? BigDecimal.ZERO : charge.getAmount(),
                 charge.getConfirmationStatus(),
-                charge.getEvidenceUrl());
+                charge.getEvidenceUrl(),
+                charge.isWaived() ? charge.getWaivedSource() : null);
     }
 
     @Mapping(target = "fullName", source = "user.fullName")
@@ -130,8 +131,9 @@ public interface BookingMapper {
             String driverName,
             BookingActionKind actionKind,
             String depositPaymentStatus,
-            String depositRejectionReason
-    ) {
+            String depositRejectionReason,
+            BigDecimal estimatedTotal,
+            BigDecimal paidAmount) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getPreviousVehicleId() != null || booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
         PlanType planType = snapshot != null ? snapshot.getPlanType() : booking.getPlan().getPlanType();
@@ -171,7 +173,9 @@ public interface BookingMapper {
                 driverName,
                 actionKind,
                 depositPaymentStatus,
-                depositRejectionReason);
+                depositRejectionReason,
+                estimatedTotal,
+                paidAmount);
     }
 
     default BookingDetailResponse toDetail(Booking booking,
@@ -261,7 +265,7 @@ public interface BookingMapper {
     }
 
     private static String cancelDetailNote(Booking booking) {
-        if (booking.getOperationalResolution() != com.fptufa26.ecomotion.booking.enums.OperationalResolutionType.CANCEL_AND_REFUND) {
+        if (booking.getOperationalResolution() != OperationalResolutionType.CANCEL_AND_REFUND) {
             return null;
         }
         String reason = booking.getOperationalResolutionReason();

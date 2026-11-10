@@ -4,6 +4,8 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import com.fptufa26.ecomotion.finance.service.FinancialAuditService;
+import com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests;
 
 public interface YearlyWorkflowService {
     View disputeRefund(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.RefundComplaint request);
@@ -13,11 +15,11 @@ public interface YearlyWorkflowService {
     View adminView(Long adminId, String code);
     List<ReviewCase> reviewCases(Long userId, String code);
     record ReviewCase(Long id, String category, String status, String description, List<String> evidenceUrls, String resolution) {}
-    View disputeSettlement(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Complaint request);
-    View replyReview(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Reply request);
-    View adjudicateSettlement(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.SettlementRuling request);
-    void adjudicateCancellation(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.CancellationRuling request);
-    java.util.List<com.fptufa26.ecomotion.finance.service.FinancialAuditService.Entry> reviewHistory(Long userId, String code);
+    View disputeSettlement(Long userId, String code, YearlyReviewRequests.Complaint request);
+    View replyReview(Long userId, String code, YearlyReviewRequests.Reply request);
+    View adjudicateSettlement(Long adminId, String code, YearlyReviewRequests.SettlementRuling request);
+    void adjudicateCancellation(Long adminId, String code, YearlyReviewRequests.CancellationRuling request);
+    java.util.List<FinancialAuditService.Entry> reviewHistory(Long userId, String code);
 
     View get(Long userId, String code);
     Preview preview(Long userId, String code, PreviewRequest request);
@@ -38,7 +40,7 @@ public interface YearlyWorkflowService {
     Incident incidentConfirm(Long userId, String code, Long id, Version request);
     Replacement replacement(Long userId, String code, Replace request);
     Replacement cancelReplacement(Long userId, String code, Long id, Version request);
-    Replacement acceptReplacement(Long userId, String code, Long id, Version request);
+    Replacement acceptReplacement(Long userId, String code, Long id, AcceptReplacement request);
     Replacement replacementInspection(Long userId, String code, Long id, Exchange request);
     Replacement confirmReplacement(Long userId, String code, Long id, Version request);
 
@@ -65,6 +67,8 @@ public interface YearlyWorkflowService {
                   @NotNull @Min(1) Long evidenceId, @NotNull @DecimalMin("0") @Digits(integer=12, fraction=2) BigDecimal invoiceAmount) {}
     record Resolution(@NotNull @Min(0) Long version, @NotBlank @Pattern(regexp="FIXED|REIMBURSE|RENTER_PAID|END_PROVIDER|REPLACE") String outcome,
                       @NotBlank @Size(max=1000) String note, @NotNull @DecimalMin("0") @Digits(integer=12, fraction=2) BigDecimal approvedAmount) {}
+    // B1: acknowledgeLowerQuality = khách xác nhận rõ khi xe thay thế có chất lượng thấp hơn.
+    record AcceptReplacement(@NotNull @Min(0) Long version, Boolean acknowledgeLowerQuality) {}
     record Replace(@NotNull @Min(1) Long incidentId, @NotNull @Min(1) Long vehicleId,
                    @NotNull LocalDate plannedOn) {}
     record Exchange(@NotNull @Min(0) Long version, @NotNull LocalDate exchangedOn,
@@ -75,11 +79,14 @@ public interface YearlyWorkflowService {
                     String resolutionNote, BigDecimal approvedAmount, Long transferEvidenceId, String bankReference) {}
     record Replacement(Long id, Long version, Long incidentId, Long oldVehicleId, Long newVehicleId,
                        LocalDate plannedOn, LocalDate exchangedOn, Long oldFinalKm, Long newInitialKm,
-                       Long oldEvidenceId, Long newEvidenceId, String status) {}
+                       Long oldEvidenceId, Long newEvidenceId, String status,
+                       String oldVehicleName, String newVehicleName, BigDecimal oldPlanPrice, BigDecimal newPlanPrice,
+                       boolean lowerQuality, String qualityNotes, boolean qualityAcknowledged) {}
     record Money(BigDecimal rentDue, BigDecimal earlyFee, BigDecimal lateFee, BigDecimal excessKmFee,
                  BigDecimal otherCharges, BigDecimal rentPaid, BigDecimal depositHeld,
                  BigDecimal rentRefund, BigDecimal depositRefund, BigDecimal balanceDue,
-                 BigDecimal depositDeduction, String note) {}
+                 // B1: vehicleChangeDiscount = giảm trừ do đổi xe rẻ hơn (đã tính vào rentDue/balanceDue).
+                 BigDecimal depositDeduction, BigDecimal vehicleChangeDiscount, String note) {}
     record View(Long version, String stage, Contract contract, boolean termsAccepted, Long annualKm, BigDecimal excessKmRate,
                 int graceDays, BigDecimal lateDailyRate, BigDecimal roundingUnit, String returnMode,
                 LocalDate returnedOn, LocalDate failureOn, Long finalKm, Long returnEvidenceId, Long totalKm, long completedKm, Long currentInitialKm,

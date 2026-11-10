@@ -2,7 +2,7 @@
 
 > Kịch bản seed cập nhật 10/11/2026 dùng 3 renter, Provider và Admin. Booking MONTHLY/HAPPY-END phục vụ vận hành và quyết toán; EM-Y2-CANCEL thuộc renter happy-end, đã trả cọc/kỳ đầu nhưng chưa bàn giao. Hủy đơn này dùng API hủy trước nhận và phân xử YEARLY_CANCELLATION, không dùng returns/settlement của hợp đồng đã nhận xe. Thứ tự màn hình, dữ liệu mẫu và cách xử lý thay đổi nằm tại [hướng dẫn demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).
 
-Đối chiếu controller/service hiện tại ngày 07/11/2026. Chuẩn URL của luồng này là **/api**, không thêm /v1 trong request mới. Các alias /api/v1 đã có ở API dùng chung được giữ để tương thích; tài liệu này chỉ dùng đường dẫn chính /api.
+Đối chiếu controller/service sau gộp conflict với main 56a47dc ngày 10/11/2026. Tài liệu mô tả code hiện có, không tự coi mọi chính sách sau merge là nghiệp vụ đã được team chốt. Chuẩn URL của luồng này là **/api**, không thêm /v1 trong request mới. Các alias /api/v1 đã có ở API dùng chung được giữ để tương thích; tài liệu này chỉ dùng đường dẫn chính /api.
 
 Nghiệp vụ: [đặc tả](YEARLY_RENTAL_BUSINESS_SPEC_VI.md). Tài khoản và thao tác demo: [hướng dẫn demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).
 
@@ -230,7 +230,7 @@ Lấy xe của provider bằng `GET /api/provider/vehicles?page=0&size=100&statu
 | Method / URL | Bên | Body mẫu | Response |
 |---|---|---|---|
 | POST P/replacements | Provider | {"incidentId":601,"vehicleId":302,"plannedOn":"2026-11-07"} | Replacement, PROPOSED |
-| POST R/replacements/{id}/accept | Renter | {"version":0} | Replacement, ACCEPTED |
+| POST R/replacements/{id}/accept | Renter | {"version":0,"acknowledgeLowerQuality":true} | Replacement, ACCEPTED; bắt buộc xác nhận true khi lowerQuality=true, còn lại có thể false/bỏ trường |
 | POST P/replacements/{id}/inspection | Provider | {"version":1,"exchangedOn":"2026-11-07","oldFinalKm":10500,"newInitialKm":20000,"oldEvidenceId":506,"newEvidenceId":507} | Replacement, HANDOVER_PROPOSED |
 | POST R/replacements/{id}/confirm | Renter | {"version":2} | Replacement, COMPLETED; đóng report liên quan |
 | POST R/P/replacements/{id}/cancel | Một bên của đơn | {"version":1} | Replacement, CANCELLED; report mở lại để provider xử lý phương án khác |
@@ -329,3 +329,15 @@ Ví dụ renter báo mới nhận một phần:
 Khi thiếu ngân hàng nhận tiền, API Provider chấp nhận booking trả conflict với hướng dẫn thiết lập tại Tài chính. Không bỏ điều kiện này bằng cách upload lại hợp đồng.
 
 Các bảng hiện hữu cần migration `20261110_yearly_provider_business_closure.sql`; không thực thi schema.sql trên dữ liệu cần giữ. Các số tiền ví dụ chỉ minh họa request.
+
+
+## 16. Bổ sung DTO và giới hạn sau merge main 56a47dc
+
+- `replacements[]` thêm `oldVehicleName`, `newVehicleName`, `oldPlanPrice`, `newPlanPrice`, `lowerQuality`, `qualityNotes`, `qualityAcknowledged`. lowerQuality hiện dựa vào tiêu chí số chỗ/năm sản xuất của policy, không phải giám định tổng thể chất lượng xe.
+- Accept dùng version của replacement và `acknowledgeLowerQuality`. Đây là đồng ý đề nghị, chưa cập nhật xe đang sử dụng; bước confirm bàn giao mới hoàn thành đổi xe.
+- `money.vehicleChangeDiscount` là khoản giảm trừ được code tính, client không tự gửi số giảm vào settlement. `money.rentDue` vẫn được service gán từ tiền các kỳ trước giảm trừ; không trừ lại discount lần nữa từ balanceDue/rentRefund đã tính.
+- `refundVerifiedReceived` và `refundRemaining` là field cấp View, không nằm trong money. Chúng được giữ sau gộp với trường giảm trừ mới; không dùng số renter tự khai làm số đã xác minh.
+- Tiếp tục dùng các endpoint năm cho YEARLY_REFUND/YEARLY_INCIDENT; không mở chúng qua endpoint khiếu nại chung. Giữ các category mới PAYMENT_MISMATCH/OTHER của main ở phạm vi luồng chung tương ứng.
+- `reviewOpen` trên UI chỉ là bảo vệ giao diện; quyền/version/dispute phải được kiểm tra ở backend. Không khẳng định mọi endpoint, đặc biệt cancel replacement, đều đã có cùng một guard.
+- Code hiện cho đổi xe khác giá, xe đắt hơn không thu thêm và xe rẻ hơn giảm trừ theo chặng. Đây là mở rộng so với mục 11 của business spec cũ; xem ghi chú trạng thái ở đầu business spec và checklist demo, chưa coi là policy đã nghiệm thu.
+- Cần kiểm tra riêng giảm trừ khi PROVIDER_FAILURE, timeline ngày trả sau đổi xe và thu/hoàn trùng. Chưa có xác nhận E2E cho các ca này; không sửa code hoặc đổi contract trong lần cập nhật tài liệu.

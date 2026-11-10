@@ -53,6 +53,13 @@ public class RefundController {
         return ApiResponse.success(null);
     }
 
+    @PostMapping("/api/refunds/{refundId}/offset")
+    @PreAuthorize("hasRole('RENTER')")
+    @Operation(summary = "Renter offsets an overpayment against the final settlement instead of a refund")
+    public ApiResponse<RefundResponse> offset(@AuthenticationPrincipal SecurityUser principal, @PathVariable Long refundId) {
+        return ApiResponse.success(refundService.offsetExcessRefund(principal.getUserId(), refundId));
+    }
+
     @PostMapping({"/api/v1/refunds", "/api/refunds"})
     @Operation(summary = "Submit a new refund request for a booking")
     public ApiResponse<RefundResponse> createRefund(
