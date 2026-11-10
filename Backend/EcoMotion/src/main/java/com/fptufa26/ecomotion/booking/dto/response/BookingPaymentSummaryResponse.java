@@ -11,6 +11,8 @@ public record BookingPaymentSummaryResponse(
         BigDecimal netPaidAmount,
         BigDecimal remainingAmount,
         BigDecimal creditAmount,
+        // B1: khoản giảm trừ do đổi sang xe rẻ hơn (đã trừ vào tổng chi phí).
+        BigDecimal vehicleChangeDiscount,
         boolean provisional,
         String balanceNote
 ) {

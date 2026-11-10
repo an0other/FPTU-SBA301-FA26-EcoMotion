@@ -130,4 +130,20 @@ public class RentalPricingServiceImpl implements RentalPricingService {
             throw new ConflictException("Giá hoặc thời lượng đã thay đổi, vui lòng lấy báo giá mới");
         return option(vehicleCatalogService.requireApproved(vehicleId), start, hours, amount, items);
     }
+
+    // B1: yearlyPlanPrice - giá gói năm của xe thay thế, dùng tính chênh lệch giá khi đổi xe.
+    @Override public BigDecimal yearlyPlanPrice(Long vehicleId) {
+        return planRepository.findByVehicle_IdAndPlanType(vehicleId, PlanType.YEARLY)
+                .filter(p -> p.getStatus() == PlanStatus.ACTIVE && p.getSlotPrice() != null)
+                .map(RentalPlan::getSlotPrice)
+                .orElseThrow(() -> new ConflictException("Xe thay thế chưa có gói năm để tính chênh lệch giá thuê"));
+    }
+
+    @Override public BigDecimal rentalAmountFor(Long vehicleId, Instant start, Instant end) {
+        int hours = Math.toIntExact(Duration.between(start, end).toHours());
+        return RentalPriceOptimizer.optimize(plans(vehicleId), hours).stream()
+                .filter(c -> c.hours() == hours).map(RentalPriceOptimizer.Combination::amount)
+                .min(Comparator.naturalOrder())
+                .orElseThrow(() -> new ConflictException("Xe thay thế chưa có gói giá phù hợp để tính chênh lệch giá thuê"));
+    }
 }

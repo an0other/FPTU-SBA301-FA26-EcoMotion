@@ -11,7 +11,8 @@ import YearlyPaymentsPanel from './YearlyPaymentsPanel'
 import YearlyIncidentPanel from './YearlyIncidentPanel'
 
 const stages = { TERMS_DRAFT: 'Chờ chốt điều khoản', TERMS_ACCEPTED: 'Chuẩn bị hợp đồng và bàn giao', ACTIVE: 'Đang thuê', RETURN_REQUESTED: 'Đã yêu cầu trả xe', RETURN_INSPECTED: 'Chờ xác nhận kiểm định', RETURNED: 'Đã nhận lại xe', SETTLEMENT_PROPOSED: 'Chờ đồng ý quyết toán', SETTLEMENT_ACCEPTED: 'Đã chốt quyết toán', REFUND_TRANSFER_RECORDED: 'Chờ xác nhận tiền hoàn', REFUND_RECEIVED: 'Đã nhận tiền hoàn', COMPLETED: 'Hoàn tất' }
-const moneyLabels = { rentDue: 'Tiền thuê phải trả', earlyFee: 'Phí kết thúc sớm', lateFee: 'Phí trả trễ', excessKmFee: 'Phí vượt km', otherCharges: 'Phụ phí khác', rentPaid: 'Tiền thuê đã nhận', depositHeld: 'Tiền bảo đảm đang giữ', depositDeduction: 'Khấu trừ tiền bảo đảm', balanceDue: 'Cần thanh toán bổ sung', rentRefund: 'Tiền thuê cần hoàn', depositRefund: 'Tiền bảo đảm cần hoàn' }
+// B1: thêm nhãn vehicleChangeDiscount (giảm trừ do đổi xe rẻ hơn).
+const moneyLabels = { rentDue: 'Tiền thuê phải trả', earlyFee: 'Phí kết thúc sớm', lateFee: 'Phí trả trễ', excessKmFee: 'Phí vượt km', otherCharges: 'Phụ phí khác', rentPaid: 'Tiền thuê đã nhận', depositHeld: 'Tiền bảo đảm đang giữ', depositDeduction: 'Khấu trừ tiền bảo đảm', vehicleChangeDiscount: 'Giảm trừ do đổi xe rẻ hơn (đã trừ vào nghĩa vụ)', balanceDue: 'Cần thanh toán bổ sung', rentRefund: 'Tiền thuê cần hoàn', depositRefund: 'Tiền bảo đảm cần hoàn' }
 const modes = [['EARLY', 'Trả sớm, chịu phí theo hợp đồng'], ['STANDARD', 'Trả theo hạn hợp đồng'], ['FULL_CONTRACT', 'Trả xe và thanh toán đủ tiền thuê cả năm']]
 const n = (d, k) => Number(d.get(k))
 const fields = {

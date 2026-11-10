@@ -208,7 +208,9 @@ public class DisputeServiceImpl implements DisputeService {
             charge.setWaived(true);
             charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
             bookingPaymentLedgerService.saveCharge(charge);
-            BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
+            // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+            BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO
+                    : booking.getTotalAmount().subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO);
             obligation = obligation.add(bookingPaymentLedgerService.listCharges(booking.getId()).stream()
                     .filter(item -> !item.isWaived()
                             && item.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.BASE_RENTAL

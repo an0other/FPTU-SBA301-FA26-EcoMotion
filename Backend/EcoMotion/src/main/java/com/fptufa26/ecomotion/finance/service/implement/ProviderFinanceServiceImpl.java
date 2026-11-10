@@ -368,7 +368,9 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal totalPayable = baseRental.add(approvedCharges).max(BigDecimal.ZERO);
+        // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+        BigDecimal totalPayable = baseRental.subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO)
+                .add(approvedCharges).max(BigDecimal.ZERO);
 
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactionsAscending(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()

@@ -78,6 +78,9 @@ public interface ProviderBookingService {
     OperationalResolutionResponse resolveOperationalRisk(
             Long currentUserId, String bookingCodeOrId, ResolveOperationalRiskRequest request);
 
+    /** Re-checks, server side, that the proposed vehicle/time is really available; throws ConflictException otherwise. */
+    void requireProposalTargetReady(Long currentUserId, String bookingCodeOrId, ResolveOperationalRiskRequest request);
+
     List<DriverCandidateResponse> getAssignmentCandidates(Long currentUserId, String bookingCodeOrId);
 
     AssignmentSuggestionResponse suggestDriverAssignment(Long currentUserId, String bookingCodeOrId);

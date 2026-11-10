@@ -6,5 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public record RespondOperationalProposalRequest(
         @NotBlank @Pattern(regexp = "ACCEPT|REJECT") String action,
-        @Size(max = 500) String reason) {
+        @Size(max = 500) String reason,
+        // B1: thêm acknowledgeLowerQuality - bắt buộc true khi đổi sang xe chất lượng thấp hơn.
+        Boolean acknowledgeLowerQuality) {
 }
