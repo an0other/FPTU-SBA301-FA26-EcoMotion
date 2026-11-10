@@ -462,6 +462,19 @@ public class UserServiceImpl implements UserService {
     public User updateEkycStatus(Long userId, EkycStatus status) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại: " + userId));
+        if (status == EkycStatus.VERIFIED) {
+            Renter renter = renterRepository.findByUser_Id(userId).orElse(null);
+            if (renter == null
+                    || isBlank(renter.getCccdNo())
+                    || renter.getDateOfBirth() == null
+                    || isBlank(renter.getGender())
+                    || isBlank(renter.getAddress())
+                    || isBlank(renter.getCccdImageUrl())
+                    || isBlank(renter.getPortraitUrl())) {
+                throw new IllegalArgumentException(
+                        "Không thể xác nhận eKYC hợp lệ: Hồ sơ đang thiếu thông tin định danh bắt buộc (Số CCCD, ngày sinh, giới tính, địa chỉ) hoặc thiếu ảnh chụp CCCD/chân dung đối chiếu.");
+            }
+        }
         user.setEkycStatus(status);
         return userRepository.save(user);
     }
@@ -548,7 +561,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public long countPendingEkyc() {
-        return userRepository.countByEkycStatus(EkycStatus.PENDING);
+        return userRepository.countByRoleAndEkycStatus(Role.RENTER, EkycStatus.PENDING);
     }
 
     @Override

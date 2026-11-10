@@ -40,6 +40,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -51,6 +53,7 @@ import java.util.stream.Collectors;
 public class ProviderVehicleServiceImpl implements ProviderVehicleService {
 
     private static final BigDecimal DEPOSIT_EXAMPLE_TOTAL = new BigDecimal("10000000.00");
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final UserService userService;
     private final VehicleRepository vehicleRepository;
@@ -277,6 +280,22 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
             coverImageUrl = image.getImageUrl();
         }
 
+        List<String> savedGalleryUrls = new ArrayList<>();
+        if (request.galleryImageUrls() != null && !request.galleryImageUrls().isEmpty()) {
+            int order = 1;
+            for (String url : request.galleryImageUrls()) {
+                if (url != null && !url.isBlank()) {
+                    VehicleImage galleryImg = new VehicleImage();
+                    galleryImg.setVehicle(saved);
+                    galleryImg.setImageUrl(url.trim());
+                    galleryImg.setDisplayOrder(order++);
+                    galleryImg.setCaption("Ảnh chi tiết xe");
+                    vehicleImageRepository.save(galleryImg);
+                    savedGalleryUrls.add(galleryImg.getImageUrl());
+                }
+            }
+        }
+
         return new ProviderVehicleDetailResponse(
                 saved.getId(),
                 saved.getLicensePlate(),
@@ -295,7 +314,10 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 saved.getRatingAvg(),
                 saved.getRatingCount(),
                 saved.getCreatedAt(),
-                saved.getUpdatedAt()
+                saved.getUpdatedAt(),
+                List.of(),
+                List.of(),
+                savedGalleryUrls
         );
     }
 
@@ -306,12 +328,17 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
 
-        String coverImageUrl = vehicleImageRepository.findByVehicle_IdInOrderByDisplayOrderAsc(List.of(vehicleId))
-                .stream()
+        List<VehicleImage> allImages = vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(vehicleId);
+        String coverImageUrl = allImages.stream()
                 .filter(img -> img.getDisplayOrder() == 0)
                 .map(VehicleImage::getImageUrl)
                 .findFirst()
                 .orElse(null);
+
+        List<String> galleryImageUrls = allImages.stream()
+                .filter(img -> img.getDisplayOrder() > 0)
+                .map(VehicleImage::getImageUrl)
+                .toList();
 
         List<ProviderRentalPlanResponse> plans = buildRentalPlanResponses(vehicle);
         List<ProviderVehicleDocumentResponse> documents = vehicleDocumentRepository.findByVehicle_Id(vehicleId)
@@ -339,7 +366,8 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 vehicle.getCreatedAt(),
                 vehicle.getUpdatedAt(),
                 plans,
-                documents
+                documents,
+                galleryImageUrls
         );
     }
 
@@ -374,8 +402,8 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         Vehicle saved = vehicleRepository.save(vehicle);
 
         String coverImageUrl = null;
+        List<VehicleImage> existingImages = vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(vehicleId);
         if (request.coverImageUrl() != null && !request.coverImageUrl().isBlank()) {
-            List<VehicleImage> existingImages = vehicleImageRepository.findByVehicle_IdInOrderByDisplayOrderAsc(List.of(vehicleId));
             VehicleImage coverImg = existingImages.stream()
                     .filter(img -> img.getDisplayOrder() == 0)
                     .findFirst()
@@ -390,7 +418,6 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
             vehicleImageRepository.save(coverImg);
             coverImageUrl = coverImg.getImageUrl();
         } else {
-            List<VehicleImage> existingImages = vehicleImageRepository.findByVehicle_IdInOrderByDisplayOrderAsc(List.of(vehicleId));
             coverImageUrl = existingImages.stream()
                     .filter(img -> img.getDisplayOrder() == 0)
                     .map(VehicleImage::getImageUrl)
@@ -398,7 +425,39 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                     .orElse(null);
         }
 
+        List<String> updatedGalleryUrls = new ArrayList<>();
+        if (request.galleryImageUrls() != null) {
+            List<VehicleImage> existingGallery = existingImages.stream()
+                    .filter(img -> img.getDisplayOrder() > 0)
+                    .toList();
+            if (!existingGallery.isEmpty()) {
+                vehicleImageRepository.deleteAll(existingGallery);
+                vehicleImageRepository.flush();
+            }
+            int order = 1;
+            for (String url : request.galleryImageUrls()) {
+                if (url != null && !url.isBlank()) {
+                    VehicleImage galleryImg = new VehicleImage();
+                    galleryImg.setVehicle(saved);
+                    galleryImg.setImageUrl(url.trim());
+                    galleryImg.setDisplayOrder(order++);
+                    galleryImg.setCaption("Ảnh chi tiết xe");
+                    vehicleImageRepository.save(galleryImg);
+                    updatedGalleryUrls.add(galleryImg.getImageUrl());
+                }
+            }
+        } else {
+            updatedGalleryUrls = existingImages.stream()
+                    .filter(img -> img.getDisplayOrder() > 0)
+                    .map(VehicleImage::getImageUrl)
+                    .toList();
+        }
+
         List<ProviderRentalPlanResponse> plans = buildRentalPlanResponses(saved);
+        List<ProviderVehicleDocumentResponse> documents = vehicleDocumentRepository.findByVehicle_Id(vehicleId)
+                .stream()
+                .map(this::mapToDocumentResponse)
+                .toList();
 
         return new ProviderVehicleDetailResponse(
                 saved.getId(),
@@ -419,7 +478,9 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
                 saved.getRatingCount(),
                 saved.getCreatedAt(),
                 saved.getUpdatedAt(),
-                plans
+                plans,
+                documents,
+                updatedGalleryUrls
         );
     }
 
@@ -804,8 +865,18 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         Vehicle vehicle = vehicleRepository.findByIdAndProvider_Id(vehicleId, provider.getId())
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
 
-        if (request.docType() != DocumentType.REGISTRATION && request.expiryDate() == null) {
-            throw new IllegalArgumentException("Ngày hết hạn là bắt buộc đối với loại giấy tờ " + request.docType());
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+        if (request.docType() != DocumentType.REGISTRATION) {
+            if (request.expiryDate() == null) {
+                throw new IllegalArgumentException("Ngày hết hạn là bắt buộc đối với loại giấy tờ " + request.docType());
+            }
+            if (request.expiryDate().isBefore(today)) {
+                throw new IllegalArgumentException("Ngày hết hạn của " + request.docType() + " không hợp lệ (phải từ ngày hiện tại trở đi)");
+            }
+        } else {
+            if (request.expiryDate() != null && request.expiryDate().isBefore(today)) {
+                throw new IllegalArgumentException("Ngày hết hạn của Giấy đăng ký xe không hợp lệ (phải từ ngày hiện tại trở đi)");
+            }
         }
 
         var existingOpt = vehicleDocumentRepository.findByVehicle_IdAndDocType(vehicleId, request.docType());
@@ -816,7 +887,7 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
         if (existingOpt.isPresent()) {
             doc = existingOpt.get();
             doc.setDocNumber(request.docNumber().trim());
-            doc.setExpiryDate(request.docType() == DocumentType.REGISTRATION ? null : request.expiryDate());
+            doc.setExpiryDate(request.expiryDate());
             doc.setFileUrl(request.fileUrl().trim());
             doc.setStatus(DocumentStatus.PENDING);
         } else {
@@ -824,7 +895,7 @@ public class ProviderVehicleServiceImpl implements ProviderVehicleService {
             doc.setVehicle(vehicle);
             doc.setDocType(request.docType());
             doc.setDocNumber(request.docNumber().trim());
-            doc.setExpiryDate(request.docType() == DocumentType.REGISTRATION ? null : request.expiryDate());
+            doc.setExpiryDate(request.expiryDate());
             doc.setFileUrl(request.fileUrl().trim());
             doc.setStatus(DocumentStatus.PENDING);
         }

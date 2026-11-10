@@ -178,6 +178,21 @@ public class AdminOperationsController {
         Driver drv = (b != null) ? b.getDriver() : null;
         User drvUser = (drv != null) ? drv.getUser() : null;
 
+        com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision effectiveDecision = d.getDecision();
+        if (effectiveDecision == null
+                && d.getCategory() == com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE
+                && (d.getStatus() == DisputeStatus.RESOLVED || d.getStatus() == DisputeStatus.REJECTED)) {
+            if (c != null) {
+                effectiveDecision = c.isWaived()
+                        ? com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE
+                        : com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.KEEP_CHARGE;
+            } else {
+                effectiveDecision = d.getStatus() == DisputeStatus.RESOLVED
+                        ? com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE
+                        : com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.KEEP_CHARGE;
+            }
+        }
+
         return AdminDisputeDto.builder()
                 .id(d.getId())
                 .bookingId(b != null ? b.getId() : null)
@@ -185,6 +200,7 @@ public class AdminOperationsController {
                 .chargeId(c != null ? c.getId() : null)
                 .chargeDescription(c != null ? c.getDescription() : null)
                 .chargeAmount(c != null ? c.getAmount() : null)
+                .chargeWaived(c != null ? c.isWaived() : null)
                 .raisedById(raised != null ? raised.getId() : null)
                 .raisedByName(raised != null ? raised.getFullName() : null)
                 .raisedByEmail(raised != null ? raised.getEmail() : null)
@@ -202,7 +218,7 @@ public class AdminOperationsController {
                 .description(d.getDescription())
                 .evidenceUrls(d.getEvidenceUrlList())
                 .resolution(d.getResolution())
-                .decision(d.getDecision())
+                .decision(effectiveDecision)
                 .refundAwardTotal(d.getRefundAwardTotal())
                 .resolvedAt(d.getResolvedAt())
                 .tripEndAction(d.getTripEndAction())
