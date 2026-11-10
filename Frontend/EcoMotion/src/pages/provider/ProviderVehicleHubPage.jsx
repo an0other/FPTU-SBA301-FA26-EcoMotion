@@ -5,6 +5,9 @@ import Toast from '../../components/Toast'
 import FilePreviewLightbox from '../../components/common/FilePreviewLightbox'
 import { providerService } from '../../services/providerService'
 import { formatLicensePlateInput } from '../../utils/validation'
+import { getErrorMessage } from '../../utils/errorMessage'
+
+const VIETNAM_PLATE_REGEX = /^[0-9]{2}[A-Z]{1,2}-([0-9]{3}\.[0-9]{2}|[0-9]{4,5})$/
 
 const DOC_SPECS = [
   {
@@ -60,6 +63,7 @@ export default function ProviderVehicleHubPage() {
   const [showRuleModal, setShowRuleModal] = useState(false)
   const [vehicle, setVehicle] = useState(null)
   const [licensePlateHistory, setLicensePlateHistory] = useState([])
+  const [showPlateHistoryModal, setShowPlateHistoryModal] = useState(false)
   const [providerInfo, setProviderInfo] = useState({ displayName: '', depotAddress: '' })
 
   const [documents, setDocuments] = useState([])
@@ -127,6 +131,13 @@ export default function ProviderVehicleHubPage() {
   const [initialDepositPolicy, setInitialDepositPolicy] = useState(null)
   const [depositPolicyInfo, setDepositPolicyInfo] = useState(null)
   const [savingDepositPolicy, setSavingDepositPolicy] = useState(false)
+  const [unusualPriceModal, setUnusualPriceModal] = useState({
+    isOpen: false,
+    changedPlans: [],
+    pendingPayload: null,
+    pendingPolicyChanged: false,
+    ratioValue: null
+  })
 
   const liveDepositCalculation = useMemo(() => {
     const providerRatio = Number(depositPolicyInfo?.providerDefaultRatio ?? 0.3)
@@ -405,13 +416,6 @@ export default function ProviderVehicleHubPage() {
     setForm(prev => ({ ...prev, licensePlate: formatted }))
   }
 
-  function resetPlate() {
-    if (initialData) {
-      setForm(prev => ({ ...prev, licensePlate: initialData.licensePlate }))
-      setToast({ type: 'info', message: 'Đã khôi phục biển số ban đầu: ' + initialData.licensePlate })
-    }
-  }
-
   function handleBufferInputChange(val) {
     const clean = val.replace(/\D/g, '')
     setForm(prev => ({ ...prev, maintenanceBufferMinutes: clean }))
@@ -569,10 +573,25 @@ export default function ProviderVehicleHubPage() {
 
   async function handleSaveProfile(e) {
     if (e) e.preventDefault()
+    const cleanPlate = form.licensePlate.trim().toUpperCase()
+    if (!cleanPlate) {
+      setToast({
+        type: 'error',
+        message: 'Vui lòng nhập biển số xe kiểm soát.'
+      })
+      return
+    }
+    if (!VIETNAM_PLATE_REGEX.test(cleanPlate)) {
+      setToast({
+        type: 'error',
+        message: 'Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111).'
+      })
+      return
+    }
     try {
       setSaving(true)
       const payload = {
-        licensePlate: form.licensePlate.trim().toUpperCase(),
+        licensePlate: cleanPlate,
         brand: form.brand.trim(),
         model: form.model.trim(),
         manufactureYear: parseInt(form.manufactureYear, 10),
@@ -604,6 +623,11 @@ export default function ProviderVehicleHubPage() {
       setInitialData(newInit)
 
       if (isPlateChanged) {
+        try {
+          const freshHistory = await providerService.getVehicleLicensePlateHistory(id)
+          setLicensePlateHistory(freshHistory)
+        } catch {
+        }
         setToast({
           type: 'warning',
           message: 'Biển số mới đã gửi: Xe chuyển về trạng thái Chờ duyệt'
@@ -617,7 +641,7 @@ export default function ProviderVehicleHubPage() {
     } catch (err) {
       setToast({
         type: 'error',
-        message: err.response?.data?.message || err.message || 'Lỗi khi cập nhật thông tin xe'
+        message: getErrorMessage(err, 'Lỗi khi cập nhật thông tin xe')
       })
     } finally {
       setSaving(false)
@@ -743,16 +767,73 @@ export default function ProviderVehicleHubPage() {
     setToast({ type: 'info', message: 'Đã khôi phục cấu hình bảng giá và chính sách cọc ban đầu' })
   }
 
+  async function executeSavePricing(payload, isDepositPolicyChanged, ratioValue) {
+    try {
+      setSavingPlans(true)
+      const savePromises = [providerService.updateVehicleRentalPlans(id, payload)]
+      if (isDepositPolicyChanged) {
+        savePromises.push(providerService.updateVehicleDepositPolicy(id, {
+          depositRatioOverride: ratioValue,
+          minimumDepositAmount: Number(depositPolicy.minimumDepositAmount || 0),
+        }))
+      }
+
+      const [updatedPlans, updatedPolicy] = await Promise.all(savePromises)
+      if (updatedPlans) {
+        setInitialPricingPlans(pricingPlans)
+        setInitialSurcharges(surcharges)
+      }
+      if (updatedPolicy) {
+        setDepositPolicyInfo(updatedPolicy)
+        setInitialDepositPolicy({
+          depositRatioOverride: updatedPolicy.depositRatioOverride == null ? '' : Number(updatedPolicy.depositRatioOverride),
+          minimumDepositAmount: Number(updatedPolicy.minimumDepositAmount ?? 0),
+        })
+      }
+      setToast({
+        type: 'success',
+        message: isDepositPolicyChanged
+          ? 'Cập nhật bảng giá gói cước & chính sách đặt cọc thành công!'
+          : 'Cập nhật bảng giá gói cước & phụ phí vận hành thành công!'
+      })
+      setUnusualPriceModal({
+        isOpen: false,
+        changedPlans: [],
+        pendingPayload: null,
+        pendingPolicyChanged: false,
+        ratioValue: null
+      })
+    } catch (err) {
+      setToast({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Không thể lưu cấu hình bảng giá'
+      })
+    } finally {
+      setSavingPlans(false)
+    }
+  }
+
+  async function handleConfirmSaveUnusualPrice() {
+    if (!unusualPriceModal.pendingPayload) return
+    const confirmedPayload = {
+      ...unusualPriceModal.pendingPayload,
+      confirmUnusualPriceChange: true
+    }
+    await executeSavePricing(confirmedPayload, unusualPriceModal.pendingPolicyChanged, unusualPriceModal.ratioValue)
+  }
+
   async function handleSavePricing(e) {
     if (e) e.preventDefault()
     try {
       setSavingPlans(true)
 
+      const typeLabels = { HOURLY: 'Theo giờ', DAILY: 'Theo ngày', MONTHLY: 'Theo tháng', YEARLY: 'Theo năm' }
+      const MAX_SLOT_PRICE = 999999999
+
       const activeWithoutPrice = ['HOURLY', 'DAILY', 'MONTHLY', 'YEARLY'].filter(
         type => pricingPlans[type]?.status === 'ACTIVE' && (!pricingPlans[type]?.slotPrice || Number(pricingPlans[type]?.slotPrice) <= 0)
       )
       if (activeWithoutPrice.length > 0) {
-        const typeLabels = { HOURLY: 'Theo giờ', DAILY: 'Theo ngày', MONTHLY: 'Theo tháng', YEARLY: 'Theo năm' }
         const missingLabels = activeWithoutPrice.map(t => typeLabels[t] || t).join(', ')
         setToast({
           type: 'error',
@@ -762,18 +843,30 @@ export default function ProviderVehicleHubPage() {
         return
       }
 
-      const hasUnusualPriceChange = ['HOURLY', 'DAILY', 'MONTHLY', 'YEARLY'].some((type) => {
-        const previous = Number(initialPricingPlans?.[type]?.slotPrice ?? 0)
-        const next = Number(pricingPlans[type]?.slotPrice ?? 0)
-        return previous > 0 && Math.abs(next - previous) / previous >= 0.5
-      })
-      let confirmUnusualPriceChange = false
-      if (hasUnusualPriceChange) {
-        confirmUnusualPriceChange = window.confirm('Có gói giá thay đổi từ 50% trở lên. Bạn có chắc muốn lưu mức giá này?')
-        if (!confirmUnusualPriceChange) {
+      for (const type of ['HOURLY', 'DAILY', 'MONTHLY', 'YEARLY']) {
+        const priceNum = Number(pricingPlans[type]?.slotPrice || 0)
+        if (priceNum > MAX_SLOT_PRICE) {
+          setToast({
+            type: 'error',
+            message: `Đơn giá của gói ${typeLabels[type]} không được vượt quá ${formatMoney(MAX_SLOT_PRICE)} VNĐ.`
+          })
           setSavingPlans(false)
           return
         }
+      }
+
+      const isHourlyActive = pricingPlans.HOURLY?.status === 'ACTIVE'
+      const isDailyActive = pricingPlans.DAILY?.status === 'ACTIVE'
+      const hourlyPrice = Number(pricingPlans.HOURLY?.slotPrice || 0)
+      const dailyPrice = Number(pricingPlans.DAILY?.slotPrice || 0)
+
+      if (isHourlyActive && isDailyActive && hourlyPrice > 0 && dailyPrice > 0 && hourlyPrice >= dailyPrice) {
+        setToast({
+          type: 'error',
+          message: `Đơn giá gói thuê theo giờ (${formatMoney(hourlyPrice)} đ/h) không được lớn hơn hoặc bằng đơn giá thuê theo ngày (${formatMoney(dailyPrice)} đ/ngày).`
+        })
+        setSavingPlans(false)
+        return
       }
 
       const isDepositPolicyChanged = initialDepositPolicy && (
@@ -845,41 +938,46 @@ export default function ProviderVehicleHubPage() {
         waitingFreeMinutes: Math.max(0, Number(surcharges.waitingFreeMinutes) || 0),
         waitingRate: Math.max(0, Number(surcharges.waitingRate) || 0),
         weekendSurchargeRatio: Math.min(1.0, Math.max(0, Number(surcharges.weekendSurchargeRatio) || 0)),
-        confirmUnusualPriceChange
+        confirmUnusualPriceChange: false
       }
 
-      const savePromises = [providerService.updateVehicleRentalPlans(id, payload)]
-      if (isDepositPolicyChanged) {
-        savePromises.push(providerService.updateVehicleDepositPolicy(id, {
-          depositRatioOverride: ratioValue,
-          minimumDepositAmount: Number(depositPolicy.minimumDepositAmount || 0),
-        }))
-      }
-
-      const [updatedPlans, updatedPolicy] = await Promise.all(savePromises)
-      if (updatedPlans) {
-        setInitialPricingPlans(pricingPlans)
-        setInitialSurcharges(surcharges)
-      }
-      if (updatedPolicy) {
-        setDepositPolicyInfo(updatedPolicy)
-        setInitialDepositPolicy({
-          depositRatioOverride: updatedPolicy.depositRatioOverride == null ? '' : Number(updatedPolicy.depositRatioOverride),
-          minimumDepositAmount: Number(updatedPolicy.minimumDepositAmount ?? 0),
+      const changedPlans = ['HOURLY', 'DAILY', 'MONTHLY', 'YEARLY']
+        .filter((type) => {
+          const previous = Number(initialPricingPlans?.[type]?.slotPrice ?? 0)
+          const next = Number(pricingPlans[type]?.slotPrice ?? 0)
+          return previous > 0 && Math.abs(next - previous) / previous >= 0.5
         })
+        .map((type) => {
+          const previous = Number(initialPricingPlans?.[type]?.slotPrice ?? 0)
+          const next = Number(pricingPlans[type]?.slotPrice ?? 0)
+          const percentChange = Math.round(((next - previous) / previous) * 100)
+          return {
+            type,
+            label: typeLabels[type] || type,
+            oldPrice: previous,
+            newPrice: next,
+            percentChange
+          }
+        })
+
+      if (changedPlans.length > 0) {
+        setUnusualPriceModal({
+          isOpen: true,
+          changedPlans,
+          pendingPayload: payload,
+          pendingPolicyChanged: isDepositPolicyChanged,
+          ratioValue
+        })
+        setSavingPlans(false)
+        return
       }
-      setToast({
-        type: 'success',
-        message: isDepositPolicyChanged
-          ? 'Cập nhật bảng giá gói cước & chính sách đặt cọc thành công!'
-          : 'Cập nhật bảng giá gói cước & phụ phí vận hành thành công!'
-      })
+
+      await executeSavePricing(payload, isDepositPolicyChanged, ratioValue)
     } catch (err) {
       setToast({
         type: 'error',
         message: err.response?.data?.message || err.message || 'Không thể lưu cấu hình bảng giá'
       })
-    } finally {
       setSavingPlans(false)
     }
   }
@@ -1283,6 +1381,7 @@ export default function ProviderVehicleHubPage() {
                       <input
                         id="plate-input"
                         type="text"
+                        maxLength={12}
                         value={form.licensePlate}
                         onChange={handlePlateInput}
                         placeholder="VD: 51K-334.12"
@@ -1290,9 +1389,9 @@ export default function ProviderVehicleHubPage() {
                       />
                       <button
                         type="button"
-                        onClick={resetPlate}
-                        title="Khôi phục biển gốc"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 p-1"
+                        onClick={() => setShowPlateHistoryModal(true)}
+                        title="Xem nhật ký đổi biển số xe"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg p-1 transition-colors cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-base">history</span>
                       </button>
@@ -1317,7 +1416,7 @@ export default function ProviderVehicleHubPage() {
 
                 <div className="lg:col-span-6 bg-slate-50/80 p-5 rounded-2xl border border-slate-200 flex flex-col items-center justify-center">
                   <span className="text-xs font-semibold text-slate-500 mb-3 self-start">Mô phỏng biển số thực tế:</span>
-                  <div className="vn-plate w-64 sm:w-72 h-24 rounded-2xl px-4 py-2 flex flex-col items-center justify-center relative select-none bg-gradient-to-b from-white to-slate-100 border-[3.5px] border-slate-800 shadow-md">
+                  <div className="vn-plate w-64 sm:w-72 h-24 rounded-2xl px-4 py-2 flex flex-col items-center justify-center relative select-none bg-gradient-to-b from-white to-slate-100 border-[3.5px] border-slate-800 shadow-md overflow-hidden">
                     
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-300 border border-slate-500 absolute top-2 left-3 shadow-inner"></span>
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-300 border border-slate-500 absolute top-2 right-3 shadow-inner"></span>
@@ -1330,7 +1429,9 @@ export default function ProviderVehicleHubPage() {
                       <span className="text-[9px] font-bold tracking-widest text-slate-700 font-mono">VIETNAM</span>
                     </div>
                     
-                    <div className="text-xl sm:text-2xl font-black font-mono tracking-widest text-slate-900 drop-shadow-[0_1px_1px_rgba(255,255,255,1)]">
+                    <div className={`w-full max-w-[90%] truncate text-center font-black font-mono tracking-widest text-slate-900 drop-shadow-[0_1px_1px_rgba(255,255,255,1)] ${
+                      (form.licensePlate || '').length > 10 ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'
+                    }`}>
                       {form.licensePlate || '51K - XXXXX'}
                     </div>
                     
@@ -2209,81 +2310,6 @@ export default function ProviderVehicleHubPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-                
-                <div className={`rounded-xl border-2 p-4 relative flex flex-col justify-between shadow-sm transition-all ${pricingPlans.DAILY?.status === 'ACTIVE'
-                    ? 'border-emerald-500 bg-emerald-50/20'
-                    : 'border-slate-200 bg-slate-50/60 opacity-80'
-                  }`}>
-                  <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider">
-                    Phổ biến nhất
-                  </span>
-                  <div>
-                    <div className="flex items-center justify-between mb-3 mt-1">
-                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-base text-emerald-600">calendar_today</span>
-                        Gói thuê theo ngày
-                      </span>
-                      
-                      <button
-                        type="button"
-                        onClick={() => togglePlanStatus('DAILY')}
-                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${pricingPlans.DAILY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
-                          }`}
-                        title="Bật/Tắt gói ngày"
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${pricingPlans.DAILY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-[11px] font-semibold text-slate-700">Đơn giá niêm yết (VNĐ/ngày)</label>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pricingPlans.DAILY?.status === 'ACTIVE'
-                            ? 'text-emerald-700 bg-emerald-100'
-                            : 'text-slate-500 bg-slate-200'
-                          }`}>
-                          {pricingPlans.DAILY?.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'}
-                        </span>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="0"
-                          step="10000"
-                          placeholder="Chưa thiết lập giá"
-                          value={pricingPlans.DAILY?.slotPrice ?? ''}
-                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
-                          onChange={(e) => handlePlanPriceChange('DAILY', e.target.value)}
-                          className="w-full pl-3 pr-16 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">đ/ngày</span>
-                      </div>
-                      <p className="text-[10px] text-emerald-700 font-semibold mt-1">
-                        {pricingPlans.DAILY?.slotPrice ? `≈ ${formatMoney(pricingPlans.DAILY.slotPrice)} VNĐ / ngày (24 giờ)` : 'Chưa thiết lập giá'}
-                      </p>
-                    </div>
-
-                    <ul className="text-[11px] text-slate-600 space-y-1.5 mb-4">
-                      <li className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-xs text-emerald-600">check</span> Chu kỳ thuê: 24 giờ / ngày
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-xs text-emerald-600">route</span>
-                        <span>Không giới hạn km hành trình</span>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${pricingPlans.DAILY?.status === 'ACTIVE'
-                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                      : 'text-slate-500 bg-slate-100 border-slate-200'
-                    }`}>
-                    {pricingPlans.DAILY?.status === 'ACTIVE' ? 'Đang nhận khách trên ứng dụng' : 'Tạm tắt gói cước này'}
-                  </div>
-                </div>
-
                 <div className={`rounded-xl border p-4 flex flex-col justify-between shadow-sm transition-all ${pricingPlans.HOURLY?.status === 'ACTIVE'
                     ? 'border-emerald-500 bg-emerald-50/10'
                     : 'border-slate-200 bg-slate-50/60 opacity-80'
@@ -2370,6 +2396,80 @@ export default function ProviderVehicleHubPage() {
                       : 'text-slate-500 bg-slate-100 border-slate-200'
                     }`}>
                     {pricingPlans.HOURLY?.status === 'ACTIVE' ? 'Đang nhận khách trên ứng dụng' : 'Tạm tắt gói cước này'}
+                  </div>
+                </div>
+
+                <div className={`rounded-xl border-2 p-4 relative flex flex-col justify-between shadow-sm transition-all ${pricingPlans.DAILY?.status === 'ACTIVE'
+                    ? 'border-emerald-500 bg-emerald-50/20'
+                    : 'border-slate-200 bg-slate-50/60 opacity-80'
+                  }`}>
+                  <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider">
+                    Phổ biến nhất
+                  </span>
+                  <div>
+                    <div className="flex items-center justify-between mb-3 mt-1">
+                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-base text-emerald-600">calendar_today</span>
+                        Gói thuê theo ngày
+                      </span>
+                      
+                      <button
+                        type="button"
+                        onClick={() => togglePlanStatus('DAILY')}
+                        className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${pricingPlans.DAILY?.status === 'ACTIVE' ? 'bg-emerald-600' : 'bg-slate-300'
+                          }`}
+                        title="Bật/Tắt gói ngày"
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${pricingPlans.DAILY?.status === 'ACTIVE' ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-semibold text-slate-700">Đơn giá niêm yết (VNĐ/ngày)</label>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${pricingPlans.DAILY?.status === 'ACTIVE'
+                            ? 'text-emerald-700 bg-emerald-100'
+                            : 'text-slate-500 bg-slate-200'
+                          }`}>
+                          {pricingPlans.DAILY?.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="10000"
+                          placeholder="Chưa thiết lập giá"
+                          value={pricingPlans.DAILY?.slotPrice ?? ''}
+                          onKeyDown={(e) => blockNegativeAndExponentKeys(e, false)}
+                          onChange={(e) => handlePlanPriceChange('DAILY', e.target.value)}
+                          className="w-full pl-3 pr-16 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">đ/ngày</span>
+                      </div>
+                      <p className="text-[10px] text-emerald-700 font-semibold mt-1">
+                        {pricingPlans.DAILY?.slotPrice ? `≈ ${formatMoney(pricingPlans.DAILY.slotPrice)} VNĐ / ngày (24 giờ)` : 'Chưa thiết lập giá'}
+                      </p>
+                    </div>
+
+                    <ul className="text-[11px] text-slate-600 space-y-1.5 mb-4">
+                      <li className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-emerald-600">check</span> Chu kỳ thuê: 24 giờ / ngày
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-emerald-600">route</span>
+                        <span>Không giới hạn km hành trình</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className={`text-[10px] p-2 rounded-lg border font-medium ${pricingPlans.DAILY?.status === 'ACTIVE'
+                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                      : 'text-slate-500 bg-slate-100 border-slate-200'
+                    }`}>
+                    {pricingPlans.DAILY?.status === 'ACTIVE' ? 'Đang nhận khách trên ứng dụng' : 'Tạm tắt gói cước này'}
                   </div>
                 </div>
 
@@ -2971,7 +3071,143 @@ export default function ProviderVehicleHubPage() {
         </div>
       )}
 
-      {/* File / Image Preview Lightbox (Nested Modal) */}
+      {unusualPriceModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+              <span className="material-symbols-outlined text-2xl">priority_high</span>
+            </div>
+            <div className="text-center space-y-1.5">
+              <h3 className="font-extrabold text-slate-900 text-base">Xác nhận điều chỉnh biểu phí lớn</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Một hoặc nhiều gói giá có mức điều chỉnh từ 50% trở lên so với mức giá hiện tại. Bạn có chắc chắn muốn lưu biểu phí này?
+              </p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100">
+              {unusualPriceModal.changedPlans.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700">{item.label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400 line-through">{formatMoney(item.oldPrice)} đ</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="font-bold text-emerald-700">{formatMoney(item.newPrice)} đ</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.percentChange >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                      {item.percentChange >= 0 ? `+${item.percentChange}%` : `${item.percentChange}%`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setUnusualPriceModal(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={savingPlans}
+                onClick={handleConfirmSaveUnusualPrice}
+                className="flex-1 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-xs disabled:opacity-50 transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+              >
+                {savingPlans && (
+                  <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                )}
+                <span>Xác nhận lưu</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPlateHistoryModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-xl">history</span>
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Nhật ký Thay đổi Biển số xe</h3>
+                  <p className="text-xs text-slate-500">Mã định danh: VEH-{vehicle?.id} · {vehicle?.brand} {vehicle?.model}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlateHistoryModal(false)}
+                className="w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed">
+              Theo quy chuẩn pháp lý Tầng 2, mọi thay đổi biển số xe là thủ tục một chiều và đều yêu cầu Chuyên viên kiểm duyệt lại giấy đăng ký trước khi xe tiếp tục hoạt động.
+            </div>
+
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/40 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    Biển số hiện tại
+                  </span>
+                  <div className="text-sm font-extrabold text-slate-900 mt-1">
+                    {vehicle?.licensePlate || form.licensePlate}
+                  </div>
+                </div>
+                <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm">verified</span>
+                  Đang ghi nhận
+                </span>
+              </div>
+
+              {licensePlateHistory.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-xs">
+                  Xe đang sử dụng biển số đăng ký ban đầu, chưa có lần thay đổi biển nào.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-700">Các lần thay đổi trước đây ({licensePlateHistory.length}):</div>
+                  {licensePlateHistory.map((entry, index) => (
+                    <div key={entry.id || index} className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <span className="text-slate-500 line-through">{entry.previousPlate}</span>
+                          <span className="text-slate-400">→</span>
+                          <span className="text-emerald-700 font-extrabold">{entry.newPlate}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Thực hiện bởi: {entry.changedBy || 'Nhà cung cấp'}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-medium">
+                        {new Date(entry.changedAt).toLocaleString('vi-VN')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPlateHistoryModal(false)}
+                className="px-5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <FilePreviewLightbox
         isOpen={previewFile.isOpen}
         onClose={() => setPreviewFile(prev => ({ ...prev, isOpen: false }))}

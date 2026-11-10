@@ -5,6 +5,7 @@ import ProviderHeader from "../../components/provider/ProviderHeader";
 import Toast from "../../components/Toast";
 import FilePreviewLightbox from "../../components/common/FilePreviewLightbox";
 import { formatLicensePlateInput } from "../../utils/validation";
+import { getErrorMessage } from "../../utils/errorMessage";
 
 const DEFAULT_VEHICLE_PREVIEW =
   'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500"><rect width="100%" height="100%" fill="%23f1f5f9"/><text x="50%" y="50%" fill="%2394a3b8" font-size="24" font-family="sans-serif" text-anchor="middle">Chưa có ảnh bìa xe</text></svg>';
@@ -393,12 +394,18 @@ export default function ProviderVehicleCreatePage() {
       }, 1500);
     } catch (err) {
       console.error("Create vehicle failed:", err);
+      const friendlyMsg = getErrorMessage(
+        err,
+        "Không thể đăng ký xe. Vui lòng kiểm tra lại thông tin."
+      );
       const serverMsg =
+        friendlyMsg ||
         err.original?.response?.data?.message ||
         err.response?.data?.message ||
         err.message ||
         "Không thể đăng ký xe. Vui lòng kiểm tra lại thông tin.";
 
+      const cleanServerMsg = serverMsg.replace(/^licensePlate[:\s-]*/i, "");
       const serverErrors = {};
       const lower = serverMsg.toLowerCase();
       if (
@@ -406,7 +413,7 @@ export default function ProviderVehicleCreatePage() {
         lower.includes("licenseplate") ||
         lower.includes("license")
       ) {
-        serverErrors.licensePlate = serverMsg;
+        serverErrors.licensePlate = cleanServerMsg;
         document
           .getElementById("license_plate")
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -461,7 +468,7 @@ export default function ProviderVehicleCreatePage() {
       if (Object.keys(serverErrors).length > 0) {
         setErrors((prev) => ({ ...prev, ...serverErrors }));
       }
-      setToast({ message: serverMsg, type: "error" });
+      setToast({ message: friendlyMsg, type: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -778,7 +785,7 @@ export default function ProviderVehicleCreatePage() {
                           id="license_plate"
                           type="text"
                           required
-                          maxLength={20}
+                          maxLength={12}
                           value={form.licensePlate}
                           onChange={(e) => handleChange("licensePlate", formatLicensePlateInput(e.target.value, form.licensePlate))}
                           placeholder="51K-334.12"
@@ -844,7 +851,9 @@ export default function ProviderVehicleCreatePage() {
                                 VIETNAM
                               </span>
                             </div>
-                            <span className="font-mono font-bold text-[24px] tracking-widest text-[#0b1c30] leading-tight select-none my-0.5">
+                            <span className={`w-full max-w-[90%] truncate text-center font-mono font-bold tracking-widest text-[#0b1c30] leading-tight select-none my-0.5 ${
+                              (displayPlate || '').length > 10 ? 'text-[18px] sm:text-[20px]' : 'text-[24px]'
+                            }`}>
                               {displayPlate}
                             </span>
                             <div

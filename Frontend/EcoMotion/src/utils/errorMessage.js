@@ -39,6 +39,12 @@ const BY_PHRASE = [
   [/yearly plans must use the dedicated contract flow/i, 'Gói thuê năm yêu cầu thực hiện qua quy trình ký hợp đồng riêng.'],
   [/malformed request body/i, 'Dữ liệu gửi lên không hợp lệ.'],
   [/validation failed/i, 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.'],
+  [/gói thuê theo giờ.*gói thuê theo ngày/i, 'Đơn giá gói thuê theo giờ không được lớn hơn hoặc bằng đơn giá gói thuê theo ngày.'],
+  [/mức giá thay đổi bất thường/i, 'Mức giá thay đổi bất thường từ 50% trở lên; vui lòng xác nhận trước khi lưu.'],
+  [/vượt quá 999/i, 'Đơn giá gói cước không được vượt quá 999,999,999 VNĐ.'],
+  [/biển số xe không đúng định dạng/i, 'Biển số xe không đúng định dạng quy chuẩn Việt Nam (VD: 51K-334.12 hoặc 51A-11111).'],
+  [/licenseplate.*size must be|size must be between 0 and 20/i, 'Biển số xe không đúng định dạng quy chuẩn Việt Nam.'],
+  [/licenseplate/i, 'Biển số xe không hợp lệ. Vui lòng kiểm tra lại.'],
   [/internal server error/i, 'Máy chủ gặp sự cố. Vui lòng thử lại sau.'],
 ]
 
