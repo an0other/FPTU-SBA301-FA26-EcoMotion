@@ -305,38 +305,150 @@ function DisputeDetailForm({
           </div>
 
           {/* Charge in Dispute */}
-          {dispute.chargeId && (
-            <div className="rounded-2xl border border-purple-200 bg-purple-50/40 p-4 space-y-1">
-              <span className="block font-bold text-purple-900 uppercase tracking-wider text-[11px]">
-                Khoản phụ phí đang tranh chấp #{dispute.chargeId}
-              </span>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-700 font-medium">{dispute.chargeDescription || 'Phụ phí phát sinh'}</span>
-                <span className="text-base font-extrabold text-purple-700">
-                  {formatVND(dispute.chargeAmount)}
-                </span>
+          {dispute.chargeId && (() => {
+            const resolvedChargeDecision =
+              dispute.decision ||
+              (isResolvedOrRejected
+                ? dispute.chargeWaived === true || dispute.status === 'RESOLVED'
+                  ? 'WAIVE_CHARGE'
+                  : 'KEEP_CHARGE'
+                : null)
+            const isChargeWaived =
+              resolvedChargeDecision === 'WAIVE_CHARGE' || dispute.chargeWaived === true
+
+            return (
+              <div className="rounded-2xl border border-purple-200 bg-purple-50/40 p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="block font-bold text-purple-900 uppercase tracking-wider text-[11px]">
+                    Khoản phụ phí đang tranh chấp #{dispute.chargeId}
+                  </span>
+                  {isResolvedOrRejected && (
+                    <span
+                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                        isChargeWaived
+                          ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                          : 'border-amber-300 bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {isChargeWaived
+                        ? 'Đã miễn giảm phụ phí (0 ₫ phải trả)'
+                        : 'Giữ nguyên phụ phí (Khách phải trả)'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-slate-700 font-medium">{dispute.chargeDescription || 'Phụ phí phát sinh'}</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-base font-extrabold ${
+                        isResolvedOrRejected && isChargeWaived
+                          ? 'line-through text-slate-400'
+                          : 'text-purple-700'
+                      }`}
+                    >
+                      {formatVND(dispute.chargeAmount)}
+                    </span>
+                    {isResolvedOrRejected && isChargeWaived && (
+                      <span className="text-sm font-black text-emerald-700">→ 0 ₫ (Đã gạch bỏ)</span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* If already resolved, show resolution card */}
-          {isResolvedOrRejected ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-emerald-900">
-                <IconCheckCircle className="h-4 w-4 text-emerald-600" />
-                <span>Tranh chấp đã được phân xử xong</span>
+          {isResolvedOrRejected ? (() => {
+            const effectiveDecision =
+              dispute.decision ||
+              (dispute.category === 'CHARGE' || dispute.chargeId
+                ? dispute.chargeWaived === true || dispute.status === 'RESOLVED'
+                  ? 'WAIVE_CHARGE'
+                  : 'KEEP_CHARGE'
+                : null)
+            const isWaivedDecision = effectiveDecision === 'WAIVE_CHARGE'
+
+            return (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-bold text-emerald-900">
+                    <IconCheckCircle className="h-4 w-4 text-emerald-600" />
+                    <span>Tranh chấp đã được phân xử xong</span>
+                  </div>
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                      dispute.status === 'RESOLVED'
+                        ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                        : 'border-rose-300 bg-rose-100 text-rose-800'
+                    }`}
+                  >
+                    {dispute.status === 'RESOLVED'
+                      ? 'RESOLVED — Chấp thuận khiếu nại'
+                      : 'REJECTED — Bác bỏ khiếu nại'}
+                  </span>
+                </div>
+
+                {/* Explicit Decision Ruling Box for Charge Disputes (C9 / C10) */}
+                {(dispute.category === 'CHARGE' || dispute.chargeId || effectiveDecision) && (
+                  <div
+                    className={`rounded-xl border p-3.5 ${
+                      isWaivedDecision
+                        ? 'border-emerald-300 bg-emerald-100/60 text-emerald-950'
+                        : 'border-amber-300 bg-amber-50/90 text-amber-950'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold uppercase tracking-wider opacity-75">
+                      Quyết định xử lý đã chốt trước đó:
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-lg px-2.5 py-1 text-xs font-extrabold text-white ${
+                          isWaivedDecision ? 'bg-emerald-700' : 'bg-amber-700'
+                        }`}
+                      >
+                        {isWaivedDecision
+                          ? 'MIỄN GIẢM PHỤ PHÍ (WAIVE_CHARGE)'
+                          : 'GIỮ NGUYÊN PHỤ PHÍ (KEEP_CHARGE)'}
+                      </span>
+                      <span className="text-xs font-bold">
+                        {isWaivedDecision
+                          ? `Đã gạch bỏ khoản phụ phí ${formatVND(dispute.chargeAmount)} khỏi quyết toán của khách thuê`
+                          : `Giữ nguyên khoản phụ phí ${formatVND(dispute.chargeAmount)} — Khách thuê phải thanh toán`}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[11px] opacity-90">
+                      {isWaivedDecision
+                        ? 'Hệ thống đã cập nhật trạng thái miễn phí (waived = true) cho khoản phụ phí này trong hóa đơn quyết toán của đơn thuê.'
+                        : 'Khoản phụ phí vẫn được giữ hiệu lực thu (waived = false) trong hóa đơn quyết toán để khách thuê thanh toán số tiền còn thiếu.'}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Nội dung phán quyết / Ghi chú của Admin:
+                  </span>
+                  <p className="rounded-xl border border-emerald-200 bg-white p-3 font-medium text-slate-800">
+                    {dispute.resolution || 'Chưa ghi nhận'}
+                  </p>
+                </div>
+
+                <p className="mt-2 text-xs text-slate-600">
+                  Người xử lý: <strong>{dispute.handledByName || 'Admin'}</strong> · Thời điểm phân xử:{' '}
+                  <strong>
+                    {dispute.resolvedAt
+                      ? new Date(dispute.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+                      : 'Chưa ghi nhận'}
+                  </strong>
+                </p>
+                {dispute.category === 'TRIP_NOT_CONFIRMED' && !dispute.tripEndAction && <form onSubmit={handleSubmit} className="space-y-2 border-t pt-3">
+                  <label className="block">Hành động sau xác minh<select required value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="block w-full rounded-lg border p-2"><option value="">Chọn hành động</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option></select></label>
+                  {error && <p role="alert">{error}</p>}<button disabled={actionLoading} className="min-h-11 rounded-lg bg-emerald-800 px-4 text-white">Áp dụng hành động với chuyến</button>
+                </form>}
+                {dispute.refundAwardTotal != null && <p className="mt-2 text-sm font-semibold">Tổng mức hoàn theo phán quyết: {formatVND(dispute.refundAwardTotal)}</p>}
               </div>
-              <p className="rounded-xl border border-emerald-200 bg-white p-3 font-medium text-slate-800">
-                {dispute.resolution || 'Chưa ghi nhận'}
-              </p>
-              <p className="mt-2 text-xs text-slate-600">Người xử lý: {dispute.handledByName || 'Chưa ghi nhận'} · Thời điểm phân xử: {dispute.resolvedAt ? new Date(dispute.resolvedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa ghi nhận'}</p>
-              {dispute.category === 'TRIP_NOT_CONFIRMED' && !dispute.tripEndAction && <form onSubmit={handleSubmit} className="space-y-2 border-t pt-3">
-                <label className="block">Hành động sau xác minh<select required value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="block w-full rounded-lg border p-2"><option value="">Chọn hành động</option><option value="RESUME_TRIP">Tiếp tục chuyến</option><option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option></select></label>
-                {error && <p role="alert">{error}</p>}<button disabled={actionLoading} className="min-h-11 rounded-lg bg-emerald-800 px-4 text-white">Áp dụng hành động với chuyến</button>
-              </form>}
-              {dispute.refundAwardTotal != null && <p className="mt-2 text-sm font-semibold">Tổng mức hoàn theo phán quyết: {formatVND(dispute.refundAwardTotal)}</p>}
-            </div>
-          ) : (
+            )
+          })() : (
             /* Resolution Form */
             <form onSubmit={handleSubmit} noValidate className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
               <h4 className="font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">

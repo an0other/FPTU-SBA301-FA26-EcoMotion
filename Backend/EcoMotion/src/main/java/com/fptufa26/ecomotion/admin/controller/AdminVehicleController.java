@@ -73,6 +73,14 @@ public class AdminVehicleController {
         List<String> imgUrls = vehicleImageService.findImageUrls(v.getId());
         List<RentalPlanData> plans = rentalPlanService.findActivePlans(v.getId());
 
+        java.util.Map<com.fptufa26.ecomotion.vehicle.enums.DocumentType, Long> latestIdByType = new java.util.EnumMap<>(
+                com.fptufa26.ecomotion.vehicle.enums.DocumentType.class);
+        for (VehicleDocument d : docs) {
+            if (d.getDocType() != null && d.getId() != null) {
+                latestIdByType.merge(d.getDocType(), d.getId(), Math::max);
+            }
+        }
+
         List<AdminVehicleDto.DocumentDto> docDtos = docs.stream()
                 .map(d -> AdminVehicleDto.DocumentDto.builder()
                         .id(d.getId())
@@ -81,6 +89,10 @@ public class AdminVehicleController {
                         .expiryDate(d.getExpiryDate())
                         .fileUrl(d.getFileUrl())
                         .status(d.getStatus())
+                        .createdAt(d.getCreatedAt())
+                        .updatedAt(d.getUpdatedAt())
+                        .isLatest(d.getDocType() == null || d.getId() == null
+                                || d.getId().equals(latestIdByType.get(d.getDocType())))
                         .build())
                 .toList();
 

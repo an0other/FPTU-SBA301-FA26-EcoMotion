@@ -348,15 +348,53 @@ export default function AdminUsersTab({
   }
 
   // Handle eKYC Approval
-  async function handleUpdateEkyc(userId, status) {
+  async function handleUpdateEkyc(userId, status, ekycItem = null) {
+    const targetEkyc =
+      ekycItem ||
+      (selectedEkyc && Number(selectedEkyc.userId) === Number(userId) ? selectedEkyc : null) ||
+      ekycList.find((item) => Number(item.userId) === Number(userId))
+
+    if (status === 'VERIFIED' && targetEkyc) {
+      const missingFields = []
+      if (!targetEkyc.cccdNo || !String(targetEkyc.cccdNo).trim()) missingFields.push('Số CCCD/CMND')
+      if (!targetEkyc.dateOfBirth) missingFields.push('Ngày sinh')
+      if (!targetEkyc.gender || !String(targetEkyc.gender).trim()) missingFields.push('Giới tính')
+      if (!targetEkyc.address || !String(targetEkyc.address).trim()) missingFields.push('Địa chỉ thường trú')
+      if (!targetEkyc.cccdImageUrl) missingFields.push('Ảnh mặt trước CCCD')
+      if (!targetEkyc.portraitUrl) missingFields.push('Ảnh chân dung đối chiếu')
+
+      if (missingFields.length > 0) {
+        const errorText = `Không thể xác nhận eKYC hợp lệ: Hồ sơ đang trống thông tin bắt buộc (${missingFields.join(', ')}). Vui lòng từ chối hồ sơ hoặc yêu cầu khách thuê bổ sung đầy đủ!`
+        setMessage({ type: 'error', text: errorText })
+        setPopupModal({
+          mode: 'alert',
+          tone: 'error',
+          title: 'Không thể duyệt hồ sơ eKYC thiếu thông tin',
+          message: errorText,
+          confirmText: 'Đã hiểu',
+        })
+        return false
+      }
+    }
+
     setActionLoading(true)
     try {
       await adminService.updateEkycStatus(userId, status)
       setMessage({ type: 'success', text: `Đã cập nhật trạng thái eKYC: ${status}` })
       loadData()
       if (onStatsUpdate) onStatsUpdate()
+      return true
     } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Lỗi xử lý eKYC' })
+      const errMsg = err.message || 'Lỗi xử lý eKYC'
+      setMessage({ type: 'error', text: errMsg })
+      setPopupModal({
+        mode: 'alert',
+        tone: 'error',
+        title: 'Không thể cập nhật trạng thái eKYC',
+        message: errMsg,
+        confirmText: 'Đóng',
+      })
+      return false
     } finally {
       setActionLoading(false)
     }
@@ -831,9 +869,17 @@ export default function AdminUsersTab({
       {/* SubTab 4: EKYC APPROVAL */}
       {subTab === 'ekyc' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
-            <span className="text-xs font-bold text-slate-600">Lọc theo trạng thái hồ sơ eKYC:</span>
-            <div className="flex gap-2">
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">
+                Thẩm định hồ sơ định danh eKYC Khách thuê (Renter)
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Áp dụng khi khách thuê cập nhật lại giấy tờ CCCD / ảnh chân dung hoặc khi hệ thống chuyển thẩm định thủ công.
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-600">Trạng thái:</span>
               {['ALL', 'PENDING', 'VERIFIED', 'REJECTED'].map((st) => (
                 <button
                   key={st}
@@ -862,9 +908,16 @@ export default function AdminUsersTab({
                   key={e.userId}
                   className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card"
                 >
-                  <div className="flex flex-wrap items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-6 py-4">
                     <div>
-                      <h4 className="text-base font-bold text-slate-900">{e.fullName || 'Khách thuê'}</h4>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-base font-bold text-slate-900">{e.fullName || 'Khách thuê'}</h4>
+                        {(e.ekycStatus || e.status) === 'PENDING' && (
+                          <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                            Cập nhật hồ sơ / Chờ thẩm định CCCD
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-slate-500 flex items-center gap-1.5">
                         <button
                           type="button"
@@ -888,14 +941,17 @@ export default function AdminUsersTab({
 
                   <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-3">
                     {/* Identity Data */}
-                    <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-xs">
+                    <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-xs min-w-0">
                       <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                         Thông tin giấy tờ
                       </div>
-                      <div><strong className="text-slate-800">Số CCCD / CMND:</strong> {e.cccdNo || '—'}</div>
+                      <div className="break-all">
+                        <strong className="text-slate-800">Số CCCD / CMND:</strong>{' '}
+                        <span className="font-mono font-semibold text-slate-900">{e.cccdNo || '—'}</span>
+                      </div>
                       <div><strong className="text-slate-800">Ngày sinh:</strong> {e.dateOfBirth || '—'}</div>
                       <div><strong className="text-slate-800">Giới tính:</strong> {e.gender || '—'}</div>
-                      <div><strong className="text-slate-800">Địa chỉ thường trú:</strong> {e.address || '—'}</div>
+                      <div className="break-words"><strong className="text-slate-800">Địa chỉ thường trú:</strong> {e.address || '—'}</div>
                     </div>
 
                     {/* CCCD Photos */}
@@ -965,7 +1021,7 @@ export default function AdminUsersTab({
                       <button
                         type="button"
                         disabled={actionLoading}
-                        onClick={() => handleUpdateEkyc(e.userId, 'VERIFIED')}
+                        onClick={() => handleUpdateEkyc(e.userId, 'VERIFIED', e)}
                         className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-700"
                       >
                         Xác nhận eKYC hợp lệ
@@ -975,7 +1031,7 @@ export default function AdminUsersTab({
                       <button
                         type="button"
                         disabled={actionLoading}
-                        onClick={() => handleUpdateEkyc(e.userId, 'REJECTED')}
+                        onClick={() => handleUpdateEkyc(e.userId, 'REJECTED', e)}
                         className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700 transition-all hover:bg-rose-100"
                       >
                         Từ chối eKYC
@@ -1111,8 +1167,10 @@ export default function AdminUsersTab({
           ekyc={selectedEkyc}
           onClose={() => setSelectedEkyc(null)}
           onStatusUpdate={async (userId, status) => {
-            await handleUpdateEkyc(userId, status)
-            setSelectedEkyc(null)
+            const ok = await handleUpdateEkyc(userId, status, selectedEkyc)
+            if (ok) {
+              setSelectedEkyc(null)
+            }
           }}
           actionLoading={actionLoading}
           onPreviewImage={(url) => setPreviewImage(url)}

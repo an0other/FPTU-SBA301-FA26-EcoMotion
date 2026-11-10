@@ -23,6 +23,7 @@ public class AdminDisputeDto {
     private Long chargeId;
     private String chargeDescription;
     private BigDecimal chargeAmount;
+    private Boolean chargeWaived;
     private Long raisedById;
     private String raisedByName;
     private String raisedByEmail;

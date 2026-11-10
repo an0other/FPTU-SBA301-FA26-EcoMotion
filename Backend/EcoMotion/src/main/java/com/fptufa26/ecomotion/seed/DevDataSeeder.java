@@ -403,6 +403,37 @@ public class DevDataSeeder implements ApplicationRunner {
     private void seedPastMonthsBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
         ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
 
+        // --- Thang 01/2026 - 07/2026 (Historical months for 10+ periods in Admin Overview) ---
+        String[][] earlyMonths = {
+                {"BK-JAN-01", "1", "10", "101", "1", "DAILY", "1100000.00", "San bay Tan Son Nhat"},
+                {"BK-JAN-02", "1", "22", "102", "3", "DAILY", "3200000.00", "Vung Tau - Bai Sau"},
+                {"BK-FEB-01", "2", "8", "103", "4", "DAILY", "1400000.00", "InterContinental Saigon, Q.1"},
+                {"BK-FEB-02", "2", "19", "104", "1", "DAILY", "2200000.00", "Mui Ne, Phan Thiet"},
+                {"BK-MAR-01", "3", "6", "105", "2", "HOURLY", "600000.00", "Vincom Center Landmark 81"},
+                {"BK-MAR-02", "3", "18", "106", "3", "DAILY", "3200000.00", "Ho Tram Resort, Xuyen Moc"},
+                {"BK-APR-01", "4", "9", "101", "4", "DAILY", "2800000.00", "Diamond Island, TP. Thu Duc"},
+                {"BK-APR-02", "4", "24", "102", "1", "DAILY", "1100000.00", "Aeon Mall Tan Phu"},
+                {"BK-MAY-01", "5", "7", "103", "3", "DAILY", "3200000.00", "Cao toc Long Thanh - Dau Giay"},
+                {"BK-MAY-02", "5", "21", "104", "4", "DAILY", "1400000.00", "Sheraton Saigon, 88 Dong Khoi"},
+                {"BK-JUN-01", "6", "11", "105", "1", "DAILY", "2200000.00", "San bay Tan Son Nhat - Ga Quoc te"},
+                {"BK-JUN-02", "6", "25", "106", "3", "DAILY", "3200000.00", "Phan Thiet - Doi Cat Bay"},
+                {"BK-JUL-01", "7", "8", "107", "4", "DAILY", "2800000.00", "Khu du lich Dai Nam"},
+                {"BK-JUL-02", "7", "19", "5", "3", "DAILY", "3200000.00", "Vung Tau Marina"}
+        };
+        for (String[] row : earlyMonths) {
+            int monthVal = Integer.parseInt(row[1]);
+            int dayVal = Integer.parseInt(row[2]);
+            Long renterUserId = Long.parseLong(row[3]);
+            Long vehicleId = Long.parseLong(row[4]);
+            PlanType pType = PlanType.valueOf(row[5]);
+            Instant startAt = ZonedDateTime.of(2026, monthVal, dayVal, 9, 0, 0, 0, zone).toInstant();
+            Instant endAt = pType == PlanType.HOURLY
+                    ? startAt.plus(4, ChronoUnit.HOURS)
+                    : startAt.plus(1, ChronoUnit.DAYS);
+            seedBooking(row[0], renterUserId, vehicleId, pType, driverCuong, BookingStatus.COMPLETED,
+                    row[7], startAt, 3, row[6], startAt, endAt, null, null, null);
+        }
+
         // --- Thang 08/2026 (7 completed bookings) ---
         Instant aug05 = ZonedDateTime.of(2026, 8, 5, 8, 0, 0, 0, zone).toInstant();
         seedBooking("BK-AUG-01", 101L, 1L, PlanType.DAILY, driverCuong, BookingStatus.COMPLETED,
@@ -610,10 +641,11 @@ public class DevDataSeeder implements ApplicationRunner {
         User renterEkyc = seedUser(8L, "renter.pending@ecomotion.vn", "0901000040", "Lê Hoàng Long", Role.RENTER);
         renterEkyc.setEkycStatus(EkycStatus.PENDING);
         userRepository.save(renterEkyc);
-        if (renterRepository.findByUser_Id(renterEkyc.getId()).isEmpty()) {
+        Renter existingPendingRenter = renterRepository.findByUser_Id(renterEkyc.getId()).orElse(null);
+        if (existingPendingRenter == null) {
             Renter renter = new Renter();
             renter.setUser(renterEkyc);
-            renter.setCccdNo(cipher.encrypt("079095012345"));
+            renter.setCccdNo("079095012345");
             renter.setDateOfBirth(LocalDate.of(1995, 8, 20));
             renter.setGender("Nam");
             renter.setAddress("Số 10 Ba Tháng Hai, Quận 10, TP. Hồ Chí Minh");
@@ -621,6 +653,9 @@ public class DevDataSeeder implements ApplicationRunner {
             renter.setCccdImageBackUrl("https://images.unsplash.com/photo-1544717305-2782549b5136?w=400");
             renter.setPortraitUrl("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400");
             renterRepository.save(renter);
+        } else if (existingPendingRenter.getCccdNo() == null || !existingPendingRenter.getCccdNo().matches("\\d{9,12}")) {
+            existingPendingRenter.setCccdNo("079095012345");
+            renterRepository.save(existingPendingRenter);
         }
 
         if (vehicleRepository.findById(9L).isEmpty()) {

@@ -31,5 +31,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     long countByEkycStatus(EkycStatus ekycStatus);
 
+    long countByRoleAndEkycStatus(Role role, EkycStatus ekycStatus);
+
     long countByRole(Role role);
 }

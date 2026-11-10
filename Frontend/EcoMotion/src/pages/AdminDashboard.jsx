@@ -33,7 +33,8 @@ export default function AdminDashboard() {
   const [tabOptions, setTabOptions] = useState({})
   const [stats, setStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
-  const [selectedMonthKey, setSelectedMonthKey] = useState('ALL') // 'ALL' | 'YYYY-MM'
+  const [selectedMonthKey, setSelectedMonthKey] = useState('ALL') // 'ALL' | 'YYYY-MM' | 'CUSTOM'
+  const [customDateRange, setCustomDateRange] = useState({ fromDate: '', toDate: '' })
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
   const profileDropdownRef = useRef(null)
 
@@ -51,17 +52,23 @@ export default function AdminDashboard() {
     }
   }, [profileDropdownOpen])
 
-  const loadStats = useCallback(async (monthKey = 'ALL') => {
+  const loadStats = useCallback(async (monthKey = 'ALL', dateRange = null) => {
     setLoadingStats(true)
     try {
       let year = null
       let month = null
-      if (monthKey && monthKey !== 'ALL') {
+      let fromDate = null
+      let toDate = null
+
+      if (monthKey === 'CUSTOM') {
+        fromDate = dateRange?.fromDate || null
+        toDate = dateRange?.toDate || fromDate || null
+      } else if (monthKey && monthKey !== 'ALL') {
         const [y, m] = monthKey.split('-')
         year = parseInt(y, 10)
         month = parseInt(m, 10)
       }
-      const data = await adminService.getDashboardStats({ year, month })
+      const data = await adminService.getDashboardStats({ year, month, fromDate, toDate })
       setStats(data)
     } catch (err) {
       console.error('Failed to load admin stats:', err)
@@ -78,9 +85,19 @@ export default function AdminDashboard() {
     return () => { cancelled = true }
   }, [loadStats])
 
-  function handleMonthChange(newMonthKey) {
+  function handleMonthChange(newMonthKey, nextCustomRange = null) {
     setSelectedMonthKey(newMonthKey)
-    loadStats(newMonthKey)
+    if (newMonthKey === 'CUSTOM') {
+      const rangeToUse = nextCustomRange || customDateRange
+      if (nextCustomRange) {
+        setCustomDateRange(nextCustomRange)
+      }
+      if (rangeToUse?.fromDate || rangeToUse?.toDate) {
+        loadStats('CUSTOM', rangeToUse)
+      }
+    } else {
+      loadStats(newMonthKey)
+    }
   }
 
   async function handleLogout() {
@@ -287,8 +304,9 @@ export default function AdminDashboard() {
             stats={stats}
             loading={loadingStats}
             selectedMonthKey={selectedMonthKey}
+            customDateRange={customDateRange}
             onMonthChange={handleMonthChange}
-            onRefresh={() => loadStats(selectedMonthKey)}
+            onRefresh={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}
@@ -297,7 +315,7 @@ export default function AdminDashboard() {
           <AdminUsersTab
             initialSubTab={tabOptions.subTab || 'users'}
             initialFilter={tabOptions}
-            onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onStatsUpdate={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}
@@ -306,7 +324,7 @@ export default function AdminDashboard() {
           <AdminVehiclesTab
             initialStatus={tabOptions.status || 'ALL'}
             initialFilter={tabOptions}
-            onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onStatsUpdate={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}
@@ -315,7 +333,7 @@ export default function AdminDashboard() {
           <AdminOperationsTab
             initialSubTab={tabOptions.subTab || 'bookings'}
             initialFilter={tabOptions}
-            onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onStatsUpdate={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}

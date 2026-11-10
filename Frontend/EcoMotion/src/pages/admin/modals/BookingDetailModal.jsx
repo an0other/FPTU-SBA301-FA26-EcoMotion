@@ -288,25 +288,13 @@ export default function BookingDetailModal({
         </div>
 
         {/* Action Controls */}
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+        <div className="mt-8 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
           <button
             type="button"
             onClick={onClose}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             Đóng
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              if (onOpenRefund) onOpenRefund(booking.id)
-            }}
-            className="flex items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-xs font-bold text-brand-700 hover:bg-brand-100"
-          >
-            <IconWallet className="h-4 w-4" />
-            <span>Thực hiện Hoàn tiền (Refund)</span>
           </button>
         </div>
       </div>

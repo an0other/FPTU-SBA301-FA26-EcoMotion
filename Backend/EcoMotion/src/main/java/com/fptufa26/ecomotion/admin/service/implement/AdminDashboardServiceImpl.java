@@ -17,8 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +30,7 @@ import java.util.List;
 public class AdminDashboardServiceImpl implements AdminDashboardService {
 
     private static final ZoneId ZONE_VN = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter DATE_LABEL_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final UserService userService;
     private final VehicleService vehicleService;
@@ -37,12 +40,18 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminStatsResponse getStats() {
-        return getStats(null, null);
+        return getStats(null, null, null, null);
     }
 
     @Override
     @Transactional(readOnly = true)
     public AdminStatsResponse getStats(Integer year, Integer month) {
+        return getStats(year, month, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminStatsResponse getStats(Integer year, Integer month, LocalDate fromDate, LocalDate toDate) {
         BigDecimal platformCommission;
         BigDecimal grossCompleted;
         BigDecimal providerPayoutDue;
@@ -60,8 +69,63 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         BigDecimal payoutDiff = null;
         Long bookingsDiff = null;
         String comparedToLabel = null;
+        String selectedFromDateStr = null;
+        String selectedToDateStr = null;
 
-        if (year != null && month != null && month >= 1 && month <= 12) {
+        if (fromDate != null || toDate != null) {
+            LocalDate start = fromDate != null ? fromDate : toDate;
+            LocalDate end = toDate != null ? toDate : fromDate;
+            if (start.isAfter(end)) {
+                LocalDate tmp = start;
+                start = end;
+                end = tmp;
+            }
+            selectedFromDateStr = start.toString();
+            selectedToDateStr = end.toString();
+
+            Instant from = start.atStartOfDay(ZONE_VN).toInstant();
+            Instant to = end.plusDays(1).atStartOfDay(ZONE_VN).toInstant();
+
+            platformCommission = bookingService.sumAdminCommission(from, to);
+            grossCompleted = bookingService.sumCompletedGrossRentalVolume(from, to);
+            providerPayoutDue = grossCompleted.subtract(platformCommission).max(BigDecimal.ZERO);
+            escrowDeposits = bookingService.sumEscrowDeposits(from, to);
+            if (escrowDeposits == null) {
+                escrowDeposits = BigDecimal.ZERO;
+            }
+            gmv = grossCompleted.compareTo(BigDecimal.ZERO) > 0 ? grossCompleted
+                    : bookingService.sumTotalRevenue(from, to);
+            completedBookings = bookingService.countCompletedBookings(from, to);
+            totalBookings = bookingService.countTotalBookings(from, to);
+
+            long spanDays = Math.max(ChronoUnit.DAYS.between(start, end) + 1, 1);
+            LocalDate prevStart = start.minusDays(spanDays);
+            LocalDate prevEnd = start.minusDays(1);
+            Instant prevFrom = prevStart.atStartOfDay(ZONE_VN).toInstant();
+            Instant prevTo = prevEnd.plusDays(1).atStartOfDay(ZONE_VN).toInstant();
+
+            BigDecimal prevCommission = bookingService.sumAdminCommission(prevFrom, prevTo);
+            BigDecimal prevGross = bookingService.sumCompletedGrossRentalVolume(prevFrom, prevTo);
+            BigDecimal prevPayout = prevGross.subtract(prevCommission).max(BigDecimal.ZERO);
+            long prevCompleted = bookingService.countCompletedBookings(prevFrom, prevTo);
+
+            comparedToLabel = spanDays == 1
+                    ? prevStart.format(DATE_LABEL_FMT)
+                    : String.format("%s - %s", prevStart.format(DATE_LABEL_FMT), prevEnd.format(DATE_LABEL_FMT));
+            commissionDiff = platformCommission.subtract(prevCommission);
+            commissionGrowthRate = calculateGrowthRate(platformCommission, prevCommission);
+
+            gmvDiff = gmv.subtract(prevGross);
+            gmvGrowthRate = calculateGrowthRate(gmv, prevGross);
+
+            payoutDiff = providerPayoutDue.subtract(prevPayout);
+            payoutGrowthRate = calculateGrowthRate(providerPayoutDue, prevPayout);
+
+            bookingsDiff = completedBookings - prevCompleted;
+            bookingsGrowthRate = calculateGrowthRate(
+                    BigDecimal.valueOf(completedBookings),
+                    BigDecimal.valueOf(prevCompleted));
+        } else if (year != null && month != null && month >= 1 && month <= 12) {
             YearMonth ym = YearMonth.of(year, month);
             Instant from = ym.atDay(1).atStartOfDay(ZONE_VN).toInstant();
             Instant to = ym.plusMonths(1).atDay(1).atStartOfDay(ZONE_VN).toInstant();
@@ -138,6 +202,8 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .completedBookings(completedBookings)
                 .selectedYear(year)
                 .selectedMonth(month)
+                .selectedFromDate(selectedFromDateStr)
+                .selectedToDate(selectedToDateStr)
                 .monthlySummaries(monthlySummaries)
                 .commissionGrowthRate(commissionGrowthRate)
                 .gmvGrowthRate(gmvGrowthRate)
@@ -161,7 +227,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             earliestYm = currentYm;
         }
 
-        int count = (int) ChronoUnit.MONTHS.between(earliestYm, currentYm) + 1;
+        int count = Math.max((int) ChronoUnit.MONTHS.between(earliestYm, currentYm) + 1, 12);
         List<MonthlyFinancialSummaryDto> temp = new ArrayList<>();
 
         // Build count + 1 months to allow comparing the earliest month (temp.get(count - 1))

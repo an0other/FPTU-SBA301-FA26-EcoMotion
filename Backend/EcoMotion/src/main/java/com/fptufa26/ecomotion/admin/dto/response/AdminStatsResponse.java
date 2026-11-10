@@ -31,6 +31,8 @@ public class AdminStatsResponse {
     private long completedBookings;
     private Integer selectedYear;
     private Integer selectedMonth;
+    private String selectedFromDate;
+    private String selectedToDate;
     private List<MonthlyFinancialSummaryDto> monthlySummaries;
 
     // Month-over-month (MoM) growth & difference metrics for the selected period
