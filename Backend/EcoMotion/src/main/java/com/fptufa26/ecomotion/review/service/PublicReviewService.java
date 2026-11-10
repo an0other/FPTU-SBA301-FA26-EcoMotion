@@ -41,7 +41,10 @@ public class PublicReviewService {
         Driver driver = userService.findDriverById(driverId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy tài xế"));
         String name = driver.getUser() == null ? "Tài xế" : driver.getUser().getFullName();
-        String avatar = driver.getUser() == null ? null : driver.getUser().getAvatarUrl();
+        String avatar = driver.getPortraitUrl();
+        if (avatar == null || avatar.isBlank()) {
+            avatar = driver.getUser() == null ? null : driver.getUser().getAvatarUrl();
+        }
         return build("DRIVER", driverId, name, avatar, reviewRepository.findByDriver_Id(driverId));
     }
 
