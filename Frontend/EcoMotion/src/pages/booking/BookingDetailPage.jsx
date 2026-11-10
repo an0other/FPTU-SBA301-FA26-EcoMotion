@@ -13,6 +13,7 @@ import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSumm
 import { RefundAccountModal } from '../../components/booking/RefundAccountModal'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import PaymentReceiptsCard from '../../components/booking/PaymentReceiptsCard'
+import { reviewService } from '../../services/reviewService'
 
 const CHARGE_LABELS = {
   BASE_RENTAL: 'Tiền thuê',
@@ -141,6 +142,17 @@ export function BookingDetailPage() {
   const [workflow, setWorkflow] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const [tripNotice, setTripNotice] = useState('')
+  // Đánh giá khách đã gửi cho đơn hoàn tất — để hiện "Xem đánh giá của tôi" thay vì luôn mời đánh giá.
+  const [myReviews, setMyReviews] = useState(null)
+  const completed = detail?.status === 'COMPLETED' && detail?.bookingCode?.toUpperCase() === bookingCode?.toUpperCase()
+  useEffect(() => {
+    if (!completed) return undefined
+    let cancelled = false
+    reviewService.getBookingReviews(bookingCode)
+      .then((data) => { if (!cancelled) setMyReviews(data) })
+      .catch(() => { if (!cancelled) setMyReviews(null) })
+    return () => { cancelled = true }
+  }, [completed, bookingCode])
   const [refundAccountOpen, setRefundAccountOpen] = useState(false)
   const promptedRefundKey = useRef('')
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
@@ -254,6 +266,9 @@ export function BookingDetailPage() {
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
         onGoToReviews={() => navigate(`/renter/bookings/${encodeURIComponent(booking.id)}/reviews`)}
+        myReviews={myReviews}
+        onOpenVehicleReviews={detail.vehicleId ? () => navigate(`/vehicles/${detail.vehicleId}/reviews`) : null}
+        onOpenDriverReviews={detail.driver?.id ? () => navigate(`/drivers/${detail.driver.id}/reviews`) : null}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
         onCancelBooking={async (_code, account) => {
           const updated = await cancelMyBooking(booking.id, account)

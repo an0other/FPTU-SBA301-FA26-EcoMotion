@@ -28,6 +28,9 @@ export const BookingDetail = ({
   onGoBack,
   onGoToCarPage,
   onGoToReviews,
+  myReviews = null,
+  onOpenVehicleReviews = null,
+  onOpenDriverReviews = null,
   onPayDeposit,
   onCancelBooking,
   onOpenDispute,
@@ -258,22 +261,50 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {booking.status === 'COMPLETED' && onGoToReviews && (
-            <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-bold text-[#14221A]">Chuyến đi đã hoàn tất</h2>
-                <p className="text-xs text-gray-600 mt-1">Đánh giá xe và tài xế để giúp khách sau chọn đúng.</p>
+          {booking.status === 'COMPLETED' && onGoToReviews && (() => {
+            const submitted = myReviews?.reviews || []
+            const totalTargets = myReviews?.hasDriver ? 2 : 1
+            const reviewedAll = submitted.length >= totalTargets
+            return (
+              <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-base font-bold text-[#14221A]">
+                      {submitted.length ? 'Bạn đã đánh giá chuyến đi' : 'Chuyến đi đã hoàn tất'}
+                    </h2>
+                    {submitted.length ? (
+                      <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
+                        {submitted.map((review) => (
+                          <li key={review.target}>
+                            {review.target === 'VEHICLE' ? 'Xe' : 'Tài xế'}: <span className="font-semibold text-amber-600">{'★'.repeat(review.rating)}</span>
+                            {review.comment ? <span className="text-gray-500"> · {review.comment.length > 60 ? `${review.comment.slice(0, 60)}…` : review.comment}</span> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-gray-600 mt-1">Đánh giá xe và tài xế để giúp khách sau chọn đúng.</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={onGoToReviews}
+                    type="button"
+                    className={`inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-[12px] text-sm font-semibold transition-colors shrink-0 cursor-pointer ${submitted.length
+                      ? 'border border-[#15803D] text-[#15803D] hover:bg-[#F0FDF4]'
+                      : 'bg-[#15803D] hover:bg-[#166534] text-white'}`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">{submitted.length ? 'visibility' : 'star'}</span>
+                    {!submitted.length ? 'Đánh giá chuyến đi' : reviewedAll ? 'Xem đánh giá của tôi' : 'Xem và đánh giá tiếp'}
+                  </button>
+                </div>
+                {(onOpenVehicleReviews || onOpenDriverReviews) && (
+                  <div className="flex flex-wrap gap-3 border-t border-[#EEF2EF] pt-3 text-xs">
+                    {onOpenVehicleReviews && <button type="button" onClick={onOpenVehicleReviews} className="font-semibold text-[#15803D] hover:underline">Đánh giá của khách khác về xe này</button>}
+                    {onOpenDriverReviews && <button type="button" onClick={onOpenDriverReviews} className="font-semibold text-[#15803D] hover:underline">Đánh giá về tài xế</button>}
+                  </div>
+                )}
               </div>
-              <button
-                onClick={onGoToReviews}
-                type="button"
-                className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-[12px] bg-[#15803D] hover:bg-[#166534] text-white text-sm font-semibold transition-colors shrink-0 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">star</span>
-                Đánh giá chuyến đi
-              </button>
-            </div>
-          )}
+            )
+          })()}
 
           {booking.status === 'DRIVER_ARRIVED' && (
             <div className="p-5 text-white bg-cyan-700 rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">

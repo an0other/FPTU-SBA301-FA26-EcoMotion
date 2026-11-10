@@ -538,6 +538,17 @@ public class BookingServiceImpl implements BookingService {
                 result.getTotalElements(), offset, size, result.hasNext());
     }
 
+    private static final Set<BookingStatus> LIST_ACTION_STATUSES = EnumSet.of(
+            BookingStatus.ACCEPTED, BookingStatus.AWAITING_DEPOSIT, BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.AWAITING_END_CONFIRMATION, BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT);
+    private static final Set<BookingStatus> LIST_ACTIVE_STATUSES = EnumSet.of(
+            BookingStatus.IN_PROGRESS, BookingStatus.DRIVER_ARRIVED);
+    private static final Set<BookingStatus> LIST_UPCOMING_STATUSES = EnumSet.of(
+            BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED);
+    private static final Set<BookingStatus> LIST_ENDED_STATUSES = EnumSet.of(
+            BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.REJECTED);
+
     private boolean isActionNeededGroup(String group) {
         return group != null && "ACTION_NEEDED".equalsIgnoreCase(group.trim());
     }
@@ -564,19 +575,26 @@ public class BookingServiceImpl implements BookingService {
             query.orderBy(builder.desc(root.get("createdAt")), builder.desc(root.get("id")));
             return;
         }
-        Expression<Integer> upcomingBucket = builder.<Integer>selectCase()
-                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), 0)
-                .otherwise(1);
-        Expression<Instant> upcomingPickup = builder.<Instant>selectCase()
-                .when(builder.greaterThanOrEqualTo(root.get("pickupTime"), now), root.get("pickupTime"))
+        // Nhóm trạng thái trước: cần thao tác → đang thuê → sắp tới → chờ nhà xe → đã kết thúc.
+        var status = root.get("status");
+        Expression<Integer> statusBucket = builder.<Integer>selectCase()
+                .when(status.in(LIST_ACTION_STATUSES), 0)
+                .when(status.in(LIST_ACTIVE_STATUSES), 1)
+                .when(status.in(LIST_UPCOMING_STATUSES), 2)
+                .when(status.in(LIST_ENDED_STATUSES), 4)
+                .otherwise(3);
+        Predicate ended = status.in(LIST_ENDED_STATUSES);
+        // Trong nhóm đang diễn ra: ngày nhận gần nhất lên trước; nhóm đã kết thúc: mới nhất lên trước.
+        Expression<Instant> openPickup = builder.<Instant>selectCase()
+                .when(builder.not(ended), root.get("pickupTime"))
                 .otherwise(builder.nullLiteral(Instant.class));
-        Expression<Instant> pastPickup = builder.<Instant>selectCase()
-                .when(builder.lessThan(root.get("pickupTime"), now), root.get("pickupTime"))
+        Expression<Instant> endedPickup = builder.<Instant>selectCase()
+                .when(ended, root.get("pickupTime"))
                 .otherwise(builder.nullLiteral(Instant.class));
         query.orderBy(
-                builder.asc(upcomingBucket),
-                builder.asc(upcomingPickup),
-                builder.desc(pastPickup),
+                builder.asc(statusBucket),
+                builder.asc(openPickup),
+                builder.desc(endedPickup),
                 builder.desc(root.get("createdAt")));
     }
 
@@ -1235,7 +1253,16 @@ public class BookingServiceImpl implements BookingService {
                 actionKind(booking),
                 depositPaymentStatus(booking),
                 depositRejectionReason(booking),
-                estimatedTotal(booking));
+                estimatedTotal(booking),
+                paidAmount(booking));
+    }
+
+    private BigDecimal paidAmount(Booking booking) {
+        return paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .filter(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
+                        && t.getType() != PaymentType.SECURITY_DEPOSIT)
+                .map(t -> RefundMath.appliedPortion(t.getAmount(), t.getAppliedAmount(), t.getProcessingNote()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** Tiền thuê + phụ phí chưa miễn (gồm phí đón ngoài bán kính) — khớp "Tổng chi phí dự kiến" ở trang chi tiết. */

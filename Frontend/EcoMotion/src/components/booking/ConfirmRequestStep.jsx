@@ -178,55 +178,61 @@ export const ConfirmRequestStep = ({
           Chi phí
         </SectionHeader>
         <div className="bg-white p-5 sm:p-6">
-          <div className="space-y-3">
-            <div className="rounded-xl border border-slate-200 p-4">
-              <h3 className="text-sm font-bold text-ink">Tiền thuê theo từng gói</h3>
-              <ul className="mt-3 divide-y divide-slate-100">
-                {pricingItems.map(item => <li key={item.planId} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-3 first:pt-0">
-                  <div>
-                    <p className="text-sm font-semibold text-ink">Gói {slotDurationLabel(item.slotLengthMinutes)}</p>
-                    <p className="mt-1 text-sm tabular-nums text-slate-600">
-                      {item.quantity} gói × {formatCurrency(item.unitPrice)} / gói
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold tabular-nums text-ink">{formatCurrency(Number(item.unitPrice) * item.quantity)}</p>
-                </li>)}
+          <div className="divide-y divide-slate-100 text-sm">
+            <details className="group py-2.5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <span className="text-slate-700">
+                  Tiền thuê <span className="text-xs text-slate-500">({pricingItems.reduce((sum, item) => sum + item.quantity, 0)} gói)</span>
+                  <span className="ml-1 text-xs text-brand-700 group-open:hidden">Xem chi tiết</span>
+                </span>
+                <span className="font-semibold tabular-nums text-ink">{formatCurrency(baseRentalAmount)}</span>
+              </summary>
+              <ul className="mt-2 space-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                {pricingItems.map(item => (
+                  <li key={item.planId} className="flex justify-between gap-3 tabular-nums">
+                    <span>Gói {slotDurationLabel(item.slotLengthMinutes)}: {item.quantity} × {formatCurrency(item.unitPrice)}</span>
+                    <span>{formatCurrency(Number(item.unitPrice) * item.quantity)}</span>
+                  </li>
+                ))}
               </ul>
-              <div className="flex flex-wrap items-start justify-between gap-3 border-t border-slate-200 pt-3">
-              <div>
-                <p className="text-[15px] font-bold text-[#14221A]">Tổng tiền thuê</p>
-                <p className="mt-1 text-sm text-slate-600">Cộng thành tiền của các gói ở trên.</p>
-              </div>
-              <p className="text-xl font-extrabold tabular-nums text-[#14221A]">{formatCurrency(baseRentalAmount)}</p>
-              </div>
-            </div>
-            <PickupFeeSummary quote={pickupQuote} />
-            <div className="flex flex-wrap justify-between gap-2 font-bold text-[#14221A]">
-              <span>Tổng dự kiến (gồm phí đón)</span>
-              <span>{formatCurrency(totalAmount)}</span>
-            </div>
-            <p className="text-sm tabular-nums text-slate-600">
-              {formatCurrency(baseRentalAmount)} tiền thuê + {formatCurrency(pickupQuote?.pickupFee ?? 0)} phí đón = {formatCurrency(totalAmount)}
-            </p>
-            <p className="text-sm leading-relaxed text-slate-600">Chưa gồm phụ phí phát sinh như vượt giờ hoặc thời gian chờ. Các khoản này được tính theo chính sách áp dụng khi phát sinh.</p>
-            <div className="border-t-2 border-dashed border-[#E6EBE8]" />
-            <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl bg-brand-50/50 p-3 -mx-1">
-              <div>
-                <p className="text-[15px] font-bold text-brand-800">Cọc giữ chỗ 15 phút</p>
-                <p className="mt-1 text-sm text-brand-800">{depositNote}. Cọc là một phần của tổng tiền, không cộng thêm.</p>
-              </div>
-              <p className="text-xl font-extrabold tabular-nums text-brand-700">{formatCurrency(depositAmount)}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-4 text-sm">
-              <div className="flex flex-wrap justify-between gap-2 font-semibold text-ink">
-                <span>Còn lại dự kiến sau khi thanh toán cọc</span>
-                <span className="tabular-nums">{formatCurrency(Number(totalAmount) - Number(depositAmount))}</span>
-              </div>
-              <p className="mt-2 tabular-nums text-slate-600">{formatCurrency(totalAmount)} tổng dự kiến − {formatCurrency(depositAmount)} tiền cọc</p>
+            </details>
+            {Number(pickupQuote?.pickupFee) > 0 && (
+              <details className="group py-2.5">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                  <span className="text-slate-700">
+                    Phí đón ngoài bán kính
+                    <span className="ml-1 text-xs text-brand-700 group-open:hidden">Cách tính</span>
+                  </span>
+                  <span className="font-semibold tabular-nums text-ink">{formatCurrency(pickupQuote.pickupFee)}</span>
+                </summary>
+                <div className="mt-2"><PickupFeeSummary quote={pickupQuote} /></div>
+              </details>
+            )}
+            <div className="flex items-center justify-between gap-3 py-3">
+              <span className="text-[15px] font-bold text-ink">Tổng dự kiến</span>
+              <span className="text-xl font-extrabold tabular-nums text-ink">{formatCurrency(totalAmount)}</span>
             </div>
           </div>
-          <p className="mt-4 text-[13px] leading-relaxed text-[#14221A]/70">{DEPOSIT_HOLD_COPY.submitHint}</p>
-          <p className="mt-1 text-[13px] text-[#14221A]/55">Kênh thanh toán cọc: VNPAY hoặc VietQR.</p>
+          <div className="mt-1 flex items-center justify-between gap-3 rounded-xl bg-brand-50 px-4 py-3">
+            <div>
+              <p className="text-[15px] font-bold text-brand-800">Cọc cần trả ngay</p>
+              <p className="text-xs text-brand-800/80">Giữ chỗ 15 phút · trừ vào tổng, không cộng thêm</p>
+            </div>
+            <p className="text-xl font-extrabold tabular-nums text-brand-700">{formatCurrency(depositAmount)}</p>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 px-4 text-sm text-slate-600">
+            <span>Còn lại khi quyết toán chuyến</span>
+            <span className="font-semibold tabular-nums text-ink">{formatCurrency(Number(totalAmount) - Number(depositAmount))}</span>
+          </div>
+          <details className="mt-4 rounded-lg border border-slate-200 px-3 py-2 text-[13px] text-slate-600">
+            <summary className="cursor-pointer font-semibold text-slate-700">Lưu ý về chi phí</summary>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>Chưa gồm phụ phí phát sinh như vượt giờ hoặc thời gian chờ; các khoản này tính theo chính sách khi phát sinh.</li>
+              <li>{depositNote}.</li>
+              <li>{DEPOSIT_HOLD_COPY.submitHint}</li>
+              <li>Kênh thanh toán cọc: VNPAY hoặc VietQR.</li>
+            </ul>
+          </details>
         </div>
       </section>
 

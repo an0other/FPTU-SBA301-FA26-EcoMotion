@@ -132,7 +132,8 @@ public interface BookingMapper {
             BookingActionKind actionKind,
             String depositPaymentStatus,
             String depositRejectionReason,
-            BigDecimal estimatedTotal) {
+            BigDecimal estimatedTotal,
+            BigDecimal paidAmount) {
         Vehicle vehicle = booking.getVehicle();
         boolean vehicleReplaced = booking.getPreviousVehicleId() != null || booking.getOperationalResolution() == OperationalResolutionType.CHANGE_VEHICLE;
         PlanType planType = snapshot != null ? snapshot.getPlanType() : booking.getPlan().getPlanType();
@@ -173,7 +174,8 @@ public interface BookingMapper {
                 actionKind,
                 depositPaymentStatus,
                 depositRejectionReason,
-                estimatedTotal);
+                estimatedTotal,
+                paidAmount);
     }
 
     default BookingDetailResponse toDetail(Booking booking,

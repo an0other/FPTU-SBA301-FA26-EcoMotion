@@ -140,6 +140,62 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
     finally { setSubmitting(false) }
   }
 
+  // Đơn chưa cọc: không có gì để "đề xuất phương án" — chỉ cần huỷ đơn kèm lý do, không phát sinh hoàn tiền.
+  const simpleCancel = awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver && !workflow?.proposal
+    && !(Number(workflow?.confirmedPaid) > 0)
+  if (simpleCancel) {
+    const cancelUnpaid = async (event) => {
+      event.preventDefault()
+      if (submitting || !reason.trim()) return
+      setSubmitting(true)
+      setError('')
+      try {
+        const result = await providerBookingService.resolveOperationalRisk(booking.bookingCode, {
+          resolution: 'CANCEL_AND_REFUND', reason: reason.trim(),
+        })
+        await onSuccess(result)
+        setOpen(false)
+      } catch (err) { setError(err.message || 'Không thể huỷ đơn.') }
+      finally { setSubmitting(false) }
+    }
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-slate-900">Không nhận được chuyến này?</h2>
+            <p className="mt-0.5 text-xs text-slate-600">
+              Khách chưa đặt cọc nên không phát sinh hoàn tiền. Huỷ đơn sẽ giải phóng lịch xe và báo cho khách.
+            </p>
+          </div>
+          {!open && (
+            <button type="button" onClick={() => setOpen(true)}
+              className="h-10 shrink-0 rounded-lg border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 hover:bg-rose-50">
+              Huỷ đơn (khách chưa cọc)
+            </button>
+          )}
+        </div>
+        {open && (
+          <form onSubmit={cancelUnpaid} className="mt-3 space-y-2">
+            <label className="block text-xs font-semibold text-slate-700">Lý do huỷ (khách sẽ thấy)
+              <textarea required maxLength={500} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={submitting}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
+            </label>
+            <p className="text-[11px] text-amber-800">Nếu khách vừa báo đã chuyển khoản, hãy kiểm tra sao kê trước khi huỷ.</p>
+            {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setOpen(false)} disabled={submitting}
+                className="h-9 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700">Không huỷ</button>
+              <button type="submit" disabled={submitting || !reason.trim()}
+                className="h-9 rounded-lg bg-rose-700 px-4 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-50">
+                {submitting ? 'Đang huỷ...' : 'Xác nhận huỷ đơn'}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    )
+  }
+
   const windowText = hasWindow
     ? `${formatBookingWhen(rentalStart)} → ${formatBookingWhen(rentalEnd)}`
     : 'chưa có khoảng thuê'

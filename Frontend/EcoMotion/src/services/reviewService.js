@@ -5,6 +5,16 @@ function reviewsPath(bookingCode) {
 }
 
 export const reviewService = {
+  async getVehicleReviews(vehicleId) {
+    const { data } = await apiClient.get(`/vehicles/${encodeURIComponent(vehicleId)}/reviews`)
+    return data.data
+  },
+
+  async getDriverReviews(driverId) {
+    const { data } = await apiClient.get(`/reviews/drivers/${encodeURIComponent(driverId)}`)
+    return data.data
+  },
+
   async getBookingReviews(bookingCode) {
     const { data } = await apiClient.get(reviewsPath(bookingCode))
     return data.data
