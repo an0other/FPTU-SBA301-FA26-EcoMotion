@@ -32,7 +32,8 @@ class TripEndObjectionWindowTest {
 
     private final TripEndConfirmationRepository histories = mock(TripEndConfirmationRepository.class);
     private final BookingPaymentLedgerService ledger = mock(BookingPaymentLedgerService.class);
-    private final DisputeRepository disputes = mock(DisputeRepository.class);
+    private final com.fptufa26.ecomotion.dispute.service.DisputeQueryService disputes =
+            mock(com.fptufa26.ecomotion.dispute.service.DisputeQueryService.class);
     private final PaymentRequestService payments = mock(PaymentRequestService.class);
     private final com.fptufa26.ecomotion.finance.service.RefundEventService refunds =
             mock(com.fptufa26.ecomotion.finance.service.RefundEventService.class);
@@ -45,7 +46,9 @@ class TripEndObjectionWindowTest {
         when(provider.getObject()).thenReturn(payments);
         ObjectProvider<com.fptufa26.ecomotion.finance.service.RefundEventService> refundProvider = mock(ObjectProvider.class);
         when(refundProvider.getObject()).thenReturn(refunds);
-        return new TripEndConfirmationService(histories, ledger, mock(BookingNotificationService.class), disputes,
+        ObjectProvider<com.fptufa26.ecomotion.dispute.service.DisputeQueryService> disputeProvider = mock(ObjectProvider.class);
+        when(disputeProvider.getObject()).thenReturn(disputes);
+        return new TripEndConfirmationService(histories, ledger, mock(BookingNotificationService.class), disputeProvider,
                 Clock.fixed(now, ZoneOffset.UTC), provider, mock(jakarta.persistence.EntityManager.class), refundProvider);
     }
 
@@ -57,7 +60,7 @@ class TripEndObjectionWindowTest {
         booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         when(histories.save(any())).thenAnswer(inv -> { latest.set(inv.getArgument(0)); return inv.getArgument(0); });
         when(histories.findFirstByBooking_IdOrderByIdDesc(43L)).thenAnswer(inv -> Optional.ofNullable(latest.get()));
-        when(disputes.findByBooking_Id(43L)).thenReturn(List.of());
+        when(disputes.findByBooking(43L)).thenReturn(List.of());
         when(payments.calculateRemainingAmount(43L)).thenReturn(BigDecimal.ZERO);
     }
 

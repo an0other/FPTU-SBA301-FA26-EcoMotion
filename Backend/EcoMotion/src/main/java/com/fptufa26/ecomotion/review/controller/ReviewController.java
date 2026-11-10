@@ -25,7 +25,6 @@ import com.fptufa26.ecomotion.review.enums.ReviewTarget;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/renter/bookings/{bookingCode}/reviews")

@@ -14,7 +14,7 @@ import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.enums.VehicleStatus;
-import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,7 +37,7 @@ import static org.mockito.Mockito.when;
 class ProviderScheduleServiceImplTest {
 
     private VehicleScheduleRepository vehicleScheduleRepository;
-    private VehicleRepository vehicleRepository;
+    private VehicleService vehicleRepository;
     private VehicleCatalogService vehicleCatalogService;
     private UserService userService;
     private ProviderScheduleServiceImpl providerScheduleService;
@@ -48,7 +48,7 @@ class ProviderScheduleServiceImplTest {
     @BeforeEach
     void setUp() {
         vehicleScheduleRepository = mock(VehicleScheduleRepository.class);
-        vehicleRepository = mock(VehicleRepository.class);
+        vehicleRepository = mock(VehicleService.class);
         vehicleCatalogService = mock(VehicleCatalogService.class);
         userService = mock(UserService.class);
         providerScheduleService = new ProviderScheduleServiceImpl(
@@ -70,7 +70,7 @@ class ProviderScheduleServiceImplTest {
         vehicle.setMaintenanceBufferMinutes(60);
 
         when(userService.findProviderByUserId(1L)).thenReturn(Optional.of(provider));
-        when(vehicleRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(vehicle));
+        when(vehicleRepository.findVehicleByIdForUpdate(100L)).thenReturn(Optional.of(vehicle));
         when(vehicleCatalogService.requireOwnedByProvider(100L, 10L)).thenReturn(vehicle);
     }
 

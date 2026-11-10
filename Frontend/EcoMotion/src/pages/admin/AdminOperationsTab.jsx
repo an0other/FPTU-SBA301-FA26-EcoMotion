@@ -716,10 +716,6 @@ export default function AdminOperationsTab({
       <BookingDetailModal
         booking={selectedBooking}
         onClose={() => setSelectedBooking(null)}
-        onOpenRefund={(bookingId) => {
-          setShowRefundModal(true)
-          setRefundForm((prev) => ({ ...prev, bookingId: String(bookingId) }))
-        }}
         onSelectRenter={(b) => navigateToUser(b.renterUserId, b.renterEmail)}
         onSelectVehicle={(vehicleId) => navigateToVehicle(vehicleId)}
         onSelectProvider={(providerId) => navigateToProvider(providerId)}

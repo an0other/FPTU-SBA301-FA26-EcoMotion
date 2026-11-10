@@ -2,7 +2,6 @@ package com.fptufa26.ecomotion.user.service.implement;
 
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
-import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
 import com.fptufa26.ecomotion.finance.enums.SupportedBank;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.entity.Driver;

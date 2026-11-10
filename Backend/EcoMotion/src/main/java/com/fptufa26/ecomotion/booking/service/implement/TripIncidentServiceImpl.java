@@ -30,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
+import com.fptufa26.ecomotion.booking.service.IncidentEvidenceUrls;
 
 @Service
 @RequiredArgsConstructor
@@ -41,7 +43,7 @@ public class TripIncidentServiceImpl implements TripIncidentService {
     private final UserService userService;
     private final DriverOptimizationService driverOptimizationService;
     private final Clock clock;
-    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+    private final BookingNotificationService bookingNotificationService;
 
     @Override
     @Transactional
@@ -76,7 +78,7 @@ public class TripIncidentServiceImpl implements TripIncidentService {
         incident.setStatus(TripIncidentStatus.OPEN);
         incident.setLocationLatitude(request.latitude());
         incident.setLocationLongitude(request.longitude());
-        incident.setEvidenceUrlList(com.fptufa26.ecomotion.booking.service.IncidentEvidenceUrls.normalize(request.evidenceUrls()));
+        incident.setEvidenceUrlList(IncidentEvidenceUrls.normalize(request.evidenceUrls()));
         incident.setCreatedBy(driver.getUser());
         incident.setCreatedAt(now);
 

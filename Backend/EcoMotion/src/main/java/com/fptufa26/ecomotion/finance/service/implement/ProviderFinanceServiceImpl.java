@@ -27,7 +27,6 @@ import com.fptufa26.ecomotion.finance.dto.response.ProviderFinanceSummaryRespons
 import com.fptufa26.ecomotion.finance.dto.response.ProviderPayoutDetailResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderPayoutSummaryResponse;
 import com.fptufa26.ecomotion.finance.dto.response.ProviderTransactionResponse;
-import com.fptufa26.ecomotion.finance.entity.PaymentEvidence;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
 import com.fptufa26.ecomotion.finance.entity.ProviderBankAccount;
 import com.fptufa26.ecomotion.finance.enums.BankAccountStatus;
@@ -65,6 +64,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import com.fptufa26.ecomotion.dispute.service.DisputeService;
+import com.fptufa26.ecomotion.finance.repository.RefundRequestRepository;
+import com.fptufa26.ecomotion.finance.enums.RefundStatus;
+import com.fptufa26.ecomotion.user.enums.Role;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -81,8 +85,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     private final PaymentRequestRepository paymentRequestRepository;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final org.springframework.core.env.Environment environment;
-    private final com.fptufa26.ecomotion.dispute.service.DisputeService disputeService;
-    private final com.fptufa26.ecomotion.finance.repository.RefundRequestRepository refundRequestRepository;
+    private final DisputeService disputeService;
+    private final RefundRequestRepository refundRequestRepository;
 
     @Override
     public ProviderBankAccountResponse getBankAccount(Long currentUserId) {
@@ -531,8 +535,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
     @Transactional
     public ProviderPayoutSummaryResponse createSandboxPayout(Long currentUserId, Long bookingId) {
         var actor = userService.findById(currentUserId)
-                .filter(u -> u.getRole() == com.fptufa26.ecomotion.user.enums.Role.ADMIN
-                        && u.getStatus() == com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE)
+                .filter(u -> u.getRole() == Role.ADMIN
+                        && u.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new AccessDeniedException("Chỉ Admin được tạo lệnh chi trả"));
         if (!Boolean.TRUE.equals(environment.getProperty("app.finance.sandbox-payout-enabled", Boolean.class, false))
                 || !environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev", "test"))
@@ -544,11 +548,11 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
             throw new PayoutIneligibleException("Chỉ chi trả sau khi hoàn tất quyết toán và giải quyết tranh chấp");
         }
         if (refundRequestRepository.existsByBooking_IdAndStatusIn(bookingId, List.of(
-                com.fptufa26.ecomotion.finance.enums.RefundStatus.REQUESTED,
-                com.fptufa26.ecomotion.finance.enums.RefundStatus.UNDER_REVIEW,
-                com.fptufa26.ecomotion.finance.enums.RefundStatus.APPROVED,
-                com.fptufa26.ecomotion.finance.enums.RefundStatus.PROCESSING,
-                com.fptufa26.ecomotion.finance.enums.RefundStatus.PENDING_RECONCILIATION))) {
+                RefundStatus.REQUESTED,
+                RefundStatus.UNDER_REVIEW,
+                RefundStatus.APPROVED,
+                RefundStatus.PROCESSING,
+                RefundStatus.PENDING_RECONCILIATION))) {
             throw new PayoutIneligibleException("Đơn thuê còn nghĩa vụ hoàn tiền chưa xử lý");
         }
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactions(bookingId);

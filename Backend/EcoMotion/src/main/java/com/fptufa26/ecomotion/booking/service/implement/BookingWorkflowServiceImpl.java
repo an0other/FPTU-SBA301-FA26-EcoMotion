@@ -29,12 +29,16 @@ import com.fptufa26.ecomotion.finance.enums.RefundStatus;
 import java.util.Comparator;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import com.fptufa26.ecomotion.booking.service.BookingPaymentStateService;
+import com.fptufa26.ecomotion.dispute.entity.Dispute;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.finance.entity.RefundRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +49,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     private final BookingRepository bookings;
     private final DriverAssignmentRepository assignments;
     private final BookingPaymentLedgerService ledger;
-    private final com.fptufa26.ecomotion.booking.service.BookingPaymentStateService paymentStates;
+    private final BookingPaymentStateService paymentStates;
     private final ProviderBookingService providerBookings;
     private final BookingNotificationService notifications;
     private final RefundService refunds;
@@ -101,9 +105,9 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                 provider && MUTABLE.contains(booking.getStatus()), nextAction(booking, provider, payment, settlement, needsDriver, proposal, refundRows),
                 proposal, feedback, refundRows, booking.getUpdatedAt(),
                 disputes.getDisputesByBookingId(booking.getId()).stream()
-                    .sorted(Comparator.comparing(com.fptufa26.ecomotion.dispute.entity.Dispute::getCreatedAt).reversed())
+                    .sorted(Comparator.comparing(Dispute::getCreatedAt).reversed())
                     .map(d -> {
-                        var ids = d.getRelatedRefunds().stream().map(com.fptufa26.ecomotion.finance.entity.RefundRequest::getId).sorted().toList();
+                        var ids = d.getRelatedRefunds().stream().map(RefundRequest::getId).sorted().toList();
                         var linked = refundRows.stream().filter(r -> ids.contains(r.id())).toList();
                         return new DisputeResponse(d.getId(), d.getCategory(), d.getCharge() == null ? null : d.getCharge().getId(),
                             d.getCharge() == null ? null : d.getCharge().getDescription(), d.getDescription(), d.getEvidenceUrlList(),
@@ -126,7 +130,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     public OperationalResolutionResponse proposeAlternative(Long userId, String code, ResolveOperationalRiskRequest request) {
         Booking booking = booking(code, true);
         User user = participant(userId, booking);
-        if (booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+        if (booking.getPlan().getPlanType() == PlanType.YEARLY) {
             throw new ConflictException("Gói năm dùng quy trình hợp đồng và đổi xe riêng");
         }
 
@@ -250,7 +254,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
 
     private BigDecimal sum(List<PaymentTransaction> payments, PaymentDirection direction, PaymentStatus status, PaymentType type) {
         return payments.stream().filter(t -> t.getDirection() == direction && t.getStatus() == status && (type == null || t.getType() == type)
-                        && t.getVerificationMethod() != com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.MOCK_SIMULATED)
+                        && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED)
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -291,13 +295,13 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         if ("VERIFYING".equals(payment)) return "Đang xác minh thanh toán với máy chủ. Không thanh toán lại trong lúc chờ kết quả.";
         return switch (booking.getStatus()) {
             case PENDING -> provider ? "Xem yêu cầu để chấp nhận hoặc từ chối." : "Chờ nhà xe duyệt. Bạn chưa cần thanh toán cọc.";
-            case ACCEPTED -> booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+            case ACCEPTED -> booking.getPlan().getPlanType() == PlanType.YEARLY
                     ? provider
                         ? "Chờ người thuê tải hợp đồng đã ký lên trong thời gian giữ xe."
                         : "Tải hợp đồng đã ký lên để tạo yêu cầu thanh toán trả trước."
                     : provider ? "Chờ khách thanh toán trong thời gian giữ lịch."
                         : "Thanh toán cọc trước khi hết thời gian giữ lịch.";
-            case AWAITING_DEPOSIT -> booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+            case AWAITING_DEPOSIT -> booking.getPlan().getPlanType() == PlanType.YEARLY
                     ? provider ? "Chờ người thuê thanh toán khoản trả trước."
                         : "Thanh toán khoản trả trước để xác nhận lịch thuê năm."
                     : provider ? "Chờ khách thanh toán trong thời gian giữ lịch."

@@ -124,4 +124,6 @@ boolean existsByReceivingBankAccount_IdAndGatewayRef(Long receivingBankAccountId
             PaymentType excludedType);
 
 
+
+    Optional<PaymentTransaction> findFirstByManualConfirmationId(String manualConfirmationId);
 }

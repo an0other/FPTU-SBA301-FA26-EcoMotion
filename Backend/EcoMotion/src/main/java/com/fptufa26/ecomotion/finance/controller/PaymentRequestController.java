@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest;
 
 @RestController
 @RequiredArgsConstructor
@@ -178,7 +179,7 @@ public class PaymentRequestController {
     public ApiResponse<PaymentRequestResponse> recordBankTransferForReconciliation(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
-            @Valid @RequestBody com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request) {
+            @Valid @RequestBody BankTransferReconciliationRequest request) {
         return ApiResponse.success(paymentRequestService.recordBankTransferForReconciliation(id, principal.getUserId(), request));
     }
 

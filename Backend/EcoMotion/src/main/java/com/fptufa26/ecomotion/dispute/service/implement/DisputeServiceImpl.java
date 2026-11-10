@@ -33,6 +33,13 @@ import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.user.enums.Role;
 import org.springframework.security.access.AccessDeniedException;
 import com.fptufa26.ecomotion.finance.service.RefundEventService;
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
+import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
+import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
+import com.fptufa26.ecomotion.booking.entity.PaymentTransaction;
+import com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService;
+import com.fptufa26.ecomotion.user.enums.UserStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +52,7 @@ public class DisputeServiceImpl implements DisputeService {
         var booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
         var dispute = disputeRepository.findByIdForUpdate(disputeId).orElseThrow();
         var admin = userService.findById(adminId).filter(u -> u.getRole() == Role.ADMIN
-                && u.getStatus() == com.fptufa26.ecomotion.user.enums.UserStatus.ACTIVE)
+                && u.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new AccessDeniedException("Chỉ admin được phân xử"));
         if (!java.util.Set.of(DisputeCategory.YEARLY_SETTLEMENT, DisputeCategory.YEARLY_CANCELLATION).contains(dispute.getCategory())
                 || !java.util.Set.of(DisputeStatus.OPEN, DisputeStatus.IN_REVIEW).contains(dispute.getStatus())
@@ -60,7 +67,7 @@ public class DisputeServiceImpl implements DisputeService {
     private final UserService userService;
     private final EntityManager entityManager;
     private final Clock clock;
-    private final com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService endConfirmations;
+    private final TripEndConfirmationService endConfirmations;
     private final BookingNotificationService notifications;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
@@ -120,10 +127,10 @@ public class DisputeServiceImpl implements DisputeService {
     @Transactional(readOnly = true)
     public BigDecimal recordedForPaymentRequest(Long bookingId, Long paymentRequestId) {
         return bookingPaymentLedgerService.listTransactions(bookingId).stream()
-                .filter(t -> t.getDirection() == com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN
-                        && t.getStatus() == com.fptufa26.ecomotion.booking.enums.PaymentStatus.PAID
+                .filter(t -> t.getDirection() == PaymentDirection.IN
+                        && t.getStatus() == PaymentStatus.PAID
                         && t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(paymentRequestId))
-                .map(com.fptufa26.ecomotion.booking.entity.PaymentTransaction::getAmount)
+                .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -267,10 +274,7 @@ public class DisputeServiceImpl implements DisputeService {
         booking.setActualEndAt(correctedEndAt);
         bookingPaymentLedgerService.saveBooking(booking);
 
-        var snapshot = entityManager.createQuery(
-                        "select s from BookingPolicySnapshot s where s.booking.id = :id",
-                        com.fptufa26.ecomotion.booking.entity.BookingPolicySnapshot.class)
-                .setParameter("id", booking.getId()).getResultStream().findFirst().orElse(null);
+        var snapshot = bookingPaymentLedgerService.findSnapshot(booking.getId()).orElse(null);
         int slot = snapshot != null && snapshot.getSlotLengthMinutes() != null && snapshot.getSlotLengthMinutes() > 0
                 ? snapshot.getSlotLengthMinutes() : 60;
         int grace = snapshot != null && snapshot.getAllowedOvertimeMinutes() != null ? snapshot.getAllowedOvertimeMinutes() : 0;
@@ -281,7 +285,7 @@ public class DisputeServiceImpl implements DisputeService {
         int remaining = allowedSlots;
         boolean changed = false;
         for (BookingCharge overtime : bookingPaymentLedgerService.listCharges(booking.getId())) {
-            if (overtime.isWaived() || overtime.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.OVERTIME) continue;
+            if (overtime.isWaived() || overtime.getChargeType() != ChargeType.OVERTIME) continue;
             int quantity = overtime.getQuantity() == null ? 1 : overtime.getQuantity();
             if (remaining <= 0) {
                 overtime.setWaived(true);
@@ -297,8 +301,8 @@ public class DisputeServiceImpl implements DisputeService {
             } else {
                 remaining -= quantity;
             }
-            if (overtime.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.DISPUTED)
-                overtime.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+            if (overtime.getConfirmationStatus() == ChargeConfirmationStatus.DISPUTED)
+                overtime.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
             bookingPaymentLedgerService.saveCharge(overtime);
         }
         if (changed) reserveOverCollected(booking, "TRIP_END:" + dispute.getId(), "Hoàn phần phí quá giờ đã thu sau khi chốt lại giờ kết thúc", dispute, admin);
@@ -312,7 +316,7 @@ public class DisputeServiceImpl implements DisputeService {
             throw new ConflictException("Số tiền giảm phải lớn hơn 0 và nhỏ hơn số tiền phụ phí; giảm toàn bộ thì chọn miễn phụ phí");
         charge.setAmount(charge.getAmount().subtract(reduction).setScale(2, java.math.RoundingMode.HALF_UP));
         charge.setDescription(trim500(charge.getDescription() + " (admin giảm " + reduction.setScale(0, java.math.RoundingMode.HALF_UP).toPlainString() + " đ)"));
-        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
         bookingPaymentLedgerService.saveCharge(charge);
         reserveOverCollected(dispute.getBooking(), "PARTIAL:" + charge.getId(), "Hoàn phần phụ phí đã thu sau khi admin giảm", dispute, dispute.getRaisedBy());
     }
@@ -322,9 +326,9 @@ public class DisputeServiceImpl implements DisputeService {
         BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
         obligation = obligation.add(bookingPaymentLedgerService.listCharges(booking.getId()).stream()
                 .filter(item -> !item.isWaived()
-                        && item.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.BASE_RENTAL
-                        && item.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.DEPOSIT
-                        && item.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.WEEKEND)
+                        && item.getChargeType() != ChargeType.BASE_RENTAL
+                        && item.getChargeType() != ChargeType.DEPOSIT
+                        && item.getChargeType() != ChargeType.WEEKEND)
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
         BigDecimal open = refundEventService.openAllocated(booking.getId(), obligation);
@@ -345,15 +349,15 @@ public class DisputeServiceImpl implements DisputeService {
         if (decision == DisputeResolutionDecision.WAIVE_CHARGE) {
             charge.setWaived(true);
             charge.setWaivedSource("ADMIN_DISPUTE");
-            charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+            charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
             bookingPaymentLedgerService.saveCharge(charge);
             BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
             obligation = obligation.add(bookingPaymentLedgerService.listCharges(booking.getId()).stream()
                     .filter(item -> !item.isWaived()
-                            && item.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.BASE_RENTAL
-                            && item.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.DEPOSIT
-                            && item.getChargeType() != com.fptufa26.ecomotion.booking.enums.ChargeType.WEEKEND)
-                    .map(com.fptufa26.ecomotion.booking.entity.BookingCharge::getAmount)
+                            && item.getChargeType() != ChargeType.BASE_RENTAL
+                            && item.getChargeType() != ChargeType.DEPOSIT
+                            && item.getChargeType() != ChargeType.WEEKEND)
+                    .map(BookingCharge::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add));
             BigDecimal open = refundEventService.openAllocated(booking.getId(), obligation);
             if (open.signum() > 0) {
@@ -362,7 +366,7 @@ public class DisputeServiceImpl implements DisputeService {
                         "Hoàn phần đã thu sau khi miễn phụ phí", actor));
             }
         } else {
-            charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+            charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
             bookingPaymentLedgerService.saveCharge(charge);
         }
 

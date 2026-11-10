@@ -71,6 +71,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 
 @Service
 @RequiredArgsConstructor
@@ -102,7 +103,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     private final NotificationStreamService notificationStreamService;
     private final TripEndConfirmationService endConfirmations;
     private final Clock clock;
-    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+    private final BookingNotificationService bookingNotificationService;
 
     @Override
     public PageResponse<DriverTripResponse> listDriverTrips(

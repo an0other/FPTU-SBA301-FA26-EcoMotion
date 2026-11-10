@@ -1,6 +1,5 @@
 package com.fptufa26.ecomotion.finance.service.implement;
 
-import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.booking.entity.BookingCharge;
@@ -35,7 +34,6 @@ import com.fptufa26.ecomotion.finance.enums.PaymentEvidenceStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
 import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
-import com.fptufa26.ecomotion.finance.enums.SupportedBank;
 import com.fptufa26.ecomotion.finance.exception.BankAccountConflictException;
 import com.fptufa26.ecomotion.finance.exception.InvalidPaymentOperationException;
 import com.fptufa26.ecomotion.finance.exception.MissingBankAccountException;
@@ -92,6 +90,14 @@ import java.util.UUID;
 import com.fptufa26.ecomotion.booking.enums.CancelReason;
 import java.io.IOException;
 import java.util.stream.IntStream;
+import com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
+import com.fptufa26.ecomotion.finance.service.FinancialAuditService;
+import com.fptufa26.ecomotion.finance.service.RefundMath;
+import com.fptufa26.ecomotion.finance.entity.RefundRequest;
+import com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService;
+import com.fptufa26.ecomotion.booking.policy.YearlyRentalRules;
 
 @Service
 @RequiredArgsConstructor
@@ -101,7 +107,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    private final CancellationClosureService closure;
     private final PaymentRequestRepository paymentRequestRepository;
     private final BookingNotificationService bookingNotificationService;
     private final PaymentEvidenceRepository paymentEvidenceRepository;
@@ -118,8 +124,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     private final DisputeQueryService disputeQueryService;
     private final EntityManager entityManager;
     private final VehicleService vehicleService;
-    private final com.fptufa26.ecomotion.finance.service.FinancialAuditService financialAudit;
-    private final com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService endConfirmations;
+    private final FinancialAuditService financialAudit;
+    private final TripEndConfirmationService endConfirmations;
     private final jakarta.validation.Validator validator;
     private final tools.jackson.databind.ObjectMapper objectMapper;
 
@@ -685,8 +691,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         String confirmationId = request.confirmationId() == null || request.confirmationId().isBlank()
                 ? null : request.confirmationId().trim();
         if (confirmationId != null) {
-            var previous = entityManager.createQuery("select t from PaymentTransaction t where t.manualConfirmationId=:key", PaymentTransaction.class)
-                    .setParameter("key", confirmationId).getResultStream().findFirst();
+            var previous = bookingPaymentLedgerService.findTransactionByManualConfirmationId(confirmationId);
             if (previous.isPresent()) {
                 PaymentTransaction paid = previous.get();
                 if (paid.getPaymentRequest() == null || !paid.getPaymentRequest().getId().equals(paymentRequestId)
@@ -849,7 +854,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             // reserve() khoá và refresh booking: ghi trạng thái vừa đổi xuống DB trước để không bị ghi đè.
             entityManager.flush();
             refundEventService.reserveOnTransaction(booking.getId(),
-                    com.fptufa26.ecomotion.finance.service.RefundMath.OVERPAY_EVENT + savedTx.getId(), excessAmount,
+                    RefundMath.OVERPAY_EVENT + savedTx.getId(), excessAmount,
                     "EXCESS: Khách chuyển dư " + excessAmount.setScale(0, RoundingMode.HALF_UP).toPlainString()
                             + " đ cho " + pr.getPaymentCode() + "; nhà xe phải hoàn hoặc khách chọn cấn trừ",
                     provider.getUser(), savedTx.getId());
@@ -932,7 +937,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     @Transactional
-    public List<com.fptufa26.ecomotion.finance.entity.RefundRequest> applyMismatchResolution(
+    public List<RefundRequest> applyMismatchResolution(
             Long paymentRequestId, BigDecimal verifiedTotal, User admin, Long disputeId) {
         PaymentRequest candidate = paymentRequestRepository.findById(paymentRequestId)
                 .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
@@ -968,7 +973,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         tx.setPaidAt(clock.instant());
         tx.setReceivingBankAccount(pr.getReceivingBankAccount());
         // applied = 0 phải mang tiền tố EXCESS để không bị tính như tiền đã trả cho đơn.
-        tx.setProcessingNote((applied.signum() == 0 ? com.fptufa26.ecomotion.finance.service.RefundMath.EXCESS_PREFIX + ": " : "")
+        tx.setProcessingNote((applied.signum() == 0 ? RefundMath.EXCESS_PREFIX + ": " : "")
                 + "Admin đối soát khiếu nại sai lệch #" + disputeId);
         tx.setVerificationMethod(PaymentVerificationMethod.ADMIN_RECONCILED);
         tx.setConfirmedBy(admin);
@@ -995,9 +1000,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             paymentRequestRepository.save(pr);
         }
         entityManager.flush();
-        List<com.fptufa26.ecomotion.finance.entity.RefundRequest> refunds = excess.signum() > 0
+        List<RefundRequest> refunds = excess.signum() > 0
                 ? refundEventService.reserveOnTransaction(booking.getId(),
-                        com.fptufa26.ecomotion.finance.service.RefundMath.MISMATCH_EVENT + disputeId, excess,
+                        RefundMath.MISMATCH_EVENT + disputeId, excess,
                         "EXCESS: Khách chuyển dư " + excess.setScale(0, RoundingMode.HALF_UP).toPlainString()
                                 + " đ (admin xác minh khiếu nại #" + disputeId + ")", admin, saved.getId())
                 : List.of();
@@ -1008,7 +1013,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
     @Override
     @Transactional
     public PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
-            com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request) {
+            BankTransferReconciliationRequest request) {
         Provider provider = resolveProvider(currentUserId);
         if (request == null || !validator.validate(request).isEmpty()) {
             throw new InvalidPaymentOperationException("Cần số tiền thực nhận, mã ngân hàng và xác minh sao kê hợp lệ");
@@ -1703,7 +1708,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 .orElseThrow(() -> new InvalidPaymentOperationException("Cần chốt điều khoản năm trước khi tạo lịch thanh toán"));
         List<BigDecimal> amounts;
         try {
-            amounts = com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.installments(booking.getTotalAmount(), unit);
+            amounts = YearlyRentalRules.installments(booking.getTotalAmount(), unit);
         } catch (IllegalArgumentException ex) {
             throw new InvalidPaymentOperationException("Giá năm không phù hợp với bước chia tiền tháng đã cấu hình");
         }
@@ -1800,7 +1805,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         List<BookingCharge> charges = bookingPaymentLedgerService.listCharges(booking.getId());
         BigDecimal approvedCharges = charges.stream()
                 .filter(c -> !c.isWaived()
-                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
+                        && c.getConfirmationStatus() == ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
                         && c.getChargeType() != ChargeType.BASE_RENTAL
                         && c.getChargeType() != ChargeType.WEEKEND)
@@ -1813,7 +1818,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         BigDecimal allocatedPayments = transactions.stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
-                .map(t -> com.fptufa26.ecomotion.finance.service.RefundMath.appliedPortion(
+                .map(t -> RefundMath.appliedPortion(
                         t.getAmount(), t.getAppliedAmount(), t.getProcessingNote()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal refundedAllocated = transactions.stream()

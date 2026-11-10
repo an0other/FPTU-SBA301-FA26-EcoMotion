@@ -7,21 +7,22 @@ import com.fptufa26.ecomotion.booking.enums.*;
 import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.booking.service.BookingPaymentStateService;
 import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
-import com.fptufa26.ecomotion.finance.repository.RefundRequestRepository;
-import com.fptufa26.ecomotion.finance.service.RefundMath;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class BookingPaymentStateServiceImpl implements BookingPaymentStateService {
     private final BookingPaymentLedgerService ledger;
-    private final RefundRequestRepository refundRequests;
+    // Lazy: RefundEventService phụ thuộc ngược vào ledger của booking.
+    private final org.springframework.beans.factory.ObjectProvider<RefundEventService> refundEvents;
 
     @Override
     public State evaluate(Booking booking, List<PaymentTransaction> transactions) {
@@ -39,7 +40,7 @@ public class BookingPaymentStateServiceImpl implements BookingPaymentStateServic
                 && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED")
                 || t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
                     && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED && !applied(t)
-                    && !refundRequests.existsBySourcePaymentTransaction_IdAndStatusIn(t.getId(), RefundMath.RESERVED));
+                    && !refundEvents.getObject().isSourceReserved(t.getId()));
         BigDecimal deposit = transactions.stream().filter(this::applied)
                 .filter(t -> t.getType() == PaymentType.DEPOSIT_PAY || t.getType() == PaymentType.UPFRONT_PAY)
                 .map(this::allocated).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -47,7 +48,7 @@ public class BookingPaymentStateServiceImpl implements BookingPaymentStateServic
         BigDecimal requiredDeposit = snapshot == null ? null : snapshot.getDepositAmount();
         if (requiredDeposit == null && snapshot != null && snapshot.getDepositRatio() != null)
             requiredDeposit = booking.getTotalAmount().multiply(snapshot.getDepositRatio());
-        if (snapshot != null && snapshot.getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY)
+        if (snapshot != null && snapshot.getPlanType() == PlanType.YEARLY)
             requiredDeposit = snapshot.getUpfrontAmount();
         boolean depositPaid = requiredDeposit != null && requiredDeposit.signum() > 0 && deposit.compareTo(requiredDeposit) >= 0;
         boolean settlementPaid = transactions.stream().filter(this::applied).anyMatch(t -> t.getType() == PaymentType.SETTLEMENT);

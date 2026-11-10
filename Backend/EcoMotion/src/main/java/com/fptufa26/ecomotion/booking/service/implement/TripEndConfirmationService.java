@@ -5,7 +5,6 @@ import com.fptufa26.ecomotion.booking.repository.TripEndConfirmationRepository;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
-import com.fptufa26.ecomotion.dispute.repository.DisputeRepository;
 import com.fptufa26.ecomotion.dispute.enums.DisputeStatus;
 import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
@@ -16,6 +15,9 @@ import java.time.*;
 import com.fptufa26.ecomotion.booking.dto.response.TripEndHistoryResponse;
 import java.util.List;
 import java.util.Set;
+import com.fptufa26.ecomotion.dispute.service.DisputeQueryService;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
 
 /**
  * Cửa sổ xác nhận giờ kết thúc 12 giờ, KHÔNG chặn luồng vận hành.
@@ -33,12 +35,13 @@ public class TripEndConfirmationService {
     private final TripEndConfirmationRepository histories;
     private final BookingPaymentLedgerService ledger;
     private final BookingNotificationService notifications;
-    private final DisputeRepository disputes;
+    // Lazy: dịch vụ khiếu nại phụ thuộc ngược vào service này.
+    private final org.springframework.beans.factory.ObjectProvider<DisputeQueryService> disputeQueries;
     private final Clock clock;
     // ObjectProvider (lazy) để tránh vòng phụ thuộc PaymentRequestService -> DisputeService -> service này.
-    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.PaymentRequestService> paymentRequests;
+    private final org.springframework.beans.factory.ObjectProvider<PaymentRequestService> paymentRequests;
     private final jakarta.persistence.EntityManager entityManager;
-    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.RefundEventService> refundEvents;
+    private final org.springframework.beans.factory.ObjectProvider<RefundEventService> refundEvents;
 
     @Transactional(readOnly=true)
     public List<TripEndHistoryResponse> history(Long bookingId) {
@@ -137,7 +140,7 @@ public class TripEndConfirmationService {
     public void completeIfReady(Booking booking) {
         if (booking.getSettlementRequestedAt() == null || !SETTLEMENT_STATUSES.contains(booking.getStatus())) return;
         if (!isEndSettled(booking.getId())) return;
-        boolean activeDispute = disputes.findByBooking_Id(booking.getId()).stream()
+        boolean activeDispute = disputeQueries.getObject().findByBooking(booking.getId()).stream()
                 .anyMatch(d -> d.getStatus() == DisputeStatus.OPEN || d.getStatus() == DisputeStatus.IN_REVIEW);
         if (activeDispute) return;
         if (paymentRequests.getObject().calculateRemainingAmount(booking.getId()).signum() > 0) return;
@@ -150,7 +153,7 @@ public class TripEndConfirmationService {
 
     @Transactional
     public Instant manual(Booking booking, Long userId) {
-        if (disputes.findByBooking_Id(booking.getId()).stream().anyMatch(d -> d.getCategory()==DisputeCategory.TRIP_NOT_CONFIRMED
+        if (disputeQueries.getObject().findByBooking(booking.getId()).stream().anyMatch(d -> d.getCategory()==DisputeCategory.TRIP_NOT_CONFIRMED
                 && (d.getStatus()==DisputeStatus.OPEN || d.getStatus()==DisputeStatus.IN_REVIEW)))
             throw new ConflictException("Khiếu nại kết thúc đang chờ admin xác minh");
         var h=histories.findFirstByBooking_IdOrderByIdDesc(booking.getId()).orElse(null);
@@ -178,7 +181,7 @@ public class TripEndConfirmationService {
     public void adminAction(Booking booking, Long disputeId, Long adminId, String action, String note) {
         if(!List.of("RESUME_TRIP","REOPEN_CONFIRMATION").contains(action)) throw new ConflictException("Hành động kết thúc không hợp lệ");
         if(booking.getStatus()!=BookingStatus.AWAITING_END_CONFIRMATION && booking.getStatus()!=BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION) throw new ConflictException("Đơn không còn ở bước xác nhận kết thúc");
-        if (disputes.findByBooking_Id(booking.getId()).stream().anyMatch(d -> !d.getId().equals(disputeId)
+        if (disputeQueries.getObject().findByBooking(booking.getId()).stream().anyMatch(d -> !d.getId().equals(disputeId)
                 && d.getCategory()==DisputeCategory.TRIP_NOT_CONFIRMED
                 && (d.getStatus()==DisputeStatus.OPEN || d.getStatus()==DisputeStatus.IN_REVIEW)))
             throw new ConflictException("Còn khiếu nại kết thúc khác cần được xử lý trước");
@@ -205,7 +208,7 @@ public class TripEndConfirmationService {
             if(h!=null) entityManager.refresh(h);
             if(h==null || !h.getId().equals(candidate.getId()) || !"WAITING".equals(h.getState()) || h.getDeadline().isAfter(clock.instant())
                     || booking.getStatus()==BookingStatus.CANCELLED) continue;
-            boolean blocked=disputes.findByBooking_Id(booking.getId()).stream().anyMatch(d -> d.getCategory()==DisputeCategory.TRIP_NOT_CONFIRMED && (d.getStatus()==DisputeStatus.OPEN || d.getStatus()==DisputeStatus.IN_REVIEW));
+            boolean blocked=disputeQueries.getObject().findByBooking(booking.getId()).stream().anyMatch(d -> d.getCategory()==DisputeCategory.TRIP_NOT_CONFIRMED && (d.getStatus()==DisputeStatus.OPEN || d.getStatus()==DisputeStatus.IN_REVIEW));
             if(blocked) {h.setState("PAUSED"); continue;}
             h.setState("CONFIRMED"); h.setConfirmationMethod("AUTO"); h.setConfirmedAt(clock.instant());
             if(booking.getStatus()==BookingStatus.AWAITING_END_CONFIRMATION) {

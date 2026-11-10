@@ -265,7 +265,7 @@ public interface BookingMapper {
     }
 
     private static String cancelDetailNote(Booking booking) {
-        if (booking.getOperationalResolution() != com.fptufa26.ecomotion.booking.enums.OperationalResolutionType.CANCEL_AND_REFUND) {
+        if (booking.getOperationalResolution() != OperationalResolutionType.CANCEL_AND_REFUND) {
             return null;
         }
         String reason = booking.getOperationalResolutionReason();

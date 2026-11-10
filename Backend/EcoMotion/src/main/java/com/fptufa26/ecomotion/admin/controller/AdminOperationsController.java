@@ -40,6 +40,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
+import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 
 @RestController
 @RequestMapping("/api/admin/operations")
@@ -178,18 +180,18 @@ public class AdminOperationsController {
         Driver drv = (b != null) ? b.getDriver() : null;
         User drvUser = (drv != null) ? drv.getUser() : null;
 
-        com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision effectiveDecision = d.getDecision();
+        DisputeResolutionDecision effectiveDecision = d.getDecision();
         if (effectiveDecision == null
-                && d.getCategory() == com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE
+                && d.getCategory() == DisputeCategory.CHARGE
                 && (d.getStatus() == DisputeStatus.RESOLVED || d.getStatus() == DisputeStatus.REJECTED)) {
             if (c != null) {
                 effectiveDecision = c.isWaived()
-                        ? com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE
-                        : com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.KEEP_CHARGE;
+                        ? DisputeResolutionDecision.WAIVE_CHARGE
+                        : DisputeResolutionDecision.KEEP_CHARGE;
             } else {
                 effectiveDecision = d.getStatus() == DisputeStatus.RESOLVED
-                        ? com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE
-                        : com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.KEEP_CHARGE;
+                        ? DisputeResolutionDecision.WAIVE_CHARGE
+                        : DisputeResolutionDecision.KEEP_CHARGE;
             }
         }
 

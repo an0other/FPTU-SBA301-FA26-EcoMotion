@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.booking.policy.YearlyRentalRules;
 
 @Service
 @RequiredArgsConstructor
@@ -62,8 +64,8 @@ public class ScheduleServiceImpl implements ScheduleService {
     }
 
     private Instant reservationEnd(Booking booking, Instant end) {
-        return booking.getPlan() != null && booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
-                ? com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.reservationEnd(end) : end;
+        return booking.getPlan() != null && booking.getPlan().getPlanType() == PlanType.YEARLY
+                ? YearlyRentalRules.reservationEnd(end) : end;
     }
 
     @Override

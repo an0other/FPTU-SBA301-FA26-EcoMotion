@@ -77,7 +77,7 @@ export default function CustomerPaymentPage() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [bookingIdentifier, navigate])
+  }, [bookingIdentifier])
 
   useEffect(() => {
     if (bookingIdentifier) {

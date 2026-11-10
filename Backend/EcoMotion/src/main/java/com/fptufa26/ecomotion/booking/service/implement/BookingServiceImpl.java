@@ -111,11 +111,18 @@ import com.fptufa26.ecomotion.booking.service.RentalPricingService;
 import com.fptufa26.ecomotion.common.cloudinary.CloudinaryService;
 import java.util.stream.Collectors;
 import org.springframework.web.multipart.MultipartFile;
+import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
+import com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage;
+import com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException;
+import com.fptufa26.ecomotion.booking.service.YearlyRentalQuoteService;
+import com.fptufa26.ecomotion.booking.policy.YearlyRentalRules;
 
 @Service
 @RequiredArgsConstructor
 public class BookingServiceImpl implements BookingService {
-    private final com.fptufa26.ecomotion.booking.service.YearlyRentalQuoteService yearlyQuotes;
+    private final YearlyRentalQuoteService yearlyQuotes;
     private final TripEndConfirmationService endConfirmations;
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -155,9 +162,9 @@ public class BookingServiceImpl implements BookingService {
     private final BookingStartPolicy bookingStartPolicy;
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
-    private final com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage evidenceImageStorage;
+    private final EvidenceImageStorage evidenceImageStorage;
     private final RefundEventService refundEventService;
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService cancellationClosure;
+    private final CancellationClosureService cancellationClosure;
 
     @Override
     @Transactional(readOnly = true)
@@ -257,7 +264,7 @@ public class BookingServiceImpl implements BookingService {
             throw new BadRequestException("Vui lòng chọn tọa độ điểm đón hợp lệ");
         }
         var route=mapLocationService.route(originLat.doubleValue(),originLng.doubleValue(),latitude.doubleValue(),longitude.doubleValue());
-        if(route==null) throw new com.fptufa26.ecomotion.location.exception.MapLocationUnavailableException("Chưa có tuyến ô tô để chốt phí đón");
+        if(route==null) throw new MapLocationUnavailableException("Chưa có tuyến ô tô để chốt phí đón");
         double distance=route.distanceMeters()/1000.0;
         int chargeableKm = (int) Math.ceil(Math.max(0, distance - freeRadiusKm));
         return new PickupQuoteResponse(distance, freeRadiusKm, chargeableKm, rate,
@@ -290,7 +297,7 @@ public class BookingServiceImpl implements BookingService {
                 charge.setWaivedSource("SYSTEM");
                 charge.setAmount(BigDecimal.ZERO);
                 charge.setQuantity(1);
-                charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+                charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
                 chargeRepository.save(charge);
             }
             return;
@@ -306,7 +313,7 @@ public class BookingServiceImpl implements BookingService {
         charge.setUnitPrice(quote.outOfRadiusRate());
         charge.setAmount(quote.pickupFee());
         charge.setWaived(false);
-        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
         if (charge.getCreatedBy() == null) {
             charge.setCreatedBy(actor);
         }
@@ -343,7 +350,7 @@ public class BookingServiceImpl implements BookingService {
         if (start.isBefore(clock.instant().plus(MINIMUM_BOOKING_LEAD_TIME))) {
             throw new ConflictException("Đơn thuê phải được tạo trước giờ nhận xe ít nhất 3 giờ");
         }
-        Instant end = yearly ? com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.contractEnd(start) : mixed ? selection.plannedEndAt() : start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
+        Instant end = yearly ? YearlyRentalRules.contractEnd(start) : mixed ? selection.plannedEndAt() : start.plus(Duration.ofMinutes((long) plan.getSlotLengthMinutes() * request.slotCount()));
         if (!end.isAfter(start)) {
             throw new ConflictException("Khoảng thời gian thuê không hợp lệ");
         }
@@ -362,7 +369,7 @@ public class BookingServiceImpl implements BookingService {
                 vehicle.getProvider().getId(), vehicle, start, end, null).isEmpty()) {
             throw new ConflictException("Không có tài xế phù hợp và còn trống trong thời gian đã chọn");
         }
-        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, yearly ? com.fptufa26.ecomotion.booking.policy.YearlyRentalRules.reservationEnd(end) : end);
+        AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, yearly ? YearlyRentalRules.reservationEnd(end) : end);
         if (!scheduleService.isRangeFree(vehicle.getId(), window.start(), window.end())) {
             throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn, bao gồm thời gian đệm");
         }
@@ -941,7 +948,7 @@ public class BookingServiceImpl implements BookingService {
             if (charge.isWaived()) {
                 throw new ConflictException("Khoản phí này đã được miễn");
             }
-            charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.DISPUTED);
+            charge.setConfirmationStatus(ChargeConfirmationStatus.DISPUTED);
             chargeRepository.save(charge);
         }
         requireDisputeAllowed(booking, request.category());
@@ -988,17 +995,17 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId) {
+    public BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(bookingCode, userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
         BookingCharge charge = chargeRepository.findByIdAndBooking_Id(chargeId, booking.getId())
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy khoản phí"));
-        if (charge.getConfirmationStatus() != com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING) {
+        if (charge.getConfirmationStatus() != ChargeConfirmationStatus.PENDING) {
             throw new ConflictException("Khoản phí không còn chờ xác nhận");
         }
-        charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
+        charge.setConfirmationStatus(ChargeConfirmationStatus.ACCEPTED);
         chargeRepository.save(charge);
-        return new com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse(
+        return new BookingChargeResponse(
                 charge.getId(), charge.getChargeType(), charge.getDescription(), charge.getQuantity(),
                 charge.getUnitPrice(), charge.getAppliedRate(), charge.getAmount(), charge.isWaived(),
                 charge.getEvidenceUrl(), null, charge.getCreatedAt(), charge.getConfirmationStatus());
@@ -1058,7 +1065,7 @@ public class BookingServiceImpl implements BookingService {
     private boolean paymentMismatchAllowed(Booking booking) {
         Instant latest = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
                 .filter(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
-                        && t.getMethod() == com.fptufa26.ecomotion.booking.enums.PaymentMethod.BANK_TRANSFER
+                        && t.getMethod() == PaymentMethod.BANK_TRANSFER
                         && t.getPaymentRequest() != null && t.getPaidAt() != null)
                 .map(PaymentTransaction::getPaidAt).max(Instant::compareTo).orElse(null);
         if (latest == null) return false;

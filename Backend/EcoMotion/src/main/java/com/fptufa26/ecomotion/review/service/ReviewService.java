@@ -5,7 +5,6 @@ import com.fptufa26.ecomotion.review.dto.response.ReviewResponse;
 import com.fptufa26.ecomotion.review.dto.request.UpdateReviewRequest;
 import com.fptufa26.ecomotion.review.enums.ReviewTarget;
 import com.fptufa26.ecomotion.review.dto.response.BookingReviewsResponse;
-import java.util.List;
 
 public interface ReviewService {
 

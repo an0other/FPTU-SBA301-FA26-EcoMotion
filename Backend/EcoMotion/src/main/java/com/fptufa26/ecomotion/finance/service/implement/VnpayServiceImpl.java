@@ -66,6 +66,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
+import com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus;
+import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService;
 
 @Service
 @RequiredArgsConstructor
@@ -83,7 +87,7 @@ public class VnpayServiceImpl implements VnpayService {
     private final DriverOptimizationService driverOptimizationService;
     private final PaymentCodeGenerator paymentCodeGenerator;
     private final Clock clock;
-    private final com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService endConfirmations;
+    private final TripEndConfirmationService endConfirmations;
     private final VnpayConfig vnpayConfig;
     private final PlatformTransactionManager transactionManager;
 
@@ -349,7 +353,7 @@ public class VnpayServiceImpl implements VnpayService {
 
         BigDecimal extraCharges = charges.stream()
                 .filter(c -> !c.isWaived()
-                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
+                        && c.getConfirmationStatus() == ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
                         && c.getChargeType() != ChargeType.BASE_RENTAL
                         && c.getChargeType() != ChargeType.WEEKEND)
@@ -539,7 +543,7 @@ public class VnpayServiceImpl implements VnpayService {
                             booking.getPickupTime(), booking.getPlannedEndAt());
                     requireYearlyContractBeforePayment(booking);
                 } catch (InvalidPaymentOperationException
-                         | com.fptufa26.ecomotion.common.exception.ConflictException ex) {
+                         | ConflictException ex) {
                     return recordPaymentForReconciliation(
                             transaction, "Yearly license or signed-contract eligibility changed before payment confirmation");
                 }
@@ -594,7 +598,7 @@ public class VnpayServiceImpl implements VnpayService {
                             paymentRequestRepository.save(pr);
                         });
 
-                if (booking.getDriver() == null && booking.getAssignmentMode() == com.fptufa26.ecomotion.booking.enums.AssignmentMode.FULL_AUTO)
+                if (booking.getDriver() == null && booking.getAssignmentMode() == AssignmentMode.FULL_AUTO)
                     assignDriverAfterCommit(booking.getId());
             } else {
                 return recordPaymentForReconciliation(transaction, "Booking state not eligible after gateway payment");
@@ -1020,7 +1024,7 @@ public class VnpayServiceImpl implements VnpayService {
         List<BookingCharge> charges = bookingQueryService.findChargesByBookingIdOrderByCreatedAtAsc(booking.getId());
         BigDecimal extraCharges = charges.stream()
                 .filter(c -> !c.isWaived()
-                        && c.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
+                        && c.getConfirmationStatus() == ChargeConfirmationStatus.ACCEPTED
                         && c.getChargeType() != ChargeType.DEPOSIT
                         && c.getChargeType() != ChargeType.BASE_RENTAL
                         && c.getChargeType() != ChargeType.WEEKEND)

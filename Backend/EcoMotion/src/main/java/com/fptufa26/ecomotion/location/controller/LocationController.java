@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.List;
+import com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse;
 
 @RestController
 @RequestMapping("/api/location")
@@ -28,7 +29,7 @@ public class LocationController {
     private final VehicleService vehicleService;
 
     @GetMapping("/route")
-    public ApiResponse<com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse> route(
+    public ApiResponse<RoadRouteResponse> route(
             @RequestParam double fromLatitude,@RequestParam double fromLongitude,
             @RequestParam double toLatitude,@RequestParam double toLongitude) {
         return ApiResponse.success(mapLocationService.route(fromLatitude,fromLongitude,toLatitude,toLongitude));

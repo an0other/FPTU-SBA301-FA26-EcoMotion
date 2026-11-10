@@ -1,7 +1,6 @@
 package com.fptufa26.ecomotion.review.service.implement;
 
 import com.fptufa26.ecomotion.booking.dto.response.BookingReviewContext;
-import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.service.BookingReviewAccessService;
 import com.fptufa26.ecomotion.review.dto.request.CreateReviewRequest;
@@ -12,9 +11,7 @@ import com.fptufa26.ecomotion.review.exception.ReviewAlreadyExistsException;
 import com.fptufa26.ecomotion.review.exception.ReviewNotAllowedException;
 import com.fptufa26.ecomotion.review.repository.ReviewRepository;
 import com.fptufa26.ecomotion.review.service.ReviewService;
-import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.service.UserService;
-import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +25,9 @@ import java.util.List;
 import java.util.Objects;
 import com.fptufa26.ecomotion.review.dto.request.UpdateReviewRequest;
 import com.fptufa26.ecomotion.review.exception.ReviewNotFoundException;
+import com.fptufa26.ecomotion.booking.service.BookingQueryService;
+import com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage;
+import com.fptufa26.ecomotion.review.service.ReviewContentPolicy;
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
@@ -37,9 +37,10 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewRepository reviewRepository;
     private final BookingReviewAccessService bookingReviewAccessService;
     private final VehicleService vehicleService;
+    private final BookingQueryService bookingQueryService;
     private final UserService userService;
     private final EntityManager entityManager;
-    private final com.fptufa26.ecomotion.common.storage.service.EvidenceImageStorage evidenceImageStorage;
+    private final EvidenceImageStorage evidenceImageStorage;
 
     private static final int MAX_MEDIA = 5;
     private static final int MAX_MEDIA_COLUMN = 500;
@@ -54,7 +55,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     /** Nhận xét không được chứa từ ngữ thô tục/xúc phạm. */
     private void validateComment(String comment) {
-        if (!com.fptufa26.ecomotion.review.service.ReviewContentPolicy.isClean(comment)) {
+        if (!ReviewContentPolicy.isClean(comment)) {
             throw new IllegalArgumentException(
                     "Nhận xét có từ ngữ không phù hợp. Vui lòng chỉnh lại nội dung lịch sự trước khi gửi.");
         }
@@ -202,22 +203,19 @@ public class ReviewServiceImpl implements ReviewService {
         validateDuplicate(booking, request.target());
 
         Review review = new Review();
-        review.setBooking(entityManager.getReference(
-                Booking.class,
-                booking.bookingId()));
+        review.setBooking(bookingQueryService.findBookingById(booking.bookingId())
+                .orElseThrow(() -> new ReviewNotAllowedException("Không tìm thấy đơn thuê")));
         validateComment(request.comment());
         review.setRating(request.rating());
         review.setComment(normalizeComment(request.comment()));
         review.setMedia(normalizeMedia(userId, request.mediaUrls()));
 
         if (request.target() == ReviewTarget.VEHICLE) {
-            review.setVehicle(entityManager.getReference(
-                    Vehicle.class,
-                    booking.vehicleId()));
+            review.setVehicle(vehicleService.findVehicleById(booking.vehicleId())
+                    .orElseThrow(() -> new ReviewNotAllowedException("Không tìm thấy xe của đơn thuê")));
         } else {
-            review.setDriver(entityManager.getReference(
-                    Driver.class,
-                    booking.driverId()));
+            review.setDriver(userService.findDriverById(booking.driverId())
+                    .orElseThrow(() -> new ReviewNotAllowedException("Không tìm thấy tài xế của đơn thuê")));
         }
 
         Review saved = reviewRepository.saveAndFlush(review);

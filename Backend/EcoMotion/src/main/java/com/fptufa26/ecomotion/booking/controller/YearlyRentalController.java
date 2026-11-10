@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 
 @RestController
 @RequiredArgsConstructor
@@ -17,10 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasAnyRole('RENTER','PROVIDER')")
 public class YearlyRentalController {
     private final YearlyRentalQuoteService service;
-    private final com.fptufa26.ecomotion.finance.service.PaymentRequestService payments;
+    private final PaymentRequestService payments;
 
     @GetMapping("/payments")
-    public ApiResponse<java.util.List<com.fptufa26.ecomotion.finance.service.PaymentRequestService.YearlyPaymentItem>> payments(
+    public ApiResponse<java.util.List<PaymentRequestService.YearlyPaymentItem>> payments(
             @AuthenticationPrincipal SecurityUser principal, @PathVariable String bookingCode) {
         return ApiResponse.success(payments.yearlyPayments(principal.getUserId(), bookingCode));
     }

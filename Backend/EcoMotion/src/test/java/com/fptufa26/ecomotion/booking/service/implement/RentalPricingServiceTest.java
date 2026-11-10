@@ -7,7 +7,6 @@ import com.fptufa26.ecomotion.schedule.enums.ScheduleType;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.entity.*;
 import com.fptufa26.ecomotion.vehicle.enums.*;
-import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.service.*;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
@@ -23,15 +22,15 @@ class RentalPricingServiceTest {
         p.setSlotLengthMinutes(hours*60);p.setSlotPrice(BigDecimal.valueOf(price));return p;
     }
     @Test void removesUnavailableFourDayOptionAndAllowsItWhenFree() {
-        var catalog=mock(VehicleCatalogService.class);var plans=mock(RentalPlanRepository.class);
+        var catalog=mock(VehicleCatalogService.class);
         var schedule=mock(ScheduleService.class);var deposit=mock(VehicleDepositPolicyService.class);
         Vehicle vehicle=new Vehicle();vehicle.setId(1L);vehicle.setMaintenanceBufferMinutes(30);
         when(catalog.requireApproved(1L)).thenReturn(vehicle);
-        when(plans.findByVehicle_IdAndStatusOrderByIdAsc(1L,PlanStatus.ACTIVE))
+        when(catalog.findActivePlans(1L))
                 .thenReturn(List.of(plan(1,1,700),plan(2,24,1000),plan(3,720,4000)));
         when(deposit.resolve(eq(vehicle),any())).thenAnswer(inv ->
                 new VehicleDepositPolicyService.DepositQuote(BigDecimal.ZERO,BigDecimal.ZERO,BigDecimal.ZERO));
-        var service=new RentalPricingServiceImpl(plans,catalog,deposit,schedule,
+        var service=new RentalPricingServiceImpl(catalog,deposit,schedule,
                 Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), new BookingStartPolicy(Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), 3));
         when(schedule.occupiedWindows(anyLong(),any(),any())).thenReturn(List.of(
                 new OccupiedScheduleWindow(start.plus(Duration.ofHours(75)),start.plus(Duration.ofHours(100)),ScheduleType.BOOKED)));
@@ -43,7 +42,7 @@ class RentalPricingServiceTest {
         assertThat(quote.options()).extracting(o -> o.coveredHours()).containsExactly(74,96);
         assertThat(quote.options().getLast().rentalAmount()).isEqualByComparingTo("4000");
         assertThat(quote.options().getFirst().policyPlanId()).isEqualTo(2L);
-        when(plans.findByVehicle_IdAndStatusOrderByIdAsc(1L,PlanStatus.ACTIVE))
+        when(catalog.findActivePlans(1L))
                 .thenReturn(List.of(plan(1,1,100),plan(2,24,1000)));
         quote=service.quote(new RentalQuoteRequest(1L,start,start.plus(Duration.ofHours(74))));
         assertThat(quote.options()).extracting(o -> o.coveredHours()).containsExactly(74,96);

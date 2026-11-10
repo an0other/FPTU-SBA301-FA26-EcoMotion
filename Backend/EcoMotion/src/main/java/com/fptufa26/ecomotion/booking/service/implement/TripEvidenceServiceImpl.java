@@ -30,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 
 @Service
 @Slf4j
@@ -84,7 +85,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
 
         Booking booking = resolveBooking(bookingIdOrCode);
         Driver assignedDriver = validateAndResolveAccess(currentUser, currentUserRole, booking);
-        if (booking.getPlan().getPlanType() != com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+        if (booking.getPlan().getPlanType() != PlanType.YEARLY) {
             validateBookingStatusForEvidenceType(booking.getStatus(), type);
         } else if (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.REJECTED) {
             throw new InvalidTripTransitionException("Không tải minh chứng mới cho đơn đã hủy/từ chối");
@@ -174,7 +175,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
         Booking booking = resolveBooking(bookingIdOrCode);
         validateAndResolveAccess(currentUser, currentUserRole, booking);
 
-        if (booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) {
+        if (booking.getPlan().getPlanType() == PlanType.YEARLY) {
             throw new AccessDeniedException("Minh chứng gói năm phải được giữ để đối chiếu, không xóa trực tiếp");
         }
 
@@ -243,7 +244,7 @@ public class TripEvidenceServiceImpl implements TripEvidenceService {
 
     private Driver validateAndResolveAccess(User currentUser, Role currentUserRole, Booking booking) {
         if (currentUserRole == Role.RENTER) {
-            if (booking.getPlan().getPlanType() != com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+            if (booking.getPlan().getPlanType() != PlanType.YEARLY
                     || !booking.getRenter().getUser().getId().equals(currentUser.getId())) {
                 throw new AccessDeniedException("Renter chỉ được truy cập minh chứng đơn năm của mình");
             }

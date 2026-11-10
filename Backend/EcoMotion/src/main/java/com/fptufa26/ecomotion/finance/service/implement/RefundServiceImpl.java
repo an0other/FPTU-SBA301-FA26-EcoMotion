@@ -44,6 +44,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.Optional;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
+import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
+import com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService;
 
 @Service
 @RequiredArgsConstructor
@@ -64,7 +70,7 @@ public class RefundServiceImpl implements RefundService {
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp", "application/pdf");
 
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    private final CancellationClosureService closure;
     private final RefundRequestRepository refundRequestRepository;
     private final BookingService bookingService;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
@@ -72,10 +78,10 @@ public class RefundServiceImpl implements RefundService {
     private final FileStorageService fileStorageService;
     private final Clock clock;
     private final jakarta.persistence.EntityManager entityManager;
-    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+    private final BookingNotificationService bookingNotificationService;
     private final RefundEventService refundEventService;
-    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService> endConfirmations;
-    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository> paymentRequests;
+    private final org.springframework.beans.factory.ObjectProvider<TripEndConfirmationService> endConfirmations;
+    private final org.springframework.beans.factory.ObjectProvider<PaymentRequestRepository> paymentRequests;
 
     private static final java.util.Set<BookingStatus> OFFSET_BLOCKED = java.util.Set.of(
             BookingStatus.AWAITING_FINAL_PAYMENT, BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW);
@@ -99,7 +105,7 @@ public class RefundServiceImpl implements RefundService {
             throw new ConflictException("Khoản hoàn đã được xử lý, không thể cấn trừ");
         }
         boolean finalIssued = paymentRequests.getObject().findByBooking_IdAndPaymentType(booking.getId(),
-                com.fptufa26.ecomotion.finance.enums.PaymentRequestType.FINAL_BALANCE).isPresent();
+                PaymentRequestType.FINAL_BALANCE).isPresent();
         if (OFFSET_BLOCKED.contains(booking.getStatus()) || finalIssued) {
             throw new ConflictException("Đơn đã đến bước quyết toán; khoản chuyển dư cần được nhà xe hoàn lại");
         }
@@ -304,8 +310,8 @@ public class RefundServiceImpl implements RefundService {
                 : normalizedNote);
         transaction.setConfirmedBy(user);
         transaction.setVerificationMethod(user.getRole() == Role.ADMIN
-                ? com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.ADMIN_RECONCILED
-                : com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED);
+                ? PaymentVerificationMethod.ADMIN_RECONCILED
+                : PaymentVerificationMethod.PROVIDER_CONFIRMED);
         transaction.setStatus(PaymentStatus.PAID);
         transaction.setPaidAt(now);
         bookingPaymentLedgerService.saveTransaction(transaction);

@@ -1,6 +1,5 @@
 package com.fptufa26.ecomotion.common.security;
 
-import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.entity.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;

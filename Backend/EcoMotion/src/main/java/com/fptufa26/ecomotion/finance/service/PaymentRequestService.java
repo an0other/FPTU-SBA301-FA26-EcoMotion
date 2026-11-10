@@ -20,6 +20,9 @@ import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.springframework.web.multipart.MultipartFile;
+import com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest;
+import com.fptufa26.ecomotion.finance.entity.RefundRequest;
+import com.fptufa26.ecomotion.user.entity.User;
 
 public interface PaymentRequestService {
     record YearlyCash(BigDecimal rentPaid, BigDecimal depositHeld) {}
@@ -81,7 +84,7 @@ public interface PaymentRequestService {
     PaymentRequestResponse confirmPayment(Long paymentRequestId, Long currentUserId, ConfirmPaymentRequest request);
 
     PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
-            com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request);
+            BankTransferReconciliationRequest request);
 
     PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request);
 
@@ -102,9 +105,9 @@ public interface PaymentRequestService {
      * Admin chấp nhận khiếu nại sai lệch: ghi nhận phần tiền khách đã chuyển mà nhà xe chưa ghi nhận
      * (verifiedTotal − đã ghi nhận). Phần còn thiếu của yêu cầu được áp vào, phần dư thành khoản phải hoàn.
      */
-    java.util.List<com.fptufa26.ecomotion.finance.entity.RefundRequest> applyMismatchResolution(
-            Long paymentRequestId, java.math.BigDecimal verifiedTotal, com.fptufa26.ecomotion.user.entity.User admin, Long disputeId);
+    java.util.List<RefundRequest> applyMismatchResolution(
+            Long paymentRequestId, java.math.BigDecimal verifiedTotal, User admin, Long disputeId);
 
     /** Khách xác nhận số tiền nhà xe ghi nhận cho yêu cầu này là đúng. */
-    com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse acknowledgeReceipt(Long paymentRequestId, Long currentUserId);
+    PaymentRequestResponse acknowledgeReceipt(Long paymentRequestId, Long currentUserId);
 }

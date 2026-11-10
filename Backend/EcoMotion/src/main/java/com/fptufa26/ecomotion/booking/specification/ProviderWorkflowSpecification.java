@@ -9,6 +9,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 
 public final class ProviderWorkflowSpecification {
     private ProviderWorkflowSpecification() {}
@@ -30,9 +32,9 @@ public final class ProviderWorkflowSpecification {
             jakarta.persistence.criteria.Root<Booking> root, jakarta.persistence.criteria.CriteriaQuery<?> query,
             jakarta.persistence.criteria.CriteriaBuilder cb) {
         var sub = query.subquery(Long.class);
-        var request = sub.from(com.fptufa26.ecomotion.finance.entity.PaymentRequest.class);
+        var request = sub.from(PaymentRequest.class);
         sub.select(request.get("id")).where(cb.equal(request.get("booking"), root),
-                cb.equal(request.get("status"), com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus.PROOF_SUBMITTED));
+                cb.equal(request.get("status"), PaymentRequestStatus.PROOF_SUBMITTED));
         return sub;
     }
 

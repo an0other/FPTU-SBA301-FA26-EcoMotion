@@ -15,7 +15,6 @@ import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.booking.service.RenterPaymentService;
 import com.fptufa26.ecomotion.common.response.PageResponse;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +29,7 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import java.math.BigDecimal;
 import java.util.List;
 import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
+import com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository;
 
 @Service
 @Transactional(readOnly = true)
@@ -39,12 +39,12 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
     private final BookingRepository bookingRepository;
     private final BookingChargeRepository bookingChargeRepository;
     private final BookingPolicySnapshotRepository snapshotRepository;
-    private final com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository yearlyWorkflows;
+    private final YearlyWorkflowRepository yearlyWorkflows;
 
     @org.springframework.beans.factory.annotation.Autowired
     public RenterPaymentServiceImpl(PaymentTransactionRepository payments, BookingRepository bookings,
             BookingChargeRepository charges, BookingPolicySnapshotRepository snapshots,
-            com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository yearlyWorkflows) {
+            YearlyWorkflowRepository yearlyWorkflows) {
         this.paymentTransactionRepository = payments;
         this.bookingRepository = bookings;
         this.bookingChargeRepository = charges;
