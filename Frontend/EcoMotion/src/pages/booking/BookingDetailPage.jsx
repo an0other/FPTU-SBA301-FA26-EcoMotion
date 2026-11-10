@@ -82,6 +82,7 @@ function toCard(detail) {
       formula: formula(charge),
       amount: Number(charge.effectiveAmount ?? charge.amount),
       isWaived: Boolean(charge.isWaived),
+      waivedSource: charge.waivedSource || null,
       confirmationStatus: charge.confirmationStatus,
       evidenceUrl: charge.evidenceUrl,
     })),

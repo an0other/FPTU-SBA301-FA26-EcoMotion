@@ -209,9 +209,14 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
               <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900">
                 Phương án
                 <select aria-label="Phương án xử lý" value={resolution} onChange={e => setResolution(e.target.value)} disabled={submitting} className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
-                  <option value="CHANGE_VEHICLE">Đề xuất đổi xe</option><option value="RESCHEDULE">Đề xuất dời lịch</option><option value="CANCEL_AND_REFUND">Hủy và hoàn tiền</option>
+                  <option value="CHANGE_VEHICLE">Đề xuất đổi xe</option><option value="RESCHEDULE">Đề xuất dời lịch</option><option value="CANCEL_AND_REFUND">Hủy và hoàn tiền</option><option value="OTHER">Khác (tự mô tả phương án)</option>
                 </select>
               </label>
+              {resolution === 'OTHER' && (
+                <p className="self-end text-[11px] text-amber-900 sm:col-span-1">
+                  Mô tả cụ thể phương án ở ô bên dưới (tối thiểu 10 ký tự). Khách đồng ý thì phương án được ghi nhận; hệ thống không tự đổi xe hay giờ.
+                </p>
+              )}
 
               {resolution === 'RESCHEDULE' && (
                 <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900">
@@ -293,7 +298,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900 sm:col-span-2">
                 <span className="flex items-center justify-between">
-                  <span>Lý do</span>
+                  <span>{resolution === 'OTHER' ? 'Phương án đề xuất cho khách' : 'Lý do'}</span>
                   <span className="font-normal text-amber-800">{reason.length}/500</span>
                 </span>
                 <textarea aria-label="Lý do xử lý" required maxLength={500} rows={2} value={reason} onChange={e => setReason(e.target.value)} disabled={submitting} className="w-full resize-y rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
@@ -305,6 +310,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
                   disabled={
                     submitting
                     || !reason.trim()
+                    || (resolution === 'OTHER' && reason.trim().length < 10)
                     || (pendingProposal && resolution !== 'CANCEL_AND_REFUND')
                     || (resolution === 'CHANGE_VEHICLE' && (!vehicleId || loading || selectedVehicleStatus !== 'free'))
                     || (resolution === 'RESCHEDULE' && (!newStart || rescheduleStatus?.status !== 'free'))

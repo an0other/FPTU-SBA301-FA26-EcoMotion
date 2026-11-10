@@ -26,6 +26,13 @@ public class SchemaCompatibilityPatcher implements ApplicationRunner {
             // Loại khiếu nại/phán quyết mới (PAYMENT_MISMATCH, OTHER, ...): enum được kiểm ở tầng ứng dụng.
             "ALTER TABLE dispute DROP CONSTRAINT IF EXISTS dispute_category_check",
             "ALTER TABLE dispute DROP CONSTRAINT IF EXISTS dispute_decision_check",
+            "ALTER TABLE booking DROP CONSTRAINT IF EXISTS booking_proposal_resolution_check",
+            "ALTER TABLE booking DROP CONSTRAINT IF EXISTS booking_operational_resolution_check",
+            // Dữ liệu cũ: suy ra ai đã miễn phụ phí (trước đây nhà xe rút và admin miễn dùng chung cờ is_waived).
+            "UPDATE booking_charge SET waived_source = 'ADMIN_DISPUTE' WHERE is_waived AND waived_source IS NULL"
+                    + " AND id IN (SELECT charge_id FROM dispute WHERE decision = 'WAIVE_CHARGE' AND charge_id IS NOT NULL)",
+            "UPDATE booking_charge SET waived_source = 'SYSTEM' WHERE is_waived AND waived_source IS NULL AND charge_type = 'OUT_OF_RADIUS'",
+            "UPDATE booking_charge SET waived_source = 'PROVIDER_WITHDRAWN' WHERE is_waived AND waived_source IS NULL",
     };
 
     private final JdbcTemplate jdbcTemplate;

@@ -27,6 +27,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import com.fptufa26.ecomotion.booking.entity.BookingCharge;
+import com.fptufa26.ecomotion.booking.enums.ChargeType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -84,6 +86,29 @@ class EndUserWorkflowIntegrationTest {
                 com.fptufa26.ecomotion.dispute.enums.DisputeStatus.REJECTED,
                 com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.WAIVE_CHARGE, "Contradictory ruling"))
                 .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+    }
+
+    @Test void partialWaiveReducesChargeAndRejectsFullOrZeroReduction() {
+        ready();
+        long[] ids = tx.execute(s -> {
+            var b = em.find(Booking.class, bookingId);
+            var charge = new BookingCharge(); charge.setBooking(b); charge.setChargeType(ChargeType.PARKING);
+            charge.setDescription("Phí gửi xe"); charge.setQuantity(1); charge.setUnitPrice(new BigDecimal("50000"));
+            charge.setAmount(new BigDecimal("50000")); charge.setCreatedBy(b.getRenter().getUser()); em.persist(charge);
+            var opened = disputes.open(b, b.getRenter().getUser(), com.fptufa26.ecomotion.dispute.enums.DisputeCategory.CHARGE, charge);
+            return new long[]{charge.getId(), opened.disputeId()};
+        });
+        var partial = com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision.PARTIAL_WAIVE;
+        var resolved = com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED;
+        assertThatThrownBy(() -> disputes.resolveDispute(ids[1], adminId, resolved, partial, "Giảm toàn bộ", new BigDecimal("50000")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        assertThatThrownBy(() -> disputes.resolveDispute(ids[1], adminId, resolved, partial, "Thiếu số tiền", null))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        disputes.resolveDispute(ids[1], adminId, resolved, partial, "Chỉ tính nửa phí gửi xe", new BigDecimal("20000"));
+        BookingCharge charge = tx.execute(s -> em.find(BookingCharge.class, ids[0]));
+        assertThat(charge.getAmount()).isEqualByComparingTo("30000");
+        assertThat(charge.isWaived()).isFalse();
+        assertThat(charge.getConfirmationStatus()).isEqualTo(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
     }
 
     @Test void adminDepositAwardCreatesOnlyMissingRefundAndExposesRulingToParticipants() throws Exception {
@@ -300,6 +325,91 @@ class EndUserWorkflowIntegrationTest {
         assertThat(confirmed.getState()).isEqualTo("CONFIRMED");
         assertThat(confirmed.getConfirmationMethod()).isEqualTo("RENTER");
     }
+    /** Đơn đã kết thúc, tài xế báo trễ 3 slot quá giờ; nhà xe đã thêm phí quá giờ 3 slot. */
+    long tripEndedWithOvertime() {
+        reportTripEnd();
+        return tx.execute(s -> {
+            Booking b = em.find(Booking.class, bookingId);
+            b.setPlannedEndAt(b.getActualEndAt().minus(java.time.Duration.ofMinutes(170)));
+            b.setActualStartAt(b.getActualEndAt().minus(java.time.Duration.ofHours(6)));
+            snapshots.findByBooking_Id(bookingId).ifPresent(p -> { p.setSlotLengthMinutes(60); p.setAllowedOvertimeMinutes(0); });
+            BookingCharge overtime = new BookingCharge(); overtime.setBooking(b); overtime.setChargeType(ChargeType.OVERTIME);
+            overtime.setDescription("Quá giờ 3 slot"); overtime.setQuantity(3); overtime.setUnitPrice(new BigDecimal("100000"));
+            overtime.setAmount(new BigDecimal("300000")); overtime.setCreatedBy(b.getRenter().getUser());
+            overtime.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.PENDING);
+            em.persist(overtime);
+            return overtime.getId();
+        });
+    }
+
+    long openEndComplaint() {
+        return renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED, (Long) null, "Tôi trả xe sớm hơn giờ tài xế báo")).disputeId();
+    }
+
+    @Test void acceptingRenterEndTimeSettlesTimeAndReducesOvertimeOnly() {
+        long chargeId = tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        var planned = bookings.findById(bookingId).orElseThrow().getPlannedEndAt();
+        Instant corrected = planned.plus(java.time.Duration.ofMinutes(50));
+        disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null,
+                "GPS cho thấy xe về bãi lúc khách báo", null, "ACCEPT_RENTER_TIME", corrected);
+        assertThat(bookings.findById(bookingId).orElseThrow().getActualEndAt()).isEqualTo(corrected);
+        assertThat(endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow().getState()).isEqualTo("CONFIRMED");
+        BookingCharge overtime = tx.execute(s -> em.find(BookingCharge.class, chargeId));
+        assertThat(overtime.getQuantity()).as("50 phút quá giờ = 1 slot").isEqualTo(1);
+        assertThat(overtime.getAmount()).isEqualByComparingTo("100000");
+        assertThat(overtime.isWaived()).isFalse();
+    }
+
+    @Test void acceptingRenterTimeWithinPlanWaivesOvertimeAsAdmin() {
+        long chargeId = tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        Instant corrected = bookings.findById(bookingId).orElseThrow().getPlannedEndAt().minusSeconds(60);
+        disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED, null,
+                "Khách trả xe đúng giờ", null, "ACCEPT_RENTER_TIME", corrected);
+        BookingCharge overtime = tx.execute(s -> em.find(BookingCharge.class, chargeId));
+        assertThat(overtime.isWaived()).isTrue();
+        assertThat(overtime.getWaivedSource()).isEqualTo("ADMIN_DISPUTE");
+    }
+
+    @Test void renterTimeLaterThanDriverReportIsRejected() {
+        tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        Instant later = bookings.findById(bookingId).orElseThrow().getActualEndAt().plusSeconds(600);
+        assertThatThrownBy(() -> disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.RESOLVED,
+                null, "Sai giờ", null, "ACCEPT_RENTER_TIME", later)).isInstanceOf(RuntimeException.class);
+    }
+
+    @Test void keepingDriverTimeSettlesWithoutTouchingCharges() {
+        long chargeId = tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        var reported = bookings.findById(bookingId).orElseThrow().getActualEndAt();
+        var resolved = disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.REJECTED, null,
+                "Bằng chứng không đủ", null, "KEEP_DRIVER_TIME", null);
+        assertThat(resolved.getTripEndAction()).isEqualTo("KEEP_DRIVER_TIME");
+        assertThat(bookings.findById(bookingId).orElseThrow().getActualEndAt()).isEqualTo(reported);
+        assertThat(endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow().getState()).isEqualTo("CONFIRMED");
+        assertThat(tx.execute(s -> em.find(BookingCharge.class, chargeId)).getQuantity()).isEqualTo(3);
+    }
+
+    @Test void otherVerdictKeepsComplaintOpenAndWindowPaused() {
+        tripEndedWithOvertime();
+        long disputeId = openEndComplaint();
+        disputes.resolveDispute(disputeId, adminId, com.fptufa26.ecomotion.dispute.enums.DisputeStatus.IN_REVIEW, null,
+                "Chờ nhà xe gửi log GPS", null, null, null);
+        assertThat(endHistories.findFirstByBooking_IdOrderByIdDesc(bookingId).orElseThrow().getState()).isEqualTo("PAUSED");
+    }
+
+    @Test void otherComplaintNeedsDescription() {
+        ready();
+        assertThatThrownBy(() -> renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.OTHER, (Long) null, "ngắn"))).isInstanceOf(RuntimeException.class);
+        var opened = renterBookings.openDispute(renterId, code(), new com.fptufa26.ecomotion.booking.dto.request.OpenDisputeRequest(
+                com.fptufa26.ecomotion.dispute.enums.DisputeCategory.OTHER, (Long) null, "Tài xế hút thuốc trong xe dù tôi đã nhắc"));
+        assertThat(opened.category()).isEqualTo(com.fptufa26.ecomotion.dispute.enums.DisputeCategory.OTHER);
+    }
+
     @Test void unassignedDriverCannotStartOrEndTrip() {
         long[] assigned = ready(); long[] other = ready();
         optimization.manualAssign(bookingId, assigned[0], assigned[2]);

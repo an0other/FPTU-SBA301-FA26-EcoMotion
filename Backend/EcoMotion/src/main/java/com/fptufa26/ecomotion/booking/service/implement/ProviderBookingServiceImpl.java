@@ -770,6 +770,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
             throw new ConflictException("Không rút phụ phí khi đơn đang có tranh chấp");
         }
         charge.setWaived(true);
+        charge.setWaivedSource("PROVIDER_WITHDRAWN");
         bookingNotificationService.changed(booking, "CHARGES_CHANGED");
         return toChargeResponse(bookingChargeRepository.save(charge));
     }
@@ -1253,6 +1254,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                         ? "Đã hủy booking và tạo yêu cầu hoàn 100% số tiền đã nhận"
                         : "Đã hủy booking; chưa phát sinh khoản cần hoàn";
             }
+            case OTHER -> message = "Đã áp dụng phương án khách đồng ý: " + booking.getOperationalProposal().getReason();
             default -> throw new IllegalArgumentException("Phương án xử lý không hợp lệ");
         }
 
@@ -1379,7 +1381,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 c.getEvidenceUrl(),
                 createdByName,
                 c.getCreatedAt(),
-                c.getConfirmationStatus()
+                c.getConfirmationStatus(),
+                c.isWaived() ? c.getWaivedSource() : null
         );
     }
 
@@ -1403,6 +1406,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 case CHANGE_VEHICLE -> "Đã đổi xe thay thế";
                 case RESCHEDULE -> "Đã dời giờ nhận xe";
                 case CANCEL_AND_REFUND -> "Nhà xe đã hủy chuyến";
+                case OTHER -> "Đã áp dụng phương án khác";
             };
             events.add(new ProviderBookingDetailResponse.TimelineEventResponse(
                     title,

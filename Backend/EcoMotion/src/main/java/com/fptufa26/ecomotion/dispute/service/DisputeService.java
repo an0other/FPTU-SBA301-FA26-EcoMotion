@@ -40,6 +40,13 @@ public interface DisputeService {
     Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status,
                            DisputeResolutionDecision decision, String resolution, BigDecimal refundAwardTotal, String tripEndAction);
 
+    /**
+     * tripEndAction cho khiếu nại giờ kết thúc: ACCEPT_RENTER_TIME (chốt theo giờ khách, cần correctedEndAt),
+     * KEEP_DRIVER_TIME (giữ giờ tài xế báo), hoặc RESUME_TRIP / REOPEN_CONFIRMATION (nâng cao).
+     */
+    Dispute resolveDispute(Long disputeId, Long adminUserId, DisputeStatus status, DisputeResolutionDecision decision,
+                           String resolution, BigDecimal refundAwardTotal, String tripEndAction, java.time.Instant correctedEndAt);
+
     long countOpenOrInReview();
 
     long countTotalDisputes();

@@ -154,3 +154,13 @@ export function holdProgress(ms, durationMs = HOLD_DURATION_MS) {
   if (ms <= 0) return 0
   return Math.min(100, Math.max(0, (ms / durationMs) * 100))
 }
+
+/** Nhãn khoản phí đã miễn theo người thực hiện (nhà xe rút ≠ admin miễn qua khiếu nại). */
+export function waivedChargeLabel(source) {
+  switch (source) {
+    case 'PROVIDER_WITHDRAWN': return 'Nhà xe đã rút'
+    case 'ADMIN_DISPUTE': return 'Admin miễn (khiếu nại)'
+    case 'SYSTEM': return 'Không tính'
+    default: return 'Đã miễn'
+  }
+}

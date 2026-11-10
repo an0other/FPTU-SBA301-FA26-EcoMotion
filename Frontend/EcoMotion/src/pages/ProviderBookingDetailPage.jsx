@@ -25,7 +25,7 @@ import ProviderPaymentStatusCard from '../components/provider/ProviderPaymentSta
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 import { paymentStatusLabel } from '../utils/bookingStatus'
 import { estimatedGrandTotal } from '../utils/bookingFinancialSummary'
-import { CHARGE_TYPE_LABELS, formatChargeQuantity, PAYMENT_TYPE_LABELS } from '../utils/paymentDisplay'
+import { CHARGE_TYPE_LABELS, formatChargeQuantity, PAYMENT_TYPE_LABELS, waivedChargeLabel } from '../utils/paymentDisplay'
 
 // Trạng thái giao dịch của BE (PaymentStatus) hiển thị bằng tiếng Việt.
 const TRANSACTION_STATUS_LABELS = {
@@ -58,9 +58,11 @@ const CHARGE_STATUS_BADGE = {
   ACCEPTED: { label: 'Đã xác nhận', cls: 'border-emerald-300 bg-emerald-50 text-emerald-800' },
   DISPUTED: { label: 'Đang khiếu nại', cls: 'border-red-300 bg-red-50 text-red-800' },
 }
-const WAIVED_BADGE = { label: 'Đã miễn (admin)', cls: 'border-slate-300 bg-slate-100 text-slate-600' }
+const WAIVED_BADGE_CLS = 'border-slate-300 bg-slate-100 text-slate-600'
 // Khoản admin đã miễn sau khiếu nại vẫn hiện để đối chiếu nhưng không tính vào số phải thu.
-const chargeBadge = (c) => (c.waived ? WAIVED_BADGE : CHARGE_STATUS_BADGE[c.confirmationStatus])
+const chargeBadge = (c) => (c.waived
+  ? { label: waivedChargeLabel(c.waivedSource), cls: WAIVED_BADGE_CLS }
+  : CHARGE_STATUS_BADGE[c.confirmationStatus])
 const collectibleChargeTotal = (charges = []) =>
   charges.filter((c) => !c.waived).reduce((sum, c) => sum + Number(c.amount || 0), 0)
 
@@ -1008,7 +1010,7 @@ export default function ProviderBookingDetailPage() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-slate-200 bg-slate-50">
-                        <td colSpan={3} className="px-3.5 py-2.5 text-right text-xs font-bold text-slate-700">Tổng phải thu (không gồm khoản đã miễn)</td>
+                        <td colSpan={3} className="px-3.5 py-2.5 text-right text-xs font-bold text-slate-700">Tổng phải thu (không gồm khoản đã rút hoặc được miễn)</td>
                         <td className="px-3.5 py-2.5 text-right font-mono text-sm font-bold text-slate-900">
                           {formatVnd(collectibleChargeTotal(booking.charges))}
                         </td>
@@ -1065,7 +1067,7 @@ export default function ProviderBookingDetailPage() {
                     </div>
                   ))}
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                    <span className="text-xs font-bold text-slate-700">Tổng phải thu (không gồm khoản đã miễn)</span>
+                    <span className="text-xs font-bold text-slate-700">Tổng phải thu (không gồm khoản đã rút hoặc được miễn)</span>
                     <span className="font-mono text-sm font-bold text-slate-900">
                       {formatVnd(collectibleChargeTotal(booking.charges))}
                     </span>

@@ -10,12 +10,14 @@ import { HoldCountdown } from '../payments/HoldCountdown';
 import YearlyWorkflowPanel from '../yearly-rental/YearlyWorkflowPanel';
 import TripEndConfirmationBanner from './TripEndConfirmationBanner';
 import { formatBookingWhen } from '../../utils/bookingDateTime';
+import { waivedChargeLabel } from '../../utils/paymentDisplay';
 
 const DISPUTE_LABELS = {
   CHARGE: 'Phụ phí / khoản phí',
   SERVICE_QUALITY: 'Chất lượng dịch vụ / tài xế',
   DEPOSIT_REFUND: 'Hoàn cọc',
   TRIP_NOT_CONFIRMED: 'Giờ kết thúc chuyến không đúng',
+  OTHER: 'Khác (mô tả cụ thể)',
 };
 
 export const BookingDetail = ({
@@ -646,7 +648,7 @@ export const BookingDetail = ({
                         {charge.amount.toLocaleString('vi-VN')} đ
                       </td>
                       <td className="py-3 px-3 text-[#6D7A72]">
-                        {charge.isWaived ? 'Đã miễn (admin)' : charge.confirmationStatus === 'PENDING' ? (
+                        {charge.isWaived ? waivedChargeLabel(charge.waivedSource) : charge.confirmationStatus === 'PENDING' ? (
                           <button type="button" className="rounded-lg border border-[#14221A] px-2 py-1 text-[11px] font-semibold text-[#14221A]" onClick={() => onAcceptCharge?.(charge.chargeId)}>Chấp nhận</button>
                         ) : charge.confirmationStatus === 'DISPUTED' ? 'Đang tranh chấp' : 'Đã nhận'}
                       </td>

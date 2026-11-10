@@ -199,6 +199,14 @@ public class BookingServiceImpl implements BookingService {
             BookingStatus.AWAITING_DEPOSIT, BookingStatus.ACCEPTED);
 
     /** Chất lượng dịch vụ/tài xế: từ lúc tài xế tới điểm đón đến sau khi hoàn tất chuyến. */
+    /** Khiếu nại "Khác": từ khi đã cọc đến khi hoàn tất hoặc bị huỷ. */
+    private static final Set<BookingStatus> OTHER_DISPUTE = EnumSet.of(
+            BookingStatus.CONFIRMED, BookingStatus.DRIVER_ASSIGNED, BookingStatus.DRIVER_CONFIRMED,
+            BookingStatus.DRIVER_ARRIVED, BookingStatus.AWAITING_START_CONFIRMATION, BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION, BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION,
+            BookingStatus.AWAITING_FINAL_PAYMENT, BookingStatus.COMPLETED, BookingStatus.CANCELLED,
+            BookingStatus.CANCELLATION_REVIEW);
+
     private static final Set<BookingStatus> SERVICE_QUALITY_DISPUTE = EnumSet.of(
             BookingStatus.DRIVER_ARRIVED,
             BookingStatus.AWAITING_START_CONFIRMATION,
@@ -262,6 +270,7 @@ public class BookingServiceImpl implements BookingService {
         if (rows.size() > 1) {
             rows.stream().skip(1).forEach(extra -> {
                 extra.setWaived(true);
+                extra.setWaivedSource("SYSTEM");
                 chargeRepository.save(extra);
             });
         }
@@ -278,6 +287,7 @@ public class BookingServiceImpl implements BookingService {
         if (quote.pickupFee().signum() == 0) {
             if (charge != null && charge.getId() != null) {
                 charge.setWaived(true);
+                charge.setWaivedSource("SYSTEM");
                 charge.setAmount(BigDecimal.ZERO);
                 charge.setQuantity(1);
                 charge.setConfirmationStatus(com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED);
@@ -903,6 +913,9 @@ public class BookingServiceImpl implements BookingService {
         }
         requireDisputeAllowed(booking, request.category());
         if (request.category() == DisputeCategory.PAYMENT_MISMATCH) validatePaymentMismatch(booking, request);
+        if (request.category() == DisputeCategory.OTHER
+                && (request.description() == null || request.description().trim().length() < 10))
+            throw new BadRequestException("Khiếu nại \"Khác\" cần mô tả cụ thể ít nhất 10 ký tự");
         PaymentRequest finalRequest = null;
         if (request.category() == DisputeCategory.CHARGE) {
             finalRequest = paymentRequestService
@@ -1001,6 +1014,7 @@ public class BookingServiceImpl implements BookingService {
                         && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0);
             case YEARLY_SETTLEMENT, YEARLY_CANCELLATION -> false;
             case PAYMENT_MISMATCH -> paymentMismatchAllowed(booking);
+            case OTHER -> OTHER_DISPUTE.contains(booking.getStatus());
             case TRIP_NOT_CONFIRMED -> endConfirmations.canObject(booking)
                     || (booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
                     && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null)));
@@ -1113,6 +1127,7 @@ public class BookingServiceImpl implements BookingService {
                 case CHANGE_VEHICLE -> "Nhà cung cấp đã đổi xe";
                 case RESCHEDULE -> "Nhà cung cấp đã dời giờ nhận xe";
                 case CANCEL_AND_REFUND -> providerCancelTimelineTitle(payments);
+                case OTHER -> "Nhà cung cấp áp dụng phương án khác";
             };
             steps.add(new TimelineStepResponse(
                     title,

@@ -103,8 +103,8 @@ export const adminService = {
     return data?.data ?? []
   },
 
-  async resolveDispute(id, status, decision, resolution, refundAwardTotal, tripEndAction) {
-    const { data } = await apiClient.patch(`/admin/operations/disputes/${id}/resolve`, { status, decision, resolution, refundAwardTotal, tripEndAction })
+  async resolveDispute(id, status, decision, resolution, refundAwardTotal, tripEndAction, correctedEndAt) {
+    const { data } = await apiClient.patch(`/admin/operations/disputes/${id}/resolve`, { status, decision, resolution, refundAwardTotal, tripEndAction, correctedEndAt })
     return data?.data ?? null
   },
 

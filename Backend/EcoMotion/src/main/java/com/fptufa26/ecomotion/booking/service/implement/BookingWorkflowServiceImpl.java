@@ -148,6 +148,9 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         } else if (request.resolution() == OperationalResolutionType.RESCHEDULE) {
             if (request.newPickupTime() == null || !request.newPickupTime().isAfter(clock.instant().plus(Duration.ofHours(1))))
                 throw new IllegalArgumentException("Giờ nhận mới phải sau hiện tại ít nhất 1 giờ");
+        } else if (request.resolution() == OperationalResolutionType.OTHER) {
+            if (request.reason().trim().length() < 10)
+                throw new IllegalArgumentException("Phương án khác cần mô tả cụ thể ít nhất 10 ký tự");
         } else throw new IllegalArgumentException("Phương án không hợp lệ");
         OperationalProposal current = booking.getOperationalProposal();
         if (current != null && current.getRespondedAt() == null) {
