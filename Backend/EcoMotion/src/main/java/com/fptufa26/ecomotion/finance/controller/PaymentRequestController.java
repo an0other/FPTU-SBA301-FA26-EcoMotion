@@ -92,11 +92,11 @@ public class PaymentRequestController {
 
     @PostMapping(value = {"/api/v1/payment-requests/{id}/proofs/multipart",
             "/api/payment-requests/{id}/proofs/multipart"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Customer uploads an image proof of bank transfer")
+    @Operation(summary = "Customer marks a bank transfer as sent (receipt image optional)")
     public ApiResponse<PaymentEvidenceResponse> uploadPaymentProof(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable Long id,
-            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "file", required = false) MultipartFile file,
             @RequestParam(required = false) BigDecimal transferredAmount,
             @RequestParam(required = false) String transactionReference,
             @RequestParam(required = false) Instant transferredAt,

@@ -210,8 +210,8 @@ export default function CustomerPaymentPage() {
       setCurrentTime(Date.now())
       setToast({
         message: selectedRequest.paymentType === 'FINAL_BALANCE'
-          ? 'Đã gửi biên lai quyết toán. Nhà xe sẽ đối soát và xác nhận hoàn tất đơn.'
-          : 'Đã gửi biên lai. Hệ thống gia hạn giữ chỗ; nhà xe sẽ đối soát và xác nhận cọc.',
+          ? 'Đã báo chuyển khoản quyết toán. Nhà xe sẽ đối soát và xác nhận.'
+          : 'Đã báo chuyển khoản. Hệ thống gia hạn giữ chỗ; nhà xe sẽ đối soát và xác nhận cọc.',
         type: 'success',
       })
     } catch (err) {
@@ -533,7 +533,7 @@ export default function CustomerPaymentPage() {
               <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-xs text-blue-950 flex items-start gap-3">
                 <Icon name="hourglass_top" className="text-xl text-blue-700 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="block font-bold">Đã gửi biên lai — chờ nhà xe xác nhận</strong>
+                  <strong className="block font-bold">Đã báo chuyển khoản — chờ nhà xe xác nhận</strong>
                   <p className="mt-0.5 text-blue-900">
                     {isFinalBalance
                       ? 'Nhà xe đang đối soát biên lai chuyển khoản quyết toán để xác nhận hoàn tất đơn thuê.'
@@ -548,8 +548,8 @@ export default function CustomerPaymentPage() {
                   <strong className="block font-bold">Sau khi chuyển khoản</strong>
                   <p className="mt-0.5 text-emerald-800">
                     {isFinalBalance
-                      ? 'Gửi ảnh biên lai bên dưới để chuyển sang bước nhà xe đối soát và xác nhận tất toán đơn thuê.'
-                      : 'Gửi ảnh biên lai bên dưới để gia hạn giữ chỗ và chuyển sang bước nhà xe đối soát. Chỉ bấm「Kiểm tra trạng thái」nếu nhà xe đã xác nhận trên hệ thống.'}
+                      ? 'Quét mã QR (đã có sẵn số tiền và nội dung), chuyển khoản rồi bấm「Tôi đã chuyển khoản」.'
+                      : 'Quét mã QR (đã có sẵn số tiền và nội dung), chuyển khoản rồi bấm「Tôi đã chuyển khoản」để giữ chỗ trong lúc nhà xe đối soát.'}
                   </p>
                 </div>
               </div>

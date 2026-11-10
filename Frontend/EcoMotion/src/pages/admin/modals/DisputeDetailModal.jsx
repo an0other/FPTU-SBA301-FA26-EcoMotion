@@ -66,7 +66,9 @@ function DisputeDetailForm({
     }
     onResolve(dispute.id, form.status,
       dispute.category === 'CHARGE' && form.status !== 'IN_REVIEW' ? form.decision : undefined,
-      form.resolution.trim(), dispute.category === 'DEPOSIT_REFUND' && form.status === 'RESOLVED' ? Number(form.refundAwardTotal) : undefined,
+      form.resolution.trim(),
+      (dispute.category === 'DEPOSIT_REFUND' || (dispute.category === 'PAYMENT_MISMATCH' && form.refundAwardTotal !== ''))
+        && form.status === 'RESOLVED' ? Number(form.refundAwardTotal) : undefined,
       dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' ? form.tripEndAction || undefined : undefined)
   }
 
@@ -267,6 +269,14 @@ function DisputeDetailForm({
               {dispute.description || <span className="text-slate-400 italic">Không có mô tả chi tiết</span>}
             </p>
           </div>
+
+          {dispute.category === 'PAYMENT_MISMATCH' && (
+            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-xs sm:grid-cols-3">
+              <div><p className="font-semibold text-amber-900">Loại sai lệch</p><p className="mt-1 font-bold text-slate-900">{{ OVERPAID: 'Khách chuyển dư', UNDER_RECORDED: 'Nhà xe ghi thiếu', OTHER: 'Khác' }[dispute.mismatchType] || '—'}</p></div>
+              <div><p className="font-semibold text-amber-900">Khách khai đã chuyển</p><p className="mt-1 font-bold text-slate-900">{dispute.claimedAmount != null ? formatVND(dispute.claimedAmount) : '—'}</p></div>
+              <div><p className="font-semibold text-amber-900">Nhà xe đã ghi nhận</p><p className="mt-1 font-bold text-slate-900">{dispute.recordedAmount != null ? formatVND(dispute.recordedAmount) : '—'}</p></div>
+            </div>
+          )}
 
           {/* Evidence Photos Gallery */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
@@ -522,6 +532,14 @@ function DisputeDetailForm({
                   onChange={e => setForm(prev => ({ ...prev, refundAwardTotal: e.target.value }))}
                   className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
                 <span className="block text-xs font-normal text-slate-600">Nhập tổng mức hoàn theo phán quyết. Hệ thống trừ phần đã hoàn hoặc đang xử lý để chỉ tạo phần thiếu; chưa chuyển tiền ở bước này.</span>
+              </label>}
+              {dispute.category === 'PAYMENT_MISMATCH' && form.status === 'RESOLVED' && <label className="block space-y-2 font-semibold text-slate-800">
+                <span>Tổng số khách thực chuyển cho khoản này (đ) — đã đối chiếu sao kê</span>
+                <input type="number" min="1" step="1" value={form.refundAwardTotal}
+                  onChange={e => setForm(prev => ({ ...prev, refundAwardTotal: e.target.value }))}
+                  placeholder={dispute.claimedAmount != null ? String(Math.round(Number(dispute.claimedAmount))) : ''}
+                  className="block min-h-11 w-full rounded-lg border border-slate-300 px-3" />
+                <span className="block text-xs font-normal text-slate-600">Hệ thống ghi nhận phần chênh lệch so với số nhà xe đã ghi: phần còn thiếu của khoản được áp vào, phần dư thành khoản nhà xe bắt buộc hoàn cho khách. Để trống nếu chỉ ghi kết luận.</span>
               </label>}
               {dispute.category === 'TRIP_NOT_CONFIRMED' && form.status !== 'IN_REVIEW' && <label className="block">Hành động với chuyến
                 <select value={form.tripEndAction} onChange={e => setForm(prev => ({ ...prev, tripEndAction: e.target.value }))} className="mt-2 block w-full rounded-lg border p-3">

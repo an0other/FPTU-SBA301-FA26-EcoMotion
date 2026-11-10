@@ -38,6 +38,7 @@ public class TripEndConfirmationService {
     // ObjectProvider (lazy) để tránh vòng phụ thuộc PaymentRequestService -> DisputeService -> service này.
     private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.PaymentRequestService> paymentRequests;
     private final jakarta.persistence.EntityManager entityManager;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.RefundEventService> refundEvents;
 
     @Transactional(readOnly=true)
     public List<TripEndHistoryResponse> history(Long bookingId) {
@@ -140,6 +141,8 @@ public class TripEndConfirmationService {
                 .anyMatch(d -> d.getStatus() == DisputeStatus.OPEN || d.getStatus() == DisputeStatus.IN_REVIEW);
         if (activeDispute) return;
         if (paymentRequests.getObject().calculateRemainingAmount(booking.getId()).signum() > 0) return;
+        // Khách chuyển dư: chờ nhà xe hoàn xong mới hoàn tất đơn.
+        if (refundEvents.getObject().hasOpenExcessRefunds(booking.getId())) return;
         booking.setStatus(BookingStatus.COMPLETED);
         ledger.saveBooking(booking);
         notifications.changed(booking, "BOOKING_CHANGED");

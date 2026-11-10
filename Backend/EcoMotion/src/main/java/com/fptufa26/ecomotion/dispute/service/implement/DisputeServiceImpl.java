@@ -106,6 +106,28 @@ public class DisputeServiceImpl implements DisputeService {
     }
 
     @Override
+    @Transactional
+    public void attachPaymentMismatch(Long disputeId, Long paymentRequestId, BigDecimal claimedAmount, String mismatchType) {
+        Dispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tranh chấp không tồn tại: " + disputeId));
+        dispute.setPaymentRequestId(paymentRequestId);
+        dispute.setClaimedAmount(claimedAmount);
+        dispute.setMismatchType(mismatchType);
+        disputeRepository.save(dispute);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal recordedForPaymentRequest(Long bookingId, Long paymentRequestId) {
+        return bookingPaymentLedgerService.listTransactions(bookingId).stream()
+                .filter(t -> t.getDirection() == com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN
+                        && t.getStatus() == com.fptufa26.ecomotion.booking.enums.PaymentStatus.PAID
+                        && t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(paymentRequestId))
+                .map(com.fptufa26.ecomotion.booking.entity.PaymentTransaction::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<Dispute> listDisputes(DisputeStatus status) {
         if (status != null) {
@@ -167,11 +189,12 @@ public class DisputeServiceImpl implements DisputeService {
         }
         boolean charge = dispute.getCategory() == DisputeCategory.CHARGE;
         boolean deposit = dispute.getCategory() == DisputeCategory.DEPOSIT_REFUND;
+        boolean mismatch = dispute.getCategory() == DisputeCategory.PAYMENT_MISMATCH;
         if (status == DisputeStatus.IN_REVIEW && (decision != null || refundAwardTotal != null)
                 || status != DisputeStatus.IN_REVIEW && charge && decision != (status == DisputeStatus.RESOLVED
                     ? DisputeResolutionDecision.WAIVE_CHARGE : DisputeResolutionDecision.KEEP_CHARGE)
                 || !charge && decision != null
-                || !(deposit && status == DisputeStatus.RESOLVED) && refundAwardTotal != null)
+                || !((deposit || mismatch) && status == DisputeStatus.RESOLVED) && refundAwardTotal != null)
             throw new ConflictException("Phán quyết, trạng thái và số tiền không phù hợp với loại khiếu nại");
         dispute.setStatus(status);
         dispute.setResolution(note);
@@ -187,6 +210,13 @@ public class DisputeServiceImpl implements DisputeService {
             dispute.getRelatedRefunds().addAll(refundEventService.awardDepositRefund(booking.getId(), dispute.getId(), refundAwardTotal, admin));
             if (refundEventService.hasOpenRefunds(booking.getId())) booking.setStatus(BookingStatus.CANCELLATION_REVIEW);
             bookingPaymentLedgerService.saveBooking(booking);
+        }
+        if (mismatch && status == DisputeStatus.RESOLVED && refundAwardTotal != null) {
+            // refundAwardTotal = tổng số khách thực chuyển cho yêu cầu này (admin đã đối chiếu sao kê).
+            if (dispute.getPaymentRequestId() == null)
+                throw new ConflictException("Khiếu nại không gắn với yêu cầu thanh toán");
+            dispute.getRelatedRefunds().addAll(paymentRequestService.applyMismatchResolution(
+                    dispute.getPaymentRequestId(), refundAwardTotal, admin, dispute.getId()));
         }
         if(tripEndAction!=null) {
             endConfirmations.adminAction(booking,disputeId,adminUserId,tripEndAction,note);
@@ -248,7 +278,8 @@ public class DisputeServiceImpl implements DisputeService {
                 if (remaining.signum() <= 0) {
                     if (paid.signum() > 0) request.setAmount(paid);
                     request.setStatus(paid.signum() > 0 ? PaymentRequestStatus.CONFIRMED : PaymentRequestStatus.VOIDED);
-                    if (endConfirmations.isEndSettled(booking.getId())) {
+                    if (endConfirmations.isEndSettled(booking.getId())
+                            && !refundEventService.hasOpenExcessRefunds(booking.getId())) {
                         booking.setStatus(BookingStatus.COMPLETED);
                     } else {
                         booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT);

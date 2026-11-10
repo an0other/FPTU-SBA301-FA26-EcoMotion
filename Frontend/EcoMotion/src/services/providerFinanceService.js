@@ -83,7 +83,7 @@ export const providerFinanceService = {
 
   async completeRefund(transactionId, payload) {
     const form = new FormData()
-    form.append('file', payload.file)
+    if (payload.file) form.append('file', payload.file)
     form.append('bankReference', payload.bankReference)
     if (payload.note) form.append('note', payload.note)
     const { data } = await apiClient.post(`/payment-transactions/${transactionId}/refund-proof`, form)

@@ -1,7 +1,7 @@
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 
-const categories = { CHARGE: 'Khiếu nại phụ phí', YEARLY_SETTLEMENT: 'Quyết toán năm', YEARLY_CANCELLATION: 'Hủy trước nhận xe', DEPOSIT_REFUND: 'Khiếu nại hoàn cọc', SERVICE_QUALITY: 'Chất lượng dịch vụ', TRIP_NOT_CONFIRMED: 'Giờ kết thúc chuyến không đúng' }
+const categories = { CHARGE: 'Khiếu nại phụ phí', YEARLY_SETTLEMENT: 'Quyết toán năm', YEARLY_CANCELLATION: 'Hủy trước nhận xe', DEPOSIT_REFUND: 'Khiếu nại hoàn cọc', SERVICE_QUALITY: 'Chất lượng dịch vụ', TRIP_NOT_CONFIRMED: 'Giờ kết thúc chuyến không đúng', PAYMENT_MISMATCH: 'Sai lệch số tiền thanh toán' }
 const statuses = { OPEN: 'Đã gửi, chờ thụ lý', IN_REVIEW: 'Đang xem xét', RESOLVED: 'Đã phân xử', REJECTED: 'Đã bác bỏ khiếu nại' }
 const finances = { AWAITING_REFUND: 'Đã phân xử, chờ hoàn tiền', AWAITING_RECEIPT: 'Nhà xe đã chuyển hoàn, chờ xác nhận nhận tiền', RECONCILIATION_REQUIRED: 'Khoản hoàn cần đối soát', COMPLETED: 'Khoản hoàn đã hoàn tất' }
 const decisions = { WAIVE_CHARGE: 'Miễn khoản phụ phí', KEEP_CHARGE: 'Giữ nguyên khoản phụ phí' }

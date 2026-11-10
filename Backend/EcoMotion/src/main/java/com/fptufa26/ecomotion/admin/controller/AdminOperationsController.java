@@ -222,6 +222,11 @@ public class AdminOperationsController {
                 .refundAwardTotal(d.getRefundAwardTotal())
                 .resolvedAt(d.getResolvedAt())
                 .tripEndAction(d.getTripEndAction())
+                .paymentRequestId(d.getPaymentRequestId())
+                .claimedAmount(d.getClaimedAmount())
+                .mismatchType(d.getMismatchType())
+                .recordedAmount(d.getPaymentRequestId() == null || b == null ? null
+                        : disputeService.recordedForPaymentRequest(b.getId(), d.getPaymentRequestId()))
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())
                 .build();

@@ -12,6 +12,7 @@ import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
 import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSummary'
 import { RefundAccountPanel } from '../../components/booking/RefundAccountPanel'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
+import PaymentReceiptsCard from '../../components/booking/PaymentReceiptsCard'
 
 const CHARGE_LABELS = {
   BASE_RENTAL: 'Tiền thuê',
@@ -188,6 +189,8 @@ export function BookingDetailPage() {
   const booking = toCard(detail)
   const manualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
     && !['REFUNDED', 'REJECTED'].includes(refund.status))
+  // Khoản khách chuyển dư: nhà xe cần tài khoản để chuyển hoàn, kể cả khi đơn chưa huỷ.
+  const excessRefunds = manualRefunds.filter(refund => refund.excess)
 
   return (
     <>
@@ -195,6 +198,15 @@ export function BookingDetailPage() {
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
       {tripNotice && <Toast message={tripNotice} type="success" onClose={() => setTripNotice('')} />}
       {detail.planType !== 'YEARLY' && <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>}
+      <PaymentReceiptsCard
+        bookingCode={detail.bookingCode}
+        bookingStatus={detail.status}
+        workflow={workflow}
+        disputeCategories={detail.disputeCategories || []}
+        onOpenDispute={async body => { const result = await openDispute(detail.bookingCode, body); await refreshDetail(); return result }}
+        onUploadEvidence={(file) => uploadDisputeEvidence(detail.bookingCode, file)}
+        onChanged={refreshDetail}
+      />
       <BookingDetail
         onYearlyChanged={refreshDetail}
         booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
@@ -230,6 +242,10 @@ export function BookingDetailPage() {
       />
       {['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail.status) && manualRefunds.length > 0 &&
         <RefundAccountPanel key={`${booking.id}:${manualRefunds[0].id}`} bookingCode={booking.id} refunds={manualRefunds} onSaved={refreshDetail} />}
+      {!['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail.status) && excessRefunds.length > 0 &&
+        <div className="mx-auto mt-4 max-w-[1120px] px-4">
+          <RefundAccountPanel key={`excess:${excessRefunds[0].id}`} bookingCode={booking.id} refunds={excessRefunds} onSaved={refreshDetail} />
+        </div>}
     </>
   )
 }

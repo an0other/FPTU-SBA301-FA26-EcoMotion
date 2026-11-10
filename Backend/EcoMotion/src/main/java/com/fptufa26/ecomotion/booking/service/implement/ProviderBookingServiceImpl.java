@@ -206,7 +206,10 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 completed,
                 rejected,
                 cancelled,
-                bookingRepository.findProviderQueueVehicleNames(providerId)
+                bookingRepository.findProviderQueueVehicleNames(providerId),
+                bookingRepository.count(BookingSpecification.forProviderQueue(providerId, null)
+                        .and((root, query, cb) -> cb.exists(com.fptufa26.ecomotion.booking.specification
+                                .ProviderWorkflowSpecification.awaitingPaymentConfirmation(root, query, cb))))
         );
     }
 

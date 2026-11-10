@@ -27,6 +27,11 @@ public record ProviderTransactionResponse(
         String receiptUrl,
         String processingNote,
         Instant paidAt,
-        Instant createdAt
+        Instant createdAt,
+        /** Yêu cầu thanh toán mà giao dịch thuộc về (để khách đối chiếu "nhà xe xác nhận đã nhận"). */
+        Long paymentRequestId,
+        com.fptufa26.ecomotion.finance.enums.PaymentRequestType paymentRequestType,
+        /** Vai trò người xác nhận (PROVIDER/ADMIN) — null với giao dịch cổng thanh toán. */
+        com.fptufa26.ecomotion.user.enums.Role confirmedByRole
 ) {
 }

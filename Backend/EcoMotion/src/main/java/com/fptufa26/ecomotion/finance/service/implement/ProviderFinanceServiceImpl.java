@@ -684,7 +684,10 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 tx.getReceiptUrl() == null ? null : "/api/v1/payment-transactions/" + tx.getId() + "/refund-proof",
                 tx.getProcessingNote(),
                 tx.getPaidAt(),
-                tx.getCreatedAt()
+                tx.getCreatedAt(),
+                tx.getPaymentRequest() == null ? null : tx.getPaymentRequest().getId(),
+                tx.getPaymentRequest() == null ? null : tx.getPaymentRequest().getPaymentType(),
+                tx.getConfirmedBy() == null ? null : tx.getConfirmedBy().getRole()
         );
     }
 

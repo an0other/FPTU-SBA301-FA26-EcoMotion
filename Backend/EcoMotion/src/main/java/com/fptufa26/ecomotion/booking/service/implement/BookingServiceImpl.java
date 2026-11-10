@@ -902,6 +902,7 @@ public class BookingServiceImpl implements BookingService {
             chargeRepository.save(charge);
         }
         requireDisputeAllowed(booking, request.category());
+        if (request.category() == DisputeCategory.PAYMENT_MISMATCH) validatePaymentMismatch(booking, request);
         PaymentRequest finalRequest = null;
         if (request.category() == DisputeCategory.CHARGE) {
             finalRequest = paymentRequestService
@@ -915,6 +916,10 @@ public class BookingServiceImpl implements BookingService {
         DisputeOpenedResponse response = disputeService.open(
                 booking, booking.getRenter().getUser(), request.category(), charge,
                 request.description(), request.resolvedEvidenceUrls());
+        if (request.category() == DisputeCategory.PAYMENT_MISMATCH) {
+            disputeService.attachPaymentMismatch(response.disputeId(), request.paymentRequestId(),
+                    request.claimedAmount().setScale(2, RoundingMode.HALF_UP), request.mismatchType());
+        }
         if (finalRequest != null) {
             finalRequest.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
             finalRequest.setIssueNote("Payment held while a charge dispute is reviewed");
@@ -995,10 +1000,41 @@ public class BookingServiceImpl implements BookingService {
                     && paymentTransactionRepository.findByBooking_Id(booking.getId()).stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
                         && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0);
             case YEARLY_SETTLEMENT, YEARLY_CANCELLATION -> false;
+            case PAYMENT_MISMATCH -> paymentMismatchAllowed(booking);
             case TRIP_NOT_CONFIRMED -> endConfirmations.canObject(booking)
                     || (booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
                     && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null)));
         };
+    }
+
+    /** Có khoản chuyển khoản đã được xác nhận; sau khi đơn hoàn tất vẫn báo được trong 3 ngày kể từ lần xác nhận cuối. */
+    private boolean paymentMismatchAllowed(Booking booking) {
+        Instant latest = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .filter(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
+                        && t.getMethod() == com.fptufa26.ecomotion.booking.enums.PaymentMethod.BANK_TRANSFER
+                        && t.getPaymentRequest() != null && t.getPaidAt() != null)
+                .map(PaymentTransaction::getPaidAt).max(Instant::compareTo).orElse(null);
+        if (latest == null) return false;
+        if (booking.getStatus() != BookingStatus.COMPLETED && booking.getStatus() != BookingStatus.CANCELLED) return true;
+        return !latest.plus(Duration.ofDays(3)).isBefore(clock.instant());
+    }
+
+    /** Khách báo số tiền nhà xe ghi nhận không đúng: phải chỉ rõ yêu cầu thanh toán, số đã chuyển và ảnh chuyển khoản. */
+    private void validatePaymentMismatch(Booking booking, OpenDisputeRequest request) {
+        if (request.paymentRequestId() == null) throw new BadRequestException("Cần chọn khoản thanh toán bị sai lệch");
+        boolean confirmed = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                .anyMatch(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
+                        && t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(request.paymentRequestId()));
+        if (!confirmed) throw new BadRequestException("Khoản thanh toán này chưa được nhà xe xác nhận");
+        if (request.claimedAmount() == null || request.claimedAmount().compareTo(new BigDecimal("1000")) < 0
+                || request.claimedAmount().scale() > 2 || request.claimedAmount().compareTo(new BigDecimal("1000000000")) > 0)
+            throw new BadRequestException("Số tiền bạn đã chuyển không hợp lệ");
+        if (request.mismatchType() == null || !OpenDisputeRequest.MISMATCH_TYPES.contains(request.mismatchType()))
+            throw new BadRequestException("Loại sai lệch không hợp lệ");
+        if (request.resolvedEvidenceUrls().isEmpty())
+            throw new BadRequestException("Cần đính kèm ảnh chuyển khoản làm bằng chứng");
+        if ("OTHER".equals(request.mismatchType()) && (request.description() == null || request.description().isBlank()))
+            throw new BadRequestException("Vui lòng mô tả sai lệch");
     }
 
     private void requireDisputeAllowed(Booking booking, DisputeCategory category) {

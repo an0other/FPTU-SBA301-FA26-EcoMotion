@@ -48,6 +48,8 @@ export const BookingDetail = ({
   const [disputeNote, setDisputeNote] = useState('');
   const [editing, setEditing] = useState(false);
   const statusMeta = bookingStatusMeta(booking.status);
+  // Sai lệch thanh toán có luồng riêng ở thẻ "Biên nhận thanh toán".
+  const formCategories = (booking.disputeCategories || []).filter((category) => category !== 'PAYMENT_MISMATCH');
   const paymentLabel = paymentStatusLabel(workflow?.paymentStatus);
 
   const handleFileSelect = async (e) => {
@@ -646,7 +648,7 @@ export const BookingDetail = ({
             </div>
           </div>
 
-          {booking.disputeCategories.length > 0 && (
+          {formCategories.length > 0 && (
             <div id="booking-dispute-form" className="scroll-mt-24 bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
               <h3 className="text-sm font-bold text-[#14221A]">Khiếu nại</h3>
               <form onSubmit={handleComplaintSubmit} className="flex flex-col gap-3">
@@ -659,7 +661,7 @@ export const BookingDetail = ({
                     className="w-full h-11 px-3.5 rounded-xl text-sm bg-[#F7F8F6] border border-[#E6EBE8] outline-none cursor-pointer"
                   >
                     <option value="" disabled>-- Chọn loại khiếu nại --</option>
-                    {booking.disputeCategories.map((category) => (
+                    {formCategories.map((category) => (
                       <option key={category} value={category}>{DISPUTE_LABELS[category]}</option>
                     ))}
                   </select>

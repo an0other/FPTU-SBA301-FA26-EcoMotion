@@ -97,4 +97,11 @@ public interface PaymentRequestService {
 
     /** Đóng yêu cầu cọc khi nhà xe hủy chuyến trước khi ghi nhận tiền. */
     void voidUnpaidDepositIfProviderWithdraws(Long bookingId);
+
+    /**
+     * Admin chấp nhận khiếu nại sai lệch: ghi nhận phần tiền khách đã chuyển mà nhà xe chưa ghi nhận
+     * (verifiedTotal − đã ghi nhận). Phần còn thiếu của yêu cầu được áp vào, phần dư thành khoản phải hoàn.
+     */
+    java.util.List<com.fptufa26.ecomotion.finance.entity.RefundRequest> applyMismatchResolution(
+            Long paymentRequestId, java.math.BigDecimal verifiedTotal, com.fptufa26.ecomotion.user.entity.User admin, Long disputeId);
 }

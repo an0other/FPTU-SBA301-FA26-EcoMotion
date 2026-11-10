@@ -34,6 +34,8 @@ class TripEndObjectionWindowTest {
     private final BookingPaymentLedgerService ledger = mock(BookingPaymentLedgerService.class);
     private final DisputeRepository disputes = mock(DisputeRepository.class);
     private final PaymentRequestService payments = mock(PaymentRequestService.class);
+    private final com.fptufa26.ecomotion.finance.service.RefundEventService refunds =
+            mock(com.fptufa26.ecomotion.finance.service.RefundEventService.class);
     private final AtomicReference<TripEndConfirmation> latest = new AtomicReference<>();
     private Booking booking;
 
@@ -41,8 +43,10 @@ class TripEndObjectionWindowTest {
     private TripEndConfirmationService service(Instant now) {
         ObjectProvider<PaymentRequestService> provider = mock(ObjectProvider.class);
         when(provider.getObject()).thenReturn(payments);
+        ObjectProvider<com.fptufa26.ecomotion.finance.service.RefundEventService> refundProvider = mock(ObjectProvider.class);
+        when(refundProvider.getObject()).thenReturn(refunds);
         return new TripEndConfirmationService(histories, ledger, mock(BookingNotificationService.class), disputes,
-                Clock.fixed(now, ZoneOffset.UTC), provider, mock(jakarta.persistence.EntityManager.class));
+                Clock.fixed(now, ZoneOffset.UTC), provider, mock(jakarta.persistence.EntityManager.class), refundProvider);
     }
 
     @BeforeEach
@@ -81,6 +85,22 @@ class TripEndObjectionWindowTest {
 
         svc.renterConfirm(booking, 5L);
         assertThat(latest.get().getConfirmationMethod()).isEqualTo("RENTER");
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.COMPLETED);
+    }
+
+    @Test
+    void openOverpaymentRefundHoldsCompletionUntilRefunded() {
+        var svc = service(ENDED.plusSeconds(600));
+        svc.driverEnded(booking, 9L);
+        booking.setSettlementRequestedAt(ENDED.plusSeconds(300));
+        when(refunds.hasOpenExcessRefunds(43L)).thenReturn(true);
+
+        svc.renterConfirm(booking, 5L);
+        assertThat(booking.getStatus()).as("khách chuyển dư chưa được hoàn thì chưa hoàn tất")
+                .isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
+
+        when(refunds.hasOpenExcessRefunds(43L)).thenReturn(false);
+        svc.completeIfReady(booking);
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.COMPLETED);
     }
 

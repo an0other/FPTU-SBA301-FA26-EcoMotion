@@ -423,10 +423,61 @@ class PaymentIntegrityIntegrationTest {
     }
 
     @Test
+    void depositOverpaymentRecordsFullAmountAndCreatesMandatoryRefund() {
+        confirm("50000", "OVER-" + requestId);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+        var paid = ledger.findByBooking_Id(bookingId).stream()
+                .filter(t -> t.getDirection() == com.fptufa26.ecomotion.booking.enums.PaymentDirection.IN).toList();
+        assertThat(paid).singleElement().satisfies(t -> {
+            assertThat(t.getAmount()).isEqualByComparingTo("50000");
+            assertThat(t.getAppliedAmount()).isEqualByComparingTo("30000");
+        });
+        var excess = refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId);
+        assertThat(excess).singleElement().satisfies(r -> {
+            assertThat(r.getAmount()).isEqualByComparingTo("20000");
+            assertThat(r.getStatus()).isEqualTo(com.fptufa26.ecomotion.finance.enums.RefundStatus.PROCESSING);
+        });
+        assertThat(refundEvents.hasOpenExcessRefunds(bookingId)).isTrue();
+
+        // Khách chọn cấn trừ: lệnh hoàn bị huỷ, phần dư thành tiền đã trả cho đơn.
+        var offset = refundService.offsetExcessRefund(renterId, excess.get(0).getId());
+        assertThat(offset.status()).isEqualTo(com.fptufa26.ecomotion.finance.enums.RefundStatus.REJECTED);
+        assertThat(offset.excess()).isTrue();
+        assertThat(refundEvents.hasOpenExcessRefunds(bookingId)).isFalse();
+        assertThat(ledger.findById(paid.get(0).getId()).orElseThrow().getAppliedAmount()).isEqualByComparingTo("50000");
+    }
+
+    @Test
+    void finalOverpaymentHoldsCompletionUntilExcessIsRefunded() {
+        tx.executeWithoutResult(s -> {
+            Booking booking = em.find(Booking.class, bookingId);
+            booking.setStatus(BookingStatus.AWAITING_FINAL_PAYMENT); booking.setActualEndAt(Instant.now());
+            booking.setProviderConfirmedAt(Instant.now()); booking.setRenterConfirmedAt(Instant.now());
+            em.find(PaymentRequest.class, requestId).setPaymentType(PaymentRequestType.FINAL_BALANCE);
+            em.find(PaymentRequest.class, requestId).setAmount(new BigDecimal("100000"));
+        });
+        confirm("120000", "FINAL-OVER-" + requestId);
+        assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus())
+                .as("còn 20.000 đ chuyển dư chưa hoàn thì chưa hoàn tất").isEqualTo(BookingStatus.AWAITING_FINAL_PAYMENT);
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).singleElement()
+                .satisfies(r -> assertThat(r.getAmount()).isEqualByComparingTo("20000"));
+        assertThatThrownBy(() -> refundService.offsetExcessRefund(renterId,
+                refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId).get(0).getId()))
+                .as("đã tới quyết toán thì phải hoàn, không cấn trừ").isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void renterCanMarkTransferSentWithoutReceiptImage() {
+        payments.submitPaymentProof(requestId, renterId, null, null, null, null, null);
+        var request = requests.findById(requestId).orElseThrow();
+        assertThat(request.getStatus()).isEqualTo(PaymentRequestStatus.PROOF_SUBMITTED);
+    }
+
+    @Test
     void invalidAmountAndWrongProviderDoNotRecordMoney() {
         assertThatThrownBy(() -> confirm("0", "INVALID")).isInstanceOf(InvalidPaymentOperationException.class);
         assertThatThrownBy(() -> confirm("-1", "NEGATIVE")).isInstanceOf(InvalidPaymentOperationException.class);
-        assertThatThrownBy(() -> confirm("30001", "EXCEEDS-REMAINING")).isInstanceOf(InvalidPaymentOperationException.class);
         assertThatThrownBy(() -> payments.confirmPayment(requestId, outsiderId,
                 new ConfirmPaymentRequest(new BigDecimal("30000"), "OTHER", null))).isInstanceOf(AccessDeniedException.class);
         assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();

@@ -21,6 +21,7 @@ import YearlyWorkflowPanel from '../components/yearly-rental/YearlyWorkflowPanel
 import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
 import TripEndConfirmationBanner from '../components/booking/TripEndConfirmationBanner'
+import ProviderPaymentStatusCard from '../components/provider/ProviderPaymentStatusCard'
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 import { paymentStatusLabel } from '../utils/bookingStatus'
 import { estimatedGrandTotal } from '../utils/bookingFinancialSummary'
@@ -243,6 +244,12 @@ export default function ProviderBookingDetailPage() {
     handlers: {
       [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
         setToast({ message: 'Thanh toán đã được máy chủ xác minh. Đang cập nhật đơn thuê.', type: 'success' })
+      },
+      [TV5_REALTIME_EVENTS.PAYMENT_PROOF_SUBMITTED]: () => {
+        setToast({ message: 'Khách vừa báo đã chuyển khoản — kiểm tra sao kê và xác nhận.', type: 'info' })
+      },
+      [TV5_REALTIME_EVENTS.PAYMENT_ISSUE_REPORTED]: () => {
+        setToast({ message: 'Đã ghi nhận báo cáo sai lệch thanh toán.', type: 'warning' })
       },
       [TV5_REALTIME_EVENTS.DRIVER_CONFIRMED]: () => {
         setToast({ message: 'Tài xế đã xác nhận tiếp nhận chuyến!', type: 'success' })
@@ -554,15 +561,8 @@ export default function ProviderBookingDetailPage() {
             onAction={handleProgressAction}
           />
           <div className="mt-3"><TripEndConfirmationBanner workflow={workflow} readOnly /></div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => navigate(`/provider/finance?tab=incoming&booking=${encodeURIComponent(booking.bookingCode)}`)}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <Icon name="account_balance_wallet" className="text-[16px]" />
-              Xem thanh toán cọc &amp; quyết toán của đơn
-            </button>
+          <div className="mt-3">
+            <ProviderPaymentStatusCard bookingCode={booking.bookingCode} refreshKey={`${workflow?.updatedAt}|${workflow?.confirmedPaid}|${booking.status}`} />
           </div>
         </section>}
 

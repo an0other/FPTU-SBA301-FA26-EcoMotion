@@ -21,6 +21,12 @@ public interface DisputeService {
     DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge,
                                String description, List<String> evidenceUrls);
 
+    /** Gắn chi tiết khiếu nại sai lệch thanh toán (yêu cầu thanh toán, số khách khai, loại sai lệch). */
+    void attachPaymentMismatch(Long disputeId, Long paymentRequestId, BigDecimal claimedAmount, String mismatchType);
+
+    /** Tổng tiền nhà xe đã ghi nhận (giao dịch vào đã xác nhận) cho một yêu cầu thanh toán. */
+    BigDecimal recordedForPaymentRequest(Long bookingId, Long paymentRequestId);
+
     List<Dispute> listDisputes(DisputeStatus status);
 
     Optional<Dispute> getDisputeById(Long disputeId);

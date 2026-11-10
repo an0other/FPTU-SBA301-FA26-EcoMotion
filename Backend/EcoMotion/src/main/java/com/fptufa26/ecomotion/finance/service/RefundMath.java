@@ -25,10 +25,23 @@ public final class RefundMath {
 
     /** Late IPN stores applied 0 on purpose. A legacy row with applied 0 still counts its received amount. */
     public static BigDecimal appliedPortion(BigDecimal amount, BigDecimal applied, String processingNote) {
-        if (applied == null || (applied.signum() == 0 && !unapplied(processingNote))) {
+        if (applied == null || (applied.signum() == 0 && !unapplied(processingNote) && !excess(processingNote))) {
             return money(amount);
         }
         return money(applied);
+    }
+
+    /** Tiền khách chuyển dư: không tính vào nghĩa vụ đơn, phải hoàn hoặc cấn trừ. */
+    public static final String EXCESS_PREFIX = "EXCESS";
+    public static final String OVERPAY_EVENT = "OVERPAY:";
+    public static final String MISMATCH_EVENT = "MISMATCH:";
+
+    public static boolean excess(String processingNote) {
+        return processingNote != null && processingNote.startsWith(EXCESS_PREFIX);
+    }
+
+    public static boolean excessEvent(String sourceEventId) {
+        return sourceEventId != null && (sourceEventId.startsWith(OVERPAY_EVENT) || sourceEventId.startsWith(MISMATCH_EVENT));
     }
 
     public static boolean unapplied(String processingNote) {

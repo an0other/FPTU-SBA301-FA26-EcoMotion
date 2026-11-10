@@ -9,6 +9,7 @@ import AssignDriverModal from '../components/provider/modals/AssignDriverModal'
 import { useProviderBookings } from '../hooks/useProviderBookings'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
 import { providerBookingService } from '../services/providerBookingService'
+import { providerFinanceService } from '../services/providerFinanceService'
 
 // Area 2: Exactly 6 main status tabs
 const STATUS_TAB_DEFINITIONS = [
@@ -29,6 +30,7 @@ const DRIVER_ASSIGNMENT_FILTERS = [
 
 const ACTION_WORKFLOW_FILTERS = [
   { value: 'ALL', label: 'Tất cả công việc' },
+  { value: 'PAYMENT_CONFIRM', label: 'Khách đã chuyển khoản – cần xác nhận' },
   { value: 'APPROVAL', label: 'Chờ duyệt đơn' },
   { value: 'PAYMENT', label: 'Chờ thanh toán cọc' },
   { value: 'ASSIGN_DRIVER', label: 'Chờ phân công tài xế' },
@@ -224,6 +226,21 @@ export default function ProviderBookingQueuePage() {
     limit: pageSize,
   })
 
+  // Đơn có yêu cầu thanh toán khách đã báo chuyển khoản, chờ nhà xe xác nhận.
+  const awaitingPaymentCount = summary?.paymentAwaitingConfirmation || 0
+  const [awaitingPaymentCodes, setAwaitingPaymentCodes] = useState(() => new Set())
+  useEffect(() => {
+    let cancelled = false
+    if (!awaitingPaymentCount) {
+      queueMicrotask(() => { if (!cancelled) setAwaitingPaymentCodes(new Set()) })
+      return () => { cancelled = true }
+    }
+    providerFinanceService.listProviderPaymentRequests({ status: 'PROOF_SUBMITTED', limit: 100 })
+      .then((page) => { if (!cancelled) setAwaitingPaymentCodes(new Set((page?.items || []).map((pr) => pr.bookingCode))) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [awaitingPaymentCount, bookings])
+
   // Realtime Sync Hook
   useRealtimeSync({
     handlers: {
@@ -235,6 +252,10 @@ export default function ProviderBookingQueuePage() {
       },
       [TV5_REALTIME_EVENTS.DRIVER_REJECTED]: () => {
         setToast({ message: 'Tài xế đã từ chối nhận chuyến. Cần phân công lại!', type: 'warning' })
+      },
+      [TV5_REALTIME_EVENTS.PAYMENT_PROOF_SUBMITTED]: () => {
+        setToast({ message: 'Khách vừa báo đã chuyển khoản — kiểm tra sao kê và xác nhận.', type: 'info' })
+        refetch()
       },
       [TV5_REALTIME_EVENTS.DRIVER_INCIDENT]: () => {
         setToast({ message: 'Cảnh báo: Có sự cố phát sinh trên một chuyến xe!', type: 'error' })
@@ -341,6 +362,22 @@ export default function ProviderBookingQueuePage() {
             </button>
           </div>
         </div>
+
+        {awaitingPaymentCount > 0 && actionFilter !== 'PAYMENT_CONFIRM' && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <span className="flex items-center gap-2">
+              <Icon name="payments" className="text-[20px] text-amber-700" />
+              <span><strong>{awaitingPaymentCount} đơn</strong> khách đã báo chuyển khoản — cần bạn đối chiếu sao kê và xác nhận.</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => { setSelectedTab('ALL'); setActionFilter('PAYMENT_CONFIRM'); setCurrentPage(1) }}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700"
+            >
+              Xem các đơn này
+            </button>
+          </div>
+        )}
 
         {/* Global Error Notice */}
         {error && (
@@ -846,6 +883,11 @@ export default function ProviderBookingQueuePage() {
                         {/* Trạng thái đơn và ghi chú thanh toán */}
                         <td className="px-5 py-4 align-top">
                           <BookingStatusBadge status={item.status} />
+                          {awaitingPaymentCodes.has(item.bookingCode) && (
+                            <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                              <Icon name="payments" className="text-[13px]" /> Khách đã chuyển khoản – cần xác nhận
+                            </div>
+                          )}
                           {paymentNote && (
                             <div className={`mt-1.5 text-[11px] font-semibold ${paymentNote.cls}`}>{paymentNote.label}</div>
                           )}
@@ -1088,7 +1130,12 @@ export default function ProviderBookingQueuePage() {
                         </span>
                       )}
                     </div>
-                    <BookingStatusBadge status={item.status} />
+                    <div className="flex flex-col items-end gap-1">
+                      <BookingStatusBadge status={item.status} />
+                      {awaitingPaymentCodes.has(item.bookingCode) && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Cần xác nhận thanh toán</span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs border-y border-slate-100 py-2.5">
