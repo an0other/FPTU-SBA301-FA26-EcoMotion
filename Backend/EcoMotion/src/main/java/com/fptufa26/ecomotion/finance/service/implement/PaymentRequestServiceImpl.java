@@ -1664,7 +1664,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal totalPayable = baseRental.add(approvedCharges).max(BigDecimal.ZERO);
+        // B1: khoản giảm trừ do đổi xe trừ vào nghĩa vụ cuối; totalAmount (giá trị hợp đồng) không đổi.
+        BigDecimal totalPayable = baseRental.subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO)
+                .add(approvedCharges).max(BigDecimal.ZERO);
 
         List<PaymentTransaction> transactions = bookingPaymentLedgerService.listTransactions(booking.getId());
         BigDecimal allocatedPayments = transactions.stream()

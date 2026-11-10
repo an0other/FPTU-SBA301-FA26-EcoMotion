@@ -526,6 +526,60 @@ class Tv5PostgresConcurrencyTest {
         assertThat(fresh.distanceKm()).isEqualTo(0.0);
     }
 
+    @Autowired com.fptufa26.ecomotion.booking.service.BookingWorkflowService workflow;
+    @Autowired com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository scheduleRepository;
+
+    // B1/B8 concurrency: hai booking cùng được đề xuất đổi sang xe X và hai khách đồng ý đồng thời.
+    @Test void twoBookingsAcceptingTheSameReplacementVehicleOnlyOneGetsIt() throws Exception {
+        long contested = tx.execute(status -> {
+            Vehicle old = em.find(Booking.class, first).getVehicle();
+            Vehicle x = new Vehicle(); x.setProvider(old.getProvider()); x.setLicensePlate(UUID.randomUUID().toString().substring(0, 15));
+            x.setChassisNo(UUID.randomUUID().toString()); x.setEngineNo(UUID.randomUUID().toString());
+            x.setBrand("Test"); x.setModel("Contested"); x.setManufactureYear(2026); x.setSeatCount(4);
+            x.setTransmission(Transmission.AUTOMATIC); x.setColor("White"); x.setFuelType(FuelType.EV);
+            x.setMaintenanceBufferMinutes(0); x.setStatus(VehicleStatus.APPROVED); em.persist(x);
+            RentalPlan plan = new RentalPlan(); plan.setVehicle(x); plan.setPlanType(PlanType.HOURLY);
+            plan.setSlotLengthMinutes(60); plan.setSlotPrice(new BigDecimal("100000")); em.persist(plan);
+            return x.getId();
+        });
+        String codeA = bookings.findById(first).orElseThrow().getBookingCode();
+        String codeB = bookings.findById(second).orElseThrow().getBookingCode();
+        var request = new com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest(
+                com.fptufa26.ecomotion.booking.enums.OperationalResolutionType.CHANGE_VEHICLE, contested, null, "Replacement");
+        // Cả hai đề xuất đều được gửi khi xe X còn trống.
+        workflow.proposeAlternative(providerUser, codeA, request);
+        workflow.proposeAlternative(providerUser, codeB, request);
+        String idA = workflow.getWorkflow(renterUser, codeA).proposal().id();
+        String idB = workflow.getWorkflow(renterUser, codeB).proposal().id();
+        var accept = new com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest("ACCEPT", "ok", true);
+
+        var failures = new java.util.concurrent.CopyOnWriteArrayList<Throwable>();
+        var result = race(() -> { try { workflow.respondToProposal(renterUser, codeA, idA, accept); } catch (RuntimeException e) { failures.add(e); throw e; } },
+                () -> { try { workflow.respondToProposal(renterUser, codeB, idB, accept); } catch (RuntimeException e) { failures.add(e); throw e; } });
+        assertThat(result).containsExactlyInAnyOrder(true, false);
+        assertThat(failures).hasSize(1);
+        assertThat(failures.getFirst()).isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+
+        var a = bookings.findById(first).orElseThrow();
+        var b = bookings.findById(second).orElseThrow();
+        long onContested = java.util.stream.Stream.of(a, b).filter(x -> x.getVehicle().getId().equals(contested)).count();
+        assertThat(onContested).isEqualTo(1);
+        // Booking thua giữ xe cũ, không có dấu vết đổi xe và đề xuất vẫn chưa được phản hồi (rollback đầy đủ).
+        var loser = a.getVehicle().getId().equals(contested) ? b : a;
+        var winner = loser == a ? b : a;
+        assertThat(loser.getPreviousVehicleId()).isNull();
+        assertThat(loser.getVehicleChangeAt()).isNull();
+        assertThat(loser.getOperationalProposal().getRespondedAt()).isNull();
+        assertThat(winner.getPreviousVehicleId()).isNotNull();
+        assertThat(winner.getOperationalProposal().getAccepted()).isTrue();
+        // Lịch của xe X: đúng một dòng hoạt động, thuộc booking thắng, không chồng lấn.
+        var rows = scheduleRepository.findAll().stream().filter(s -> s.getVehicle().getId().equals(contested)).toList();
+        assertThat(rows).hasSize(1);
+        assertThat(rows.getFirst().getBooking().getId()).isEqualTo(winner.getId());
+        // Cả hai booking không bao giờ cùng nằm trên xe X.
+        assertThat(java.util.stream.Stream.of(a, b).map(x -> x.getVehicle().getId()).filter(id -> id == contested).count()).isEqualTo(1);
+    }
+
     @Test void concurrentRefundRequestsCannotReserveMoreThanCollectedMoney() throws Exception {
         tx.executeWithoutResult(status -> {
             var payment = new com.fptufa26.ecomotion.booking.entity.PaymentTransaction();

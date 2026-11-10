@@ -125,6 +125,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
     private final UserService userService;
     private final VehicleService vehicleService;
+    private final com.fptufa26.ecomotion.booking.service.RentalPricingService rentalPricingService;
     private final PaymentRequestService paymentRequestService;
     private final DisputeService disputeService;
     private final ScheduleService scheduleService;
@@ -807,7 +808,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         }
 
         BigDecimal remaining = paymentRequestService.calculateRemainingAmount(booking.getId());
-        BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
+        BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO
+                : booking.getTotalAmount().subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO);
         obligation = obligation.add(bookingChargeRepository.findByBooking_IdOrderByCreatedAtAsc(booking.getId()).stream()
                 .filter(charge -> !charge.isWaived()
                         && charge.getConfirmationStatus() == com.fptufa26.ecomotion.booking.enums.ChargeConfirmationStatus.ACCEPTED
@@ -1205,8 +1207,17 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                     throw new IllegalArgumentException("Xe thay thế không đủ chỗ cho hành khách và tài xế");
                 }
                 Instant end = plannedEnd(booking, booking.getPickupTime());
+                vehicleOperationalRiskService.requireVehicleReadyForWindow(booking, replacement, booking.getPickupTime(), end);
                 var window = AvailabilityPolicy.bufferedWindow(replacement, booking.getPickupTime(), end);
                 scheduleService.moveBooking(booking, replacement, window.start(), window.end());
+                // B1: giá trị hợp đồng và cọc giữ nguyên; chỉ lưu chênh lệch để trừ vào hóa đơn cuối.
+                // Xe mới đắt hơn thì nhà xe chịu (discount = 0). Đổi trước chuyến nên xe mới áp dụng cho toàn bộ kỳ thuê.
+                BigDecimal newAmount = rentalPricingService.rentalAmountFor(replacement.getId(), booking.getPickupTime(), end);
+                booking.setVehicleChangeOldAmount(booking.getTotalAmount());
+                booking.setVehicleChangeNewAmount(newAmount);
+                booking.setVehicleChangeDiscount(com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy
+                        .discount(booking.getTotalAmount(), newAmount));
+                booking.setVehicleChangeAt(now);
                 booking.setPreviousVehicleId(booking.getVehicle().getId());
                 booking.setVehicle(replacement);
                 message = "Đã đổi sang xe " + replacement.getLicensePlate();
@@ -1218,6 +1229,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 Instant oldPickup = booking.getPickupTime();
                 vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId()).orElseThrow();
                 Instant end = plannedEnd(booking, request.newPickupTime());
+                vehicleOperationalRiskService.requireVehicleReadyForWindow(booking, booking.getVehicle(), request.newPickupTime(), end);
                 var window = AvailabilityPolicy.bufferedWindow(booking.getVehicle(), request.newPickupTime(), end);
                 scheduleService.moveBooking(booking, booking.getVehicle(), window.start(), window.end());
                 booking.setPreviousPickupTime(oldPickup);
@@ -1271,6 +1283,27 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         return new OperationalResolutionResponse(
                 booking.getBookingCode(), booking.getStatus(), request.resolution(),
                 booking.getVehicle().getId(), booking.getPickupTime(), refundAmount, message);
+    }
+
+    @Override
+    @Transactional
+    public void requireProposalTargetReady(Long currentUserId, String bookingCodeOrId, ResolveOperationalRiskRequest request) {
+        Provider provider = resolveProvider(currentUserId);
+        Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
+        requireOperationallyMutable(booking);
+        if (request.resolution() == OperationalResolutionType.CHANGE_VEHICLE) {
+            Vehicle replacement = vehicleService.requireApprovedProviderVehicleForUpdate(
+                    request.replacementVehicleId(), provider.getId());
+            vehicleOperationalRiskService.requireVehicleReadyForWindow(booking, replacement,
+                    booking.getPickupTime(), plannedEnd(booking, booking.getPickupTime()));
+            // Phải tính được giá xe thay thế để biết chênh lệch trước khi gửi đề xuất cho khách.
+            rentalPricingService.rentalAmountFor(replacement.getId(), booking.getPickupTime(),
+                    plannedEnd(booking, booking.getPickupTime()));
+        } else if (request.resolution() == OperationalResolutionType.RESCHEDULE) {
+            vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId()).orElseThrow();
+            vehicleOperationalRiskService.requireVehicleReadyForWindow(booking, booking.getVehicle(),
+                    request.newPickupTime(), plannedEnd(booking, request.newPickupTime()));
+        }
     }
 
     private void requireOperationallyMutable(Booking booking) {

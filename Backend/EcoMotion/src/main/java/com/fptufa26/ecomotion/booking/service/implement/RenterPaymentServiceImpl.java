@@ -183,6 +183,10 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 : null;
 
+        // B1: khoản giảm trừ do đổi xe; hợp đồng gốc (totalAmount) và cọc không bị đổi.
+        BigDecimal vehicleChangeDiscount = booking.vehicleChangeCredit();
+        if (!yearly && recordedCost != null) recordedCost = recordedCost.subtract(vehicleChangeDiscount).max(BigDecimal.ZERO);
+
         BigDecimal depositRequired = yearly
                 ? null
                 : charges.stream()
@@ -224,7 +228,9 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
             if (securityFlow) depositRequired = snapshot.getDepositAmount();
             if (state != null && java.util.Set.of("SETTLEMENT_ACCEPTED", "REFUND_TRANSFER_RECORDED", "REFUND_RECEIVED", "COMPLETED").contains(state.getStage())) {
                 recordedCost = state.getRentDue().add(state.getEarlyFee()).add(state.getLateFee())
-                        .add(state.getExcessKmFee()).add(state.getOtherCharges());
+                        .add(state.getExcessKmFee()).add(state.getOtherCharges())
+                        .subtract(state.getVehicleChangeDiscount());
+                vehicleChangeDiscount = state.getVehicleChangeDiscount();
                 allocatedPayments = allocatedPayments.add(state.getDepositDeduction()).subtract(refundedAmount).max(BigDecimal.ZERO);
             }
         }
@@ -274,6 +280,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 netPaidAmount,
                 remainingAmount,
                 creditAmount,
+                vehicleChangeDiscount,
                 provisional,
                 balanceNote);
     }

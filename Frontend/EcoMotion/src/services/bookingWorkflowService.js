@@ -5,8 +5,9 @@ export const bookingWorkflowService = {
     const { data } = await apiClient.get(`/${actor}/bookings/${encodeURIComponent(code)}/workflow`)
     return data?.data
   },
-  async respond(code, proposalId, action, reason) {
-    const { data } = await apiClient.put(`/renter/bookings/${encodeURIComponent(code)}/operational-proposal/${encodeURIComponent(proposalId)}`, { action, reason })
+  // B1: gửi acknowledgeLowerQuality khi khách đồng ý đổi sang xe chất lượng thấp hơn.
+  async respond(code, proposalId, action, reason, acknowledgeLowerQuality = false) {
+    const { data } = await apiClient.put(`/renter/bookings/${encodeURIComponent(code)}/operational-proposal/${encodeURIComponent(proposalId)}`, { action, reason, acknowledgeLowerQuality })
     return data?.data
   },
 
