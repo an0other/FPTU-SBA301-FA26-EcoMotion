@@ -250,6 +250,8 @@ class Tv5FinancialSafetyIntegrationTest {
         var approve = new ReviewRefundRequest("APPROVE", null);
         long firstTx = refunds.reviewRefundRequest(providerId, first, approve).paymentTransactionId();
         long secondTx = refunds.reviewRefundRequest(providerId, second, approve).paymentTransactionId();
+        renterBookings.updateRefundAccount(renterId, bookings.findById(bookingId).orElseThrow().getBookingCode(),
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank", "NGUYEN VAN TEST", "0123456789"));
         tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW));
         var proof = new MockMultipartFile("file", "refund.png", "image/png", new byte[]{(byte)0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a});
         String reference = "BANK-" + UUID.randomUUID();

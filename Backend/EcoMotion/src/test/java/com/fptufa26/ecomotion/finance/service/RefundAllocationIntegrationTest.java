@@ -95,6 +95,8 @@ class RefundAllocationIntegrationTest {
         User actor=tx.execute(s -> em.find(User.class,providerUserId));
         var refund=refunds.reserve(bookingId,"CANCEL:optional",new BigDecimal("300000"),"Test refund",actor).getFirst();
         Long transactionId=tx.execute(s -> em.find(RefundRequest.class,refund.getId()).getPaymentTransaction().getId());
+        bookingService.updateRefundAccount(renterUserId,bookingCode,
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank","NGUYEN VAN TEST","0123456789"));
         var proof=new org.springframework.mock.web.MockMultipartFile("file","refund.pdf","application/pdf","%PDF-1.4 test".getBytes());
         var result=refundService.completeRefund(providerUserId,transactionId,proof,null,null);
         assertThat(result.status()).isEqualTo(PaymentStatus.PAID);

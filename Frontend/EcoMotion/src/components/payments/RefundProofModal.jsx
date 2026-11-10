@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { providerFinanceService } from '../../services/providerFinanceService'
+import { formatCurrency } from '../../utils/formatCurrency'
 
 export function RefundProofModal({ refund, onClose, onSuccess }) {
   const [file, setFile] = useState(null)
@@ -7,10 +8,17 @@ export function RefundProofModal({ refund, onClose, onSuccess }) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const missingRecipient = Boolean(
+    refund.refundMethod && refund.refundMethod !== 'VNPAY' && !refund.recipientAccountNumber,
+  )
 
   const submit = async (event) => {
     event.preventDefault()
     if (busy) return
+    if (missingRecipient) {
+      setError('Khách thuê chưa cung cấp tài khoản nhận hoàn. Yêu cầu khách cập nhật tài khoản nhận tiền trước khi xác nhận chuyển khoản hoàn.')
+      return
+    }
     if (!file) {
       setError('Vui lòng tải biên lai hoàn tiền.')
       return
@@ -69,44 +77,68 @@ export function RefundProofModal({ refund, onClose, onSuccess }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {refund.recipientAccountNumber && <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-800">
-            <p className="font-semibold">Tài khoản nhận hoàn</p>
-            <p>{refund.recipientAccountHolder}</p>
-            <p>{refund.recipientBankName} · <span className="tabular-nums">{refund.recipientAccountNumber}</span></p>
-          </div>}
-          <label className="block text-xs font-semibold text-slate-700">
-            Biên lai
-            <input
-              required
-              type="file"
-              accept="image/jpeg,image/png,image/webp,application/pdf"
-              onChange={(e) => setFile(e.target.files[0])}
-              className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-emerald-700 hover:file:bg-emerald-100"
-            />
-          </label>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">Số tiền hoàn</p>
+            <p className="mt-0.5 font-mono text-xl font-bold text-emerald-950">{formatCurrency(refund.amount)}</p>
+            <p className="mt-1 text-[11px] leading-5 text-emerald-900/80">
+              Đối chiếu số tiền này với giao dịch chuyển khoản thực tế trước khi tải biên lai.
+            </p>
+          </div>
+          {missingRecipient ? (
+            <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="flex items-center gap-2 font-semibold">
+                <span className="material-symbols-rounded text-[20px] leading-none" aria-hidden="true">hourglass_top</span>
+                Đang chờ khách cung cấp tài khoản nhận hoàn
+              </p>
+              <p className="mt-2 text-xs leading-5">
+                Nhà xe chưa thể xác nhận chuyển khoản hoàn tiền cho đơn{' '}
+                <span className="font-mono font-semibold">{refund.bookingCode}</span>.
+                Vui lòng chờ khách cập nhật ngân hàng, tên chủ tài khoản và số tài khoản nhận hoàn.
+                Sau khi khách cập nhật, thao tác xác nhận sẽ mở lại.
+              </p>
+            </div>
+          ) : (
+            <>
+              {refund.recipientAccountNumber && <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-800">
+                <p className="font-semibold">Tài khoản nhận hoàn</p>
+                <p>{refund.recipientAccountHolder}</p>
+                <p>{refund.recipientBankName} · <span className="tabular-nums">{refund.recipientAccountNumber}</span></p>
+              </div>}
+              <label className="block text-xs font-semibold text-slate-700">
+                Biên lai
+                <input
+                  required
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={(e) => setFile(e.target.files[0])}
+                  className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-emerald-700 hover:file:bg-emerald-100"
+                />
+              </label>
 
-          <label className="block text-xs font-semibold text-slate-700">
-            Mã giao dịch ngân hàng (tùy chọn)
-            <input
-              maxLength={100}
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder="Ví dụ: FT2610982341"
-              className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none"
-            />
-          </label>
+              <label className="block text-xs font-semibold text-slate-700">
+                Mã giao dịch ngân hàng (tùy chọn)
+                <input
+                  maxLength={100}
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="Ví dụ: FT2610982341"
+                  className="mt-1.5 block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none"
+                />
+              </label>
 
-          <label className="block text-xs font-semibold text-slate-700">
-            Ghi chú (tùy chọn)
-            <textarea
-              rows={3}
-              maxLength={500}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ghi chú đối soát (nếu có)..."
-              className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none"
-            />
-          </label>
+              <label className="block text-xs font-semibold text-slate-700">
+                Ghi chú (tùy chọn)
+                <textarea
+                  rows={3}
+                  maxLength={500}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Ghi chú đối soát (nếu có)..."
+                  className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none"
+                />
+              </label>
+            </>
+          )}
 
           {error && (
             <p
@@ -127,12 +159,14 @@ export function RefundProofModal({ refund, onClose, onSuccess }) {
           >
             Đóng
           </button>
-          <button
-            disabled={busy}
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
-          >
-            {busy ? 'Đang xác minh...' : 'Gửi biên lai xác nhận'}
-          </button>
+          {!missingRecipient && (
+            <button
+              disabled={busy}
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+            >
+              {busy ? 'Đang xác minh...' : 'Gửi biên lai xác nhận'}
+            </button>
+          )}
         </div>
       </form>
     </div>

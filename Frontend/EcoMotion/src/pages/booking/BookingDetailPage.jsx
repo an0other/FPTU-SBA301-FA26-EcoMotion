@@ -10,7 +10,7 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
 import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSummary'
-import { RefundAccountPanel } from '../../components/booking/RefundAccountPanel'
+import { RefundAccountModal } from '../../components/booking/RefundAccountModal'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
 import PaymentReceiptsCard from '../../components/booking/PaymentReceiptsCard'
 
@@ -140,6 +140,8 @@ export function BookingDetailPage() {
   const [workflow, setWorkflow] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const [tripNotice, setTripNotice] = useState('')
+  const [refundAccountOpen, setRefundAccountOpen] = useState(false)
+  const promptedRefundKey = useRef('')
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
   const { trackingData, loading: trackingLoading, error: trackingError, refetch: refetchTracking } = useRenterTripTracking(
     bookingCode,
@@ -182,21 +184,57 @@ export function BookingDetailPage() {
     onResync: refreshDetail,
   })
 
+  const openManualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
+    && !['REFUNDED', 'REJECTED'].includes(refund.status))
+  // Đơn huỷ: mọi khoản hoàn chuyển khoản. Đơn chưa huỷ: chỉ khoản khách chuyển dư (nhà xe bắt buộc hoàn).
+  const manualRefunds = ['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail?.status)
+    ? openManualRefunds
+    : openManualRefunds.filter(refund => refund.excess)
+  const refundAccount = manualRefunds.find(refund => refund.recipientAccountNumber)
+  const missingRefundAccount = manualRefunds.some(refund => !refund.recipientAccountNumber)
+  const refundPromptKey = manualRefunds
+    .map(refund => `${refund.id}:${refund.recipientAccountNumber || ''}`)
+    .join('|')
+
+  useEffect(() => {
+    if (!missingRefundAccount) return
+    if (promptedRefundKey.current === refundPromptKey) return
+    promptedRefundKey.current = refundPromptKey
+    setRefundAccountOpen(true)
+  }, [missingRefundAccount, refundPromptKey])
+
   if (!detail || detail.bookingCode?.toUpperCase() !== bookingCode?.toUpperCase()) {
     return <p className="max-w-3xl mx-auto px-6 py-16 text-sm text-[#14221A]">{error || 'Đang tải đơn...'}</p>
   }
 
   const booking = toCard(detail)
-  const manualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
-    && !['REFUNDED', 'REJECTED'].includes(refund.status))
-  // Khoản khách chuyển dư: nhà xe cần tài khoản để chuyển hoàn, kể cả khi đơn chưa huỷ.
-  const excessRefunds = manualRefunds.filter(refund => refund.excess)
 
   return (
     <>
       {error && <p role="alert" className="mx-auto max-w-5xl p-4 text-sm text-red-800">Không thể cập nhật trạng thái: {error}. Dữ liệu đang hiển thị có thể đã cũ.</p>}
       {detail.rejectionReason && <p className="mx-auto max-w-5xl p-4 text-sm text-red-800">Lý do nhà cung cấp từ chối: {detail.rejectionReason}</p>}
       {tripNotice && <Toast message={tripNotice} type="success" onClose={() => setTripNotice('')} />}
+      {manualRefunds.length > 0 && (
+        <section className="mx-auto mt-6 max-w-[1120px] px-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Tài khoản nhận hoàn</p>
+              {missingRefundAccount ? (
+                <p role="status" className="mt-1 text-sm text-amber-800">Nhà xe đang chờ thông tin tài khoản để chuyển khoản hoàn tiền.</p>
+              ) : (
+                <p className="mt-1 text-sm text-slate-600">
+                  {refundAccount.recipientAccountHolder} · {refundAccount.recipientBankName} ·{' '}
+                  <span className="tabular-nums">{refundAccount.recipientAccountNumber}</span>
+                </p>
+              )}
+            </div>
+            <button type="button" onClick={() => setRefundAccountOpen(true)}
+              className="min-h-11 rounded-lg bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900">
+              {missingRefundAccount ? 'Nhập tài khoản nhận hoàn' : 'Cập nhật tài khoản nhận hoàn'}
+            </button>
+          </div>
+        </section>
+      )}
       {detail.planType !== 'YEARLY' && <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>}
       <PaymentReceiptsCard
         bookingCode={detail.bookingCode}
@@ -240,12 +278,15 @@ export function BookingDetailPage() {
         trackingError={trackingError}
         onRefreshTracking={refetchTracking}
       />
-      {['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail.status) && manualRefunds.length > 0 &&
-        <RefundAccountPanel key={`${booking.id}:${manualRefunds[0].id}`} bookingCode={booking.id} refunds={manualRefunds} onSaved={refreshDetail} />}
-      {!['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail.status) && excessRefunds.length > 0 &&
-        <div className="mx-auto mt-4 max-w-[1120px] px-4">
-          <RefundAccountPanel key={`excess:${excessRefunds[0].id}`} bookingCode={booking.id} refunds={excessRefunds} onSaved={refreshDetail} />
-        </div>}
+      {refundAccountOpen && manualRefunds.length > 0 && (
+        <RefundAccountModal
+          key={`${booking.id}:${manualRefunds[0].id}`}
+          bookingCode={booking.id}
+          refunds={manualRefunds}
+          onClose={() => setRefundAccountOpen(false)}
+          onSaved={refreshDetail}
+        />
+      )}
     </>
   )
 }

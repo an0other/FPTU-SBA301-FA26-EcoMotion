@@ -116,6 +116,8 @@ class PaymentIntegrityIntegrationTest {
     @Autowired BookingService bookingService;
     @Autowired RefundEventService refundEvents;
     @Autowired com.fptufa26.ecomotion.finance.service.RefundService refundService;
+    @Autowired com.fptufa26.ecomotion.finance.service.RefundReceiptService refundReceipts;
+    @Autowired com.fptufa26.ecomotion.booking.service.BookingWorkflowService workflow;
     @Autowired com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService riskService;
 
     @Test void optionalMetadataSupportsDistinctPartialPaymentsAndIdempotentRetries() {
@@ -371,8 +373,101 @@ class PaymentIntegrityIntegrationTest {
     }
 
     @Test
-    void expiredHoldRecordsMoneyWithoutActivatingSchedule() {
-        tx.executeWithoutResult(s -> schedules.findByBooking_Id(bookingId).forEach(h -> h.setExpiresAt(Instant.now().minusSeconds(1))));
+    void confirmingDepositOnCancellationReviewRecordsMoneyAndReservesFullRefund() {
+        tx.executeWithoutResult(s -> {
+            em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW);
+            em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
+            schedule.release(bookingId);
+        });
+
+        confirm("30000", "CANCELLED-RECEIPT-" + requestId);
+
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus())
+                .isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        PaymentRequest request = requests.findById(requestId).orElseThrow();
+        assertThat(request.getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
+        assertThat(request.getPaidAmount()).isEqualByComparingTo("30000");
+        PaymentTransaction payment = ledger.findByBooking_Id(bookingId).getFirst();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(payment.getAppliedAmount()).isZero();
+        List<RefundRequest> refunds = tx.execute(s -> em.createQuery(
+                        "select r from RefundRequest r where r.booking.id=:id", RefundRequest.class)
+                .setParameter("id", bookingId).getResultList());
+        assertThat(refunds).singleElement().satisfies(refund -> {
+            assertThat(refund.getAmount()).isEqualByComparingTo("30000");
+            assertThat(refund.getStatus()).isEqualTo(RefundStatus.PROCESSING);
+        });
+    }
+
+    @Test
+    void cancellationReceiptRefundIsCalculatedFromEachRemainingReceipt() {
+        tx.executeWithoutResult(s -> {
+            em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW);
+            em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
+            schedule.release(bookingId);
+        });
+
+        confirm("10000", "PARTIAL-1-" + requestId);
+        confirm("20000", "PARTIAL-2-" + requestId);
+
+        List<RefundRequest> refunds = tx.execute(s -> em.createQuery(
+                        "select r from RefundRequest r where r.booking.id=:id order by r.id", RefundRequest.class)
+                .setParameter("id", bookingId).getResultList());
+        assertThat(refunds).hasSize(2);
+        assertThat(refunds).extracting(RefundRequest::getAmount)
+                .containsExactly(new BigDecimal("10000.00"), new BigDecimal("20000.00"));
+        assertThat(refunds.stream().map(RefundRequest::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add))
+                .isEqualByComparingTo("30000");
+        assertThat(refunds).allMatch(refund -> refund.getStatus() == RefundStatus.PROCESSING);
+        assertThat(ledger.findByBooking_Id(bookingId).stream()
+                .filter(t -> t.getDirection() == PaymentDirection.IN)
+                .map(PaymentTransaction::getAppliedAmount))
+                .allMatch(applied -> applied != null && applied.signum() == 0);
+    }
+
+    @Test
+    void cancellationReceiptRefundRequiresRenterAccountBeforeProviderCanConfirmTransfer() {
+        tx.executeWithoutResult(s -> {
+            em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW);
+            em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
+            schedule.release(bookingId);
+        });
+        confirm("30000", "CANCELLED-ACCOUNT-" + requestId);
+        Long refundId = tx.execute(s -> em.createQuery(
+                        "select r.id from RefundRequest r where r.booking.id=:id", Long.class)
+                .setParameter("id", bookingId).getSingleResult());
+        Long outId = tx.execute(s -> em.find(RefundRequest.class, refundId).getPaymentTransaction().getId());
+        var proof = new org.springframework.mock.web.MockMultipartFile(
+                "file", "refund.pdf", "application/pdf", "%PDF-1.4 test".getBytes());
+
+        assertThatThrownBy(() -> refundService.completeRefund(providerId, outId, proof, "ACCOUNT-" + requestId, null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("tài khoản nhận hoàn");
+
+        String code = bookings.findById(bookingId).orElseThrow().getBookingCode();
+        bookingService.updateRefundAccount(renterId, code,
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest(
+                        "Vietcombank", "NGUYEN VAN TEST", "0123456789"));
+
+        assertThat(refundService.completeRefund(providerId, outId, proof, "ACCOUNT-" + requestId, null).status())
+                .isEqualTo(PaymentStatus.PAID);
+        RefundStatus resolved = tx.execute(s -> em.find(RefundRequest.class, refundId).getStatus());
+        assertThat(resolved).isEqualTo(RefundStatus.REFUNDED);
+
+        // The receipt was recorded with appliedAmount 0 because the booking was already cancelled.
+        // Once the refund is reserved and completed, that must not keep the workflow stuck in
+        // RECONCILIATION_REQUIRED.
+        assertThat(workflow.getWorkflow(renterId, code).paymentStatus()).isEqualTo("REFUNDED");
+        refundReceipts.respond(renterId, refundId, true);
+        var afterReceipt = workflow.getWorkflow(renterId, code);
+        assertThat(afterReceipt.paymentStatus()).isEqualTo("REFUNDED");
+        assertThat(afterReceipt.refunds()).singleElement()
+                .extracting(com.fptufa26.ecomotion.finance.dto.response.RefundResponse::receiptStatus)
+                .isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void expiredHoldRecordsMoneyWithoutActivatingSchedule() {        tx.executeWithoutResult(s -> schedules.findByBooking_Id(bookingId).forEach(h -> h.setExpiresAt(Instant.now().minusSeconds(1))));
         confirm("30000", "EXPIRED-" + requestId);
         assertReconciliation(BookingStatus.CANCELLATION_REVIEW);
         assertThat(schedules.findByBooking_Id(bookingId)).noneMatch(h -> h.getStatus() == ScheduleStatus.ACTIVE);
@@ -623,6 +718,8 @@ class PaymentIntegrityIntegrationTest {
         refundService.reviewRefundRequest(providerId, refund.id(),
                 new com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest("APPROVE", null));
         long outId = tx.execute(s -> refunds.findById(refund.id()).orElseThrow().getPaymentTransaction().getId());
+        bookingService.updateRefundAccount(renterId, code,
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank", "NGUYEN VAN TEST", "0123456789"));
         refundService.completeRefund(providerId, outId,
                 new org.springframework.mock.web.MockMultipartFile("file", "bank.pdf", "application/pdf", "%PDF-1.4 qa".getBytes()),
                 "RETURN-" + requestId, "Operator verified returned funds");

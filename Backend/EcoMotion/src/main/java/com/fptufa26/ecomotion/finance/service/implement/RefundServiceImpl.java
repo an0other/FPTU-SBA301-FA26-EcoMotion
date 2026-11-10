@@ -262,6 +262,8 @@ public class RefundServiceImpl implements RefundService {
         if (transaction.getMethod() == PaymentMethod.VNPAY) {
             throw new ConflictException("Hoàn qua VNPay không dùng minh chứng chuyển khoản");
         }
+        RefundRequest refund = refundRequestRepository.findByPaymentTransaction_Id(transaction.getId()).orElse(null);
+        requireRecipientAccount(refund);
         BigDecimal received = bookingPaymentLedgerService.listTransactions(transaction.getBooking().getId()).stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -308,7 +310,7 @@ public class RefundServiceImpl implements RefundService {
         transaction.setPaidAt(now);
         bookingPaymentLedgerService.saveTransaction(transaction);
 
-        refundRequestRepository.findByPaymentTransaction_Id(transaction.getId()).ifPresent(refund -> {
+        if (refund != null) {
             refund.setStatus(RefundStatus.REFUNDED);
             if (refund.getReceiptStatus() == null) {
                 refund.setReceiptStatus("WAITING");
@@ -318,7 +320,7 @@ public class RefundServiceImpl implements RefundService {
             refund.setGatewayRefundRef(transaction.getGatewayRef());
             refund.setUpdatedAt(now);
             refundRequestRepository.save(refund);
-        });
+        }
 
         Booking booking = transaction.getBooking();
         closure.reconcile(booking.getId());
@@ -391,6 +393,26 @@ public class RefundServiceImpl implements RefundService {
         if (transaction.getStatus() != PaymentStatus.PENDING) {
             throw new ConflictException("Yêu cầu hoàn tiền đã được xử lý");
         }
+    }
+
+    /**
+     * A manual bank transfer can only be confirmed once the renter has supplied a destination account.
+     * Legacy refund transactions without a linked request cannot be updated by the renter, so they keep
+     * the previous behaviour.
+     */
+    private void requireRecipientAccount(RefundRequest refund) {
+        if (refund == null) {
+            return;
+        }
+        if (isBlank(refund.getRecipientBankName()) || isBlank(refund.getRecipientAccountHolder())
+                || isBlank(refund.getRecipientAccountNumber())) {
+            throw new ConflictException(
+                    "Khách thuê chưa cung cấp tài khoản nhận hoàn. Yêu cầu khách cập nhật tài khoản nhận tiền trước khi xác nhận chuyển khoản hoàn.");
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private void validateProof(MultipartFile proof) {
