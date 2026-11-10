@@ -516,9 +516,18 @@ export const BookingDetail = ({
                   <span className="text-base font-bold text-[#14221A]">{booking.driver.name}</span>
                   <span className="text-xs font-mono text-[#6D7A72] mt-0.5">{booking.driver.phone}</span>
                   <span className="text-xs text-[#6D7A72] mt-0.5">
-                    {Number(booking.driver.ratingAvg).toFixed(1)} / 5 ({booking.driver.ratingCount} đánh giá)
+                    {Number(booking.driver.ratingCount) > 0 ? `${Number(booking.driver.ratingAvg).toFixed(1)} / 5 (${booking.driver.ratingCount} đánh giá)` : 'Chưa có đánh giá'}
                   </span>
                 </div>
+                {onOpenDriverReviews && (
+                  <button
+                    type="button"
+                    onClick={onOpenDriverReviews}
+                    className="text-xs font-semibold text-[#15803D] hover:underline"
+                  >
+                    Xem đánh giá tài xế
+                  </button>
+                )}
                 <div className="ml-auto">
                   <a
                     href={`tel:${booking.driver.phone}`}
