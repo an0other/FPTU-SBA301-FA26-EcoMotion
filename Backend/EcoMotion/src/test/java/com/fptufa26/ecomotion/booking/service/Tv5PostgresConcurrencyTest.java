@@ -285,6 +285,8 @@ class Tv5PostgresConcurrencyTest {
         var request = new com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest(code, new BigDecimal("10000"), "Test refund", null);
         long refund = refunds.createRefundRequest(providerUser, request).id();
         assertThat(refunds.createRefundRequest(providerUser, request).id()).isEqualTo(refund);
+        renterBookings.updateRefundAccount(renterUser, code,
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank", "NGUYEN VAN TEST", "0123456789"));
         var approve = new com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest("APPROVE", null);
         assertThat(race(() -> refunds.reviewRefundRequest(providerUser, refund, approve),
                 () -> refunds.reviewRefundRequest(providerUser, refund, approve))).containsOnly(true);

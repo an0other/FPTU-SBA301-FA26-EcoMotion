@@ -319,6 +319,7 @@ class P1ClosureIntegrationTest {
     long bankRefund(){tx.executeWithoutResult(s->{em.find(Booking.class,bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW);ledger.findByBooking_Id(bookingId).forEach(t->t.setMethod(PaymentMethod.BANK_TRANSFER));});
         return events.reserve(bookingId,"CANCEL:"+UUID.randomUUID(),new BigDecimal("100000"),"Bank refund",tx.execute(s->em.find(User.class,renterId))).getFirst().getId();}
     void completeBank(long id,String reference){long out=tx.execute(s->em.find(com.fptufa26.ecomotion.finance.entity.RefundRequest.class,id).getPaymentTransaction().getId());
+        renterBookings.updateRefundAccount(renterId,code(),new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank","NGUYEN VAN TEST","0123456789"));
         refunds.completeRefund(providerId,out,new MockMultipartFile("file","proof.pdf","application/pdf","%PDF-1.4 qa".getBytes()),reference,"Verified bank transfer");}
     RefundReconcileRequest review(long id,String request,String outcome,String reference){return new RefundReconcileRequest(request,requests.findById(id).orElseThrow().getVersion(),outcome,"Verified bank/gateway evidence; failure means no transfer or recovered funds","QA trace evidence",reference);}
     VnpayPaymentGatewayStrategy.VnpayRefundCallResult success(){return new VnpayPaymentGatewayStrategy.VnpayRefundCallResult(false,true,"00","00",UUID.randomUUID().toString().replace("-",""),"02",null,null);}

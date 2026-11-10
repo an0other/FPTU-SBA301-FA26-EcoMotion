@@ -955,6 +955,9 @@ export default function ProviderFinancePage() {
                         label: tx.status,
                         bg: 'bg-slate-100 text-slate-700',
                       }
+                      const linkedRefund = tx.type === 'REFUND'
+                        ? refunds.find((refund) => refund.paymentTransactionId === tx.id)
+                        : null
 
                       return (
                         <tr key={tx.id || tx.transactionCode} className="hover:bg-slate-50/80">
@@ -996,7 +999,14 @@ export default function ProviderFinancePage() {
                               <Icon name="visibility" className="text-[18px]" />
                             </button>
                             {tx.type === 'REFUND' && tx.status === 'PENDING' && (
-                              <button type="button" aria-label={`Xác nhận hoàn tiền cho ${tx.bookingCode}`} onClick={() => setProofRefund({ bookingCode: tx.bookingCode, paymentTransactionId: tx.id })} className="ml-2 rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-brand-800">Biên lai hoàn tiền</button>
+                              <button
+                                type="button"
+                                aria-label={`Xác nhận hoàn tiền cho ${tx.bookingCode}`}
+                                onClick={() => setProofRefund({ ...(linkedRefund || {}), bookingCode: tx.bookingCode, paymentTransactionId: tx.id })}
+                                className="ml-2 rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-brand-800"
+                              >
+                                Biên lai hoàn tiền
+                              </button>
                             )}
                           </td>
                         </tr>
@@ -1566,7 +1576,7 @@ export default function ProviderFinancePage() {
       )}
 
       {/* Review Refund Modal */}
-      {proofRefund && <RefundProofModal refund={proofRefund} onClose={() => setProofRefund(null)} onSuccess={async () => { await Promise.all([fetchFinanceData(), fetchTransactions()]); setToast({ message: 'Backend đã xác nhận biên lai hoàn tiền.', type: 'success' }) }} />}
+      {proofRefund && <RefundProofModal refund={proofRefund} onClose={() => setProofRefund(null)} onSuccess={async () => { await Promise.all([fetchFinanceData(), fetchTransactions()]); setToast({ message: `Đã ghi nhận hoàn ${formatVnd(proofRefund.amount)} cho đơn ${proofRefund.bookingCode}. Khách thuê có 72 giờ để xác nhận đã nhận tiền.`, type: 'success' }) }} />}
       {reviewingRefund && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
           <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5 shadow-lg border border-slate-200">

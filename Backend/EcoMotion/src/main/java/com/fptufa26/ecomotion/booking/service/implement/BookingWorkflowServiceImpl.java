@@ -98,7 +98,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         return new BookingWorkflowResponse(booking.getBookingCode(), booking.getStatus(), payment, driver, trip, settlement,
                 paid, returned, pendingRefund, refunds.refundableAmount(currentUserId, booking.getBookingCode()), remaining,
                 booking.getPickupTime(), booking.getAssignmentExpiresAt(), needsDriver,
-                provider && MUTABLE.contains(booking.getStatus()), nextAction(booking, provider, payment, settlement, needsDriver, proposal),
+                provider && MUTABLE.contains(booking.getStatus()), nextAction(booking, provider, payment, settlement, needsDriver, proposal, refundRows),
                 proposal, feedback, refundRows, booking.getUpdatedAt(),
                 disputes.getDisputesByBookingId(booking.getId()).stream()
                     .sorted(Comparator.comparing(com.fptufa26.ecomotion.dispute.entity.Dispute::getCreatedAt).reversed())
@@ -263,13 +263,20 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                 proposal.getPickupTime(), proposal.getReason(), status, proposal.getCreatedAt(), proposal.getRespondedAt(), proposal.getResponseReason());
     }
 
-    private String nextAction(Booking booking, boolean provider, String payment, String settlement, boolean needsDriver, BookingWorkflowResponse.Proposal proposal) {
+    private String nextAction(Booking booking, boolean provider, String payment, String settlement, boolean needsDriver, BookingWorkflowResponse.Proposal proposal, List<RefundResponse> refundRows) {
         if (Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW, BookingStatus.REJECTED).contains(booking.getStatus())
                 && "DISPUTED".equals(settlement)) {
             return "REFUNDED".equals(payment)
                     ? "Nhà xe đã xác nhận chuyển khoản hoàn tiền theo chính sách. Yêu cầu xem xét của bạn vẫn đang mở và được xử lý riêng; kiểm tra tài khoản nhận tiền và biên lai."
                     : "Đơn đã hủy. Yêu cầu xem xét của bạn đang được xử lý; theo dõi tiến trình hoàn tiền và phản hồi của bộ phận hỗ trợ.";
         }
+        boolean needsRefundAccount = !provider
+                && Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus())
+                && refundRows.stream().anyMatch(r -> r.refundMethod() != PaymentMethod.VNPAY
+                    && r.status() != RefundStatus.REFUNDED && r.status() != RefundStatus.REJECTED
+                    && (r.recipientAccountNumber() == null || r.recipientAccountNumber().isBlank()));
+        if (needsRefundAccount)
+            return "Nhập tài khoản nhận hoàn để nhà xe chuyển khoản hoàn tiền theo chính sách.";
         if ("REFUNDED".equals(payment) && Set.of(BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus()))
             return "Nhà xe đã xác nhận chuyển khoản hoàn tiền theo chính sách. Bạn có thể kiểm tra tài khoản nhận tiền và biên lai hoàn tiền.";
         if ("RECONCILIATION_REQUIRED".equals(payment)) return "Tiền đã được ghi nhận nhưng đơn cần đối soát. Không thanh toán lại; liên hệ nhà xe hoặc hỗ trợ để xử lý tiền đã nhận.";

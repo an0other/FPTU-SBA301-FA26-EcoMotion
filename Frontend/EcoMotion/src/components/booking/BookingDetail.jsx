@@ -259,6 +259,15 @@ export const BookingDetail = ({
               </div>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <HoldCountdown expiresAt={booking.holdExpiresAt} />
+                {booking.planType !== 'YEARLY' && booking.canCancel ? (
+                  <button
+                    onClick={() => setIsCancelModalOpen(true)}
+                    type="button"
+                    className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    Huỷ đơn
+                  </button>
+                ) : null}
                 {booking.planType !== 'YEARLY' && booking.canPay ? (
                   <button
                     onClick={() => onPayDeposit(booking)}

@@ -7,6 +7,8 @@ import com.fptufa26.ecomotion.booking.enums.*;
 import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.booking.service.BookingPaymentStateService;
 import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
+import com.fptufa26.ecomotion.finance.repository.RefundRequestRepository;
+import com.fptufa26.ecomotion.finance.service.RefundMath;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class BookingPaymentStateServiceImpl implements BookingPaymentStateService {
     private final BookingPaymentLedgerService ledger;
+    private final RefundRequestRepository refundRequests;
 
     @Override
     public State evaluate(Booking booking, List<PaymentTransaction> transactions) {
@@ -35,7 +38,8 @@ public class BookingPaymentStateServiceImpl implements BookingPaymentStateServic
         boolean reconcile = transactions.stream().anyMatch(t -> t.getProcessingNote() != null
                 && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED")
                 || t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
-                    && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED && !applied(t));
+                    && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED && !applied(t)
+                    && !refundRequests.existsBySourcePaymentTransaction_IdAndStatusIn(t.getId(), RefundMath.RESERVED));
         BigDecimal deposit = transactions.stream().filter(this::applied)
                 .filter(t -> t.getType() == PaymentType.DEPOSIT_PAY || t.getType() == PaymentType.UPFRONT_PAY)
                 .map(this::allocated).reduce(BigDecimal.ZERO, BigDecimal::add);
