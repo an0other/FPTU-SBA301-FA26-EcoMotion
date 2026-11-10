@@ -325,30 +325,37 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {booking.status === 'AWAITING_DEPOSIT' && (
-            <div className="p-5 bg-[#E8F6EE] border border-[#15803D]/30 rounded-[16px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {booking.status === 'AWAITING_DEPOSIT' && (() => {
+            // Nhà xe mới ghi nhận một phần cọc: nhắc khách chuyển phần còn thiếu.
+            const depositShortfall = booking.confirmedPaid > 0 && booking.depositAmount > booking.confirmedPaid
+              ? booking.depositAmount - booking.confirmedPaid : 0
+            return (
+            <div className={`p-5 border rounded-[16px] flex flex-col gap-4 ${depositShortfall ? 'bg-amber-50 border-amber-300' : 'bg-[#E8F6EE] border-[#15803D]/30'}`}>
               <div>
-                <h2 className="text-base font-bold text-[#15803D]">Lịch xe đang được giữ cho bạn</h2>
-                <p className="text-xs text-gray-600 mt-1">Thanh toán cọc VietQR hoặc VNPAY trong 15 phút. Sau khi một cổng xác nhận, cổng còn lại tự đóng.</p>
+                {depositShortfall ? (
+                  <>
+                    <h2 className="text-base font-bold text-amber-900">Cọc còn thiếu {depositShortfall.toLocaleString('vi-VN')} đ</h2>
+                    <p className="text-xs text-amber-900/80 mt-1">
+                      Nhà xe đã nhận {booking.confirmedPaid.toLocaleString('vi-VN')} đ / {booking.depositAmount.toLocaleString('vi-VN')} đ tiền cọc.
+                      Chuyển phần còn thiếu trước khi hết thời gian giữ chỗ để giữ lịch xe.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-base font-bold text-[#15803D]">Lịch xe đang được giữ cho bạn</h2>
+                    <p className="text-xs text-gray-600 mt-1">Thanh toán cọc VietQR hoặc VNPAY trong 15 phút. Sau khi một cổng xác nhận, cổng còn lại tự đóng.</p>
+                  </>
+                )}
               </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
                 <HoldCountdown expiresAt={booking.holdExpiresAt} />
-                {booking.planType !== 'YEARLY' && booking.canCancel ? (
-                  <button
-                    onClick={() => setIsCancelModalOpen(true)}
-                    type="button"
-                    className="px-4 py-2 bg-white text-[#B42318] border border-[#B42318] hover:bg-rose-50 text-xs font-semibold rounded-[12px] transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    Huỷ đơn
-                  </button>
-                ) : null}
                 {booking.planType !== 'YEARLY' && booking.canPay ? (
                   <button
                     onClick={() => onPayDeposit(booking)}
                     type="button"
-                    className="px-6 py-2.5 bg-[#15803D] text-white font-semibold text-sm rounded-[12px] focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                    className="px-6 py-2.5 bg-[#15803D] text-white font-semibold text-sm rounded-[12px] focus-visible:ring-2 focus-visible:ring-brand-500/40 whitespace-nowrap"
                   >
-                    Thanh toán cọc
+                    {depositShortfall ? 'Chuyển phần còn thiếu' : 'Thanh toán cọc'}
                   </button>
                 ) : null}
                 {booking.planType !== 'YEARLY' && booking.canCancel ? (
@@ -362,7 +369,8 @@ export const BookingDetail = ({
                 ) : null}
               </div>
             </div>
-          )}
+            )
+          })()}
 
           {booking.status === 'CANCELLATION_REVIEW' && (
             <div className="p-5 bg-orange-50 border border-orange-200 rounded-[16px]">

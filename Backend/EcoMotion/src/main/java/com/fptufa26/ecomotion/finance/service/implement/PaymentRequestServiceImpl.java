@@ -857,6 +857,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
 
         pr.setPaidAmount(newPaidTotal);
+        pr.setRenterAcknowledgedAt(null);
         pr.setConfirmedBy(provider.getUser());
         pr.setConfirmedAt(clock.instant());
         pr.setUpdatedAt(clock.instant());
@@ -911,6 +912,26 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
     @Override
     @Transactional
+    public PaymentRequestResponse acknowledgeReceipt(Long paymentRequestId, Long currentUserId) {
+        PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId)
+                .orElseThrow(() -> new PaymentRequestNotFoundException("Không tìm thấy yêu cầu thanh toán #" + paymentRequestId));
+        if (!pr.getBooking().getRenter().getUser().getId().equals(currentUserId)) {
+            throw new AccessDeniedException("Chỉ khách thuê của đơn mới xác nhận được biên nhận");
+        }
+        boolean recorded = bookingPaymentLedgerService.listTransactions(pr.getBooking().getId()).stream()
+                .anyMatch(t -> t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
+                        && t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(paymentRequestId));
+        if (!recorded) throw new InvalidPaymentOperationException("Nhà xe chưa ghi nhận khoản nào để xác nhận");
+        if (pr.getRenterAcknowledgedAt() == null) {
+            pr.setRenterAcknowledgedAt(clock.instant());
+            paymentRequestRepository.save(pr);
+            bookingNotificationService.changed(pr.getBooking(), "PAYMENT_VERIFIED");
+        }
+        return toResponse(pr);
+    }
+
+    @Override
+    @Transactional
     public List<com.fptufa26.ecomotion.finance.entity.RefundRequest> applyMismatchResolution(
             Long paymentRequestId, BigDecimal verifiedTotal, User admin, Long disputeId) {
         PaymentRequest candidate = paymentRequestRepository.findById(paymentRequestId)
@@ -961,6 +982,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (applied.signum() > 0) {
             BigDecimal newPaid = paid.add(applied).min(pr.getAmount());
             pr.setPaidAmount(newPaid);
+            pr.setRenterAcknowledgedAt(null);
             boolean full = newPaid.compareTo(pr.getAmount()) >= 0;
             pr.setStatus(full ? PaymentRequestStatus.CONFIRMED : PaymentRequestStatus.PARTIALLY_PAID);
             pr.setConfirmedAt(clock.instant());
@@ -1968,7 +1990,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 pr.getStatus() == PaymentRequestStatus.CONFIRMED && vnpayPaid.isPresent(),
                 vnpayPaid.map(PaymentTransaction::getVnpTransactionNo).orElse(null),
                 vnpayPaid.map(PaymentTransaction::getPaidAt).orElse(null),
-                pr.getBooking().getStatus()
+                pr.getBooking().getStatus(),
+                pr.getRenterAcknowledgedAt()
         );
     }
 

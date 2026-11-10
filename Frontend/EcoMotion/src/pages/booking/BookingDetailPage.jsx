@@ -260,7 +260,7 @@ export function BookingDetailPage() {
       />
       <BookingDetail
         onYearlyChanged={refreshDetail}
-        booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
+        booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0, confirmedPaid: Number(workflow?.confirmedPaid || 0) }}
         workflow={workflow}
         operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}

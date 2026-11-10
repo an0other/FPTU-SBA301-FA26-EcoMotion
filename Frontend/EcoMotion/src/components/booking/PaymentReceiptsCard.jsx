@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import apiClient from '../../services/apiClient'
 import { providerFinanceService } from '../../services/providerFinanceService'
 import { formatCurrency } from '../../utils/formatCurrency'
@@ -17,6 +18,7 @@ const MISMATCH_TYPES = [
  */
 export default function PaymentReceiptsCard({ bookingCode, bookingStatus, workflow, disputeCategories = [], onOpenDispute, onUploadEvidence, onChanged }) {
   const [receipts, setReceipts] = useState([])
+  const [requestsById, setRequestsById] = useState({})
   const [reportOpen, setReportOpen] = useState(false)
   const [form, setForm] = useState({ paymentRequestId: '', claimedAmount: '', mismatchType: 'OVERPAID', description: '' })
   const [evidence, setEvidence] = useState([])
@@ -27,6 +29,7 @@ export default function PaymentReceiptsCard({ bookingCode, bookingStatus, workfl
   const load = useCallback(async () => {
     try {
       const requests = await providerFinanceService.getPaymentRequestsByBooking(bookingCode)
+      setRequestsById(Object.fromEntries((requests || []).map((request) => [request.id, request])))
       const bookingId = requests?.[0]?.bookingId
       if (!bookingId) { setReceipts([]); return }
       const { data } = await apiClient.get(`/bookings/${bookingId}/payment-history`)
@@ -88,6 +91,18 @@ export default function PaymentReceiptsCard({ bookingCode, bookingStatus, workfl
     } finally { setBusy(false) }
   }
 
+  const acknowledge = async (paymentRequestId) => {
+    if (busy) return
+    setBusy(true); setError('')
+    try {
+      await apiClient.post(`/payment-requests/${paymentRequestId}/acknowledge`)
+      setNotice('Đã xác nhận số tiền nhà xe ghi nhận là đúng.')
+      await load()
+    } catch (err) {
+      setError(err.message || 'Chưa xác nhận được. Vui lòng thử lại.')
+    } finally { setBusy(false) }
+  }
+
   const offset = async (refundId) => {
     if (busy) return
     setBusy(true); setError('')
@@ -107,24 +122,67 @@ export default function PaymentReceiptsCard({ bookingCode, bookingStatus, workfl
 
         {receipts.length > 0 && (
           <ul className="mt-3 divide-y divide-[#EEF2EF]">
-            {receipts.map((receipt) => (
-              <li key={receipt.paymentRequestId} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
-                <span className="text-[#475467]">
-                  {receipt.gateway ? 'Đã thanh toán qua VNPAY' : 'Nhà xe xác nhận đã nhận'}
-                  {' · '}<strong className="text-[#14221A]">{receipt.label}</strong>
-                  {receipt.lastPaidAt ? <span className="text-xs text-[#667085]"> · {formatBookingWhen(receipt.lastPaidAt)}</span> : null}
-                  {receipt.adminAdjusted ? <span className="ml-1 text-xs text-[#15803D]">(đã gồm phần admin đối soát)</span> : null}
-                </span>
-                <span className="flex items-center gap-3">
+            {receipts.map((receipt) => {
+              const request = requestsById[receipt.paymentRequestId]
+              const requested = Number(request?.amount) || 0
+              const shortfall = request && ['PARTIALLY_PAID', 'PENDING', 'REJECTED'].includes(request.status)
+                ? Math.max(0, requested - (Number(request.paidAmount) || 0)) : 0
+              const acknowledgedAt = request?.renterAcknowledgedAt
+              return (
+              <li key={receipt.paymentRequestId} className="space-y-2 py-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[#475467]">
+                    {receipt.gateway ? 'Đã thanh toán qua VNPAY' : 'Nhà xe xác nhận đã nhận'}
+                    {' · '}<strong className="text-[#14221A]">{receipt.label}</strong>
+                    {receipt.lastPaidAt ? <span className="text-xs text-[#667085]"> · {formatBookingWhen(receipt.lastPaidAt)}</span> : null}
+                    {receipt.adminAdjusted ? <span className="ml-1 text-xs text-[#15803D]">(đã gồm phần admin đối soát)</span> : null}
+                  </span>
                   <strong className="font-mono text-[#14221A]">{formatCurrency(receipt.amount)}</strong>
-                  {canReport && !receipt.gateway && (
-                    <button type="button" onClick={() => openReport(receipt)} className="text-xs font-semibold text-[#B54708] underline-offset-2 hover:underline">
-                      Số tiền không đúng?
-                    </button>
-                  )}
-                </span>
+                </div>
+                {requested > 0 && (
+                  <p className="text-xs text-[#667085]">
+                    Số cần thanh toán: {formatCurrency(requested)}
+                    {shortfall > 0 && <> · <span className="font-semibold text-[#B54708]">Còn thiếu {formatCurrency(shortfall)}</span></>}
+                  </p>
+                )}
+                {shortfall > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <span>Bạn cần chuyển thêm <strong>{formatCurrency(shortfall)}</strong> để đủ {receipt.label.toLowerCase()}. Mã QR ở trang thanh toán đã điền sẵn số còn thiếu.</span>
+                    <Link to={`/renter/bookings/${encodeURIComponent(bookingCode)}/payment`}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 font-bold text-white hover:bg-amber-700">
+                      Chuyển phần còn thiếu
+                    </Link>
+                  </div>
+                )}
+                {!receipt.gateway && (
+                  acknowledgedAt ? (
+                    <p className="flex flex-wrap items-center gap-2 text-xs text-[#15803D]">
+                      ✓ Bạn đã xác nhận số tiền này đúng lúc {formatBookingWhen(acknowledgedAt)}
+                      {canReport && (
+                        <button type="button" onClick={() => openReport(receipt)} className="font-semibold text-[#B54708] hover:underline">
+                          Báo sai
+                        </button>
+                      )}
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-[#667085]">Đối chiếu với app ngân hàng của bạn:</span>
+                      <button type="button" disabled={busy || !request} onClick={() => acknowledge(receipt.paymentRequestId)}
+                        className="rounded-lg border border-[#15803D] px-3 py-1.5 font-semibold text-[#15803D] hover:bg-[#F0FDF4] disabled:opacity-50">
+                        Đúng số tiền
+                      </button>
+                      {canReport && (
+                        <button type="button" onClick={() => openReport(receipt)}
+                          className="rounded-lg border border-[#F2D6B3] px-3 py-1.5 font-semibold text-[#B54708] hover:bg-[#FFFAF3]">
+                          Không đúng — gửi biên lai
+                        </button>
+                      )}
+                    </div>
+                  )
+                )}
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
 

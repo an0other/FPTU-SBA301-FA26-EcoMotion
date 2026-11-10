@@ -104,4 +104,7 @@ public interface PaymentRequestService {
      */
     java.util.List<com.fptufa26.ecomotion.finance.entity.RefundRequest> applyMismatchResolution(
             Long paymentRequestId, java.math.BigDecimal verifiedTotal, com.fptufa26.ecomotion.user.entity.User admin, Long disputeId);
+
+    /** Khách xác nhận số tiền nhà xe ghi nhận cho yêu cầu này là đúng. */
+    com.fptufa26.ecomotion.finance.dto.response.PaymentRequestResponse acknowledgeReceipt(Long paymentRequestId, Long currentUserId);
 }

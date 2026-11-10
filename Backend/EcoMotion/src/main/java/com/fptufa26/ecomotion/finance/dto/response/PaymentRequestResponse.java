@@ -38,7 +38,8 @@ public record PaymentRequestResponse(
         boolean vnpayPaid,
         String vnpayTransactionNo,
         Instant vnpayPaidAt,
-        BookingStatus bookingStatus
+        BookingStatus bookingStatus,
+        Instant renterAcknowledgedAt
 ) {
     public PaymentRequestResponse(
             Long id,
@@ -70,6 +71,6 @@ public record PaymentRequestResponse(
         this(id, null, bookingId, bookingCode, paymentType, amount, paidAmount, remainingAmount, currency,
                 transferReference, bankCodeSnapshot, bankNameSnapshot, accountNumberSnapshot, accountNumberMasked,
                 accountHolderSnapshot, status, qrCodeUrl, expiresAt, firstProofAt, reconciliationDeadline,
-                createdAt, confirmedAt, rejectionReason, issueNote, evidences, false, false, null, null, bookingStatus);
+                createdAt, confirmedAt, rejectionReason, issueNote, evidences, false, false, null, null, bookingStatus, null);
     }
 }

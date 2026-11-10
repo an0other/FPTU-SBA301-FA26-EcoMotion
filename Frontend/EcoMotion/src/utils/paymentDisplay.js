@@ -109,7 +109,8 @@ export function formatChargeDescription(charge, planType) {
   return description || 'Khoản phí theo đơn thuê.'
 }
 
-export const DEPOSIT_AWAITING_PROVIDER_STATUSES = ['PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REVIEW_REQUIRED']
+// PARTIALLY_PAID không thuộc nhóm này: nhà xe đã ghi nhận một phần, tới lượt khách chuyển phần còn thiếu.
+export const DEPOSIT_AWAITING_PROVIDER_STATUSES = ['PROOF_SUBMITTED', 'REVIEW_REQUIRED']
 
 export function isDepositAwaitingProvider(status) {
   return DEPOSIT_AWAITING_PROVIDER_STATUSES.includes(status)

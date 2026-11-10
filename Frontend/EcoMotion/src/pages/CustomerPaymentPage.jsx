@@ -555,6 +555,14 @@ export default function CustomerPaymentPage() {
               </div>
             )}
 
+            {selectedRequest.status === 'PARTIALLY_PAID' && Number(selectedRequest.paidAmount) > 0 ? (
+              <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950">
+                <strong className="block text-sm">Đang chuyển phần còn thiếu</strong>
+                Nhà xe đã nhận {formatPaymentMoney(selectedRequest.paidAmount)} / {formatPaymentMoney(selectedRequest.amount)}.
+                Mã QR và số tiền phía trên là phần còn thiếu <strong>{formatPaymentMoney(selectedRequest.remainingAmount)}</strong>.
+              </div>
+            ) : null}
+
             {canSubmitProof && !awaitingProvider ? (
               <DepositProofForm
                 disabled={requestExpired}

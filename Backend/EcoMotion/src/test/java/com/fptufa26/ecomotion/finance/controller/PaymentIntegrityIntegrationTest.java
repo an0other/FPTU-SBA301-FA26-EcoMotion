@@ -518,6 +518,25 @@ class PaymentIntegrityIntegrationTest {
     }
 
     @Test
+    void partialDepositKeepsPayButtonForRemainingAndRenterCanAcknowledge() {
+        confirm("20000", "PARTIAL-" + requestId);
+        String code = tx.execute(s -> em.find(Booking.class, bookingId).getBookingCode());
+        var detail = bookingService.detail(renterId, code);
+        assertThat(detail.canPay()).as("còn thiếu 10.000 đ thì khách vẫn thanh toán được").isTrue();
+        var request = requests.findById(requestId).orElseThrow();
+        assertThat(request.getStatus()).isEqualTo(PaymentRequestStatus.PARTIALLY_PAID);
+
+        var acknowledged = payments.acknowledgeReceipt(requestId, renterId);
+        assertThat(acknowledged.renterAcknowledgedAt()).isNotNull();
+        assertThatThrownBy(() -> payments.acknowledgeReceipt(requestId, providerId)).isInstanceOf(AccessDeniedException.class);
+
+        // Nhà xe ghi nhận thêm tiền: khách phải đối chiếu lại.
+        confirm("10000", "PARTIAL-REST-" + requestId);
+        assertThat(requests.findById(requestId).orElseThrow().getRenterAcknowledgedAt()).isNull();
+        assertThat(bookingService.detail(renterId, code).canPay()).isFalse();
+    }
+
+    @Test
     void depositOverpaymentRecordsFullAmountAndCreatesMandatoryRefund() {
         confirm("50000", "OVER-" + requestId);
         assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);

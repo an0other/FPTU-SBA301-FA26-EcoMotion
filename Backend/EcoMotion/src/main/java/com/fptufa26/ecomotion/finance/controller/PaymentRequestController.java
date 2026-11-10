@@ -106,6 +106,14 @@ public class PaymentRequestController {
                 transactionReference, transferredAt, note));
     }
 
+    @PostMapping("/api/payment-requests/{id}/acknowledge")
+    @Operation(summary = "Renter confirms the amount the provider recorded is correct")
+    public ApiResponse<PaymentRequestResponse> acknowledgeReceipt(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable Long id) {
+        return ApiResponse.success(paymentRequestService.acknowledgeReceipt(id, principal.getUserId()));
+    }
+
     @GetMapping({"/api/v1/payment-evidences/{id}/file", "/api/payment-evidences/{id}/file"})
     @Operation(summary = "View an authorized payment-evidence image")
     public ResponseEntity<byte[]> viewPaymentEvidence(

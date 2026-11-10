@@ -602,6 +602,8 @@ public class BookingServiceImpl implements BookingService {
             Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
         return builder.or(
                 payableDepositPredicate(root, query, builder, now),
+                builder.and(root.get("status").in(DEPOSIT_PAYABLE_STATUSES),
+                        builder.exists(partialDepositRequestExists(root, query, builder, now))),
                 payableSettlementPredicate(root, query, builder, now));
     }
 
@@ -650,6 +652,19 @@ public class BookingServiceImpl implements BookingService {
                 builder.equal(request.get("paymentType"), type),
                 request.get("status").in(PaymentRequestStatus.PENDING, PaymentRequestStatus.REJECTED),
                 unexpired);
+        return subquery;
+    }
+
+    /** Cọc mới được ghi nhận một phần, còn hạn: khách cần chuyển phần còn thiếu. */
+    private Subquery<Long> partialDepositRequestExists(
+            Root<Booking> root, CriteriaQuery<?> query, CriteriaBuilder builder, Instant now) {
+        Subquery<Long> subquery = query.subquery(Long.class);
+        Root<PaymentRequest> request = subquery.from(PaymentRequest.class);
+        subquery.select(request.get("id")).where(
+                builder.equal(request.get("booking").get("id"), root.get("id")),
+                builder.equal(request.get("paymentType"), PaymentRequestType.DEPOSIT),
+                builder.equal(request.get("status"), PaymentRequestStatus.PARTIALLY_PAID),
+                builder.or(builder.isNull(request.get("expiresAt")), builder.greaterThan(request.get("expiresAt"), now)));
         return subquery;
     }
 
@@ -1545,6 +1560,15 @@ public class BookingServiceImpl implements BookingService {
                     && !hasUploadedYearlyContract(booking)) {
                 return false;
             }
+            Optional<PaymentRequest> depositReq = paymentRequestService
+                    .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT);
+            // Nhà xe mới ghi nhận một phần cọc: khách vẫn phải (và được) chuyển phần còn thiếu.
+            if (depositReq.isPresent() && depositReq.get().getStatus() == PaymentRequestStatus.PARTIALLY_PAID) {
+                PaymentRequest partial = depositReq.get();
+                BigDecimal paid = partial.getPaidAmount() == null ? BigDecimal.ZERO : partial.getPaidAmount();
+                boolean open = partial.getExpiresAt() == null || partial.getExpiresAt().isAfter(now);
+                return open && partial.getAmount().compareTo(paid) > 0;
+            }
             boolean alreadyPaid = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
                     .anyMatch(tx -> (tx.getType() == PaymentType.DEPOSIT_PAY
                             || tx.getType() == PaymentType.UPFRONT_PAY)
@@ -1552,8 +1576,6 @@ public class BookingServiceImpl implements BookingService {
             if (alreadyPaid) {
                 return false;
             }
-            Optional<PaymentRequest> depositReq = paymentRequestService
-                    .findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT);
             if (depositReq.isPresent()) {
                 PaymentRequest request = depositReq.get();
                 if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(now)) {
