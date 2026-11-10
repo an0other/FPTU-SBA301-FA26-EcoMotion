@@ -1,7 +1,6 @@
 package com.fptufa26.ecomotion.verification.ekyc.service.implement;
 
 import com.fptufa26.ecomotion.verification.ekyc.service.EkycProvider;
-import com.fptufa26.ecomotion.verification.ekyc.service.EkycService;
 import com.fptufa26.ecomotion.verification.ekyc.service.EkycService.FaceMatchResult;
 import com.fptufa26.ecomotion.verification.ekyc.service.EkycService.OcrResult;
 import lombok.extern.slf4j.Slf4j;

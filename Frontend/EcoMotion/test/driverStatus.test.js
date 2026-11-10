@@ -5,7 +5,7 @@ import { DRIVER_STATUS_LABELS } from '../src/utils/driverStatus.js'
 test('status reads the authenticated driver endpoint and preserves server projection', async () => {
   const projection = { activityStatus: 'AVAILABLE', operationalStatus: 'SCHEDULED', nextTrip: { bookingCode: 'test' } }
   const service = createDriverStatusService({ get: async path => {
-    assert.equal(path, '/v1/driver/status')
+    assert.equal(path, '/driver/status')
     return { data: { data: projection } }
   } })
   assert.equal(await service.getStatus(), projection)
@@ -13,7 +13,7 @@ test('status reads the authenticated driver endpoint and preserves server projec
 test('readiness update sends no driver identity and propagates conflicts', async () => {
   const conflict = new Error('ON_TRIP')
   const service = createDriverStatusService({ put: async (path, body) => {
-    assert.equal(path, '/v1/driver/status')
+    assert.equal(path, '/driver/status')
     assert.deepEqual(body, { activityStatus: 'AVAILABLE' })
     throw conflict
   } })

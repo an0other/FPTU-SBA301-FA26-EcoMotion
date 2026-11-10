@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#BAE6FD"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="480" fill="url(#bg)"/>
+  <circle cx="180" cy="168" r="78" fill="#F5D0B5"/>
+  <path d="M102 150 Q110 78 180 78 Q250 78 258 150 Q238 112 180 112 Q122 112 102 150 Z" fill="#1F2937"/>
+  <path d="M40 480 Q48 300 180 292 Q312 300 320 480 Z" fill="#1E3A8A"/>
+  <path d="M150 292 L180 350 L210 292 Z" fill="#FFFFFF"/>
+  <path d="M172 300 L180 380 L188 300 Z" fill="#B91C1C"/>
+  <rect x="0" y="408" width="360" height="72" fill="#0F172A" fill-opacity="0.78"/>
+  <text x="180" y="438" text-anchor="middle" fill="#FFFFFF"
+        font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif" font-size="22" font-weight="600">Vũ Tuấn Kiệt</text>
+  <text x="180" y="464" text-anchor="middle" fill="#CBD5E1"
+        font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif" font-size="14">Ảnh chân dung tài xế · GPLX 7901230003</text>
+</svg>

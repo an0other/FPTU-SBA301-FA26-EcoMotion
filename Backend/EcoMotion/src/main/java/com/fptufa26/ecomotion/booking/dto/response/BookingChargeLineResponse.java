@@ -16,6 +16,14 @@ public record BookingChargeLineResponse(
         boolean isWaived,
         BigDecimal effectiveAmount,
         ChargeConfirmationStatus confirmationStatus,
-        String evidenceUrl
+        String evidenceUrl,
+        /** Ai miễn khoản này: PROVIDER_WITHDRAWN (nhà xe rút), ADMIN_DISPUTE (admin phân xử), SYSTEM. */
+        String waivedSource
 ) {
+    public BookingChargeLineResponse(Long chargeId, ChargeType chargeType, String description, Integer quantity,
+                                     BigDecimal unitPrice, BigDecimal appliedRate, BigDecimal amount, boolean isWaived,
+                                     BigDecimal effectiveAmount, ChargeConfirmationStatus confirmationStatus, String evidenceUrl) {
+        this(chargeId, chargeType, description, quantity, unitPrice, appliedRate, amount, isWaived, effectiveAmount,
+                confirmationStatus, evidenceUrl, null);
+    }
 }

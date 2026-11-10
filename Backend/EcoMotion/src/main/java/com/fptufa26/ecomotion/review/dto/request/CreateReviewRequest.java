@@ -16,8 +16,14 @@ public record CreateReviewRequest(
         Integer rating,
 
         @Size(max = 1000)
-        String comment
+        String comment,
+        @Size(max = 5)
+        java.util.List<String> mediaUrls
 ) {
+    public CreateReviewRequest(ReviewTarget target, Integer rating, String comment) {
+        this(target, rating, comment, null);
+    }
+
     public static class UpdateReviewRequest {
     }
 }

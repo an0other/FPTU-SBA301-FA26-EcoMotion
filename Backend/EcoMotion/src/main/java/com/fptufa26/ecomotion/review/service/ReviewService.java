@@ -5,9 +5,12 @@ import com.fptufa26.ecomotion.review.dto.response.ReviewResponse;
 import com.fptufa26.ecomotion.review.dto.request.UpdateReviewRequest;
 import com.fptufa26.ecomotion.review.enums.ReviewTarget;
 import com.fptufa26.ecomotion.review.dto.response.BookingReviewsResponse;
-import java.util.List;
 
 public interface ReviewService {
+
+    /** Tải ảnh minh hoạ cho đánh giá; trả về URL để gửi kèm mediaUrls. */
+    String uploadReviewImage(Long userId, String bookingCode, org.springframework.web.multipart.MultipartFile file);
+
 
 //    List<ReviewResponse> getBookingReviews(Long userId, String bookingCode);
 BookingReviewsResponse getBookingReviews(

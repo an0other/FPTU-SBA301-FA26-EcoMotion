@@ -1028,12 +1028,12 @@ public class DevDataSeeder implements ApplicationRunner {
         plan.setStatus(PlanStatus.ACTIVE);
         if (planType != PlanType.YEARLY) {
             plan.setAllowedOvertimeMinutes(30);
-            plan.setOvertimeSurchargeRatio(new BigDecimal("1.2000"));
+            plan.setOvertimeSurchargeRatio(new BigDecimal("0.2000"));
             plan.setFreeRadiusKm(10);
             plan.setOutOfRadiusRate(new BigDecimal("10000.00"));
             plan.setWaitingFreeMinutes(15);
             plan.setWaitingRate(new BigDecimal("5000.00"));
-            plan.setWeekendSurchargeRatio(new BigDecimal("1.1000"));
+            plan.setWeekendSurchargeRatio(new BigDecimal("0.1000"));
             if (hourly) {
                 plan.setHourlyToDailyThresholdMinutes(1260);
             }

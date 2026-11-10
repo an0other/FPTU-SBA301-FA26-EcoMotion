@@ -37,6 +37,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
 
 @Service
 @RequiredArgsConstructor
@@ -72,6 +73,21 @@ public class RefundEventServiceImpl implements RefundEventService {
                         || "REPORTED_NOT_RECEIVED".equals(r.getReceiptStatus()));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isSourceReserved(Long sourceTransactionId) {
+        return refundRequestRepository.existsBySourcePaymentTransaction_IdAndStatusIn(sourceTransactionId, RefundMath.RESERVED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasOpenExcessRefunds(Long bookingId) {
+        return refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
+                .filter(r -> RefundMath.excessEvent(r.getSourceEventId()))
+                .anyMatch(r -> RefundMath.RESERVED.contains(r.getStatus()) && r.getStatus() != RefundStatus.REFUNDED
+                        || "REPORTED_NOT_RECEIVED".equals(r.getReceiptStatus()));
+    }
+
     private static final DateTimeFormatter VNP_DATE = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
             .withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
 
@@ -82,7 +98,7 @@ public class RefundEventServiceImpl implements RefundEventService {
     private final BookingNotificationService bookingNotificationService;
     private final Clock clock;
     private final ObjectProvider<RefundEventService> self;
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    private final CancellationClosureService closure;
     private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional

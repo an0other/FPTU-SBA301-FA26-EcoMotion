@@ -261,7 +261,7 @@ export default function AddChargeModal({ booking, isOpen, onClose, onSuccess }) 
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 space-y-1">
             <p className="text-xs text-slate-700">
-              Đơn giá {quote.unitPrice.toLocaleString('vi-VN')} × {quantity} × {quote.appliedRate}:{' '}
+              Đơn giá {quote.unitPrice.toLocaleString('vi-VN')} × {quantity} × {Math.round(Number(quote.appliedRate) * 100)}%:{' '}
               <strong className="font-mono text-sm text-emerald-800">
                 {quote.amount.toLocaleString('vi-VN')} ₫
               </strong>

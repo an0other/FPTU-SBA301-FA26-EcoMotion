@@ -176,11 +176,13 @@ export default function BookingWorkflowSummary({
               <strong className="text-slate-900 block mt-0.5">
                 {proposal.resolution === 'CHANGE_VEHICLE'
                   ? `Xe đề xuất: ${proposal.vehicleName}`
-                  : `Giờ đón đề xuất: ${when(proposal.pickupTime)}`}
+                  : proposal.resolution === 'OTHER'
+                    ? 'Phương án khác (xem mô tả)'
+                    : `Giờ đón đề xuất: ${when(proposal.pickupTime)}`}
               </strong>
             </div>
             <div className="rounded-lg bg-white/80 p-2.5 border border-amber-200/70">
-              <span className="text-[10px] text-slate-500 uppercase font-bold block">Lý do điều chỉnh</span>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">{proposal.resolution === 'OTHER' ? 'Mô tả phương án' : 'Lý do điều chỉnh'}</span>
               <span className="text-slate-800 block mt-0.5">{proposal.reason}</span>
             </div>
           </div>
@@ -363,7 +365,7 @@ export default function BookingWorkflowSummary({
               {decision === 'ACCEPT' ? 'Xác nhận đồng ý phương án thay thế?' : 'Xác nhận từ chối phương án thay thế?'}
             </h3>
             <p className="text-xs text-slate-600">
-              {proposal.resolution === 'CHANGE_VEHICLE' ? proposal.vehicleName : when(proposal.pickupTime)}
+              {proposal.resolution === 'CHANGE_VEHICLE' ? proposal.vehicleName : proposal.resolution === 'OTHER' ? proposal.reason : when(proposal.pickupTime)}
             </p>
             {decision === 'ACCEPT' && proposal.resolution === 'CHANGE_VEHICLE' && Number(proposal.priceReduction) > 0 && (
               <p className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-900">

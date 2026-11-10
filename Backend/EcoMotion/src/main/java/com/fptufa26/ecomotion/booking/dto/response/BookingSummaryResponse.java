@@ -31,6 +31,9 @@ public record BookingSummaryResponse(
         String driverName,
         BookingActionKind actionKind,
         String depositPaymentStatus,
-        String depositRejectionReason
+        String depositRejectionReason,
+        BigDecimal estimatedTotal,
+        /** Số khách đã thanh toán cho đơn (cọc + quyết toán, không gồm tiền bảo đảm, đã trừ phần chuyển dư). */
+        BigDecimal paidAmount
 ) {
 }

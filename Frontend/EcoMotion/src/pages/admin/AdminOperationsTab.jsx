@@ -1,4 +1,5 @@
 import { AdminRefundReviewPanel } from '../../components/booking/FinancialReviewPanels'
+import { disputeVerdictLabel } from '../../utils/disputeVerdict'
 import { useState, useEffect } from 'react'
 import { adminService } from '../../services/adminService'
 import {
@@ -202,7 +203,7 @@ export default function AdminOperationsTab({
   }
 
   // Dispute Resolve
-  async function handleResolveDispute(disputeId, status, decision, resolution, refundAwardTotal, tripEndAction) {
+  async function handleResolveDispute(disputeId, status, decision, resolution, refundAwardTotal, tripEndAction, correctedEndAt) {
     setActionLoading(true)
     try {
       await adminService.resolveDispute(
@@ -212,6 +213,7 @@ export default function AdminOperationsTab({
         resolution,
         refundAwardTotal,
         tripEndAction,
+        correctedEndAt,
       )
       setMessage({ type: 'success', text: 'Đã cập nhật phân xử tranh chấp thành công!' })
       setResolvingDispute(null)
@@ -576,24 +578,17 @@ export default function AdminOperationsTab({
                           </span>
                         </td>
                         <td className="px-5 py-3.5 max-w-[240px] text-slate-700" title={d.resolution}>
-                          {(d.status === 'RESOLVED' || d.status === 'REJECTED') &&
-                            (d.category === 'CHARGE' || d.chargeId || d.decision) && (
-                              <div className="mb-1">
-                                <span
-                                  className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${
-                                    d.decision === 'WAIVE_CHARGE' ||
-                                    (!d.decision && (d.chargeWaived === true || d.status === 'RESOLVED'))
-                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                      : 'border-amber-200 bg-amber-50 text-amber-800'
-                                  }`}
-                                >
-                                  {d.decision === 'WAIVE_CHARGE' ||
-                                  (!d.decision && (d.chargeWaived === true || d.status === 'RESOLVED'))
-                                    ? 'Đã chốt: Miễn phụ phí (WAIVE_CHARGE)'
-                                    : 'Đã chốt: Giữ phụ phí (KEEP_CHARGE)'}
-                                </span>
-                              </div>
-                            )}
+                          {disputeVerdictLabel(d) && (
+                            <div className="mb-1">
+                              <span className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${d.status === 'RESOLVED'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                                {disputeVerdictLabel(d)}
+                              </span>
+                            </div>
+                          )}
+                          {d.status === 'IN_REVIEW' && d.resolution && (
+                            <div className="mb-1"><span className="inline-block rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-800">Đang xử lý theo phương án khác</span></div>
+                          )}
                           <div className="truncate">
                             {d.resolution || <span className="text-slate-400 italic">Chưa có kết luận</span>}
                           </div>
@@ -721,10 +716,6 @@ export default function AdminOperationsTab({
       <BookingDetailModal
         booking={selectedBooking}
         onClose={() => setSelectedBooking(null)}
-        onOpenRefund={(bookingId) => {
-          setShowRefundModal(true)
-          setRefundForm((prev) => ({ ...prev, bookingId: String(bookingId) }))
-        }}
         onSelectRenter={(b) => navigateToUser(b.renterUserId, b.renterEmail)}
         onSelectVehicle={(vehicleId) => navigateToVehicle(vehicleId)}
         onSelectProvider={(providerId) => navigateToProvider(providerId)}

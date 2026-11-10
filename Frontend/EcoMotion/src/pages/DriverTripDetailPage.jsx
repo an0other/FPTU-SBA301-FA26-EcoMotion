@@ -44,6 +44,20 @@ export default function DriverTripDetailPage() {
   const [toast, setToast] = useState({ message: '', type: 'success' })
   const [actionError, setActionError] = useState(null)
   const [gpsEnabled] = useState(true)
+  const [busyTrips, setBusyTrips] = useState([])
+
+  const fetchBusyTrips = useCallback(async () => {
+    try {
+      setBusyTrips(await driverTripService.getBusyTrips())
+    } catch {
+      setBusyTrips([])
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(fetchBusyTrips, 0)
+    return () => clearTimeout(timer)
+  }, [fetchBusyTrips, trip?.status])
 
   const fetchEvidence = useCallback(async () => {
     if (!bookingCode) return
@@ -84,7 +98,7 @@ export default function DriverTripDetailPage() {
         setToast({ message: 'Thông tin thanh toán đã cập nhật; vui lòng kiểm tra quyết toán.', type: 'success' })
       },
     },
-    onResync: () => refetch(),
+    onResync: () => Promise.all([refetch(), fetchBusyTrips()]),
   })
 
   const executionStatus = useMemo(() => deriveExecutionStatus(trip), [trip])
@@ -92,6 +106,9 @@ export default function DriverTripDetailPage() {
     () => getExecutionStatusConfig(executionStatus),
     [executionStatus]
   )
+  const blockingTrip = ['arrive', 'start'].includes(statusConfig?.actionType)
+    ? busyTrips.find((item) => item.bookingCode !== trip?.bookingCode) || null
+    : null
 
   const isTripActive = ['CONFIRMED', 'ARRIVED', 'IN_PROGRESS'].includes(executionStatus)
   const assignmentExpired = useDeadlineExpired(trip?.assignmentExpiresAt)
@@ -450,6 +467,14 @@ export default function DriverTripDetailPage() {
                     Xác nhận nhận chuyến
                   </button>
                 </>
+              ) : statusConfig?.actionLabel && blockingTrip ? (
+                <div role="alert" className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800">
+                  Bạn đang thực hiện chuyến{' '}
+                  <Link to={`/driver/trips/${encodeURIComponent(blockingTrip.bookingCode)}`} className="underline">
+                    {blockingTrip.bookingCode}
+                  </Link>
+                  . Hãy kết thúc chuyến đó trước khi {statusConfig.actionType === 'start' ? 'bắt đầu chuyến này' : 'báo đến điểm đón'}.
+                </div>
               ) : statusConfig?.actionLabel ? (
                 <button
                   type="button"

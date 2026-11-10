@@ -5,13 +5,15 @@ import { pricingDescription, rentalDurationLabel } from '../../utils/rentalPrici
 import { useNavigate, useParams } from 'react-router-dom'
 import { BookingDetail } from '../../components/booking/BookingDetail'
 import { readErrorMessage } from '../../services/apiClient'
-import { acceptCharge, cancelMyBooking, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
+import { acceptCharge, cancelMyBooking, confirmTripEnd, getMyBooking, getMyBookingOperationalRisk, openDispute, uploadDisputeEvidence, updateBookingRequestDetails } from '../../services/bookingService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { planLabel } from '../../utils/planLabels'
 import { useRenterTripTracking } from '../../hooks/useRenterTripTracking'
 import BookingWorkflowSummary from '../../components/booking/BookingWorkflowSummary'
 import { RefundAccountModal } from '../../components/booking/RefundAccountModal'
 import { bookingWorkflowService } from '../../services/bookingWorkflowService'
+import PaymentReceiptsCard from '../../components/booking/PaymentReceiptsCard'
+import { reviewService } from '../../services/reviewService'
 
 const CHARGE_LABELS = {
   BASE_RENTAL: 'Tiền thuê',
@@ -81,6 +83,7 @@ function toCard(detail) {
       formula: formula(charge),
       amount: Number(charge.effectiveAmount ?? charge.amount),
       isWaived: Boolean(charge.isWaived),
+      waivedSource: charge.waivedSource || null,
       confirmationStatus: charge.confirmationStatus,
       evidenceUrl: charge.evidenceUrl,
     })),
@@ -139,6 +142,17 @@ export function BookingDetailPage() {
   const [workflow, setWorkflow] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const [tripNotice, setTripNotice] = useState('')
+  // Đánh giá khách đã gửi cho đơn hoàn tất — để hiện "Xem đánh giá của tôi" thay vì luôn mời đánh giá.
+  const [myReviews, setMyReviews] = useState(null)
+  const completed = detail?.status === 'COMPLETED' && detail?.bookingCode?.toUpperCase() === bookingCode?.toUpperCase()
+  useEffect(() => {
+    if (!completed) return undefined
+    let cancelled = false
+    reviewService.getBookingReviews(bookingCode)
+      .then((data) => { if (!cancelled) setMyReviews(data) })
+      .catch(() => { if (!cancelled) setMyReviews(null) })
+    return () => { cancelled = true }
+  }, [completed, bookingCode])
   const [refundAccountOpen, setRefundAccountOpen] = useState(false)
   const promptedRefundKey = useRef('')
   const trackingEnabled = Boolean(detail && ['DRIVER_ARRIVED', 'IN_PROGRESS', 'AWAITING_END_CONFIRMATION'].includes(detail.status))
@@ -183,10 +197,12 @@ export function BookingDetailPage() {
     onResync: refreshDetail,
   })
 
+  const openManualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
+    && !['REFUNDED', 'REJECTED'].includes(refund.status))
+  // Đơn huỷ: mọi khoản hoàn chuyển khoản. Đơn chưa huỷ: chỉ khoản khách chuyển dư (nhà xe bắt buộc hoàn).
   const manualRefunds = ['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail?.status)
-    ? (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
-      && !['REFUNDED', 'REJECTED'].includes(refund.status))
-    : []
+    ? openManualRefunds
+    : openManualRefunds.filter(refund => refund.excess)
   const refundAccount = manualRefunds.find(refund => refund.recipientAccountNumber)
   const missingRefundAccount = manualRefunds.some(refund => !refund.recipientAccountNumber)
   const refundPromptKey = manualRefunds
@@ -233,13 +249,26 @@ export function BookingDetailPage() {
         </section>
       )}
       {detail.planType !== 'YEARLY' && <div className="mx-auto mt-6 max-w-[1120px] px-4"><BookingWorkflowSummary key={detail.bookingCode} workflow={workflow} booking={workflow ? { ...detail, driverName: detail.driver?.fullName } : {}} error={workflowError} onRefresh={refreshDetail} /></div>}
+      <PaymentReceiptsCard
+        bookingCode={detail.bookingCode}
+        bookingStatus={detail.status}
+        workflow={workflow}
+        disputeCategories={detail.disputeCategories || []}
+        onOpenDispute={async body => { const result = await openDispute(detail.bookingCode, body); await refreshDetail(); return result }}
+        onUploadEvidence={(file) => uploadDisputeEvidence(detail.bookingCode, file)}
+        onChanged={refreshDetail}
+      />
       <BookingDetail
         onYearlyChanged={refreshDetail}
-        booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0 }}
+        booking={{ ...booking, depositCollected: Number(workflow?.confirmedPaid || 0) > 0, confirmedPaid: Number(workflow?.confirmedPaid || 0) }}
         workflow={workflow}
         operationalRisk={operationalRisk}
         onGoBack={() => navigate('/renter/bookings')}
         onGoToCarPage={() => navigate('/')}
+        onGoToReviews={() => navigate(`/renter/bookings/${encodeURIComponent(booking.id)}/reviews`)}
+        myReviews={myReviews}
+        onOpenVehicleReviews={detail.vehicleId ? () => navigate(`/vehicles/${detail.vehicleId}/reviews`) : null}
+        onOpenDriverReviews={detail.driver?.id ? () => navigate(`/drivers/${detail.driver.id}/reviews`) : null}
         onPayDeposit={() => navigate(`/renter/bookings/${booking.id}/payment`)}
         onCancelBooking={async (_code, account) => {
           const updated = await cancelMyBooking(booking.id, account)
@@ -248,6 +277,10 @@ export function BookingDetailPage() {
         }}
         onAcceptCharge={async (chargeId) => {
           await acceptCharge(booking.id, chargeId)
+          await refreshDetail()
+        }}
+        onConfirmTripEnd={async () => {
+          await confirmTripEnd(booking.id)
           await refreshDetail()
         }}
         onOpenDispute={async body => { const result = await openDispute(booking.id, body); await refreshDetail(); return result }}

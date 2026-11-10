@@ -11,10 +11,12 @@ import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import lombok.RequiredArgsConstructor;
-import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Set;
@@ -45,6 +47,7 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
 
     private final BookingRepository bookingRepository;
     private final UserService userService;
+    private final Clock clock;
     private final ScheduleService scheduleService;
 
     @Override
@@ -63,8 +66,25 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
                         && other.getPickupTime().isBefore(booking.getPickupTime()))
                 .filter(other -> other.getActualEndAt() == null)
                 .min(Comparator.comparing(Booking::getPickupTime).reversed())
-                .map(other -> OperationalRiskResponse.vehicleBusy())
+                .map(other -> lateness(booking, other))
                 .orElseGet(OperationalRiskResponse::safe);
+    }
+
+    /**
+     * Xe sẵn sàng = max(giờ trả theo lịch của chuyến trước, hiện tại nếu đã quá giờ) + thời gian chuẩn bị xe.
+     * Chỉ cảnh báo khi mốc đó vượt giờ nhận của đơn này; chuyến trước trả sớm hơn nhiều thì không báo nhầm.
+     */
+    private OperationalRiskResponse lateness(Booking booking, Booking previous) {
+        Instant plannedEnd = previous.getPlannedEndAt();
+        if (plannedEnd == null) return OperationalRiskResponse.vehicleBusy();
+        Instant now = clock.instant();
+        boolean overdue = now.isAfter(plannedEnd);
+        int bufferMinutes = booking.getVehicle().getMaintenanceBufferMinutes() == null
+                ? 0 : Math.max(0, booking.getVehicle().getMaintenanceBufferMinutes());
+        Instant readyAt = (overdue ? now : plannedEnd).plus(Duration.ofMinutes(bufferMinutes));
+        if (!readyAt.isAfter(booking.getPickupTime())) return OperationalRiskResponse.safe();
+        long delayMinutes = Math.max(1, Duration.between(booking.getPickupTime(), readyAt).toMinutes());
+        return OperationalRiskResponse.vehicleLate(previous.getBookingCode(), plannedEnd, readyAt, delayMinutes, overdue);
     }
 
     @Override

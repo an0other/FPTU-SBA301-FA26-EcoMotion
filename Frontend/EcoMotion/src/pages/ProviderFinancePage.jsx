@@ -2,6 +2,8 @@ import { BankReceiptReconciliationModal } from '../components/payments/BankRecei
 import { canReviewRefund, refundReviewPayload } from '../utils/tv5Contracts'
 import { RefundProofModal } from '../components/payments/RefundProofModal'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { displayRefundReason } from '../utils/paymentReceipts'
+import { useSearchParams } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
 import { useRealtimeSync, TV5_REALTIME_EVENTS } from '../hooks/useRealtimeSync'
@@ -304,8 +306,37 @@ const REFUND_STATUS_CONFIG = {
   PENDING_RECONCILIATION: { label: 'Chờ đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
 }
 
+// Ghi nhận tiền về theo sao kê chỉ dành cho ngoại lệ (yêu cầu không còn nhận thanh toán bình thường).
+// Yêu cầu đang chờ (PENDING/PROOF_SUBMITTED) dùng nút Xác nhận; đã xác nhận đủ thì không cần đối soát.
+const BANK_EXCEPTION_STATUSES = new Set(['EXPIRED', 'REJECTED', 'VOIDED', 'REVIEW_REQUIRED', 'PARTIALLY_PAID'])
+
+const ISSUE_TYPES = [
+  ['UNDERPAID', 'Khách chuyển thiếu', 'Khách sẽ được yêu cầu chuyển thêm phần còn thiếu.'],
+  ['OVERPAID', 'Khách chuyển dư', 'Nên xác nhận đúng số thực nhận — phần dư sẽ tự thành khoản phải hoàn.'],
+  ['WRONG_CONTENT', 'Sai nội dung chuyển khoản', 'Khách được nhắc gửi lại biên lai để đối chiếu.'],
+  ['NOT_RECEIVED', 'Chưa thấy tiền về tài khoản', 'Khách được nhắc kiểm tra lại giao dịch.'],
+  ['OTHER', 'Khác', 'Mô tả cụ thể để quản trị viên xử lý.'],
+]
+
+function ReceivedAmountHint({ request, received }) {
+  const due = Number(request.remainingAmount
+    ?? Math.max(0, Number(request.amount || 0) - Number(request.paidAmount || 0)))
+  if (!received || received === due) return null
+  return received < due
+    ? <p className="mt-1 text-[11px] text-amber-700">Nhận thiếu {formatVnd(due - received)}: ghi nhận một phần, khách sẽ được yêu cầu chuyển thêm.</p>
+    : <p className="mt-1 text-[11px] text-blue-700">Nhận dư {formatVnd(received - due)}: phần dư thành khoản bạn bắt buộc hoàn cho khách (khách được thông báo).</p>
+}
+
 export default function ProviderFinancePage() {
-  const [activeTab, setActiveTab] = useState('transactions') // transactions | incoming | refunds | bankAccounts | payout
+  // Deep-link từ chi tiết đơn: /provider/finance?tab=incoming&booking=EM-...
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'transactions') // transactions | incoming | refunds | bankAccounts | payout
+  const bookingFilter = searchParams.get('booking') || ''
+  const clearBookingFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('booking')
+    setSearchParams(next, { replace: true })
+  }
 
   // Summary & Core Metrics
   const [summary, setSummary] = useState(null)
@@ -354,6 +385,10 @@ export default function ProviderFinancePage() {
   // Modals
   const [bankReceiptRequest, setBankReceiptRequest] = useState(null)
   const [confirmModalData, setConfirmModalData] = useState(null)
+  const [receivedAmountInput, setReceivedAmountInput] = useState('')
+  const [issueType, setIssueType] = useState('UNDERPAID')
+  const [issueAmountInput, setIssueAmountInput] = useState('')
+  const [issueRefInput, setIssueRefInput] = useState('')
   const [rejectModalData, setRejectModalData] = useState(null)
   const [reportIssueModalData, setReportIssueModalData] = useState(null)
   const [viewProofModalData, setViewProofModalData] = useState(null)
@@ -447,6 +482,7 @@ export default function ProviderFinancePage() {
     try {
       const res = await providerFinanceService.listProviderPaymentRequests({
         status: requestStatusFilter !== 'ALL' ? requestStatusFilter : undefined,
+        bookingCode: bookingFilter || undefined,
         offset: (requestPage - 1) * requestPageSize,
         limit: requestPageSize,
       })
@@ -456,7 +492,7 @@ export default function ProviderFinancePage() {
     } catch {
       // Quiet fail
     }
-  }, [requestStatusFilter, requestPage, requestPageSize])
+  }, [requestStatusFilter, requestPage, requestPageSize, bookingFilter])
 
   // Realtime Sync Hook
   useRealtimeSync({
@@ -562,10 +598,27 @@ export default function ProviderFinancePage() {
   // Handle Confirm Payment
   const handleOpenConfirmModal = (pr) => {
     setConfirmModalData(pr)
+    setReceivedAmountInput(String(Math.round(Number(pr.remainingAmount
+      ?? Math.max(0, Number(pr.amount || 0) - Number(pr.paidAmount || 0))))))
     setConfirmationId(crypto.randomUUID())
     setBankRefInput('')
     setConfirmNoteInput('')
   }
+
+  // Deep-link "Xác nhận ngay" từ chi tiết đơn: ?confirm=<id> mở thẳng modal xác nhận khi dữ liệu đã tải.
+  const confirmParam = searchParams.get('confirm')
+  useEffect(() => {
+    if (!confirmParam) return
+    const target = paymentRequests.find((pr) => String(pr.id) === confirmParam)
+    if (!target) return
+    queueMicrotask(() => {
+      handleOpenConfirmModal(target)
+      const next = new URLSearchParams(searchParams)
+      next.delete('confirm')
+      setSearchParams(next, { replace: true })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmParam, paymentRequests])
 
   const handleConfirmPayment = async (e) => {
     e.preventDefault()
@@ -574,15 +627,25 @@ export default function ProviderFinancePage() {
     confirmingPayment.current = true
     try {
       setIsConfirming(true)
+      const received = Number(String(receivedAmountInput).replace(/\D/g, ''))
+      if (!received) {
+        setToast({ message: 'Nhập số tiền thực nhận theo sao kê ngân hàng.', type: 'error' })
+        return
+      }
       const payload = {
         confirmationId,
+        receivedAmount: received,
         bankTransactionRef: bankRefInput.trim() || undefined,
         note: confirmNoteInput.trim() || undefined,
       }
       const result = await providerFinanceService.confirmPayment(confirmModalData.id, payload)
+      const due = Number(confirmModalData.remainingAmount
+        ?? Math.max(0, Number(confirmModalData.amount || 0) - Number(confirmModalData.paidAmount || 0)))
       setToast(result?.status === 'REVIEW_REQUIRED'
         ? { message: 'Đã ghi nhận tiền thực nhận. Booking chưa được xác nhận; cần đối soát hoặc hoàn tiền.', type: 'warning' }
-        : { message: 'Đã ghi nhận thanh toán và cập nhật giao dịch tài chính.', type: 'success' })
+        : received > due
+          ? { message: `Đã ghi nhận. Khách chuyển dư ${formatVnd(received - due)} — khoản này nằm ở tab Yêu cầu hoàn tiền, cần chuyển hoàn cho khách.`, type: 'warning' }
+          : { message: 'Đã ghi nhận thanh toán và cập nhật giao dịch tài chính.', type: 'success' })
       setConfirmModalData(null)
       fetchFinanceData()
       fetchPaymentRequests()
@@ -659,19 +722,27 @@ export default function ProviderFinancePage() {
   const handleOpenReportIssueModal = (pr) => {
     setReportIssueModalData(pr)
     setIssueNoteInput('')
+    setIssueType('UNDERPAID')
+    setIssueAmountInput('')
+    setIssueRefInput('')
   }
 
   const handleReportIssue = async (e) => {
     e.preventDefault()
     if (!reportIssueModalData || isReportingIssue) return
-    if (!issueNoteInput.trim()) {
-      setToast({ message: 'Vui lòng mô tả sai lệch hoặc vấn đề cần đối soát', type: 'error' })
+    if (issueType === 'OTHER' && !issueNoteInput.trim()) {
+      setToast({ message: 'Vui lòng mô tả sai lệch khi chọn "Khác"', type: 'error' })
       return
     }
 
     try {
       setIsReportingIssue(true)
-      await providerFinanceService.reportIssue(reportIssueModalData.id, { issueNote: issueNoteInput.trim() })
+      await providerFinanceService.reportIssue(reportIssueModalData.id, {
+        issueType,
+        issueNote: issueNoteInput.trim() || undefined,
+        receivedAmount: issueAmountInput ? Number(issueAmountInput) : undefined,
+        bankTransactionRef: issueRefInput.trim() || undefined,
+      })
       setToast({ message: 'Đã báo cáo sai lệch giao dịch thành công. Trạng thái đã chuyển sang Cần đối soát.', type: 'success' })
       setReportIssueModalData(null)
       fetchFinanceData()
@@ -1047,7 +1118,13 @@ export default function ProviderFinancePage() {
           <div className="rounded-lg border border-slate-200 bg-white shadow-xs overflow-hidden">
             {/* Toolbar */}
             <div className="p-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {bookingFilter && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-800">
+                    Đơn {bookingFilter}
+                    <button type="button" onClick={clearBookingFilter} aria-label="Bỏ lọc theo đơn" className="ml-0.5 text-brand-700 hover:text-brand-900">×</button>
+                  </span>
+                )}
                 <label htmlFor="finance-req-status-filter" className="text-xs font-semibold text-slate-600">
                   Trạng thái:
                 </label>
@@ -1132,7 +1209,7 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : (
                     paymentRequests.map((pr) => {
-                      const hasProof = pr.evidences && pr.evidences.length > 0
+                      const hasProof = (pr.evidences || []).some((evidence) => evidence.proofImageUrl)
                       const effectiveStatus = (hasProof && pr.status === 'PENDING') ? 'PROOF_SUBMITTED' : pr.status
                       const statusMeta = REQUEST_STATUS_CONFIG[effectiveStatus] || {
                         label: pr.status,
@@ -1226,9 +1303,17 @@ export default function ProviderFinancePage() {
                               onOpenRefundsTab={() => setActiveTab('refunds')}
                               onDeclineTrip={handleOpenDeclineTripModal}
                             />
-                            <button type="button" onClick={() => setBankReceiptRequest(pr)} className="mt-2 w-full rounded-md border border-amber-200 px-2 py-1 text-xs font-semibold text-amber-800">
-                              Tiền nhận cần đối soát
-                            </button>
+                            {BANK_EXCEPTION_STATUSES.has(pr.status) && (
+                              <button
+                                type="button"
+                                onClick={() => setBankReceiptRequest(pr)}
+                                title="Dùng khi sao kê ngân hàng có tiền khách chuyển nhưng yêu cầu này đã hết hạn, bị từ chối, bị huỷ hoặc cần xem lại. Chỉ ghi nhận để đối soát, không tự xác nhận đơn hay hoàn tiền."
+                                className="mt-2 w-full text-left text-[11px] font-semibold text-amber-800 underline-offset-2 hover:underline"
+                              >
+                                Khách vẫn chuyển tiền?
+                                <span className="block font-normal text-slate-500">Yêu cầu đã huỷ/hết hạn nhưng tiền vẫn về — ghi nhận để hoàn lại hoặc áp vào đơn.</span>
+                              </button>
+                            )}
                           </td>
                         </tr>
                       )
@@ -1328,8 +1413,9 @@ export default function ProviderFinancePage() {
                           <td className="px-4 py-3 text-right font-mono font-bold text-purple-900">
                             {formatVnd(ref.amount)}
                           </td>
-                          <td className="px-4 py-3 text-slate-700 max-w-[280px] truncate" title={ref.reason}>
-                            {ref.reason}
+                          <td className="px-4 py-3 text-slate-700 max-w-[280px] truncate" title={displayRefundReason(ref.reason)}>
+                            {ref.excess && <span className="mr-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">Khách chuyển dư · bắt buộc hoàn</span>}
+                            {displayRefundReason(ref.reason)}
                           </td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${badge.bg}`}>
@@ -1776,13 +1862,29 @@ export default function ProviderFinancePage() {
                   .
                 </p>
               </div>
-              {confirmModalData.evidences?.[0] ? (
+              {confirmModalData.evidences?.[0]?.proofImageUrl ? (
                 <PaymentEvidenceImage
                   evidence={confirmModalData.evidences[0]}
                   alt="Biên lai khách gửi"
                   className="h-36 w-full rounded-xl border border-slate-200 object-contain bg-slate-50"
                 />
-              ) : null}
+              ) : (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                  Khách chỉ báo đã chuyển khoản, không đính kèm ảnh — đối chiếu theo sao kê và nội dung chuyển khoản.
+                </p>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">Số tiền thực nhận theo sao kê *</label>
+                <input
+                  required
+                  inputMode="numeric"
+                  value={receivedAmountInput}
+                  onChange={(e) => setReceivedAmountInput(e.target.value.replace(/\D/g, ''))}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold focus:border-[#059669] focus:outline-hidden"
+                />
+                <ReceivedAmountHint request={confirmModalData} received={Number(receivedAmountInput || 0)} />
+              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng (Tùy chọn)</label>
@@ -1958,11 +2060,35 @@ export default function ProviderFinancePage() {
             </div>
 
             <form onSubmit={handleReportIssue} className="mt-4 space-y-4">
+              <p className="text-[11px] text-slate-600">
+                Đơn {reportIssueModalData.bookingCode} · yêu cầu {formatVnd(reportIssueModalData.amount)}. Khách và quản trị viên sẽ thấy báo cáo này cùng hướng xử lý.
+              </p>
+              <fieldset className="space-y-1.5">
+                <legend className="text-xs font-semibold text-slate-700">Sai lệch là gì? *</legend>
+                {ISSUE_TYPES.map(([value, label, hint]) => (
+                  <label key={value} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-xs ${issueType === value ? 'border-purple-400 bg-purple-50' : 'border-slate-200'}`}>
+                    <input type="radio" name="issueType" className="mt-0.5" checked={issueType === value} onChange={() => setIssueType(value)} />
+                    <span><span className="font-semibold text-slate-800">{label}</span><span className="block text-[11px] text-slate-500">{hint}</span></span>
+                  </label>
+                ))}
+              </fieldset>
+              {['UNDERPAID', 'OVERPAID', 'OTHER'].includes(issueType) && (
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block text-xs font-semibold text-slate-700">Số thực nhận
+                    <input inputMode="numeric" value={issueAmountInput} onChange={(e) => setIssueAmountInput(e.target.value.replace(/\D/g, ''))}
+                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-xs" />
+                  </label>
+                  <label className="block text-xs font-semibold text-slate-700">Mã GD ngân hàng
+                    <input value={issueRefInput} onChange={(e) => setIssueRefInput(e.target.value)} placeholder="FT24..."
+                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-xs" />
+                  </label>
+                </div>
+              )}
               <div>
-                <label className="block text-xs font-semibold text-slate-700">Mô tả sai lệch hoặc tranh chấp *</label>
+                <label className="block text-xs font-semibold text-slate-700">Mô tả {issueType === 'OTHER' ? '*' : '(tuỳ chọn)'}</label>
                 <textarea
                   rows={3}
-                  required
+                  required={issueType === 'OTHER'}
                   value={issueNoteInput}
                   onChange={(e) => setIssueNoteInput(e.target.value)}
                   placeholder="Ví dụ: Khách hàng chuyển sai mã tham chiếu, số tiền chuyển không khớp..."

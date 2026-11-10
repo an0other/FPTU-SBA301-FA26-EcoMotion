@@ -25,7 +25,6 @@ import com.fptufa26.ecomotion.review.enums.ReviewTarget;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/renter/bookings/{bookingCode}/reviews")
@@ -57,6 +56,15 @@ public class ReviewController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response));
+    }
+
+    @PostMapping(value = "/images", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload an image to attach to a review")
+    public ApiResponse<java.util.Map<String, String>> uploadImage(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable String bookingCode,
+            @org.springframework.web.bind.annotation.RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return ApiResponse.success(java.util.Map.of("url", reviewService.uploadReviewImage(principal.getUserId(), bookingCode, file)));
     }
 
     @PutMapping("/{target}")

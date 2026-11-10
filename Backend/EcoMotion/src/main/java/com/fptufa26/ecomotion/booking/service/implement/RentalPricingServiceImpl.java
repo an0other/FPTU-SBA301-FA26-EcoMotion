@@ -22,12 +22,12 @@ import java.util.*;
 
 @Service @RequiredArgsConstructor @Transactional(readOnly = true)
 public class RentalPricingServiceImpl implements RentalPricingService {
-    private final RentalPlanRepository planRepository;
     private final VehicleCatalogService vehicleCatalogService;
     private final VehicleDepositPolicyService depositPolicy;
     private final ScheduleService scheduleService;
     private final Clock clock;
     private final BookingStartPolicy bookingStartPolicy;
+    private final RentalPlanRepository planRepository;
 
     public static int validateHours(Instant start, Instant end) {
         if (start == null || end == null || !start.equals(start.truncatedTo(ChronoUnit.HOURS))
@@ -38,7 +38,7 @@ public class RentalPricingServiceImpl implements RentalPricingService {
     }
 
     private List<RentalPlan> plans(Long vehicleId) {
-        return planRepository.findByVehicle_IdAndStatusOrderByIdAsc(vehicleId, PlanStatus.ACTIVE).stream()
+        return vehicleCatalogService.findActivePlans(vehicleId).stream()
                 .filter(p -> p.getPlanType() != PlanType.YEARLY)
                 .filter(p -> p.getSlotLengthMinutes() != null && p.getSlotLengthMinutes() >= 60
                         && p.getSlotLengthMinutes() % 60 == 0 && p.getSlotPrice() != null

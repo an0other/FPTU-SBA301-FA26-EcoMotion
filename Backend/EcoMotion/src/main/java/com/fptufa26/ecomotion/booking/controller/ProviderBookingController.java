@@ -17,7 +17,6 @@ import com.fptufa26.ecomotion.booking.dto.response.SettlementResultResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripEvidenceResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripLocationResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripTrackingResponse;
-import com.fptufa26.ecomotion.booking.entity.TripIncident;
 import com.fptufa26.ecomotion.booking.enums.TripEvidenceType;
 import com.fptufa26.ecomotion.booking.service.ProviderBookingService;
 import com.fptufa26.ecomotion.booking.service.TripEvidenceService;
@@ -47,6 +46,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import com.fptufa26.ecomotion.booking.dto.response.OperationalRiskResponse;
 import com.fptufa26.ecomotion.booking.dto.response.TripIncidentResponse;
+import com.fptufa26.ecomotion.booking.dto.response.AutoAssignmentResponse;
+import com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter;
+import com.fptufa26.ecomotion.booking.service.BookingWorkflowService;
 
 @RestController
 @RequestMapping({ "/api/provider/bookings", "/api/v1/provider/bookings", "/api/v1/provider/trips" })
@@ -57,7 +59,7 @@ public class ProviderBookingController {
     private final ProviderBookingService providerBookingService;
     private final TripEvidenceService tripEvidenceService;
     private final VehicleOperationalRiskService vehicleOperationalRiskService;
-    private final com.fptufa26.ecomotion.booking.service.BookingWorkflowService bookingWorkflowService;
+    private final BookingWorkflowService bookingWorkflowService;
 
     @GetMapping
     @Operation(summary = "List the current provider's bookings")
@@ -71,7 +73,7 @@ public class ProviderBookingController {
     @Operation(summary = "List the current provider's bookings with pagination")
     public ApiResponse<PageResponse<ProviderBookingResponse>> listBookingsPaged(
             @AuthenticationPrincipal SecurityUser principal,
-            @org.springframework.web.bind.annotation.ModelAttribute com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter,
+            @org.springframework.web.bind.annotation.ModelAttribute BookingQueueFilter filter,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "10") int limit) {
         return ApiResponse.success(providerBookingService.filterBookings(principal.getUserId(), filter, offset, limit));
@@ -211,7 +213,7 @@ public class ProviderBookingController {
     @Operation(summary = "Export bookings to CSV format")
     public ResponseEntity<byte[]> exportBookings(
             @AuthenticationPrincipal SecurityUser principal,
-            @org.springframework.web.bind.annotation.ModelAttribute com.fptufa26.ecomotion.booking.dto.request.BookingQueueFilter filter) {
+            @org.springframework.web.bind.annotation.ModelAttribute BookingQueueFilter filter) {
         byte[] csvData = providerBookingService.exportFilteredBookings(principal.getUserId(), filter);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"bookings-export.csv\"")
@@ -237,7 +239,7 @@ public class ProviderBookingController {
 
     @PostMapping("/{id}/auto-assign")
     @Operation(summary = "Run Google OR-Tools CP-SAT and automatically assign optimal driver")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.AutoAssignmentResponse> autoAssignDriver(
+    public ApiResponse<AutoAssignmentResponse> autoAssignDriver(
             @AuthenticationPrincipal SecurityUser principal,
             @PathVariable("id") String id) {
         return ApiResponse.success(providerBookingService.autoAssignDriver(principal.getUserId(), id));

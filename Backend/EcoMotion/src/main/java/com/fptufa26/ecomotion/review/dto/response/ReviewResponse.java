@@ -10,6 +10,7 @@ public record ReviewResponse(
         Integer rating,
         String comment,
         String media,
-        Instant createdAt
+        Instant createdAt,
+        java.util.List<String> mediaUrls
 ) {
 }

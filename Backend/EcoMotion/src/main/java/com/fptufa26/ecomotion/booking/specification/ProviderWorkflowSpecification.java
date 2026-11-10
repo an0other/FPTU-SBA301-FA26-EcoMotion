@@ -9,6 +9,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestStatus;
 
 public final class ProviderWorkflowSpecification {
     private ProviderWorkflowSpecification() {}
@@ -23,11 +25,25 @@ public final class ProviderWorkflowSpecification {
             "COMPLETED", List.of(BookingStatus.COMPLETED),
             "CLOSED", List.of(BookingStatus.CANCELLED, BookingStatus.REJECTED));
 
+    /** Khách đã báo chuyển khoản (có/không ảnh biên lai) và đang chờ nhà xe xác nhận. */
+    public static final String PAYMENT_CONFIRM = "PAYMENT_CONFIRM";
+
+    public static jakarta.persistence.criteria.Subquery<Long> awaitingPaymentConfirmation(
+            jakarta.persistence.criteria.Root<Booking> root, jakarta.persistence.criteria.CriteriaQuery<?> query,
+            jakarta.persistence.criteria.CriteriaBuilder cb) {
+        var sub = query.subquery(Long.class);
+        var request = sub.from(PaymentRequest.class);
+        sub.select(request.get("id")).where(cb.equal(request.get("booking"), root),
+                cb.equal(request.get("status"), PaymentRequestStatus.PROOF_SUBMITTED));
+        return sub;
+    }
+
     public static Specification<Booking> filters(BookingQueueFilter f) {
         LocalDate from = date(f.dateFrom()); LocalDate to = date(f.dateTo());
         if (from != null && to != null && from.isAfter(to)) throw new IllegalArgumentException("Invalid date range");
         String action = f.action();
-        if (action != null && !action.equals("ALL") && !action.equals("NEEDS_ATTENTION") && !ACTIONS.containsKey(action))
+        if (action != null && !action.equals("ALL") && !action.equals("NEEDS_ATTENTION") && !action.equals(PAYMENT_CONFIRM)
+                && !ACTIONS.containsKey(action))
             throw new IllegalArgumentException("Invalid workflow action");
         ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
         Specification<Booking> spec = BookingSpecification.searchKeyword(f.search()).and(BookingSpecification.pickupTimeBetween(
@@ -40,7 +56,9 @@ public final class ProviderWorkflowSpecification {
             else if ("UNASSIGNED".equals(f.driver())) predicates.add(cb.isNull(root.get("driver")));
             else if ("PENDING_DRIVER".equals(f.driver())) predicates.add(cb.equal(root.get("status"), BookingStatus.DRIVER_ASSIGNED));
             else if (f.driver() != null && !f.driver().equals("ALL")) throw new IllegalArgumentException("Invalid driver filter");
-            if (action != null && !action.equals("ALL")) {
+            if (PAYMENT_CONFIRM.equals(action)) {
+                predicates.add(cb.exists(awaitingPaymentConfirmation(root, query, cb)));
+            } else if (action != null && !action.equals("ALL")) {
                 var trip = query.subquery(Long.class); var previous = trip.from(Booking.class);
                 trip.select(previous.get("id")).where(cb.equal(previous.get("vehicle"), root.get("vehicle")),
                         cb.notEqual(previous.get("id"), root.get("id")), cb.lessThan(previous.get("pickupTime"), root.get("pickupTime")),

@@ -479,7 +479,7 @@ export default function VehicleDetailModal({
                     )}
                     {plan.overtimeSurchargeRatio != null && (
                       <div className="text-[11px] text-slate-500">
-                        Hệ số ngoài giờ: <strong>{plan.overtimeSurchargeRatio}x</strong>
+                        Phụ thu quá giờ: <strong>+{Math.round(Number(plan.overtimeSurchargeRatio) * 100)}%</strong>
                       </div>
                     )}
                   </div>

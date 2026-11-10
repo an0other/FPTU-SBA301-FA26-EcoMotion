@@ -45,6 +45,12 @@ public class AdminDisputeDto {
     private BigDecimal refundAwardTotal;
     private Instant resolvedAt;
     private String tripEndAction;
+    /** Khiếu nại sai lệch thanh toán. */
+    private Long paymentRequestId;
+    private java.math.BigDecimal claimedAmount;
+    private String mismatchType;
+    /** Tổng số nhà xe đã ghi nhận cho yêu cầu thanh toán bị khiếu nại. */
+    private java.math.BigDecimal recordedAmount;
     private Instant createdAt;
     private Instant updatedAt;
 }

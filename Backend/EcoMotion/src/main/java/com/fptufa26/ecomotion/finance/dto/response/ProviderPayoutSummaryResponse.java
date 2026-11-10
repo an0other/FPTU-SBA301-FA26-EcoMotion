@@ -5,6 +5,7 @@ import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
 
 public record ProviderPayoutSummaryResponse(
         Long id,
@@ -19,6 +20,6 @@ public record ProviderPayoutSummaryResponse(
         DestinationBankSnapshotResponse destinationBank,
         Instant createdAt,
         Instant paidAt,
-        com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod verificationMethod
+        PaymentVerificationMethod verificationMethod
 ) {
 }

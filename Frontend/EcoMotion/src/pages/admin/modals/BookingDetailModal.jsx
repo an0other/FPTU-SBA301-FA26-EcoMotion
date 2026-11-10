@@ -19,7 +19,6 @@ const BOOKING_STATUS_BADGES = {
 export default function BookingDetailModal({
   booking,
   onClose,
-  onOpenRefund,
   onSelectRenter,
   onSelectVehicle,
   onSelectProvider,

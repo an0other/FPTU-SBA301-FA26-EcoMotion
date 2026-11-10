@@ -162,6 +162,62 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
     finally { setSubmitting(false) }
   }
 
+  // Đơn chưa cọc: không có gì để "đề xuất phương án" — chỉ cần huỷ đơn kèm lý do, không phát sinh hoàn tiền.
+  const simpleCancel = awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver && !workflow?.proposal
+    && !(Number(workflow?.confirmedPaid) > 0)
+  if (simpleCancel) {
+    const cancelUnpaid = async (event) => {
+      event.preventDefault()
+      if (submitting || !reason.trim()) return
+      setSubmitting(true)
+      setError('')
+      try {
+        const result = await providerBookingService.resolveOperationalRisk(booking.bookingCode, {
+          resolution: 'CANCEL_AND_REFUND', reason: reason.trim(),
+        })
+        await onSuccess(result)
+        setOpen(false)
+      } catch (err) { setError(err.message || 'Không thể huỷ đơn.') }
+      finally { setSubmitting(false) }
+    }
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-slate-900">Không nhận được chuyến này?</h2>
+            <p className="mt-0.5 text-xs text-slate-600">
+              Khách chưa đặt cọc nên không phát sinh hoàn tiền. Huỷ đơn sẽ giải phóng lịch xe và báo cho khách.
+            </p>
+          </div>
+          {!open && (
+            <button type="button" onClick={() => setOpen(true)}
+              className="h-10 shrink-0 rounded-lg border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 hover:bg-rose-50">
+              Huỷ đơn (khách chưa cọc)
+            </button>
+          )}
+        </div>
+        {open && (
+          <form onSubmit={cancelUnpaid} className="mt-3 space-y-2">
+            <label className="block text-xs font-semibold text-slate-700">Lý do huỷ (khách sẽ thấy)
+              <textarea required maxLength={500} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={submitting}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal" />
+            </label>
+            <p className="text-[11px] text-amber-800">Nếu khách vừa báo đã chuyển khoản, hãy kiểm tra sao kê trước khi huỷ.</p>
+            {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setOpen(false)} disabled={submitting}
+                className="h-9 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700">Không huỷ</button>
+              <button type="submit" disabled={submitting || !reason.trim()}
+                className="h-9 rounded-lg bg-rose-700 px-4 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-50">
+                {submitting ? 'Đang huỷ...' : 'Xác nhận huỷ đơn'}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    )
+  }
+
   const windowText = hasWindow
     ? `${formatBookingWhen(rentalStart)} → ${formatBookingWhen(rentalEnd)}`
     : 'chưa có khoảng thuê'
@@ -172,8 +228,21 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
         <div className="min-w-0">
           <h2 className="text-sm font-bold">{panelTitle}</h2>
           <p className="mt-0.5 line-clamp-2 text-xs text-amber-900">
-            {risk?.message || 'Chọn phương án xử lý và gửi cho khách thuê.'}
+            {(risk?.userMessage || risk?.message) || 'Chọn phương án xử lý và gửi cho khách thuê.'}
           </p>
+          {risk?.atRisk && risk?.blockingBookingCode ? (
+            <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs text-amber-950 sm:grid-cols-3">
+              <div><dt className="text-amber-800">Chuyến đang giữ xe</dt><dd className="font-mono font-semibold">{risk.blockingBookingCode}</dd></div>
+              <div><dt className="text-amber-800">Lịch trả xe của chuyến đó</dt><dd className="font-semibold">{formatBookingWhen(risk.blockingPlannedEndAt)}</dd></div>
+              <div>
+                <dt className="text-amber-800">Dự kiến sẵn sàng</dt>
+                <dd className="font-semibold">
+                  {formatBookingWhen(risk.estimatedReadyAt)}
+                  {risk.estimatedDelayMinutes ? <span className="text-red-700"> · trễ ~{risk.estimatedDelayMinutes} phút</span> : null}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
         </div>
         <button
           type="button"
@@ -210,7 +279,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
             <p className="mt-1">
               {awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver
                 ? 'Khách chưa cọc hoặc chưa gửi biên lai. Nếu nhà xe không nhận chuyến, chọn Hủy và hoàn tiền — không dùng nút Từ chối ở tab Tài chính khi chưa có biên lai.'
-                : (risk?.message || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.')}
+                : ((risk?.userMessage || risk?.message) || 'Thử tìm tài xế lại ở mục phân công, hoặc gửi phương án khác cho khách. Không đổi xe, giờ đón hay giá khi khách chưa đồng ý.')}
             </p>
             {pendingProposal && <p className="mt-2 text-xs">Đang chờ khách phản hồi; không thể gửi đè một đề xuất khác. Nếu không tiếp tục cung cấp dịch vụ, nhà xe có thể hủy và bắt đầu hoàn tiền.</p>}
 
@@ -218,9 +287,14 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
               <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900">
                 Phương án
                 <select aria-label="Phương án xử lý" value={resolution} onChange={e => setResolution(e.target.value)} disabled={submitting} className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
-                  <option value="CHANGE_VEHICLE">Đề xuất đổi xe</option><option value="RESCHEDULE">Đề xuất dời lịch</option><option value="CANCEL_AND_REFUND">Hủy và hoàn tiền</option>
+                  <option value="CHANGE_VEHICLE">Đề xuất đổi xe</option><option value="RESCHEDULE">Đề xuất dời lịch</option><option value="CANCEL_AND_REFUND">Hủy và hoàn tiền</option><option value="OTHER">Khác (tự mô tả phương án)</option>
                 </select>
               </label>
+              {resolution === 'OTHER' && (
+                <p className="self-end text-[11px] text-amber-900 sm:col-span-1">
+                  Mô tả cụ thể phương án ở ô bên dưới (tối thiểu 10 ký tự). Khách đồng ý thì phương án được ghi nhận; hệ thống không tự đổi xe hay giờ.
+                </p>
+              )}
 
               {resolution === 'RESCHEDULE' && (
                 <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900">
@@ -323,7 +397,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
 
               <label className="flex flex-col gap-1 text-xs font-semibold text-amber-900 sm:col-span-2">
                 <span className="flex items-center justify-between">
-                  <span>Lý do</span>
+                  <span>{resolution === 'OTHER' ? 'Phương án đề xuất cho khách' : 'Lý do'}</span>
                   <span className="font-normal text-amber-800">{reason.length}/500</span>
                 </span>
                 <textarea aria-label="Lý do xử lý" required maxLength={500} rows={2} value={reason} onChange={e => setReason(e.target.value)} disabled={submitting} className="w-full resize-y rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
@@ -335,6 +409,7 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
                   disabled={
                     submitting
                     || !reason.trim()
+                    || (resolution === 'OTHER' && reason.trim().length < 10)
                     || (pendingProposal && resolution !== 'CANCEL_AND_REFUND')
                     || (resolution === 'CHANGE_VEHICLE' && (!vehicleId || loading || selectedVehicleStatus !== 'free'))
                     || (resolution === 'RESCHEDULE' && (!newStart || rescheduleStatus?.status !== 'free'))

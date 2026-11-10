@@ -51,6 +51,8 @@ import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
+import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
+import com.fptufa26.ecomotion.booking.policy.BookingStartPolicy;
 
 @RestController
 @RequestMapping({"/api/v1/renter/bookings", "/api/renter/bookings"})
@@ -59,10 +61,10 @@ import org.springframework.web.multipart.MultipartFile;
 public class RenterBookingController {
 
     private final BookingService bookingService;
-    private final com.fptufa26.ecomotion.booking.policy.BookingStartPolicy bookingStartPolicy;
+    private final BookingStartPolicy bookingStartPolicy;
 
     @GetMapping("/start-policy")
-    public ApiResponse<com.fptufa26.ecomotion.booking.policy.BookingStartPolicy.StartWindow> startPolicy() {
+    public ApiResponse<BookingStartPolicy.StartWindow> startPolicy() {
         return ApiResponse.success(bookingStartPolicy.window());
     }
 
@@ -175,8 +177,15 @@ public class RenterBookingController {
         return ApiResponse.success(bookingService.openDispute(user.getUserId(), bookingCode, request));
     }
 
+    @PostMapping("/{bookingCode}/trip-end/confirm")
+    public ApiResponse<BookingDetailResponse> confirmTripEnd(
+            @AuthenticationPrincipal SecurityUser user,
+            @PathVariable String bookingCode) {
+        return ApiResponse.success(bookingService.confirmTripEnd(user.getUserId(), bookingCode));
+    }
+
     @PostMapping("/{bookingCode}/charges/{chargeId}/accept")
-    public ApiResponse<com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse> acceptCharge(
+    public ApiResponse<BookingChargeResponse> acceptCharge(
             @AuthenticationPrincipal SecurityUser user,
             @PathVariable String bookingCode,
             @PathVariable Long chargeId) {

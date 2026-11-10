@@ -4,16 +4,18 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import com.fptufa26.ecomotion.finance.service.FinancialAuditService;
+import com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests;
 
 public interface YearlyWorkflowService {
     View adminView(Long adminId, String code);
     List<ReviewCase> reviewCases(Long userId, String code);
     record ReviewCase(Long id, String category, String status, String description, List<String> evidenceUrls, String resolution) {}
-    View disputeSettlement(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Complaint request);
-    View replyReview(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Reply request);
-    View adjudicateSettlement(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.SettlementRuling request);
-    void adjudicateCancellation(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.CancellationRuling request);
-    java.util.List<com.fptufa26.ecomotion.finance.service.FinancialAuditService.Entry> reviewHistory(Long userId, String code);
+    View disputeSettlement(Long userId, String code, YearlyReviewRequests.Complaint request);
+    View replyReview(Long userId, String code, YearlyReviewRequests.Reply request);
+    View adjudicateSettlement(Long adminId, String code, YearlyReviewRequests.SettlementRuling request);
+    void adjudicateCancellation(Long adminId, String code, YearlyReviewRequests.CancellationRuling request);
+    java.util.List<FinancialAuditService.Entry> reviewHistory(Long userId, String code);
 
     View get(Long userId, String code);
     Preview preview(Long userId, String code, PreviewRequest request);

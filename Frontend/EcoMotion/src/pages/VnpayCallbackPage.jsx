@@ -52,16 +52,18 @@ export default function VnpayCallbackPage() {
   if (success) {
     return (
       <Shell tone="success" icon="check_circle" title="Thanh toán thành công">
-        <p className="text-sm text-slate-600">Giao dịch của bạn đã được thanh toán thành công.</p>
+        <p className="text-sm text-slate-600">Đơn thuê đã ghi nhận khoản thanh toán của bạn.</p>
+        <p className="text-3xl font-extrabold tabular-nums text-emerald-700">{formatVnd(result.amount)}</p>
         <Details rows={[
           ['Mã đơn thuê', result.bookingCode],
-          ['Mã thanh toán nội bộ', result.transactionCode],
-          ['Số tiền', formatVnd(result.amount)],
+          ['Mã giao dịch', result.transactionCode],
           ['Mã giao dịch VNPay', result.vnpTransactionNo || null],
         ]} />
         <Actions>
-          <Link to="/renter/bookings" className={PRIMARY}>Đơn của tôi</Link>
-          <Link to="/" className={SECONDARY}>Về trang chủ</Link>
+          <Link to="/renter/bookings" className={SECONDARY}>Đơn của tôi</Link>
+          {bookingPath
+            ? <Link to={bookingPath} className={PRIMARY}>Xem chi tiết đơn</Link>
+            : <Link to="/" className={PRIMARY}>Về trang chủ</Link>}
         </Actions>
       </Shell>
     )
@@ -115,27 +117,41 @@ const TONE = {
 
 function Shell({ tone, icon, title, children }) {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-6 sm:p-7 shadow-xs text-center space-y-5" aria-live="polite">
-        <span className={`material-symbols-rounded inline-flex h-16 w-16 items-center justify-center rounded-full text-4xl leading-none ${TONE[tone]}`} aria-hidden="true">
+    // Nằm trong BookingShell (đã có header): không dùng min-h-screen để tránh khoảng trắng và thanh cuộn thừa.
+    <div className="flex justify-center px-4 py-10 sm:py-16">
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white text-center shadow-sm" aria-live="polite">
+        <div className={`h-1.5 w-full ${BAR[tone]}`} aria-hidden="true" />
+        <div className="space-y-5 p-6 sm:p-8">
+        <span className={`material-symbols-rounded mx-auto flex h-16 w-16 items-center justify-center rounded-full leading-none ${TONE[tone]}`}
+          // Stylesheet Google Fonts đặt font-size 24px ngoài layer, lấn class Tailwind — dùng inline style.
+          style={{ fontSize: 40, fontVariationSettings: "'FILL' 1" }} aria-hidden="true">
           {icon}
         </span>
         <div className="space-y-2">
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{title}</h1>
           {children}
         </div>
+        </div>
       </div>
     </div>
   )
+}
+
+const BAR = {
+  success: 'bg-emerald-500',
+  failed: 'bg-red-500',
+  error: 'bg-red-500',
+  reconciliation: 'bg-purple-500',
+  neutral: 'bg-slate-300',
 }
 
 function Details({ rows }) {
   const visible = rows.filter(([, value]) => value != null && value !== '')
   if (visible.length === 0) return null
   return (
-    <dl className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-left space-y-3">
+    <dl className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50 px-4 text-left text-sm">
       {visible.map(([label, value]) => (
-        <div key={label} className="flex justify-between gap-3">
+        <div key={label} className="flex items-center justify-between gap-3 py-2.5">
           <dt className="text-slate-600">{label}</dt>
           <dd className="font-mono font-bold text-slate-900 break-all text-right">{value}</dd>
         </div>
@@ -145,7 +161,7 @@ function Details({ rows }) {
 }
 
 function Actions({ children }) {
-  return <div className="flex flex-wrap justify-center gap-3 pt-2">{children}</div>
+  return <div className="flex flex-col-reverse justify-center gap-3 pt-2 sm:flex-row">{children}</div>
 }
 
 function formatVnd(value) {
