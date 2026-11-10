@@ -360,7 +360,8 @@ public class VnpayServiceImpl implements VnpayService {
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal totalObligation = baseRental.add(extraCharges);
+        // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+        BigDecimal totalObligation = baseRental.subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO).add(extraCharges);
 
         List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingId(booking.getId());
         BigDecimal depositPaid = transactions.stream()
@@ -407,6 +408,7 @@ public class VnpayServiceImpl implements VnpayService {
                 booking.getBookingCode(),
                 booking.getStatus(),
                 baseRental,
+                booking.vehicleChangeCredit(),
                 chargeLines,
                 extraCharges,
                 depositPaid,
@@ -1031,7 +1033,8 @@ public class VnpayServiceImpl implements VnpayService {
                 .map(BookingCharge::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal totalObligation = baseRental.add(extraCharges);
+        // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+        BigDecimal totalObligation = baseRental.subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO).add(extraCharges);
 
         List<PaymentTransaction> transactions = bookingQueryService.findTransactionsByBookingId(booking.getId());
         BigDecimal confirmedIncoming = transactions.stream()

@@ -1,3 +1,4 @@
+// x
 package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.service.YearlyWorkflowService;
@@ -150,8 +151,9 @@ public class YearlyWorkflowController {
 
     @PostMapping("/api/renter/yearly-bookings/{code}/replacements/{id}/accept")
     @PreAuthorize("hasRole('RENTER')")
+    // B1: body nhận thêm acknowledgeLowerQuality (AcceptReplacement) để khách xác nhận xe chất lượng thấp hơn.
     public ApiResponse<YearlyWorkflowService.Replacement> acceptReplacement(@AuthenticationPrincipal SecurityUser user,
-            @PathVariable String code, @PathVariable Long id, @Valid @RequestBody YearlyWorkflowService.Version request) {
+            @PathVariable String code, @PathVariable Long id, @Valid @RequestBody YearlyWorkflowService.AcceptReplacement request) {
         return ApiResponse.success(service.acceptReplacement(user.getUserId(), code, id, request));
     }
 

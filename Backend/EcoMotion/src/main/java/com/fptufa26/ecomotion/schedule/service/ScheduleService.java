@@ -27,6 +27,9 @@ public interface ScheduleService {
 
     void moveBooking(Booking booking, Vehicle vehicle, Instant start, Instant end);
 
+    /** Read-only twin of {@link #moveBooking}: throws ConflictException when the vehicle cannot take the booking for [start, end). */
+    void assertFreeForMove(Booking booking, Vehicle vehicle, Instant start, Instant end);
+
     void reissueHold(Booking booking, Instant expiresAt);
 
     void confirmHold(Long bookingId);

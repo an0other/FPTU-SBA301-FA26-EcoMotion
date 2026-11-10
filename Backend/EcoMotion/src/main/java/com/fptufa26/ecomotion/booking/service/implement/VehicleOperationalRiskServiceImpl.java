@@ -6,7 +6,10 @@ import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.exception.BookingNotFoundException;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.service.VehicleOperationalRiskService;
+import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.service.UserService;
+import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,9 +35,20 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
             BookingStatus.AWAITING_FINAL_PAYMENT
     );
 
+    private static final Set<BookingStatus> COMMITTED_STATUSES = EnumSet.of(
+            BookingStatus.CONFIRMED,
+            BookingStatus.DRIVER_ASSIGNED,
+            BookingStatus.DRIVER_CONFIRMED,
+            BookingStatus.DRIVER_ARRIVED,
+            BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_END_CONFIRMATION
+    );
+
     private final BookingRepository bookingRepository;
     private final UserService userService;
     private final Clock clock;
+    private final ScheduleService scheduleService;
 
     @Override
     public OperationalRiskResponse assess(Booking booking) {
@@ -91,6 +105,29 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
         Booking booking = bookingRepository.findByBookingCodeAndVehicle_Provider_Id(normalized, providerId)
                 .orElseThrow(() -> new BookingNotFoundException(normalized));
         return assess(booking);
+    }
+
+    @Override
+    public void requireVehicleReadyForWindow(Booking booking, Vehicle vehicle, Instant start, Instant end) {
+        Long selfId = booking.getId();
+        // 1. A vehicle still out on an earlier trip is not free, even if its schedule row has already expired.
+        boolean notReturned = bookingRepository.findByVehicle_IdAndStatusIn(vehicle.getId(), VEHICLE_NOT_RETURNED_STATUSES).stream()
+                .filter(other -> !other.getId().equals(selfId))
+                .anyMatch(other -> other.getActualEndAt() == null && other.getPickupTime() != null
+                        && other.getPickupTime().isBefore(start));
+        if (notReturned) {
+            throw new ConflictException("Xe đang chạy chuyến trước và chưa được trả về; không thể nhận chuyến này vào giờ đã chọn");
+        }
+        // 2. Another committed booking on the same vehicle that overlaps the window (does not rely on a schedule row existing).
+        boolean overlaps = bookingRepository.findByVehicle_IdAndStatusIn(vehicle.getId(), COMMITTED_STATUSES).stream()
+                .filter(other -> !other.getId().equals(selfId))
+                .anyMatch(other -> other.getPickupTime() != null && other.getPlannedEndAt() != null
+                        && other.getPickupTime().isBefore(end) && other.getPlannedEndAt().isAfter(start));
+        if (overlaps) {
+            throw new ConflictException("Xe đã có chuyến khác trong khoảng thời gian thuê này");
+        }
+        // 3. Schedule table (holds, maintenance, blocks, buffers, yearly custody).
+        scheduleService.assertFreeForMove(booking, vehicle, start, end);
     }
 
     private String normalize(String bookingCode) {

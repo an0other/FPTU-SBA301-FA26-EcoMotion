@@ -59,6 +59,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
     private final EntityManager entityManager;
     private final Clock clock;
     private final TripEndConfirmationService endConfirmations;
+    private final RentalPricingService rentalPricing;
 
     @Override
     public BookingWorkflowResponse getWorkflow(Long currentUserId, String bookingCode) {
@@ -157,6 +158,11 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
                 throw new IllegalArgumentException("Phương án khác cần mô tả cụ thể ít nhất 10 ký tự");
         } else throw new IllegalArgumentException("Phương án không hợp lệ");
         OperationalProposal current = booking.getOperationalProposal();
+        if (current == null || current.getRespondedAt() != null) {
+            // Never trust the vehicle status the UI displayed: re-check the booking window on the server.
+            // (A still-pending proposal is handled just below: idempotent repeat, or rejected as an overwrite.)
+            providerBookings.requireProposalTargetReady(userId, code, request);
+        }
         if (current != null && current.getRespondedAt() == null) {
             if (current.getResolution() == request.resolution() && Objects.equals(current.getVehicleId(), request.replacementVehicleId())
                     && Objects.equals(current.getPickupTime(), request.newPickupTime()) && current.getReason().equals(request.reason().trim()))
@@ -183,7 +189,7 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         else if ("REJECT".equals(request.action())) accept = false;
         else throw new IllegalArgumentException("Phản hồi phải là ACCEPT hoặc REJECT");
         OperationalProposal proposal = booking.getOperationalProposal();
-        if (proposal == null || !proposal.getId().equals(id)) throw new ConflictException("Đề xuất đã thay đổi; hãy tải lại đơn");
+        if (proposal == null || !proposal.getId().equals(id)) throw new ConflictException("Đề xuất đã thay đổi, vui lòng tải lại trang.");
         if (proposal.getRespondedAt() != null) {
             if (Objects.equals(proposal.getRespondedBy(), userId) && Boolean.TRUE.equals(proposal.getAccepted()) == accept)
                 return getWorkflow(userId, code);
@@ -191,6 +197,13 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         }
         if (!MUTABLE.contains(booking.getStatus())) throw new ConflictException("Đề xuất không còn áp dụng cho trạng thái hiện tại");
         if (request.reason() != null && request.reason().length() > 500) throw new IllegalArgumentException("Lý do tối đa 500 ký tự");
+        // B1: xe thay thế chất lượng thấp hơn chỉ được đổi khi khách xác nhận rõ; không tự động đổi.
+        if (accept && proposal.getResolution() == OperationalResolutionType.CHANGE_VEHICLE) {
+            var notes = lowerQualityNotes(booking, proposal);
+            if (!notes.isEmpty() && !Boolean.TRUE.equals(request.acknowledgeLowerQuality()))
+                throw new ConflictException("Xe thay thế có chất lượng thấp hơn (" + String.join("; ", notes)
+                        + "). Cần khách xác nhận đồng ý trước khi đổi xe");
+        }
         respond(booking, userId, accept, request.reason());
         proposal = booking.getOperationalProposal();
         if (accept) {
@@ -201,6 +214,13 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         }
         bookings.saveAndFlush(booking); notifications.changed(booking, "OPERATIONAL_PROPOSAL_CHANGED");
         return getWorkflow(userId, code);
+    }
+
+    private List<String> lowerQualityNotes(Booking booking, OperationalProposal proposal) {
+        if (proposal.getResolution() != OperationalResolutionType.CHANGE_VEHICLE || proposal.getVehicleId() == null) return List.of();
+        return vehicles.findVehicleById(proposal.getVehicleId())
+                .map(v -> com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.qualityDowngrades(booking.getVehicle(), v))
+                .orElse(List.of());
     }
 
     private void respond(Booking booking, Long userId, boolean accepted, String reason) {
@@ -266,8 +286,28 @@ public class BookingWorkflowServiceImpl implements BookingWorkflowService {
         String status = proposal.getRespondedAt() == null ? MUTABLE.contains(booking.getStatus()) ? "PENDING" : "EXPIRED"
                 : Boolean.TRUE.equals(proposal.getAccepted()) ? "ACCEPTED"
                 : Objects.equals(proposal.getRespondedBy(), proposal.getCreatedBy()) ? "WITHDRAWN" : "REJECTED";
+        var quality = lowerQualityNotes(booking, proposal);
+        // Đã đổi: giá xe mới lấy từ bản chốt trên booking. Chưa đổi: chỉ báo hợp đồng, khách không bị thu thêm.
+        boolean changed = "ACCEPTED".equals(status) && proposal.getResolution() == OperationalResolutionType.CHANGE_VEHICLE
+                && booking.getVehicleChangeNewAmount() != null;
+        String current = changed ? vehicles.findVehicleById(booking.getPreviousVehicleId())
+                .map(v -> v.getBrand() + " " + v.getModel() + " · " + v.getLicensePlate()).orElse(null)
+                : booking.getVehicle().getBrand() + " " + booking.getVehicle().getModel() + " · " + booking.getVehicle().getLicensePlate();
+        // Đang chờ khách: trả sẵn ước tính giá xe mới và khoản giảm trừ (cùng công thức lúc đổi) để khách thấy trước khi quyết định.
+        BigDecimal proposedAmount = changed ? booking.getVehicleChangeNewAmount() : null;
+        BigDecimal reduction = changed ? booking.vehicleChangeCredit() : null;
+        if (!changed && "PENDING".equals(status) && proposal.getResolution() == OperationalResolutionType.CHANGE_VEHICLE
+                && proposal.getVehicleId() != null && booking.getPlannedEndAt() != null && booking.getPickupTime() != null) {
+            try {
+                proposedAmount = rentalPricing.rentalAmountFor(proposal.getVehicleId(), booking.getPickupTime(), booking.getPlannedEndAt());
+                reduction = com.fptufa26.ecomotion.booking.policy.VehicleChangePolicy.discount(booking.getTotalAmount(), proposedAmount);
+            } catch (RuntimeException e) {
+                proposedAmount = null; reduction = null; // không đủ dữ liệu giá: không hiển thị ước tính, không làm hỏng việc đọc workflow
+            }
+        }
         return new BookingWorkflowResponse.Proposal(proposal.getId(), proposal.getResolution(), proposal.getVehicleId(), vehicle,
-                proposal.getPickupTime(), proposal.getReason(), status, proposal.getCreatedAt(), proposal.getRespondedAt(), proposal.getResponseReason());
+                proposal.getPickupTime(), proposal.getReason(), status, proposal.getCreatedAt(), proposal.getRespondedAt(), proposal.getResponseReason(),
+                current, !quality.isEmpty(), quality, booking.getTotalAmount(), proposedAmount, reduction);
     }
 
     private String nextAction(Booking booking, boolean provider, String payment, String settlement, boolean needsDriver, BookingWorkflowResponse.Proposal proposal, List<RefundResponse> refundRows) {

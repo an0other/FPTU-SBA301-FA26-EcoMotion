@@ -145,11 +145,22 @@ public class ScheduleServiceImpl implements ScheduleService {
     @Transactional
     public void moveBooking(Booking booking, Vehicle vehicle, Instant start, Instant end) {
         Long bookingId = booking.getId();
+        assertFreeForMove(booking, vehicle, start, end);
+        // Bookings created outside the normal hold/book path (legacy or imported data) can lack a schedule row.
+        // Reuse the same legacy-row fallback as reissueHold instead of failing the whole accept with a 500.
         VehicleSchedule row = vehicleScheduleRepository.findByBooking_Id(bookingId).stream()
                 .filter(schedule -> schedule.getType() == ScheduleType.BOOKED
                         && (schedule.getStatus() == ScheduleStatus.ACTIVE || schedule.getStatus() == ScheduleStatus.HELD))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Không tìm thấy lịch đang giữ xe của booking"));
+                .orElseGet(() -> newLegacyHold(booking));
+        row.setVehicle(vehicle);
+        row.setStartAt(start);
+        row.setEndAt(reservationEnd(booking, end));
+    }
+
+    @Override
+    public void assertFreeForMove(Booking booking, Vehicle vehicle, Instant start, Instant end) {
+        Long bookingId = booking.getId();
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(vehicle, start, reservationEnd(booking, end));
         if (vehicleScheduleRepository.hasYearlyCustody(vehicle.getId(), bookingId)
                 || vehicleScheduleRepository.hasYearlyReplacementReservation(vehicle.getId(), bookingId, start,
@@ -161,9 +172,6 @@ public class ScheduleServiceImpl implements ScheduleService {
             throw new ConflictException(
                     "Xe thay thế không còn trống trong khoảng thời gian đã chọn");
         }
-        row.setVehicle(vehicle);
-        row.setStartAt(start);
-        row.setEndAt(reservationEnd(booking, end));
     }
 
     @Override

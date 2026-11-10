@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.booking.service.implement;
 import com.fptufa26.ecomotion.booking.entity.Booking;
 import com.fptufa26.ecomotion.booking.enums.BookingStatus;
 import com.fptufa26.ecomotion.booking.repository.BookingRepository;
+import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.entity.Vehicle;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class VehicleLatenessRiskTest {
     private final BookingRepository repo = mock(BookingRepository.class);
 
     private VehicleOperationalRiskServiceImpl service(Instant now) {
-        return new VehicleOperationalRiskServiceImpl(repo, mock(UserService.class), Clock.fixed(now, ZoneOffset.UTC));
+        return new VehicleOperationalRiskServiceImpl(repo, mock(UserService.class), Clock.fixed(now, ZoneOffset.UTC), mock(ScheduleService.class));
     }
 
     private Booking booking(long id, String code, Vehicle vehicle, Instant pickup, Instant plannedEnd, BookingStatus status) {

@@ -33,7 +33,8 @@ public class BookingPaymentStateServiceImpl implements BookingPaymentStateServic
         BigDecimal extras = ledger.listCharges(booking.getId()).stream()
                 .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT)
                 .map(BookingCharge::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal obligation = booking.getTotalAmount().add(extras);
+        // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+        BigDecimal obligation = booking.getTotalAmount().subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO).add(extras);
         boolean closed = Set.of(BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus());
         BigDecimal remaining = closed ? BigDecimal.ZERO : obligation.subtract(paid.subtract(refunded)).max(BigDecimal.ZERO);
         boolean reconcile = transactions.stream().anyMatch(t -> t.getProcessingNote() != null
