@@ -205,4 +205,22 @@ class IdentityDecisionServiceTest {
         when(users.findById(1L)).thenReturn(Optional.of(user));
         assertThrows(AccessDeniedException.class, () -> service(false).review(1L, attempt.getPublicId(), 3, "APPROVE", null));
     }
+
+    @Test
+    void requestedVideoReplacementMustChangeBeforeResubmission() {
+        attempt.setRequiredPreviousVideoSha("old-video-hash");
+        attempt.setVideoSha256("old-video-hash");
+        var error = assertThrows(IdentityAiException.class, () -> service(true).submit(1L, attempt.getPublicId(), 3, true));
+        assertEquals("IDENTITY_NEW_EVIDENCE_REQUIRED", error.getErrorCode());
+        attempt.setVideoSha256("new-video-hash");
+        assertEquals(READY_TO_SUBMIT, service(true).submit(1L, attempt.getPublicId(), 3, true).status());
+    }
+
+    @Test
+    void readinessDoesNotTreatUploadedButBelowThresholdVideoAsPassed() {
+        when(attempts.findFirstByUser_IdOrderByIdDesc(1L)).thenReturn(Optional.of(attempt));
+        assertTrue(service(true).providerEvidenceReady(1L));
+        var strict = new IdentityDecisionServiceImpl(attempts, identities, users, fingerprints, sessions, mapper, clock, "0.9");
+        assertFalse(strict.providerEvidenceReady(1L));
+    }
 }

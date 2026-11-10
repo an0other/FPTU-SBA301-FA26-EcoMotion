@@ -7,7 +7,7 @@ const unwrap = (response) => response.data?.data
 export const yearlyWorkflowService = {
   async load(role, code) {
     const base = path(role, code)
-    const [workflow, handover, payments, evidence, contract] = await Promise.all([
+    const [workflow, handover, payments, evidence, contract, reviews] = await Promise.all([
       apiClient.get(base + '/workflow').then(unwrap),
       apiClient.get(base + '/handover').then(unwrap),
       apiClient.get(base + '/payments').then(unwrap).catch((error) => {
@@ -16,8 +16,9 @@ export const yearlyWorkflowService = {
       }),
       apiClient.get('/bookings/' + encodeURIComponent(code) + '/evidences').then(unwrap),
       role === 'renter' ? yearlyRentalService.getContractStatus(code) : Promise.resolve(null),
+      apiClient.get(base + '/reviews/history').then(unwrap),
     ])
-    return { workflow, handover, payments: payments || [], evidence: evidence || [], contract }
+    return { workflow, handover, payments: payments || [], evidence: evidence || [], contract, reviews }
   },
   async action(role, code, action, body = {}) {
     return unwrap(await apiClient.post(path(role, code) + '/' + action, body))

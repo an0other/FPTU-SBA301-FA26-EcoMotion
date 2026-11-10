@@ -3,6 +3,7 @@ import { IconCheckCircle, IconAlertTriangle, IconInfo } from './icons/Icons'
 
 const VARIANT_CLASS = {
   error: 'border-red-200 bg-red-50 text-red-800 shadow-red-900/10',
+  warning: 'border-amber-200 bg-amber-50 text-amber-900 shadow-amber-900/10',
   success: 'border-brand-500 bg-brand-700 text-white shadow-emerald-900/20',
   info: 'border-slate-600 bg-slate-900 text-white shadow-slate-900/20',
 }
@@ -25,6 +26,8 @@ export default function Toast({ message, type = 'error', duration = 4000, onClos
     >
       {type === 'error' ? (
         <IconAlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
+      ) : type === 'warning' ? (
+        <IconAlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
       ) : type === 'success' ? (
         <IconCheckCircle className="h-5 w-5 shrink-0 text-white" />
       ) : (

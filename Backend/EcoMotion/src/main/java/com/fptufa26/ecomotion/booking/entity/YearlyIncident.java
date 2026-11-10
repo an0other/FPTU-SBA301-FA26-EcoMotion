@@ -19,6 +19,7 @@ public class YearlyIncident {
     private Long bookingId;
     private Long evidenceId;
     private Long transferEvidenceId;
+    private Long reviewDisputeId;
     @Column(length = 2000)
     private String requestId;
     @Column(length = 2000)

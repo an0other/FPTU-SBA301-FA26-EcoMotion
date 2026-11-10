@@ -146,7 +146,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
             operation = transactions.execute(transaction -> {
                 var attempt = owned(userId, attemptId);
                 requireEditable(view(attempt), version);
-                var obsolete = keys(attempt);
+                var obsolete = attempt.isEvidenceRetained() ? java.util.List.<String>of() : keys(attempt);
                 begin(attempt, "DOCUMENT");
                 attempt.setDocumentRevision(attempt.getDocumentRevision() + 1);
                 attempt.setFrontKey(storedFront);
@@ -201,7 +201,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
                 var attempt = owned(userId, attemptId);
                 requireVideoReady(view(attempt), version);
                 var obsolete = new ArrayList<String>();
-                if (attempt.getVideoKey() != null) {
+                if (attempt.getVideoKey() != null && !attempt.isEvidenceRetained()) {
                     obsolete.add(attempt.getVideoKey());
                 }
                 begin(attempt, "VIDEO");
@@ -235,6 +235,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
                     return view(attempts.saveAndFlush(attempt));
                 }
                 attempt.setVideoJson(videoJson);
+                attempt.setVideoSha256(digest(storage.read(videoKey, maxVideoBytes)));
                 boolean ready = "READY_FOR_REVIEW".equals(result.workflow().status());
                 attempt.setStatus(ready ? READY_TO_SUBMIT : DOCUMENT_READY);
                 attempt.setLastErrorCode(ready ? null : "VIDEO_RETAKE_REQUIRED");
@@ -409,7 +410,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
                 attempt.getBackKey() != null, attempt.getVideoKey() != null,
                 document, video, attempt.getStatus() == APPROVED ? "ACCEPTED" : "NOT_EVALUATED",
                 attempt.getStatus() == READY_TO_SUBMIT && attempt.getExpiresAt().isAfter(clock.instant())
-                        && acceptanceThreshold != null && !acceptanceThreshold.isBlank(),
+                        && acceptanceThreshold != null && !acceptanceThreshold.isBlank() && attempt.hasRequiredNewEvidence(),
                 attempt.getStatus() == APPROVED && "SYSTEM".equals(attempt.getDecisionActor()),
                 attempt.getUser().getId(), attempt.getUser().getEmail(), attempt.getUser().getFullName(),
                 attempt.getDecisionActor(), attempt.getDecisionReason(), attempt.getDecisionPolicyVersion(),
@@ -423,6 +424,12 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
     private java.util.List<String> keys(IdentityVerificationAttempt attempt) {
         return Arrays.stream(new String[]{attempt.getFrontKey(), attempt.getBackKey(), attempt.getVideoKey()})
                 .filter(Objects::nonNull).toList();
+    }
+
+    @Override
+    public byte[] storedEvidence(String key, String kind) {
+        if (!java.util.Set.of("front", "back", "video").contains(kind)) throw new IllegalArgumentException("Unknown evidence kind");
+        return storage.read(key, "video".equals(kind) ? maxVideoBytes : maxImageBytes);
     }
 
     private void cleanup(String key) {

@@ -71,6 +71,10 @@ Chuẩn bị dữ liệu Provider chưa tạo danh tính đã xác minh. Khi g�
 
 API vẫn hỗ trợ quyết định `REOPEN` cho tương thích, nhưng người dùng không cần chờ thao tác này để sửa hồ sơ bị từ chối.
 
+Khi yêu cầu bổ sung hoặc từ chối, Admin phải nhập ghi chú cụ thể (tối đa 1000 ký tự), ngoài mã lý do. Giao diện hiển thị ghi chú cho người đăng ký.
+
+Nếu lý do là `DOCUMENT_UNREADABLE`, lần gửi lại phải thay đổi ảnh CCCD và kiểm tra video lại. Nếu lý do là `FACE_UNCLEAR`, video phải được thay thế. Backend so sánh fingerprint nội dung ảnh/video; gửi lại nguyên bằng chứng bị yêu cầu sửa sẽ bị chặn. Lý do sửa địa chỉ/ngân hàng không bắt buộc quay lại video còn hợp lệ.
+
 ### Phiên CCCD/video
 
 Các trạng thái chính: `DRAFT`, `PROCESSING`, `DOCUMENT_READY`, `READY_TO_SUBMIT`, `SUBMITTED`, `APPROVED`, `NEEDS_CHANGES`, `REJECTED`, `ERROR`, `CANCELLED`, `EXPIRED`.
@@ -88,12 +92,15 @@ Các trạng thái chính: `DRAFT`, `PROCESSING`, `DOCUMENT_READY`, `READY_TO_SU
 - AI được gọi ngoài transaction dài trong luồng upload; operation ID và document revision bảo vệ kết quả trả muộn.
 - Admin review hồ sơ chạy trong transaction chung với duyệt danh tính và tạo Provider. Lỗi tạo Provider phải rollback cả lượt duyệt danh tính.
 - Lưu lại form sau phản hồi chuyển hồ sơ về `DRAFT`; gửi lại chuyển về `SUBMITTED`.
-- Lịch sử review giữ quyết định và snapshot form. API history hiện trả metadata; không trả toàn bộ snapshot hoặc toàn bộ lịch sử file bằng chứng.
+- Lịch sử review mới giữ quyết định, ghi chú, snapshot form, dữ liệu OCR/AI và tham chiếu bộ bằng chứng tại thời điểm xét duyệt. Các file đã được snapshot được giữ khi upload bản thay thế. Admin xem snapshot và tải bằng chứng qua endpoint có phân quyền; không sử dụng phiên hiện tại để giả lập lịch sử.
+- Lượt duyệt cũ trước thay đổi này có thể chưa có snapshot danh tính; hệ thống không tự dựng lại bằng chứng lịch sử từ dữ liệu hiện tại.
 
 ## 6. Phạm vi MVP và giới hạn
 
 - Camera dùng hướng dẫn theo thời gian, không xác nhận realtime người dùng quay đúng đầu.
 - Kiểm tra động tác chưa đủ để khẳng định chống phát lại video/deepfake hoặc giấy tờ giả.
 - Thông tin ngân hàng hiện kiểm tra cấu trúc và ngân hàng hỗ trợ; không phải xác minh quyền sở hữu tài khoản ngân hàng qua nhà cung cấp.
+- Ngân hàng vẫn tùy chọn lúc đăng ký. Sau duyệt, dashboard có checklist thiết lập nhận tiền. Backend chặn chấp nhận đơn thuê nếu chưa có tài khoản nhận tiền, để không đẩy lỗi sang bước renter upload hợp đồng/phát hành yêu cầu thu tiền.
+- Nút lưu form có tên `Lưu thông tin`, không cam kết lưu bản đang bỏ trống trường bắt buộc. Cờ sẵn sàng gửi xét cả ngưỡng AI và yêu cầu thay bằng chứng, không chỉ việc upload hoàn tất.
 - Bằng chứng được lưu riêng tư và lấy qua API có phân quyền; không dùng URL public trong form đăng ký.
 - Cùng danh tính Renter/Provider được dùng để chặn tự thuê xe của chính mình ở các bước nghiệp vụ thuê xe. Không kiểm chứng quan hệ người quen chỉ bằng thông tin tài khoản.

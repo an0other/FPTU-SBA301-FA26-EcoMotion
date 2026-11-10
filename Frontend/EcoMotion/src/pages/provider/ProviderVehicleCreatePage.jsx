@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { providerService } from "../../services/providerService";
 import ProviderHeader from "../../components/provider/ProviderHeader";
 import Toast from "../../components/Toast";
+import { formatLicensePlateInput } from "../../utils/validation";
 
-const DEFAULT_COVER_IMAGE =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBbaQp-zgmEeeOXgITBoZMG_mcjykw9QLCVVMpxpETzMKWOKamELEhCdDXqwPVtL9zm5vOF2SlweeWygVXyZ2tA4s1juN6evzQAEWXkCkB-3K6P9MO7bJcwoh5d5bQLraMTZHHwFbqsBRK0fvMsCFq9tdvSzMkam9bV_EbMWD3qlBjHLp2u0T1nqp7jBbTKlsC-OK844n_DbPKYGhFWBhfKb6BMCy-DRHd4iSz2nmy1jHs274eOxg4y";
+const DEFAULT_VEHICLE_PREVIEW =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500"><rect width="100%" height="100%" fill="%23f1f5f9"/><text x="50%" y="50%" fill="%2394a3b8" font-size="24" font-family="sans-serif" text-anchor="middle">Chưa có ảnh bìa xe</text></svg>';
 
 const BRAND_OPTIONS = [
   "VinFast",
@@ -17,6 +18,9 @@ const BRAND_OPTIONS = [
   "Porsche",
   "Kia",
   "Ford",
+  "Mazda",
+  "Honda",
+  "Land Rover",
 ];
 
 const VIETNAM_PLATE_REGEX =
@@ -27,6 +31,7 @@ const ENGINE_REGEX = /^[A-Z0-9-]{4,50}$/;
 export default function ProviderVehicleCreatePage() {
 
   const navigate = useNavigate();
+  const navigateTimerRef = useRef(null);
 
   const [summary, setSummary] = useState(null);
   const [toast, setToast] = useState(null);
@@ -40,15 +45,23 @@ export default function ProviderVehicleCreatePage() {
     engineNo: "",
     licensePlate: "",
     brand: "VinFast",
-    model: "VF 8 Plus",
+    model: "",
     manufactureYear: 2024,
     seatCount: 5,
     transmission: "AUTOMATIC",
     fuelType: "EV",
-    color: "Xanh Lục Bảo (Deep Ocean)",
+    color: "",
     maintenanceBufferMinutes: 60,
-    coverImageUrl: DEFAULT_COVER_IMAGE,
+    coverImageUrl: "",
   });
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimerRef.current) {
+        clearTimeout(navigateTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -86,14 +99,13 @@ export default function ProviderVehicleCreatePage() {
     setForm((prev) => {
       const next = Math.max(
         30,
-        Math.min(180, (prev.maintenanceBufferMinutes || 60) + delta),
+        Math.min(240, (prev.maintenanceBufferMinutes ?? 60) + delta),
       );
       return { ...prev, maintenanceBufferMinutes: next };
     });
   }
 
-  async function handleImageFileSelected(e) {
-    const file = e.target.files?.[0];
+  async function processImageUpload(file) {
     if (!file) return;
 
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -104,13 +116,11 @@ export default function ProviderVehicleCreatePage() {
         message: "Hệ thống chỉ chấp nhận hình ảnh định dạng JPG, PNG hoặc WEBP.",
         type: "error",
       });
-      e.target.value = "";
       return;
     }
 
     if (file.size > 8 * 1024 * 1024) {
       setToast({ message: "Dung lượng ảnh tối đa là 8MB.", type: "error" });
-      e.target.value = "";
       return;
     }
 
@@ -128,8 +138,15 @@ export default function ProviderVehicleCreatePage() {
       });
     } finally {
       setUploadingImage(false);
-      e.target.value = "";
     }
+  }
+
+  async function handleImageFileSelected(e) {
+    const file = e.target.files?.[0];
+    if (file) {
+      await processImageUpload(file);
+    }
+    e.target.value = "";
   }
 
   async function handleSubmit(e) {
@@ -146,10 +163,10 @@ export default function ProviderVehicleCreatePage() {
     const newErrors = {};
 
     if (!cleanChassis) {
-      newErrors.chassisNo = "Vui lòng nhập Số khung (VIN).";
+      newErrors.chassisNo = "Vui lòng nhập Số khung xe.";
     } else if (!VIN_REGEX.test(cleanChassis)) {
       newErrors.chassisNo =
-        "Số khung (VIN) không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối).";
+        "Số khung xe không hợp lệ (tối thiểu 6 ký tự chữ, số hoặc gạch nối).";
     }
 
     if (!cleanEngine) {
@@ -178,8 +195,17 @@ export default function ProviderVehicleCreatePage() {
       newErrors.manufactureYear = "Năm sản xuất hợp lệ từ 2015 đến 2026.";
     }
 
+    const seats = Number(form.seatCount);
+    if (!seats || seats < 1) {
+      newErrors.seatCount = "Số chỗ ngồi phải từ 1 trở lên.";
+    }
+
     if (!cleanColor) {
       newErrors.color = "Vui lòng nhập Màu sắc ngoại thất.";
+    }
+
+    if (!form.coverImageUrl || !form.coverImageUrl.trim()) {
+      newErrors.coverImageUrl = "Vui lòng tải lên ảnh bìa chính thức của xe.";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -192,14 +218,18 @@ export default function ProviderVehicleCreatePage() {
         brand: "brand",
         model: "model",
         manufactureYear: "manufacture_year",
+        seatCount: "seat_count",
         color: "color",
+        coverImageUrl: "cover_image_dropzone",
       };
       const targetId = elementIdMap[firstField];
       if (targetId) {
         const el = document.getElementById(targetId);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
-          el.focus();
+          if (typeof el.focus === "function") {
+            el.focus();
+          }
         }
       }
       setToast({
@@ -225,7 +255,7 @@ export default function ProviderVehicleCreatePage() {
         fuelType: form.fuelType,
         color: cleanColor,
         maintenanceBufferMinutes: Number(form.maintenanceBufferMinutes),
-        coverImageUrl: form.coverImageUrl || DEFAULT_COVER_IMAGE,
+        coverImageUrl: form.coverImageUrl.trim(),
       };
 
       const created = await providerService.createVehicle(payload);
@@ -234,7 +264,7 @@ export default function ProviderVehicleCreatePage() {
         type: "success",
       });
 
-      setTimeout(() => {
+      navigateTimerRef.current = setTimeout(() => {
         navigate("/provider/vehicles");
       }, 1500);
     } catch (err) {
@@ -287,10 +317,20 @@ export default function ProviderVehicleCreatePage() {
         document
           .getElementById("model")
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (lower.includes("sản xuất") || lower.includes("year") || lower.includes("manufacture")) {
+        serverErrors.manufactureYear = serverMsg;
+        document
+          .getElementById("manufacture_year")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
       } else if (lower.includes("màu") || lower.includes("color")) {
         serverErrors.color = serverMsg;
         document
           .getElementById("color")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (lower.includes("ảnh") || lower.includes("coverimage") || lower.includes("image")) {
+        serverErrors.coverImageUrl = serverMsg;
+        document
+          .getElementById("cover_image_dropzone")
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
 
@@ -327,7 +367,7 @@ export default function ProviderVehicleCreatePage() {
 
       <main className="flex-1 w-full bg-[#f8f9ff]">
         <div className="flex flex-col w-full">
-          <form className="w-full pb-36" onSubmit={handleSubmit}>
+          <form className="w-full pb-8" onSubmit={handleSubmit} noValidate>
             <div className="max-w-[1440px] mx-auto px-6 lg:px-12 py-6">
               
               <nav
@@ -390,7 +430,7 @@ export default function ProviderVehicleCreatePage() {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-base font-bold text-[#0b1c30]">
-                        Kiến trúc Cập nhật Hồ sơ 3 Tầng (3-Tier Legal Rules) —
+                        Quy chuẩn cập nhật hồ sơ xe 3 tầng —
                         Quy chuẩn kiến trúc
                       </span>
                       <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-semibold text-[11px]">
@@ -463,7 +503,7 @@ export default function ProviderVehicleCreatePage() {
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
                         htmlFor="chassis_no"
                       >
-                        <span>Số khung (VIN / Chassis Number)</span>
+                        <span>Số khung xe</span>
                         <span className="text-red-500 font-bold">*</span>
                       </label>
                       <div className="relative">
@@ -587,7 +627,7 @@ export default function ProviderVehicleCreatePage() {
                       </strong>{" "}
                       Phương tiện đăng ký mới sẽ tự động ở trạng thái{" "}
                       <strong className="text-amber-700 font-semibold">
-                        CHỜ DUYỆT (PENDING)
+                        Chờ duyệt
                       </strong>{" "}
                       để Chuyên viên kiểm duyệt hồ sơ đăng ký xe trước khi đưa
                       vào vận hành nhận khách thực tế.
@@ -601,7 +641,7 @@ export default function ProviderVehicleCreatePage() {
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
                         htmlFor="license_plate"
                       >
-                        <span>Biển số xe kiểm soát (License Plate)</span>
+                        <span>Biển số xe kiểm soát</span>
                         <span className="text-red-500 font-bold">*</span>
                       </label>
                       <div className="relative flex items-center">
@@ -616,15 +656,10 @@ export default function ProviderVehicleCreatePage() {
                           required
                           maxLength={20}
                           value={form.licensePlate}
-                          onChange={(e) =>
-                            handleChange(
-                              "licensePlate",
-                              e.target.value.toUpperCase(),
-                            )
-                          }
+                          onChange={(e) => handleChange("licensePlate", formatLicensePlateInput(e.target.value, form.licensePlate))}
                           placeholder="51K-334.12"
                           className={`w-full h-12 pl-10 pr-4 bg-white font-mono font-bold text-lg text-[#0b1c30] rounded-xl border focus:outline-none shadow-xs tracking-widest uppercase transition-colors ${
-                            isPlateValid === false
+                            errors.licensePlate || isPlateValid === false
                               ? "border-red-400 focus:ring-2 focus:ring-red-500 bg-red-50/20"
                               : isPlateValid === true
                               ? "border-emerald-500 focus:ring-2 focus:ring-emerald-600 bg-emerald-50/10"
@@ -632,7 +667,14 @@ export default function ProviderVehicleCreatePage() {
                           }`}
                         />
                       </div>
-                      {isPlateValid === false ? (
+                      {errors.licensePlate ? (
+                        <span className="text-xs text-red-600 font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[15px]">
+                            error
+                          </span>
+                          {errors.licensePlate}
+                        </span>
+                      ) : isPlateValid === false ? (
                         <span className="text-xs text-red-600 font-medium flex items-center gap-1">
                           <span className="material-symbols-outlined text-[15px]">
                             error
@@ -655,7 +697,7 @@ export default function ProviderVehicleCreatePage() {
 
                     <div className="flex flex-col gap-2">
                       <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1">
-                        <span>Mô phỏng biển số thực tế (Live Preview):</span>
+                        <span>Mô phỏng biển số thực tế:</span>
                       </label>
                       <div className="flex flex-col p-4 bg-slate-50 rounded-xl border border-slate-200 shadow-xs">
                         <div className="flex flex-col items-center justify-center py-2">
@@ -762,7 +804,7 @@ export default function ProviderVehicleCreatePage() {
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
                         htmlFor="brand"
                       >
-                        <span>Hãng xe (Brand)</span>
+                        <span>Hãng xe</span>
                         <span className="text-red-500 font-bold">*</span>
                       </label>
                       <div className="relative">
@@ -804,7 +846,7 @@ export default function ProviderVehicleCreatePage() {
                         className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1"
                         htmlFor="model"
                       >
-                        <span>Dòng xe (Model)</span>
+                        <span>Dòng xe</span>
                         <span className="text-red-500 font-bold">*</span>
                       </label>
                       <input
@@ -883,9 +925,9 @@ export default function ProviderVehicleCreatePage() {
                           }
                           className="w-full h-11 px-3.5 pr-10 bg-white text-sm text-[#0b1c30] rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-xs appearance-none cursor-pointer"
                         >
-                          <option value={4}>4 chỗ (Compact)</option>
-                          <option value={5}>5 chỗ (Sedan / Crossover)</option>
-                          <option value={7}>7 chỗ (MPV / SUV)</option>
+                          <option value={4}>4 chỗ</option>
+                          <option value={5}>5 chỗ</option>
+                          <option value={7}>7 chỗ</option>
                           <option value={8}>8 chỗ</option>
                         </select>
                         <span className="absolute right-3.5 top-3 material-symbols-outlined text-[20px] text-slate-400 pointer-events-none">
@@ -917,7 +959,7 @@ export default function ProviderVehicleCreatePage() {
                           <span className="material-symbols-outlined text-[18px]">
                             sync_saved_locally
                           </span>
-                          <span>Tự động (AT)</span>
+                          <span>Số tự động</span>
                         </button>
                         <button
                           type="button"
@@ -931,7 +973,7 @@ export default function ProviderVehicleCreatePage() {
                           <span className="material-symbols-outlined text-[18px]">
                             tune
                           </span>
-                          <span>Số sàn (MT)</span>
+                          <span>Số sàn</span>
                         </button>
                       </div>
                     </div>
@@ -941,7 +983,7 @@ export default function ProviderVehicleCreatePage() {
                         <span>Loại nhiên liệu</span>
                         <span className="text-red-500 font-bold">*</span>
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-1.5">
                         {[
                           { id: "EV", label: "Điện EV", icon: "electric_bolt" },
                           { id: "GASOLINE", label: "Xăng", icon: "local_gas_station" },
@@ -976,7 +1018,7 @@ export default function ProviderVehicleCreatePage() {
                         <span className="text-red-500 font-bold">*</span>
                       </label>
                       <div className="relative">
-                        <div className="absolute left-3.5 top-3.5 w-4 h-4 rounded-full bg-emerald-700 ring-2 ring-emerald-200 shadow-xs"></div>
+                        <span className="material-symbols-outlined absolute left-3 top-3 text-[18px] text-slate-400">palette</span>
                         <input
                           id="color"
                           type="text"
@@ -1068,11 +1110,11 @@ export default function ProviderVehicleCreatePage() {
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                       <label className="text-xs sm:text-sm font-semibold text-[#0b1c30] flex items-center gap-1">
-                        <span>Ảnh bìa xe chính thức (Hero Display Image)</span>
+                        <span>Ảnh bìa đại diện của xe</span>
                         <span className="text-red-500 font-bold">*</span>
                       </label>
                       <span className="text-xs text-slate-500 font-mono">
-                        Bảng vehicle_image (display_order = 0)
+                        Ảnh đại diện phương tiện
                       </span>
                     </div>
 
@@ -1080,9 +1122,13 @@ export default function ProviderVehicleCreatePage() {
                       
                       <div className="lg:col-span-5 relative rounded-2xl overflow-hidden shadow-sm aspect-video bg-slate-100 group border border-slate-200">
                         <img
-                          src={form.coverImageUrl}
+                          src={form.coverImageUrl || DEFAULT_VEHICLE_PREVIEW}
                           alt="Cover Preview"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = DEFAULT_VEHICLE_PREVIEW;
+                          }}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#0b1c30]/80 via-transparent to-transparent"></div>
                         <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-emerald-700/90 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-1 shadow-sm">
@@ -1099,7 +1145,7 @@ export default function ProviderVehicleCreatePage() {
                         )}
                         <div className="absolute bottom-3 left-3 right-3 text-white">
                           <div className="font-bold text-sm leading-tight text-white drop-shadow-sm">
-                            {form.brand} {form.model} ({form.manufactureYear})
+                            {form.brand} {form.model || "Chưa nhập model"} ({form.manufactureYear})
                           </div>
                           <div className="text-[11px] text-white/80">
                             Hiển thị làm ảnh đại diện trên ứng dụng thuê xe cho
@@ -1109,11 +1155,27 @@ export default function ProviderVehicleCreatePage() {
                       </div>
 
                       <div
+                        id="cover_image_dropzone"
                         onClick={() =>
                           !uploadingImage && document.getElementById("coverImageInput")?.click()
                         }
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (uploadingImage) return;
+                          const file = e.dataTransfer?.files?.[0];
+                          if (file) {
+                            processImageUpload(file);
+                          }
+                        }}
                         className={`lg:col-span-7 rounded-2xl p-6 flex flex-col items-center justify-center text-center shadow-xs border-2 border-dashed transition-colors ${
-                          uploadingImage
+                          errors.coverImageUrl
+                            ? "bg-red-50/50 border-red-400 cursor-pointer"
+                            : uploadingImage
                             ? "bg-emerald-50/50 border-emerald-400 cursor-wait"
                             : "bg-slate-50 cursor-pointer hover:bg-emerald-50/50 border-slate-300 hover:border-emerald-500"
                         }`}
@@ -1156,64 +1218,70 @@ export default function ProviderVehicleCreatePage() {
                           <span className="material-symbols-outlined text-[14px]">
                             check_circle
                           </span>
-                          <span>Đã kiểm tra tỷ lệ khung hình chuẩn</span>
+                          <span>Khuyến nghị khung hình 16:9</span>
                         </div>
                       </div>
                     </div>
+                    {errors.coverImageUrl && (
+                      <span className="text-xs text-red-600 font-medium flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[15px]">error</span>
+                        {errors.coverImageUrl}
+                      </span>
+                    )}
                   </div>
                 </section>
+
+                <aside
+                  aria-label="Thanh tác vụ đăng ký xe"
+                  className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4"
+                >
+                  <div className="flex items-center gap-3 text-slate-600 text-xs sm:text-sm">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[20px]">
+                        info
+                      </span>
+                    </div>
+                    <span>
+                      <strong>Trạng thái sau khi bấm gửi:</strong> Phương tiện sẽ
+                      chuyển vào hàng đợi{" "}
+                      <strong className="text-amber-700 font-bold">
+                        Chờ duyệt
+                      </strong>{" "}
+                      để Chuyên viên kiểm duyệt hồ sơ.
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end shrink-0">
+                    <Link
+                      to="/provider/vehicles"
+                      className="px-5 py-2.5 rounded-xl text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-colors text-center border border-slate-200 shadow-xs cursor-pointer"
+                    >
+                      Hủy bỏ
+                    </Link>
+
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all focus:outline-none active:scale-[0.98] cursor-pointer"
+                    >
+                      {submitting ? (
+                        <>
+                          <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                          <span>Đang xử lý...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[20px]">
+                            send
+                          </span>
+                          <span>Tạo xe &amp; Gửi duyệt</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </aside>
               </div>
             </div>
-
-            <aside
-              aria-label="Thanh tác vụ đăng ký xe"
-              className="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] py-4 px-6 lg:px-12"
-            >
-              <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-slate-600 text-xs sm:text-sm">
-                  <span className="material-symbols-outlined text-[20px] text-emerald-700 shrink-0">
-                    info
-                  </span>
-                  <span>
-                    <strong>Trạng thái sau khi bấm gửi:</strong> Phương tiện sẽ
-                    chuyển vào hàng đợi{" "}
-                    <strong className="text-amber-700 font-bold">
-                      CHỜ DUYỆT (PENDING)
-                    </strong>{" "}
-                    để Chuyên viên kiểm duyệt hồ sơ.
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                  <Link
-                    to="/provider/vehicles"
-                    className="px-5 py-2.5 rounded-xl text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-colors text-center border border-slate-200 shadow-xs"
-                  >
-                    Hủy bỏ
-                  </Link>
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all focus:outline-none active:scale-[0.98] cursor-pointer"
-                  >
-                    {submitting ? (
-                      <>
-                        <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        <span>Đang xử lý...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined text-[20px]">
-                          send
-                        </span>
-                        <span>Tạo xe &amp; Gửi duyệt</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </aside>
           </form>
         </div>
       </main>
@@ -1231,7 +1299,7 @@ export default function ProviderVehicleCreatePage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-[#0b1c30]">
-                    Kiến trúc Quản lý Phương tiện 3 Tầng — v10.1
+                    Kiến trúc Quản lý Phương tiện 3 Tầng
                   </h3>
                   <p className="text-xs text-slate-500">
                     Tiêu chuẩn phân tách rủi ro pháp lý xe EcoMotion
@@ -1253,7 +1321,7 @@ export default function ProviderVehicleCreatePage() {
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#0b1c30]">
-                    Tầng 1: Định danh vật lý (Physical Identity)
+                    Tầng 1: Định danh vật lý
                   </span>
                   <span className="font-semibold text-xs px-2 py-0.5 rounded bg-slate-200 text-[#0b1c30]">
                     BẤT BIẾN
@@ -1270,7 +1338,7 @@ export default function ProviderVehicleCreatePage() {
               <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-amber-950">
-                    Tầng 2: Định danh pháp lý (Legal Identity)
+                    Tầng 2: Định danh pháp lý
                   </span>
                   <span className="font-semibold text-xs px-2 py-0.5 rounded bg-amber-200 text-amber-900">
                     DUYỆT LẠI

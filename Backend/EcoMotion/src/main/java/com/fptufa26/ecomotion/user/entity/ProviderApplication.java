@@ -35,6 +35,8 @@ public class ProviderApplication {
 
     @Column(name = "reason_code", length = 100)
     private String reasonCode;
+    @Column(length = 1000)
+    private String reviewNote;
 
     @Column(name = "submitted_identity_id")
     private Long submittedIdentityId;

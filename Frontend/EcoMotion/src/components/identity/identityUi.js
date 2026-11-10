@@ -10,6 +10,8 @@ export const statusLabels = {
 }
 
 const messages = {
+  IDENTITY_NEW_EVIDENCE_REQUIRED: 'Admin yêu cầu bổ sung giấy tờ hoặc video. Hãy tải bằng chứng mới trước khi gửi lại.',
+  PROVIDER_REVIEW_NOTE_REQUIRED: 'Hãy ghi rõ thông tin người đăng ký cần bổ sung hoặc lý do từ chối.',
   IDENTITY_THRESHOLD_NOT_CONFIGURED: 'Hệ thống chưa cấu hình ngưỡng xác minh. Vui lòng liên hệ quản trị viên.',
   IDENTITY_AI_UNAVAILABLE: 'Dịch vụ phân tích chưa sẵn sàng. Vui lòng thử lại sau.',
   IDENTITY_AI_AUTH_FAILED: 'Hệ thống chưa xác thực được với dịch vụ phân tích. Vui lòng liên hệ quản trị viên.',

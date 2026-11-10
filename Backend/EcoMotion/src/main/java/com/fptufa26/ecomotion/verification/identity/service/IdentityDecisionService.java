@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.UUID;
 
 public interface IdentityDecisionService {
+    String snapshotProviderEvidence(Long adminId, UUID attemptId);
+    com.fptufa26.ecomotion.verification.identity.dto.response.IdentityAttemptResponse reviewSnapshot(String snapshot);
+    byte[] reviewSnapshotEvidence(String snapshot, String kind);
     boolean providerEvidenceReady(Long userId);
     UUID submitProviderEvidence(Long userId);
     void reviewProviderEvidence(Long adminId, Long userId, UUID attemptId, String decision, String reasonCode);

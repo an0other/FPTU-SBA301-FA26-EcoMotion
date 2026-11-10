@@ -1,3 +1,4 @@
+import { AdminRefundReviewPanel } from '../../components/booking/FinancialReviewPanels'
 import { useState, useEffect } from 'react'
 import { adminService } from '../../services/adminService'
 import {
@@ -11,6 +12,7 @@ import {
 import BookingDetailModal from './modals/BookingDetailModal'
 import DisputeDetailModal from './modals/DisputeDetailModal'
 import PaymentDetailModal from './modals/PaymentDetailModal'
+import AdminPopupModal from './modals/AdminPopupModal'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -76,6 +78,7 @@ export default function AdminOperationsTab({
   const [selectedPayment, setSelectedPayment] = useState(null)
   const [showRefundModal, setShowRefundModal] = useState(false)
   const [refundForm, setRefundForm] = useState({ bookingId: '', amount: '', reason: '' })
+  const [popupModal, setPopupModal] = useState(null)
 
   useEffect(() => {
     if (!initialSubTab) return undefined
@@ -135,7 +138,13 @@ export default function AdminOperationsTab({
       const full = await adminService.getBookingDetail(bookingId)
       setSelectedBooking(full)
     } catch (err) {
-      alert('Không thể tải chi tiết đơn: ' + err.message)
+      setPopupModal({
+        mode: 'alert',
+        tone: 'error',
+        title: 'Không thể tải chi tiết đơn',
+        message: err.message || 'Không thể tải chi tiết đơn thuê.',
+        confirmText: 'Đóng',
+      })
     }
   }
 
@@ -220,11 +229,23 @@ export default function AdminOperationsTab({
     e.preventDefault()
     const amountNum = parseFloat(refundForm.amount)
     if (!refundForm.bookingId || isNaN(amountNum) || amountNum <= 0) {
-      alert('Vui lòng nhập Mã đơn hợp lệ và số tiền hoàn lớn hơn 0.')
+      setPopupModal({
+        mode: 'alert',
+        tone: 'warning',
+        title: 'Thông tin hoàn tiền chưa hợp lệ',
+        message: 'Vui lòng nhập Mã đơn hợp lệ và số tiền hoàn lớn hơn 0.',
+        confirmText: 'Đã hiểu',
+      })
       return
     }
     if (!refundForm.reason.trim()) {
-      alert('Vui lòng nhập lý do hoàn tiền.')
+      setPopupModal({
+        mode: 'alert',
+        tone: 'warning',
+        title: 'Thiếu lý do hoàn tiền',
+        message: 'Vui lòng nhập lý do hoàn tiền.',
+        confirmText: 'Đã hiểu',
+      })
       return
     }
 
@@ -245,6 +266,7 @@ export default function AdminOperationsTab({
 
   return (
     <div className="space-y-6">
+      <AdminRefundReviewPanel />
       {/* Sub Navigation Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <div className="flex flex-wrap gap-2">
@@ -703,6 +725,7 @@ export default function AdminOperationsTab({
 
       <DisputeDetailModal
         dispute={resolvingDispute}
+          onChanged={loadData}
         error={message?.type === 'error' ? message.text : ''}
         onClose={() => setResolvingDispute(null)}
         onResolve={handleResolveDispute}
@@ -752,7 +775,7 @@ export default function AdminOperationsTab({
               </button>
             </div>
 
-            <form onSubmit={handleRefundSubmit} className="mt-4 space-y-4 text-xs">
+            <form onSubmit={handleRefundSubmit} noValidate className="mt-4 space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   Mã đơn hàng (Booking ID) <span className="text-red-500">*</span>
@@ -815,6 +838,20 @@ export default function AdminOperationsTab({
           </div>
         </div>
       )}
+
+      {/* Custom Popup Modal for Alerts / Confirmations */}
+      <AdminPopupModal
+        open={Boolean(popupModal)}
+        mode={popupModal?.mode}
+        tone={popupModal?.tone}
+        title={popupModal?.title}
+        message={popupModal?.message}
+        confirmText={popupModal?.confirmText}
+        cancelText={popupModal?.cancelText}
+        loading={actionLoading}
+        onClose={() => setPopupModal(null)}
+        onConfirm={popupModal?.onConfirm}
+      />
     </div>
   )
 }

@@ -34,8 +34,14 @@ export const providerOnboardingService = {
   async detail(userId) {
     return (await apiClient.get(`/admin/provider-applications/${userId}`)).data
   },
-  async review(userId, version, decision, reasonCode) {
-    return (await apiClient.post(`/admin/provider-applications/${userId}/review`, { version, decision, reasonCode })).data
+  async review(userId, version, decision, reasonCode, note) {
+    return (await apiClient.post(`/admin/provider-applications/${userId}/review`, { version, decision, reasonCode, note })).data
+  },
+  async historyIdentity(userId, reviewId) {
+    return (await apiClient.get(`/admin/provider-applications/${userId}/history/${reviewId}/identity`)).data
+  },
+  async historyEvidence(userId, reviewId, kind) {
+    return (await apiClient.get(`/admin/provider-applications/${userId}/history/${reviewId}/evidence/${kind}`, { responseType: 'blob' })).data
   },
   async history(userId) {
     return (await apiClient.get(`/admin/provider-applications/${userId}/history`)).data

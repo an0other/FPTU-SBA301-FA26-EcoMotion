@@ -1,230 +1,194 @@
-# Hướng dẫn demo và kiểm tra gói năm
+# Demo gói năm: 3 renter, một tuyến chính và các nhánh kiểm tra
 
-## 1. Một lần chuẩn bị, 4 tài khoản
+Cập nhật 10/11/2026, sau khi cập nhật YearlyRentalDataSeeder. Các trạng thái bên dưới là dữ liệu khi tạo fixture mới; seed không đặt lại tiến trình đã chạy. Đây là kịch bản UAT, không phải báo cáo tất cả bước đã được kiểm thử trên database thật.
 
-Khởi động backend bình thường với profile dev và app.demo-seed.enabled=true. Chỉ dùng **3 renter + 1 provider**. Không chọn scenario bằng env, không đổi seed hoặc reset giữa buổi demo.
+## 1. Tài khoản và nguyên tắc trình diễn
 
-Seeder chỉ tạo mới hai booking: EM-Y2-MONTHLY và EM-Y2-HAPPY-END; renter new đặt qua web. Mỗi renter có một hợp đồng đang chạy để tránh trùng lịch. Xe 51Y-00009 dành thay thế.
+Chỉ dùng 3 renter, 1 Provider và 1 Admin. Không có account failure/cancel riêng.
 
-Chuẩn bị DB demo sạch bằng create-drop theo lựa chọn của bạn rồi khởi động để seed lại. Seed chỉ tạo ba renter với email mới ở bảng bên dưới; không đổi email cũ, không chuyển chủ booking và không có bước dọn dữ liệu cũ. Nếu muốn giữ tiến trình sau lần khởi tạo, dùng ddl-auto=update; create-drop sẽ tạo lại dữ liệu mỗi lần chạy.
+| Tài khoản | Điểm bắt đầu | Phần trình diễn |
+| --- | --- | --- |
+| renter.yearly.new@ecomotion.vn | Chưa có booking trên DB demo mới, B2 có sẵn | Đặt mới trên 51Y-00001, nhận xe; sau đó kết thúc do lỗi Provider |
+| renter.yearly.monthly@ecomotion.vn | EM-Y2-MONTHLY, xe 51Y-00002, đang thuê, trả 3 kỳ | Thanh toán kỳ 4, sự cố, hoàn ứng, đổi xe sang 51Y-00009 rồi trả sớm |
+| renter.yearly.happy-end@ecomotion.vn | EM-Y2-HAPPY-END, xe 51Y-00010, đã trả 12 kỳ | Trả xe cuối hạn, quyết toán, hoàn tiền và hoàn tất |
+| Cùng renter happy-end | EM-Y2-CANCEL, xe 51Y-00011, CONFIRMED, chưa nhận xe | Nhánh hủy trước bàn giao và Admin phân xử tiền |
+| provider.a@ecomotion.vn | Provider đã hoạt động, có ngân hàng nhận tiền | Duyệt, đối soát, bàn giao, sự cố, quyết toán |
+| admin01@ecomotion.vn | Admin | Phân xử report, hoàn tiền, quyết toán/hủy |
 
-## 2. Tài khoản và điểm bắt đầu
+Mật khẩu mặc định theo DevDataSeeder hiện tại: EcoMotion@123, trừ khi đã được thay đổi trên môi trường của bạn.
 
-Mật khẩu seed mặc định: **EcoMotion@123**.
+Mở ba phiên trình duyệt độc lập: Renter, Provider, Admin. Hai tab cùng một phiên trình duyệt không phải hai phiên đăng nhập độc lập. Giữ nguyên Provider/Admin, chỉ đổi renter khi chuyển câu chuyện.
 
-| Email | Vai trò / booking | Các bước dùng chung |
-|---|---|---|
-| renter.yearly.new@ecomotion.vn | ID 108, tạo mới trên xe 51Y-00001 | GPLX → đặt xe → hợp đồng → cọc + tháng 1 → nhận xe; có thể kết thúc do lỗi provider để trình diễn nhánh hoàn tháng sự cố |
-| renter.yearly.monthly@ecomotion.vn | ID 109, EM-Y2-MONTHLY, xe 51Y-00002 | Tháng tiếp theo → hao mòn/hoàn bảo trì → hư do renter → đổi sang xe 51Y-00009 → cuối cùng trả sớm |
-| renter.yearly.happy-end@ecomotion.vn | ID 110, EM-Y2-HAPPY-END, xe 51Y-00010 | Trả xe → kiểm định → phí trễ/phụ phí nếu có → quyết toán → hoàn cọc → hoàn tất |
-| provider.a@ecomotion.vn | Provider chung | Duyệt, nhận tiền, giao/nhận xe, xử lý sự cố, chuyển hoàn |
+Mỗi nhánh kết thúc chỉ thực hiện một lần trên booking. Sau khi hoàn tất, không sửa trạng thái bằng SQL hoặc trông chờ restart tự dựng lại.
 
-Mở hai cửa sổ khác phiên đăng nhập: một provider, một renter. Giữ provider, chỉ đổi renter khi sang giai đoạn khác. Renter vào /renter/bookings, provider tìm đúng mã trong quản lý đơn. Sau thao tác bên kia bấm **Tải lại**.
+## 2. Dữ liệu seed và mốc ngày
 
-Các bước tiếp tục thuê thực hiện nối tiếp trên cùng booking, phải đóng report trước khi tạo report mới. Trả sớm hoặc kết thúc do lỗi provider là bước cuối của booking; không thực hiện hai kết thúc khác nhau trên cùng đơn.
+Gọi D là ngày Việt Nam khi fixture được tạo lần đầu.
 
-**Ba nhánh kết thúc có thể demo trong cùng buổi:** renter new kết thúc do lỗi provider, renter monthly trả sớm, renter happy-end quyết toán cuối hợp đồng. Các biến thể số học (dư/thiếu tiền, tháng 11/12, đúng hạn/trễ) là lựa chọn hoặc kiểm tra bổ sung, không phải các hợp đồng đang chạy song song và không cần thêm tài khoản.
+| Fixture | Ngày/tiền khởi tạo | Bằng chứng/trạng thái |
+| --- | --- | --- |
+| MONTHLY | Bắt đầu D trừ 3 tháng rồi trừ 2 ngày; đã trả 3 kỳ và cọc | IN_PROGRESS, đã bàn giao, không có report đang mở |
+| HAPPY-END | Hạn trả gốc D trừ 3 ngày; ngày nhận lùi 12 tháng từ hạn đó; đã trả đủ năm và cọc | IN_PROGRESS, đã bàn giao |
+| CANCEL | Ngày nhận là mốc muộn hơn giữa D+7 và ngày sau hạn gốc HAPPY-END | CONFIRMED, cọc và kỳ đầu đã trả; actualStartAt null, chưa tạo biên bản nhận xe |
+| NEW / xe 00001 | Không dựng booking mới thay renter | Tạo qua FE |
+| Xe 00009 | Xe dành đổi xe | Không dựng booking chiếm dụng |
 
-## 3. Giá, ngày và dữ liệu mẫu
+CANCEL dùng chung renter happy-end nhưng khác xe và không trùng khoảng hợp đồng gốc. Nếu dữ liệu HAPPY-END cũ làm ngày nhận CANCEL vượt cửa sổ đặt xe hiện tại, seed bỏ qua CANCEL và ghi cảnh báo. Nếu xe đã có lịch/custody xung đột, seed cũng bỏ qua fixture thay vì ghi đè.
 
-Giá **181.000.000 đ/năm**, cọc **50.000.000 đ**; bước làm tròn **100.000 đ**. Mười tháng đầu 15.100.000 đ, hai tháng cuối 15.000.000 đ. Phí trả sớm trung bình làm tròn lên 15.100.000 đ, tối đa phần tiền thuê tương lai còn lại.
+Ví dụ khởi tạo ngày 10/11/2026: MONTHLY nhận 08/08/2026, HAPPY-END hạn 07/11/2026, CANCEL nhận 17/11/2026. Ngày thực tế trên màn hình là nguồn đối chiếu khi dùng dữ liệu đã tạo trước đó.
 
-Điều khoản dựng sẵn: 24.000 km/năm, 5.000 đ/km vượt, ân hạn 1 ngày, 500.000 đ/ngày trễ, km nhận 10.000. Renter monthly bắt đầu khoảng ba tháng trước, đã trả ba tháng. Booking happy-end tạo mới đến hạn vào ngày seed để demo kết thúc suôn sẻ; nếu đã có từ seed cũ thì giữ nguyên ngày hạn. Nếu demo sau ngày hạn thì kiểm tra ân hạn/phí trễ thực tế.
+Giá năm 181.000.000 đ; cọc 50.000.000 đ; bước chia 100.000 đ. Mười kỳ đầu 15.100.000 đ, hai kỳ cuối 15.000.000 đ; tổng đúng giá năm. Điều khoản: 24.000 km/năm, 5.000 đ/km vượt, ân hạn 1 ngày, trễ 500.000 đ/ngày. Km nhận 10.000.
 
-Xem ngày thực tế trên web, không đoán phí từ tên booking. Để demo đúng hạn có thể dùng ngày nhận lại đúng dueOn nếu đó là ngày đã qua và biên bản demo tương ứng. Để demo trễ dùng ngày nhận lại hôm nay; không thêm một lượt hoàn tất khác trên cùng đơn.
+Các booking mới có snapshot giá, pricing item, 13 payment request, giao dịch mô phỏng và PDF DEMO có lịch tiền/chính sách. Seed tự kiểm tra tổng tiền và số kỳ trả trước.
 
-Lịch sử seed là fixture có nhãn demo, không phải bằng chứng OCR/chuyển tiền/ký thật. Renter new dùng ảnh GPLX được phép sử dụng để gọi AI thật; GPLX dựng sẵn của hai renter còn lại không dùng chứng minh OCR. Không chuyển tiền thật vào tài khoản ngân hàng demo.
+## 3. Chuẩn bị một lần trước buổi demo
 
-## 4. Chuẩn bị file và kiểm tra trước demo
+1. Chạy backend profile dev. Không có yêu cầu bật app.demo-seed.enabled hoặc chọn scenario bằng env.
+2. Áp dụng các migration cần thiết, gồm 20261110_yearly_provider_business_closure.sql cho nhóm phân xử mới.
+3. Nếu giữ tiến trình thì dùng DB_DDL_AUTO=update. Chỉ khởi tạo lại trên database demo riêng khi chủ động muốn xóa dữ liệu; không chạy schema.sql hoặc create/create-drop vào DB cần giữ.
+4. Đọc log: phải có đủ MONTHLY, HAPPY-END và CANCEL hoặc biết rõ fixture nào được giữ/bỏ qua. Kiểm tra xe 00001 và 00009 chưa bị sử dụng.
+5. Kiểm tra Provider có tài khoản nhận tiền; chưa có sẽ bị chặn chấp nhận đơn.
+6. Ba renter đã có GPLX B2 demo hợp lệ. Không cần upload GPLX thật để đi tuyến gói năm. Ảnh GPLX seed không dùng chứng minh OCR thật; không ghi đè GPLX đã upload thật.
+7. Chuẩn bị PDF mẫu và ảnh JPG/PNG: giao xe/km, hóa đơn sửa chữa, hai xe khi đổi, biên lai thu/hoàn. Ghi rõ DEMO, không chuyển tiền thật. PDF fixture có nhãn chưa ký, không khẳng định là chữ ký thật.
+8. Kiểm tra FE/BE, upload local, dịch vụ bản đồ/tuyến đường. Đặt xe mới vẫn cần các dependency hiện tại; seed B2 không làm mọi dependency trở thành offline.
+9. Lưu bảng ngày, tiền, mã booking và bản sao DB + thư mục bằng chứng tương ứng trước buổi demo.
 
-- Hai ảnh GPLX rõ, đủ hai mặt, thuộc trường hợp DocumentAI hiện hỗ trợ; còn hạn đến hết 12 tháng. Mẫu DEMO dựng sẵn không dùng làm đầu vào để chứng minh OCR thật.
-- Một PDF hợp đồng mẫu để upload cho đơn mới, nội dung thể hiện giá năm, cọc, 12 kỳ, km, phí sớm và phí trễ.
-- Ảnh bàn giao/công-tơ-mét, ảnh sự cố/hóa đơn, ảnh biên lai thanh toán và hoàn tiền. Chỉ dùng dữ liệu được phép trình diễn; mẫu giao dịch cần ghi rõ DEMO.
-- Ảnh JPG/PNG tối đa 8 MB theo form hiện tại; PDF theo giới hạn backend.
-- Backend, frontend, DocumentAI và cấu hình URL/API key cần chạy đúng. Ảnh minh chứng dùng kho local giống GPLX; lỗi upload là lỗi cần sửa, không bỏ qua bằng cách nhập evidence ID.
-- Kiểm tra xe 00001 và 00009 chưa bị dùng bởi buổi demo trước; tài khoản provider có tài khoản nhận tiền đang hoạt động.
-- Dùng bước làm tròn 100.000 đ để đối chiếu các con số dưới đây. Nếu cấu hình khác, đọc lịch tiền thực tế.
+Seed giữ booking đã tồn tại, kể cả đã hoàn tất hoặc ngày cũ. Muốn đúng trạng thái/ngày mẫu mới thì cần fixture mới trên DB demo được chuẩn bị chủ động; không tự dịch ngày hay xóa tiến trình của buổi trước.
 
-## 5. Kịch bản 1 — người mới đặt và nhận xe
+## 4. Các màn hình dùng chung
 
-1. Renter new (ID 108) đăng nhập, vào thuê năm hoặc mở xe `51Y-00001` và chọn gói năm.
-2. Upload hai mặt GPLX → gọi DocumentAI → kiểm tra thông tin trả về → lưu hồ sơ. GPLX không hợp lệ thì dừng và báo đúng lý do.
-3. Chọn ngày nhận hợp lệ, điểm nhận, gửi yêu cầu thuê. Lưu mã đơn mới; không dùng mã seed của renter khác.
-4. Provider mở đơn mới → **Chấp nhận**.
-5. Provider vào **Hợp đồng thuê năm** → **Chốt điều khoản cho người thuê**: 24.000 km, 5.000 đ/km, ân hạn 1 ngày, 500.000 đ/ngày → xác nhận.
-6. Renter tải lại → kiểm tra điều khoản → đánh dấu đồng ý và xác nhận.
-7. Renter upload PDF hợp đồng. Xuất hiện **13 khoản**: một khoản cọc và 12 kỳ tiền thuê, không gộp cọc vào tổng tiền thuê.
-8. Renter chọn cọc → chuyển khoản demo theo nội dung riêng → nhập số tiền, mã giao dịch và upload biên lai.
-9. Provider tải lại → mở **Đối soát** khoản cọc → kiểm tra bằng chứng và nhập số thực nhận, mã giao dịch → xác nhận.
-10. Làm tương tự với tháng 1, số tiền 15.100.000 đ. Tổng ban đầu là **65.100.000 đ**, trong đó 50 triệu là cọc riêng.
-11. Provider **Xác nhận bắt đầu giao xe** → sau đó **Xe đã đến điểm giao**, nhập km và upload ảnh.
-12. Renter kiểm tra xe/km/ảnh → **Tôi đã kiểm tra và nhận xe**.
-13. Kiểm tra trạng thái đang thuê, ngày nhận thực tế và hạn sau đúng 12 tháng. Lịch 12 kỳ neo theo ngày nhận thực tế; không tự chuyển sang có tài xế.
+| Vai trò | Màn hình |
+| --- | --- |
+| Renter | /renter/bookings; mở đúng booking |
+| Renter gói năm | /renter/bookings/{bookingCode}/yearly-rental |
+| Đặt xe | /vehicles/{id}, hoặc luồng /renter/bookings/new |
+| Provider | /provider/bookings → /provider/bookings/{bookingCode}, mở khu vực hợp đồng/gói năm |
+| Admin | /admin → mục khiếu nại/phân xử, mở đúng hồ sơ theo mã booking |
 
-Kiểm tra ngắn: chưa đủ cọc + tháng 1 thì không được dispatch bằng API hiện tại; không thanh toán tháng 2 trước khi hoàn tất hai khoản ban đầu. Đây là ràng buộc đã triển khai, không chứng minh hệ thống kiểm soát việc giao xe ngoài thực tế.
+Không dùng ID xe thay mã booking. Mã booking NEW lấy từ kết quả đặt thật, không gõ EM-Y2-MONTHLY để thao tác thay.
 
-## 6. Kịch bản 2 — thanh toán tháng tiếp theo
+Sau thao tác ở phiên khác, bấm Tải lại. Trước mỗi bước, xác nhận đúng email, mã booking, biển số và trạng thái.
 
-Đăng nhập `renter.yearly.monthly@ecomotion.vn`, dùng `EM-Y2-MONTHLY`.
+## 5. Tuyến trình diễn chính
 
-1. Xem cọc và ba tháng đầu đã xác nhận. Các tháng còn lại chưa trả.
-2. Chọn tháng 4 → gửi biên lai, nhập 15.100.000 đ và mã giao dịch demo riêng.
-3. Provider đối soát tháng 4, xác nhận số thực nhận.
-4. Renter tải lại: tháng 4 đã trả, tháng 5 không tự đổi trạng thái; booking vẫn đang thuê.
-5. Mở lịch sử thanh toán kiểm tra giao dịch; cọc không bị cộng thành tiền thuê. Nếu provider từ chối biên lai thì renter gửi lại bằng chứng đúng.
+Mục tiêu khoảng 15–20 phút khi đã chuẩn bị file và phiên đăng nhập. Đây là thời lượng dự kiến; không bỏ qua validation để đạt thời gian.
 
-Không trình diễn tự động thu nợ, khóa xe hoặc chấm dứt do chậm tiền: các phần đó chưa thuộc scope.
+### A — Đặt mới và nhận xe: renter new
 
-## 7. Luồng chung trả xe và hoàn tất
+| Bước | Người/màn hình/thao tác | Kết quả cần thấy |
+| --- | --- | --- |
+| A1 | Renter mở xe 00001, chọn năm, ngày/giờ nhận hợp lệ và điểm nhận | Giá, cọc, thời gian thuê; B2 đã có sẵn |
+| A2 | Gửi yêu cầu thuê | Một booking PENDING mới; ghi mã vào bảng demo |
+| A3 | Provider mở đúng booking → Chấp nhận | ACCEPTED; chưa đồng nghĩa đã nhận xe |
+| A4 | Provider chốt điều khoản 24.000 km, 5.000 đ/km, 1 ngày ân hạn, 500.000 đ/ngày | TERMS_DRAFT |
+| A5 | Renter đọc và đồng ý | TERMS_ACCEPTED |
+| A6 | Renter upload PDF demo | Một cọc + 12 kỳ; không gộp cọc vào 181 triệu |
+| A7 | Renter gửi biên lai cọc 50 triệu → Provider kiểm tra và xác nhận | Chỉ khoản cọc được xác nhận |
+| A8 | Lặp với kỳ đầu 15,1 triệu, dùng mã giao dịch khác | Ban đầu đã nhận 65,1 triệu, gồm hai nguồn khác nhau |
+| A9 | Provider bắt đầu giao → xe đã đến, km 10.000 và ảnh | ARRIVED; chưa tự thành đang thuê |
+| A10 | Renter kiểm tra rồi nhận xe | IN_PROGRESS; ngày thực nhận neo lại hạn 12 tháng/lịch kỳ |
 
-Dùng các nhánh trả xe bên dưới; luôn hoàn thành theo thứ tự:
+Có thể chọn giờ nhận cùng ngày đủ điều kiện thời gian của BE để các mốc ngày dễ theo dõi. Nếu ngày thực nhận khác dự kiến, phải đọc lại hạn/lịch tiền trên màn hình.
 
-1. Renter xem ước tính, chọn hình thức trả phù hợp, gửi yêu cầu.
-2. Provider nhận lại xe → nhập ngày nhận thực tế không vượt ngày hiện tại, công-tơ-mét cuối và ảnh kiểm định.
-3. Renter xác nhận ngày, km và tình trạng xe.
-4. Provider **Lập quyết toán**: phụ phí khác, khoản trừ cọc, ghi chú và bằng chứng nếu có phụ phí.
-5. Renter kiểm tra từng dòng tiền → **Đồng ý quyết toán**.
-6. Nếu còn phải trả: khoản thanh toán bổ sung xuất hiện → renter gửi biên lai → provider xác nhận. Không gọi khoản này là tháng thuê mới.
-7. Nếu cần hoàn: provider chuyển trực tiếp, nhập mã giao dịch và upload biên lai → renter xác nhận đã nhận đủ.
-8. Provider **Hoàn tất hợp đồng** khi đủ điều kiện. Hết quyền tiếp tục chạy xe sau khi đã nhận lại/chốt trả, dù còn chờ hoàn tiền.
-9. Provider mở lại lịch cho thuê sau kiểm định, ngày sớm nhất là ngày mai. Xe chưa được mở lại không được coi tự động rảnh cho đơn tiếp theo.
+Dừng tại đây để chuyển sang MONTHLY; nhánh kết thúc do Provider ở mục 7, không thực hiện trả sớm EARLY trên booking NEW trước nhánh đó.
 
-Không gộp “đã trả xe”, “đã trả đủ tiền”, “đã nhận hoàn” và “hoàn tất” thành một trạng thái.
+### B — Trong thời gian thuê: renter monthly
 
-## 8. Buổi demo trên renter đang thuê — làm nối tiếp
-
-Đăng nhập renter.yearly.monthly@ecomotion.vn, dùng duy nhất **EM-Y2-MONTHLY**.
-
-1. Thực hiện thanh toán tháng 4 theo mục 6; provider xác nhận.
-2. Renter báo OWNER_MAINTENANCE, ngày hôm nay, hóa đơn 1.000.000 đ và ảnh.
-3. Provider chọn REIMBURSE, duyệt 1 triệu, chuyển trực tiếp và upload biên lai.
-4. Renter xác nhận nhận tiền → report đóng; tiền tháng không bị trừ.
-5. Renter tạo report RENTER_DAMAGE với hóa đơn 2 triệu.
-6. Provider chọn RENTER_PAID, approvedAmount=0; renter xác nhận → report đóng. Không tính lại khoản đã tự trả.
-7. Renter tạo report OWNER_MAINTENANCE để đổi xe.
-8. Provider chọn REPLACE → chọn xe 51Y-00009 → hẹn bàn giao → renter đồng ý.
-9. Provider nhập km xe cũ 10.500, xe mới 20.000, ngày đổi và hai ảnh; renter xác nhận.
-10. Tổng đã đi là 500 km; xe mới bắt đầu tính từ 20.000, giữ nguyên giá/cọc/hạn.
-11. Sau các report đã đóng, renter xem ước tính EARLY rồi gửi yêu cầu trả sớm.
-12. Provider kiểm định xe mới ở 20.300 km → tổng đã đi 800 km. Tiếp tục quyết toán và hoàn cọc theo mục 7.
-
-Nếu đang tháng 3 và đã trả thêm tháng 4 thì tiền thuê đã nhận 60.400.000 đ, giữ 3 tháng + phí sớm cũng 60.400.000 đ; chưa có phí khác thì không cần bổ sung/hoàn tiền thuê, chỉ hoàn cọc 50 triệu.
-
-Muốn trình diễn có hoàn tiền thuê, renter có thể trả trước thêm tháng 5/6 trước bước trả sớm. Muốn trình diễn còn thiếu, chọn trả sớm trước khi thanh toán tháng 4. Đây là lựa chọn số tiền tại cùng điểm bắt đầu; **không cần chạy cả hai quyết toán trên một booking**.
-
-## 9. Buổi demo người mới — thêm nhánh kết thúc do provider
-
-Dùng renter.yearly.new@ecomotion.vn sau khi đã hoàn thành mục 5 và nhận xe.
-
-1. Tạo report OWNER_MAINTENANCE, mô tả lỗi xe, ngày hôm nay và bằng chứng.
-2. Provider kiểm tra, chọn END_PROVIDER, tiền hoàn bảo trì nhập 0 và ghi lý do.
-3. Renter xác nhận kết quả report; không gửi thêm yêu cầu EARLY.
-4. Provider nhận lại/kiểm định xe, renter xác nhận.
-5. Provider quyết toán: hoàn **toàn tháng xảy ra sự cố + các tháng tương lai đã trả**, không có phí tự nguyện trả sớm; cọc tính riêng.
-6. Nếu nhận và hỏng ngay tháng 1, chỉ trả tháng đầu 15.100.000 đ, không có phí/km vượt/khấu trừ thì hoàn tiền thuê 15.100.000 đ + cọc 50.000.000 đ.
-7. Provider upload chứng từ hoàn → renter xác nhận → provider hoàn tất.
-
-Đây là nhánh kết thúc riêng trên booking mới, không ảnh hưởng booking renter monthly.
-
-## 10. Buổi demo cuối hợp đồng — trả xe và hoàn cọc
-
-Dùng renter.yearly.happy-end@ecomotion.vn, **EM-Y2-HAPPY-END**, đã trả đủ 12 tháng.
-
-1. Xem dueOn và ngày nhận lại dự định.
-2. Chọn STANDARD; provider kiểm định, km cuối 20.000, upload ảnh.
-3. Renter xác nhận → provider lập quyết toán → renter đồng ý.
-4. Nếu nhận đúng dueOn hoặc trong ân hạn, không phí trễ; hoàn cọc 50 triệu nếu không có phụ phí.
-5. Nếu thực tế trễ 3 ngày và ân hạn 1 ngày thì phí trễ 1 triệu. Booking mới seed không bị cố tình đặt quá hạn; đọc dueOn và ngày nhận lại thực tế để quyết định có phí hay không. Có thể xem ước tính ngày trả tương lai để giải thích phí, nhưng không nhập ngày kiểm định tương lai.
-6. Chọn một cách: renter đóng bổ sung rồi hoàn đủ cọc, hoặc thống nhất khoản khấu trừ cọc tương ứng trong quyết toán; không thu trùng.
-7. Provider chuyển hoàn, upload biên lai → renter xác nhận → provider hoàn tất.
-8. Provider mở lại lịch xe sau kiểm định từ ngày mai hoặc muộn hơn.
-
-Không bắt buộc demo cả đúng hạn và trễ bằng hai lần kết thúc; có thể đối chiếu preview hoặc giải thích ngày/đơn giá rồi thực hiện một quyết toán cuối cùng.
-
-## 11. Các ca biên để giải thích, không cần tài khoản riêng
-
-- Phí sớm = một tháng trung bình làm tròn lên, nhưng không vượt tiền thuê tương lai còn lại.
-- Tháng 11 còn 15 triệu thì chỉ thu tối đa 15 triệu, dù phí trung bình 15,1 triệu.
-- Tháng 12 đã trả đủ năm thì phí sớm bằng 0.
-- Tiền tháng đã bắt đầu không chia lẻ ngày; kết thúc do lỗi provider hoàn cả tháng sự cố theo chính sách.
-- Km cộng theo quãng đường từng xe, không lấy công-tơ-mét xe mới trừ mốc nhận của xe cũ.
-
-Các con số này dùng để giải thích/kiểm tra công thức. Không dựng thêm tài khoản hoặc sửa ngày hợp đồng đang demo để ép trạng thái tháng 11/12.
-
-## 12. Kiểm tra ngắn về quyền, tiền và ngày
-
-Chỉ cần các kiểm tra gắn với nghiệp vụ, không cần tạo hàng loạt test mới:
-
-- 108 không được xem/sửa đơn 109; renter không được xác nhận nhận tiền thay provider.
-- Không được nhập ngày kiểm định tương lai, km trả nhỏ hơn mốc nhận, hoặc tiền âm.
-- Bấm lại/nhiều tab phải kiểm tra phiên bản; nếu dữ liệu đổi, tải lại rồi xác nhận.
-- Chưa xác nhận nhận xe mới thì không cộng km hoặc thay xe hoàn tất.
-- Không hoàn tất khi còn nợ bổ sung, report chưa đóng hoặc tiền hoàn chưa xác nhận.
-- Các khoản cọc, tiền thuê và hoàn chi phí sửa chữa phải tách biệt.
-- Ngày 29/02 cộng 12 tháng về ngày cuối tháng 2 năm sau; mốc tháng 29–31 luôn neo ngày nhận ban đầu (ví dụ 31/01 → 28/02 → 31/03), không cộng dồn từ ngày đã bị rút ngắn.
-
-Các trường hợp lịch đặc biệt có thể kiểm tra hàm ngày riêng; không đổi đồng hồ máy hoặc sửa ngày hợp đồng đã chạy chỉ để ép demo.
-
-## 13. API dùng trong giao diện
-
-Chuẩn URL: **/api**, FE apiClient đã có baseURL này nên service không thêm /v1. Xem [tham chiếu API và body mẫu](YEARLY_RENTAL_API_REFERENCE_VI.md).
-
-Tiền tố: `/api/renter/yearly-bookings/{code}` hoặc `/api/provider/yearly-bookings/{code}`. Các thao tác thay đổi workflow cần `version` mới nhất; report/đổi xe dùng phiên bản của bản ghi tương ứng.
-
-| Bên | Method / hậu tố | Mục đích |
-|---|---|---|
-| Cả hai | GET /workflow, /handover, /payments | Trạng thái nghiệp vụ, giao nhận, 13 khoản ban đầu |
-| Renter | GET /schedule-preview | Dự kiến phân bổ tiền |
-| Provider | POST /terms | Chốt km, phí vượt, ân hạn và phí trễ |
-| Renter | POST /terms/accept | Đồng ý điều khoản |
-| Provider | POST /handover/dispatch, /handover/arrive | Đang giao, đã đến + km/ảnh |
-| Renter | POST /handover/receive | Nhận xe, chốt hạn thực tế |
-| Renter | POST /returns/preview, /returns | Ước tính và yêu cầu trả |
-| Provider | POST /returns/inspection | Kiểm định nhận lại xe |
-| Renter | POST /returns/confirm | Đồng ý biên bản trả xe |
-| Provider / renter | POST /settlement, /settlement/accept | Đề xuất và đồng ý quyết toán |
-| Provider / renter | POST /refund/transfer, /refund/confirm | Bằng chứng chuyển hoàn và xác nhận nhận |
-| Provider | POST /complete, /reopen | Hoàn tất hợp đồng, mở lại lịch xe |
-| Renter | POST /incidents | Report kèm ảnh/hóa đơn và requestId |
-| Provider | POST /incidents/{id}/resolution, /transfer | Xử lý report, ghi khoản hoàn trực tiếp |
-| Renter | POST /incidents/{id}/confirm | Xác nhận kết quả report |
-| Provider | POST /replacements | Đề nghị xe khác cùng provider |
-| Renter | POST /replacements/{id}/accept, /confirm | Chấp thuận và xác nhận bàn giao xe mới |
-| Provider | POST /replacements/{id}/inspection | Ngày đổi, km cũ/mới, hai bằng chứng |
-| Cả hai | POST /replacements/{id}/cancel | Hủy đề nghị còn hiệu lực |
-
-API chung:
-
-- `GET /api/bookings/{code}/evidences`; `POST /api/bookings/{code}/evidences/upload` (multipart ảnh).
-- `GET /api/payment-requests/{id}`.
-- `POST /api/payment-requests/{id}/proofs/multipart` (renter gửi biên lai).
-- `POST /api/provider/payment-requests/{id}/confirm`, `/reject` (provider đối soát).
-- API GPLX/hợp đồng dùng qua `yearlyRentalService.js` và controller tương ứng; đọc Swagger đang chạy để lấy đầy đủ request.
-
-## 14. Ghi kết quả và tái sử dụng
-
-Ghi mã đơn, ngày kiểm tra, số tiền trước/sau, trạng thái và ảnh màn hình các bước chính. Không đánh dấu “đã test trên web” chỉ dựa vào seed hay build.
-
-Các scenario thay đổi DB thật; restart không đưa về ban đầu. Chuyển sang nhánh khác bằng cách đổi tài khoản, không thay cấu hình seed. Ba renter và provider trong bảng được chuẩn bị trong một lần khởi động. Với nhánh đã kết thúc, tạo booking mới qua web để chạy lại hoặc dùng bản sao database demo được chuẩn bị trước. Không xóa giao dịch để tái sử dụng một đơn cũ và không tạo endpoint reset công khai.
-
-Trạng thái kiểm chứng của thay đổi seed: đã compile backend; chưa tự chạy seeder vào PostgreSQL đang dùng và chưa xác minh end-to-end qua trình duyệt. Hướng dẫn này là quy trình cần chạy, không phải báo cáo kết quả đã đạt.
-
-
-Danh sách endpoint, body và thứ tự gọi hiện hành: [API gói năm — chuẩn /api](YEARLY_RENTAL_API_REFERENCE_VI.md). Các bảng route đề xuất ban đầu cần đối chiếu với tài liệu API này.
-
-
-
-
-Lưu ý storage khi create-drop: Hibernate chỉ tạo lại DB, không xóa file trên ổ đĩa. PDF hợp đồng seed dùng tên có UUID để không trùng file từ lần chạy trước; không cần xóa toàn bộ storage để chạy lại seed.
-
-
-Chính sách GPLX demo hiện tại: chấp nhận B, B1 và B2, kể cả GPLX cấp trước năm 2025. Vẫn cần kết quả đọc thành công, đủ tuổi, xe tối đa 9 chỗ và GPLX còn hạn đến hết thời gian thuê. Đây là phạm vi demo, không phải đối chiếu đầy đủ các hạn chế theo từng hạng.
-
-
-Giới hạn ngày nhận xe: GET /api/renter/bookings/start-policy trả maxAdvanceMonths và latestPickupTime theo cấu hình BE. Form năm dùng mốc này để đặt max và chặn bước tiếp theo; mặc định là 3 tháng, không phải 3 năm. POST /api/renter/bookings/pickup-quote hỗ trợ YEARLY để báo giá điểm nhận; báo giá không thay thế bước ký hợp đồng và không tạo booking.
-
-
-Khi xác nhận tiền cọc/tháng: mỗi lần chuyển cần mã giao dịch ngân hàng riêng. Ví dụ demo: COC-001, THANG1-001, THANG4-001. Không dùng lại cùng mã giữa các khoản trên cùng tài khoản ngân hàng nhận. Lỗi 409 “Giao dịch ngân hàng này đã được đối soát trước đó” nghĩa là mã đã được ghi nhận; kiểm tra lịch sử trước, không tắt kiểm tra trùng hoặc xác nhận lại cùng giao dịch. Mã giao dịch khác với mã booking/nội dung chuyển khoản.
-
-
-Ảnh minh chứng giao/nhận, sự cố, hóa đơn và hoàn tiền của gói năm được lưu local qua FileStorageService (app.upload.provider=local, app.upload.dir giống ảnh GPLX). POST /api/bookings/{code}/evidences/upload nhận JPG/PNG, tên UUID; GET /api/bookings/{code}/evidences/{id}/file trả binary với kiểm tra quyền và no-store. Client cần gửi Bearer token, không mở URL local bảo vệ trực tiếp bằng img không có Authorization. Không cần Cloudinary cho luồng minh chứng này.
+1. Mở EM-Y2-MONTHLY. Chỉ cọc và kỳ 1–3 được xác nhận; kỳ 4 chưa được thanh toán.
+2. Gửi biên lai kỳ 4 là 15,1 triệu, mã giao dịch mới. Provider xác nhận → tiền thuê đã nhận 60,4 triệu; tiền bảo đảm vẫn 50 triệu.
+3. Báo hao mòn OWNER_MAINTENANCE, hóa đơn 500.000 đ. Provider chọn REIMBURSE 500.000 → ghi nhận chuyển → renter xác nhận. Report đóng; không tự giảm tiền tháng 5.
+4. Nếu cần chứng minh trách nhiệm renter: tạo RENTER_DAMAGE, hóa đơn 300.000 đ → Provider chọn RENTER_PAID, approvedAmount=0 → renter xác nhận. Không thu lại khoản renter đã thanh toán.
+5. Tạo một report hao mòn khác để đổi xe → Provider chọn REPLACE, approvedAmount=0 → chọn xe 00009 → renter đồng ý.
+6. Provider ghi giao nhận: xe cũ kết thúc 14.000 km, xe mới bắt đầu 2.000 km, có ảnh riêng. Renter xác nhận.
+7. Kiểm tra giá/cọc/hạn/kỳ tiền giữ nguyên. Quãng đường xe cũ là 4.000 km; không lấy đồng hồ xe mới trừ mốc xe cũ.
+
+Chỉ tạo report tiếp theo khi report trước đã đóng. Nếu ít thời gian, chọn một nhánh sửa chữa và nhánh đổi xe để thao tác; mở lịch sử/phần chính sách để giải thích nhánh còn lại.
+
+### C — Trả sớm: tiếp tục MONTHLY sau B
+
+1. Xem ước tính EARLY cho ngày trả hợp lệ, rồi gửi yêu cầu.
+2. Provider kiểm định xe mới: km cuối 3.500 → thêm 1.500 km; tổng hợp đồng 5.500 km.
+3. Renter kiểm tra ngày/km/ảnh rồi xác nhận nhận lại xe.
+4. Provider lập quyết toán. Với fixture mới tạo đúng mốc trên và trả trong tháng thứ 4: E=60,4 triệu, phí sớm=15,1 triệu; chưa có phí km hoặc phụ phí.
+5. Cách nhanh: chọn khấu trừ cọc 15,1 triệu, phụ phí khác 0 → cần trả thêm 0, hoàn cọc 34,9 triệu. Đây là lựa chọn khấu trừ minh bạch được renter chấp nhận, không tự động dùng cọc thanh toán nợ.
+6. Nếu thầy chọn khấu trừ 0: cần thanh toán bổ sung 15,1 triệu, sau đó hoàn đủ cọc 50 triệu. Không vừa thu 15,1 triệu vừa khấu trừ 15,1 triệu.
+7. Renter đồng ý quyết toán → thực hiện khoản thiếu nếu có → Provider ghi chuyển hoàn → renter xác nhận → Provider hoàn tất.
+
+Các con số phải tính lại nếu ngày trả, km, số kỳ đã thanh toán hoặc phí thay đổi. Hoàn ứng sửa chữa không được cộng thành tiền thuê đã trả.
+
+### D — Cuối hợp đồng: renter happy-end
+
+1. Mở EM-Y2-HAPPY-END, không mở EM-Y2-CANCEL. Kiểm tra đủ 12 kỳ 181 triệu và cọc 50 triệu.
+2. Chọn STANDARD. Provider nhập ngày nhận lại, km 20.000 và ảnh.
+3. Nếu chọn ngày hạn gốc D-3 (biên bản DEMO tương ứng), không phí trễ; nếu chọn ngày D, trễ 3 ngày, miễn 1 → tính 2 ngày = 1 triệu. Không nhập ngày kiểm định tương lai.
+4. Renter xác nhận → Provider lập quyết toán. Không có phí khác/km vượt: hoàn cọc 50 triệu ở nhánh đúng hạn.
+5. Ở nhánh trễ, chọn khấu trừ 1 triệu → hoàn 49 triệu; hoặc thu bổ sung 1 triệu rồi hoàn 50 triệu, không thu trùng.
+6. Renter đồng ý → Provider ghi chuyển → renter xác nhận → Provider hoàn tất.
+7. Mở lại lịch xe từ ngày mai hoặc muộn hơn sau kiểm định. Sẵn sàng nhận lịch và hoàn tất tài chính là hai vấn đề độc lập.
+
+## 6. Các điểm dừng khi thầy muốn kiểm tra
+
+| Điểm dừng | Thử thay đổi | Kết quả và cách tiếp tục |
+| --- | --- | --- |
+| Trước nhận xe | Thiếu cọc/kỳ đầu rồi giao xe | Bị chặn; hoàn tất khoản thiếu rồi thử lại |
+| Lịch thanh toán | Dùng lại mã giao dịch đã nhận | Bị chặn trùng; kiểm tra lịch sử, không bịa mã mới cho cùng giao dịch |
+| Kiểm định | Km cuối nhỏ hơn đầu; ngày trước nhận hoặc trong tương lai | Bị chặn; dữ liệu hợp lệ trước đó phải còn nguyên |
+| Quyết toán | Đổi ngày/km/khấu trừ | BE tính lại; đọc từng dòng thay vì cố giữ số mẫu |
+| Hoàn tiền | Renter chưa nhận/nhận thiếu | Dùng nhánh Admin mục 8, không bấm nhận đủ cho nhanh |
+| Report | Không đồng ý/Provider chưa xử lý | Gửi Admin xem xét, không sửa DB để đóng report |
+| Hai phiên cùng thao tác | Gửi version cũ hoặc bấm lặp | Không ghi tiền hai lần; tải lại trạng thái/kiểm tra kết quả đã xử lý trước khi tiếp tục |
+| Sai vai trò/chủ booking | Gọi thao tác của bên kia | Bị chặn quyền, quay về đúng phiên |
+| Đã nhận xe | Muốn dùng hủy trước bàn giao | Dùng flow trả xe; nhánh hủy trình diễn trên booking CANCEL riêng |
+
+Sau mỗi lỗi, kiểm tra tiền, trạng thái và số giao dịch không bị thay đổi ngoài dự kiến. Một thao tác bị chặn đúng là kết quả kiểm tra hợp lệ.
+
+## 7. Kết thúc do Provider: dùng booking NEW sau A
+
+1. Renter tạo OWNER_MAINTENANCE, ngày sự cố thuộc tháng đầu và bằng chứng phù hợp.
+2. Provider chọn END_PROVIDER, approvedAmount=0, ghi lý do không thể tiếp tục cung cấp xe.
+3. Renter xác nhận report → Provider kiểm định/nhận lại → renter xác nhận. Không tạo yêu cầu EARLY khác.
+4. Quyết toán với không phụ phí, không vượt km: phí kết thúc sớm 0; tiền thuê tháng sự cố đã nhận được hoàn 15,1 triệu, cọc hoàn 50 triệu.
+5. Chuyển hoàn tổng 65,1 triệu, renter xác nhận rồi hoàn tất. Không hoàn tiền các tháng chưa từng nhận.
+
+Nếu thầy chọn FIXED hoặc REPLACE thì booking tiếp tục theo phương án đó; không ép END_PROVIDER trên report đã đóng. Ghi nhận nhánh đã chọn và dùng các booking còn độc lập để tiếp tục buổi demo.
+
+## 8. Admin can thiệp: không thêm tài khoản
+
+### Report chưa xử lý
+
+- Renter mở report chưa đóng → Yêu cầu Admin xem xét, ghi vấn đề và ảnh.
+- Admin mở hồ sơ YEARLY_INCIDENT theo đúng booking/report.
+- HOLD giữ hồ sơ mở. Hai bên không tự thay kết luận khi Admin đang xem xét.
+- FIXED/RENTER_PAID là kết luận đã xử lý; REIMBURSE tạo nghĩa vụ hoàn ứng, END_PROVIDER mở nhánh trả do Provider.
+- Nếu đang có đề nghị đổi xe thì xử lý/hủy đề nghị đó trước khi phân xử report.
+- Khoản hoàn ứng đã có kết luận, đang chờ chuyển/xác nhận không chặn riêng yêu cầu trả xe; hoàn tất tài chính vẫn cần report đóng.
+- Đã có biên lai hoàn ứng thì dùng TRANSFER_VERIFIED hoặc FAILED_TRANSFER theo bằng chứng, không bỏ qua giao dịch để đổi kết luận tùy ý.
+
+### Chưa nhận/nhận thiếu tiền hoàn
+
+- Dùng MONTHLY hoặc HAPPY-END ở REFUND_TRANSFER_RECORDED. Renter chọn Chưa nhận/nhận thiếu, nhập tổng thực nhận và ảnh.
+- Admin mở YEARLY_REFUND. Số renter khai chưa tự thành số đã xác minh.
+- HOLD: giữ chờ; không chuyển thêm khi giao dịch cũ chưa rõ kết quả hoặc chuyển nhầm chưa thu hồi.
+- FAILED_VERIFIED: đã xác minh chuyển thất bại/tiền quay về; mở chuyển lại phần còn thiếu, yêu cầu mã giao dịch mới.
+- PARTIAL_RECEIVED: xác minh số nhận cộng dồn, phần thiếu không còn treo; chỉ chuyển thiếu.
+- CONFIRMED_RECEIVED: số đã xác minh phải bằng tổng phải hoàn; ghi nhận đúng Admin, không giả thành renter tự xác nhận.
+- Cấm giảm số đã xác minh hoặc vượt tổng phải hoàn. Không hoàn tất khi hồ sơ/tiền còn chưa xử lý.
+
+## 9. Hủy trước nhận xe: cùng renter happy-end
+
+1. Mở EM-Y2-CANCEL, xe 00011. Kiểm tra CONFIRMED, actualStartAt chưa có, cọc 50 triệu và kỳ đầu 15,1 triệu đã nhận.
+2. Renter bấm Hủy yêu cầu trước nhận xe. Không bấm nhận xe trên đơn này trước khi demo hủy.
+3. Đơn vào CANCELLATION_REVIEW, ngừng thu các kỳ tương lai, giải phóng lịch xe, có hồ sơ YEARLY_CANCELLATION.
+4. Admin xem hợp đồng, tiền thực nhận và bằng chứng; quyết định nghĩa vụ/tiền hoàn theo căn cứ. Tổng nhận là 65,1 triệu, không được hoàn quá nguồn còn lại.
+5. Thực hiện luồng hoàn/đối soát hiện tại và đóng hủy khi không còn nghĩa vụ treo.
+
+Không khẳng định mọi hủy trước bàn giao mặc định hoàn toàn bộ. Số Admin nhập cần có căn cứ, không lấy phí EARLY sau nhận xe áp ngược. Nếu thầy đã nhận xe trên đơn CANCEL thì nó trở thành hợp đồng đang thuê và phải đi flow trả xe.
+
+## 10. Phạm vi và khôi phục
+
+- Tuyến chính chứng minh đặt/nhận, vận hành, trả sớm và kết thúc bình thường. Nhánh 7–9 được mở theo câu hỏi; không bắt làm tất cả trong 15 phút.
+- Không cần account cho từng phép tính dư/thiếu tiền hoặc tháng 11/12. Dùng preview cho số học trước khi xác nhận một kết quả cuối.
+- Không tự reset, đổi ngày hay chuyển chủ booking đã tồn tại. Khi một nhánh kết thúc đã được chọn, chuyển tình huống khác hoặc dùng snapshot demo đã chuẩn bị.
+- Khôi phục DB cần kèm thư mục file đúng snapshot. Chỉ khôi phục trên môi trường demo được chủ động chọn.
+- Các fixture/cọc/biên lai/PDF mô phỏng không chứng minh giao nhận hoặc chuyển tiền ngoài đời.
+- Luồng đăng ký Provider demo riêng một lần theo docs/provider-register. Gói năm dùng Provider đã sẵn sàng để không phụ thuộc kết quả AI đăng ký ngay trong buổi trình bày.

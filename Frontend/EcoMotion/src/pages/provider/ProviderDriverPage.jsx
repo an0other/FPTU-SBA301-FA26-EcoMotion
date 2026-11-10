@@ -7,6 +7,7 @@ import { DRIVER_STATUS_LABELS } from '../../utils/driverStatus'
 import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { getErrorMessage } from '../../utils/errorMessage'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
+import { isValidEmail, isValidVnPhone } from '../../utils/validation'
 
 export default function ProviderDriverPage() {
   const [drivers, setDrivers] = useState([])
@@ -18,6 +19,8 @@ export default function ProviderDriverPage() {
     rejected: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [brokenAvatarIds, setBrokenAvatarIds] = useState(new Set())
   const [toast, setToast] = useState(null)
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -35,7 +38,7 @@ export default function ProviderDriverPage() {
     setOffset(0)
     setter(value)
   }
-  const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
+  const [viewMode, setViewMode] = useState('grid')
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -58,8 +61,6 @@ export default function ProviderDriverPage() {
 
   const portraitInputRef = useRef(null)
   const licenseInputRef = useRef(null)
-
-  // Load drivers and stats
   const loadData = useCallback(async (quiet = false) => {
     const sequence = ++loadSequence.current
     if (invalidRange) { setDrivers([]); setTotal(0); setLoading(false); return }
@@ -80,12 +81,12 @@ export default function ProviderDriverPage() {
       ])
 
       if (sequence !== loadSequence.current) return
+      if (statsRes) setStats(statsRes)
       if (driversRes) {
         if (offset > 0 && offset >= driversRes.total) { setOffset(0); return }
         setDrivers(driversRes.items)
         setTotal(driversRes.total)
       }
-      if (statsRes) setStats(statsRes)
     } catch (err) {
       if (sequence !== loadSequence.current) return
       setDrivers([])
@@ -95,7 +96,10 @@ export default function ProviderDriverPage() {
         message: getErrorMessage(err, 'Không thể tải danh sách tài xế của nhà xe'),
       })
     } finally {
-      if (sequence === loadSequence.current) setLoading(false)
+      if (sequence === loadSequence.current) {
+        setLoading(false)
+        setStatsLoading(false)
+      }
     }
   }, [selectedStatus, sortBy, operationalStatus, searchTerm, updatedFrom, updatedTo, offset, invalidRange])
 
@@ -146,6 +150,26 @@ export default function ProviderDriverPage() {
 
   const handleFileUpload = async (file, type) => {
     if (!file) return
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp']
+    const ext = file.name?.split('.').pop()?.toLowerCase()
+    const validExts = ['jpg', 'jpeg', 'png', 'webp']
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+      setToast({
+        type: 'error',
+        message: 'Hệ thống chỉ chấp nhận hình ảnh định dạng JPG, PNG hoặc WEBP.',
+      })
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setToast({
+        type: 'error',
+        message: 'Dung lượng ảnh vượt quá 5MB. Vui lòng chọn tệp nhỏ hơn.',
+      })
+      return
+    }
+
     try {
       if (type === 'portrait') setUploadingPortrait(true)
       if (type === 'license') setUploadingLicense(true)
@@ -169,12 +193,49 @@ export default function ProviderDriverPage() {
 
   const handleSubmitForm = async (e) => {
     e.preventDefault()
+
+    const cleanFullName = formFullName.trim()
+    const cleanEmail = formEmail.trim().toLowerCase()
+    const cleanPhone = formPhone.trim()
+    const cleanLicenseNo = formLicenseNo.trim()
+    const todayStr = new Date().toLocaleDateString('en-CA')
+
+    if (!cleanFullName) {
+      setToast({ type: 'error', message: 'Vui lòng nhập họ và tên tài xế.' })
+      return
+    }
+
+    if (!isEditing && !isValidEmail(cleanEmail)) {
+      setToast({ type: 'error', message: 'Email đăng nhập không đúng định dạng hợp lệ.' })
+      return
+    }
+
+    if (!isValidVnPhone(cleanPhone)) {
+      setToast({ type: 'error', message: 'Số điện thoại không đúng định dạng di động Việt Nam (10 chữ số, bắt đầu bằng 0).' })
+      return
+    }
+
+    if (!cleanLicenseNo) {
+      setToast({ type: 'error', message: 'Vui lòng nhập số giấy phép lái xe.' })
+      return
+    }
+
+    if (!formLicenseExpiry) {
+      setToast({ type: 'error', message: 'Vui lòng chọn ngày hết hạn GPLX.' })
+      return
+    }
+
+    if (formLicenseExpiry < todayStr) {
+      setToast({ type: 'error', message: 'Giấy phép lái xe đã hết hạn hoặc không hợp lệ.' })
+      return
+    }
+
     if (!formPortraitUrl) {
-      setToast({ type: 'error', message: 'Vui lòng tải lên ảnh chân dung của tài xế' })
+      setToast({ type: 'error', message: 'Vui lòng tải lên ảnh chân dung của tài xế.' })
       return
     }
     if (!formLicenseImageUrl) {
-      setToast({ type: 'error', message: 'Vui lòng tải lên ảnh chụp giấy phép lái xe (GPLX)' })
+      setToast({ type: 'error', message: 'Vui lòng tải lên ảnh chụp giấy phép lái xe.' })
       return
     }
 
@@ -182,25 +243,25 @@ export default function ProviderDriverPage() {
       setSubmitting(true)
       if (isEditing) {
         await providerService.updateDriver(editingDriverId, {
-          fullName: formFullName,
-          phone: formPhone,
+          fullName: cleanFullName,
+          phone: cleanPhone,
           portraitUrl: formPortraitUrl,
-          licenseNo: formLicenseNo,
+          licenseNo: cleanLicenseNo,
           licenseClass: formLicenseClass,
           licenseExpiry: formLicenseExpiry,
           licenseImageUrl: formLicenseImageUrl,
         })
         setToast({
           type: 'success',
-          message: 'Đã cập nhật hồ sơ tài xế thành công! Nếu sửa đổi GPLX, hồ sơ sẽ chuyển sang Chờ duyệt.',
+          message: 'Đã cập nhật hồ sơ tài xế thành công! Nếu sửa đổi giấy phép lái xe hoặc ảnh chân dung, hồ sơ sẽ chuyển sang trạng thái Chờ duyệt để Quản trị viên thẩm định lại.',
         })
       } else {
         await providerService.createDriver({
-          fullName: formFullName,
-          email: formEmail,
-          phone: formPhone,
+          fullName: cleanFullName,
+          email: cleanEmail,
+          phone: cleanPhone,
           portraitUrl: formPortraitUrl,
-          licenseNo: formLicenseNo,
+          licenseNo: cleanLicenseNo,
           licenseClass: formLicenseClass,
           licenseExpiry: formLicenseExpiry,
           licenseImageUrl: formLicenseImageUrl,
@@ -208,7 +269,7 @@ export default function ProviderDriverPage() {
         })
         setToast({
           type: 'success',
-          message: 'Tạo hộ tài khoản tài xế thành công! Hồ sơ đang ở trạng thái Chờ duyệt (PENDING).',
+          message: 'Tạo hộ tài khoản tài xế thành công! Hồ sơ đang ở trạng thái Chờ duyệt.',
         })
       }
       handleCloseModal()
@@ -237,8 +298,7 @@ export default function ProviderDriverPage() {
       await providerService.toggleDriverStatus(driver.id, newStatus)
       setToast({
         type: 'success',
-        message: `Đã ${newStatus === 'APPROVED' ? 'kích hoạt hoạt động' : 'tạm ngưng'} tài xế ${driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
-{(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}`,
+        message: `Đã ${newStatus === 'APPROVED' ? 'kích hoạt hoạt động' : 'tạm ngưng'} tài xế ${driver.fullName}`,
       })
       loadData()
     } catch (err) {
@@ -303,7 +363,7 @@ export default function ProviderDriverPage() {
             </div>
             <div>
               <div className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1">
-                {String(stats.total).padStart(2, '0')}{' '}
+                {statsLoading || !stats ? '—' : String(stats.total).padStart(2, '0')}{' '}
                 <span className="text-sm font-normal text-slate-500">tài xế</span>
               </div>
               <p className="text-xs text-slate-500">Đang trong danh sách đội xe</p>
@@ -319,7 +379,7 @@ export default function ProviderDriverPage() {
             </div>
             <div>
               <div className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1">
-                {String(stats.approved).padStart(2, '0')}{' '}
+                {statsLoading || !stats ? '—' : String(stats.approved).padStart(2, '0')}{' '}
                 <span className="text-sm font-normal text-slate-500">tài xế</span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
@@ -338,7 +398,7 @@ export default function ProviderDriverPage() {
             </div>
             <div>
               <div className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1">
-                {String(stats.pending).padStart(2, '0')}{' '}
+                {statsLoading || !stats ? '—' : String(stats.pending).padStart(2, '0')}{' '}
                 <span className="text-sm font-normal text-slate-500">tài xế</span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold">
@@ -357,7 +417,7 @@ export default function ProviderDriverPage() {
             </div>
             <div>
               <div className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1">
-                {String(stats.suspended).padStart(2, '0')}{' '}
+                {statsLoading || !stats ? '—' : String(stats.suspended).padStart(2, '0')}{' '}
                 <span className="text-sm font-normal text-slate-500">tài xế</span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
@@ -367,156 +427,201 @@ export default function ProviderDriverPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 mb-8 flex flex-col lg:flex-row items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/90 mb-8 space-y-4">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
+            <div className="relative flex-1 min-w-[260px]">
+              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
+                search
+              </span>
+              <input
+                type="text"
+                maxLength={100}
+                value={searchTerm}
+                onChange={(e) => changeFilter(setSearchTerm, e.target.value)}
+                placeholder="Tìm kiếm theo tên, SĐT, email, GPLX..."
+                className="w-full bg-slate-50 pl-10 pr-4 py-2.5 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all"
+              />
+            </div>
 
-          <div className="relative w-full lg:w-96 flex-shrink-0">
-            <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">
-              search
-            </span>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => changeFilter(setSearchTerm, e.target.value)}
-              placeholder="Tìm kiếm theo tên, SĐT, email, GPLX..."
-              className="w-full bg-slate-50 pl-10 pr-4 py-2.5 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all"
-            />
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="relative">
+                <select
+                  aria-label="Lọc trạng thái nhận chuyến"
+                  value={operationalStatus}
+                  onChange={(e) => changeFilter(setOperationalStatus, e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 pl-3.5 pr-8 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
+                >
+                  <option value="">Tất cả trạng thái nhận chuyến</option>
+                  {Object.entries(DRIVER_STATUS_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[18px]">
+                  expand_more
+                </span>
+              </div>
+
+              <div className="relative">
+                <select
+                  aria-label="Sắp xếp tài xế"
+                  value={sortBy}
+                  onChange={(e) => changeFilter(setSortBy, e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 pl-3.5 pr-8 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
+                >
+                  <option value="updated_desc">Cập nhật mới nhất</option>
+                  <option value="updated_asc">Cập nhật cũ nhất</option>
+                  <option value="status_updated_at">Cập nhật trạng thái mới nhất</option>
+                  <option value="newest">Tạo mới nhất</option>
+                  <option value="rating">Đánh giá cao nhất</option>
+                  <option value="expiry">GPLX sắp hết hạn</option>
+                </select>
+                <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[18px]">
+                  expand_more
+                </span>
+              </div>
+
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === 'grid' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                  title="Chế độ thẻ"
+                >
+                  <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    viewMode === 'table' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                  title="Chế độ bảng"
+                >
+                  <span className="material-symbols-outlined text-[18px]">view_list</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 scrollbar-none">
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'ALL')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'ALL'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Tất cả</span>
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  selectedStatus === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+          <div className="pt-3 border-t border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 xl:pb-0 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'ALL')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'ALL'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                {stats.total}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'APPROVED')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'APPROVED'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Đang hoạt động</span>
-              <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.approved}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'PENDING')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'PENDING'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Chờ duyệt</span>
-              <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.pending}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'REJECTED')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'REJECTED'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Bị từ chối</span>
-              <span className="bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.rejected}
-              </span>
-            </button>
-
-            <button
-              onClick={() => changeFilter(setSelectedStatus, 'SUSPENDED')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                selectedStatus === 'SUSPENDED'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span>Tạm ngưng</span>
-              <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                {stats.suspended}
-              </span>
-            </button>
-          </div>
-
-          {/* Right: View Controls & Sort */}
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
-            <div className="relative flex flex-wrap items-center gap-2">
-              <select aria-label="Lọc trạng thái nhận chuyến" value={operationalStatus} onChange={e => changeFilter(setOperationalStatus, e.target.value)} className="rounded-lg border border-slate-200 p-2 text-sm">
-<option value="">Tất cả trạng thái nhận chuyến</option>
-{Object.entries(DRIVER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-</select>
-<select
-                aria-label="Sắp xếp tài xế"
-                value={sortBy}
-                onChange={(e) => changeFilter(setSortBy, e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold py-2.5 pl-3.5 pr-8 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
-              >
-                <option value="updated_desc">Cập nhật mới nhất</option>
-                <option value="updated_asc">Cập nhật cũ nhất</option>
-                <option value="status_updated_at">Cập nhật trạng thái mới nhất</option>
-                <option value="newest">Tạo mới nhất</option>
-                <option value="rating">Đánh giá cao nhất</option>
-                <option value="expiry">GPLX sắp hết hạn</option>
-              </select>
-              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[18px]">
-                expand_more
-              </span>
-            </div>
-
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
+                <span>Tất cả</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    selectedStatus === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                   }`}
-                title="Chế độ Thẻ (Grid)"
-              >
-                <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                >
+                  {stats.total}
+                </span>
               </button>
+
               <button
-                onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'table' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                title="Chế độ Bảng (Table)"
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'APPROVED')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'APPROVED'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
               >
-                <span className="material-symbols-outlined text-[18px]">view_list</span>
+                <span>Đang hoạt động</span>
+                <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.approved}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'PENDING')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'PENDING'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>Chờ duyệt</span>
+                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.pending}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'REJECTED')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'REJECTED'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>Bị từ chối</span>
+                <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.rejected}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => changeFilter(setSelectedStatus, 'SUSPENDED')}
+                className={`h-10 px-4 rounded-xl text-xs font-semibold inline-flex items-center gap-2 flex-shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+                  selectedStatus === 'SUSPENDED'
+                    ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-700/20'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>Tạm ngưng</span>
+                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {stats.suspended}
+                </span>
               </button>
             </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-slate-500 font-medium">Khoảng ngày:</span>
+              <input
+                type="date"
+                aria-label="Cập nhật từ ngày"
+                value={updatedFrom}
+                onChange={(e) => changeFilter(setUpdatedFrom, e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
+              />
+              <span className="text-slate-400">→</span>
+              <input
+                type="date"
+                aria-label="Đến ngày"
+                value={updatedTo}
+                onChange={(e) => changeFilter(setUpdatedTo, e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
+              />
+              {(updatedFrom || updatedTo) && (
+                <button
+                  type="button"
+                  onClick={() => { changeFilter(setUpdatedFrom, ''); setUpdatedTo('') }}
+                  className="text-emerald-700 hover:text-emerald-800 font-semibold px-2 py-1 transition-colors cursor-pointer"
+                >
+                  Xóa
+                </button>
+              )}
+            </div>
           </div>
+          {invalidRange && (
+            <p role="alert" className="text-xs text-red-600 font-medium pt-1">
+              Ngày bắt đầu không được sau ngày kết thúc.
+            </p>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 mb-5">
-          <label className="text-sm text-slate-700">Cập nhật từ ngày
-            <input type="date" value={updatedFrom} onChange={e => changeFilter(setUpdatedFrom, e.target.value)} className="block border border-slate-200 rounded-lg p-2" />
-          </label>
-          <label className="text-sm text-slate-700">Đến ngày
-            <input type="date" value={updatedTo} onChange={e => changeFilter(setUpdatedTo, e.target.value)} className="block border border-slate-200 rounded-lg p-2" />
-          </label>
-          <button type="button" onClick={() => { changeFilter(setUpdatedFrom, ''); setUpdatedTo('') }} className="text-sm text-emerald-700 p-2">Xóa khoảng ngày</button>
-          <p className="text-xs text-slate-500">Giờ Việt Nam (UTC+7), bao gồm cả ngày kết thúc. Bản ghi chưa có thời gian cập nhật nằm cuối và không thuộc khoảng ngày.</p>
-          {invalidRange && <p role="alert" className="text-sm text-red-700">Ngày bắt đầu không được sau ngày kết thúc.</p>}
-        </div>
-
-        {/* Content Body: Grid or Table */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {[1, 2, 3].map((i) => (
@@ -563,21 +668,18 @@ export default function ProviderDriverPage() {
                 <div>
 
                   <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="relative">
-                        {driver.portraitUrl ? (
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <div className="relative shrink-0">
+                        {driver.portraitUrl && !brokenAvatarIds.has(driver.id) ? (
                           <img
                             src={driver.portraitUrl}
                             alt={driver.fullName}
                             className="w-14 h-14 rounded-2xl object-cover shadow-sm ring-2 ring-emerald-500/20"
-                            onError={(e) => {
-                              e.target.onerror = null
-                              e.target.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(driver.fullName)
-                            }}
+                            onError={() => setBrokenAvatarIds((prev) => new Set(prev).add(driver.id))}
                           />
                         ) : (
-                          <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-lg">
-                            {driver.fullName ? driver.fullName.charAt(0) : 'TX'}
+                          <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-lg shrink-0">
+                            {driver.fullName ? driver.fullName.charAt(0).toUpperCase() : 'TX'}
                           </div>
                         )}
                         {driver.status === 'APPROVED' && (
@@ -590,11 +692,21 @@ export default function ProviderDriverPage() {
                           <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-rose-500 border-2 border-white"></span>
                         )}
                       </div>
-                      <div>
-                        <h3 className="font-bold text-base text-slate-900 leading-tight group-hover:text-emerald-700 transition-colors">
-                          {driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
-{(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-bold text-base text-slate-900 leading-tight group-hover:text-emerald-700 transition-colors truncate">
+                          {driver.fullName}
                         </h3>
+                        {driver.status === 'APPROVED' && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <DriverStatusBadge status={driver.operationalStatus} />
+                            {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
+                              <span className="text-xs text-slate-500 font-mono font-medium">
+                                {driver.currentTripBookingCode || driver.nextTripBookingCode}
+                                {!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <p className="mt-1 text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
                         <div className="flex items-center gap-1.5 mt-1">
                           {driver.ratingCount > 0 ? (
@@ -615,25 +727,25 @@ export default function ProviderDriverPage() {
                     </div>
 
                     {driver.status === 'APPROVED' && (
-                      <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center gap-1.5">
+                      <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                         <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                         Hoạt động
                       </span>
                     )}
                     {driver.status === 'PENDING' && (
-                      <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold flex items-center gap-1.5">
+                      <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                         <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                         Chờ duyệt
                       </span>
                     )}
                     {driver.status === 'REJECTED' && (
-                      <span className="px-3 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1.5">
+                      <span className="px-3 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                         <span className="w-2 h-2 rounded-full bg-rose-600"></span>
                         Bị từ chối
                       </span>
                     )}
                     {driver.status === 'SUSPENDED' && (
-                      <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center gap-1.5">
+                      <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                         <span className="w-2 h-2 rounded-full bg-slate-400"></span>
                         Tạm ngưng
                       </span>
@@ -698,7 +810,7 @@ export default function ProviderDriverPage() {
                           error
                         </span>
                         <div>
-                          <span className="font-bold block mb-0.5">Lý do từ chối (reject_reason):</span>
+                          <span className="font-bold block mb-0.5">Lý do từ chối:</span>
                           <span>
                             {driver.rejectReason ||
                               'Ảnh chụp GPLX bị mờ hoặc thông tin chưa chính xác, vui lòng chụp lại rõ nét.'}
@@ -767,19 +879,32 @@ export default function ProviderDriverPage() {
                     <tr key={driver.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={driver.portraitUrl}
-                            alt=""
-                            className="w-10 h-10 rounded-xl object-cover ring-1 ring-slate-200"
-                            onError={(e) => {
-                              e.target.onerror = null
-                              e.target.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(driver.fullName)
-                            }}
-                          />
-                          <div>
+                          {driver.portraitUrl && !brokenAvatarIds.has(driver.id) ? (
+                            <img
+                              src={driver.portraitUrl}
+                              alt=""
+                              className="w-10 h-10 rounded-xl object-cover ring-1 ring-slate-200 shrink-0"
+                              onError={() => setBrokenAvatarIds((prev) => new Set(prev).add(driver.id))}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-sm shrink-0">
+                              {driver.fullName ? driver.fullName.charAt(0).toUpperCase() : 'TX'}
+                            </div>
+                          )}
+                          <div className="min-w-0">
                             <p className="text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
-                            <div className="font-bold text-slate-900">{driver.fullName}<span className="ml-2"><DriverStatusBadge status={driver.operationalStatus} /></span>
-{(driver.currentTripBookingCode || driver.nextTripBookingCode) && <span className="ml-2 text-xs text-slate-500">{driver.currentTripBookingCode || driver.nextTripBookingCode}{!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}</span>}</div>
+                            <div className="font-bold text-slate-900 truncate">{driver.fullName}</div>
+                            {driver.status === 'APPROVED' && (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                <DriverStatusBadge status={driver.operationalStatus} />
+                                {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
+                                  <span className="text-[11px] text-slate-500 font-mono">
+                                    {driver.currentTripBookingCode || driver.nextTripBookingCode}
+                                    {!driver.currentTripBookingCode && driver.nextTripPickupTime ? ' · ' + new Date(driver.nextTripPickupTime).toLocaleString('vi-VN') : ''}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             <div className="text-[11px] text-slate-400 font-mono">ID #{driver.id}</div>
                           </div>
                         </div>
@@ -821,10 +946,23 @@ export default function ProviderDriverPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        {driver.status === 'APPROVED' || driver.status === 'SUSPENDED' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStatus(driver)}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer mr-2 border ${
+                              driver.status === 'APPROVED'
+                                ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
+                            }`}
+                          >
+                            {driver.status === 'APPROVED' ? 'Tạm ngưng' : 'Kích hoạt'}
+                          </button>
+                        ) : null}
                         <button
                           onClick={() => handleOpenEditModal(driver)}
-                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs transition-colors cursor-pointer mr-2"
+                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs transition-colors cursor-pointer"
                         >
                           Sửa
                         </button>
@@ -837,15 +975,29 @@ export default function ProviderDriverPage() {
           </div>
         )}
 
-        <nav aria-label="Phân trang tài xế" className="flex items-center justify-between gap-3 mb-6">
-          <span className="text-sm text-slate-600" aria-live="polite">{total === 0 ? '0 kết quả' : [offset + 1, '–', Math.min(offset + pageSize, total), ' / ', total, ' tài xế'].join('')}</span>
-          <div className="flex gap-3">
-            <button disabled={loading || offset === 0} onClick={() => { ++loadSequence.current; setOffset(Math.max(0, offset - pageSize)) }} className="border rounded-lg p-2 disabled:opacity-40">Trang trước</button>
-            <button disabled={loading || offset + pageSize >= total} onClick={() => { ++loadSequence.current; setOffset(offset + pageSize) }} className="border rounded-lg p-2 disabled:opacity-40">Trang sau</button>
-          </div>
-        </nav>
-
-        {/* Banner: Cơ chế Điều phối Linh hoạt */}
+        {total > 0 && (
+          <nav aria-label="Phân trang tài xế" className="flex items-center justify-between gap-3 mb-6">
+            <span className="text-sm text-slate-600" aria-live="polite">
+              {[offset + 1, '–', Math.min(offset + pageSize, total), ' / ', total, ' tài xế'].join('')}
+            </span>
+            <div className="flex gap-2">
+              <button
+                disabled={loading || offset === 0}
+                onClick={() => { ++loadSequence.current; setOffset(Math.max(0, offset - pageSize)) }}
+                className="px-3.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Trang trước
+              </button>
+              <button
+                disabled={loading || offset + pageSize >= total}
+                onClick={() => { ++loadSequence.current; setOffset(offset + pageSize) }}
+                className="px-3.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Trang sau
+              </button>
+            </div>
+          </nav>
+        )}
         <div className="bg-gradient-to-r from-white via-white to-emerald-50/60 rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
           <div className="flex items-start gap-4 z-10">
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700 flex-shrink-0 shadow-sm">
@@ -859,7 +1011,7 @@ export default function ProviderDriverPage() {
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-600 max-w-4xl leading-relaxed">
-                Tài xế <strong className="text-slate-800 font-semibold">không gán cố định</strong> vào bất kỳ phương tiện nào. Khi khách hàng đặt xe kèm tài xế, chủ xe có toàn quyền chọn điều phối bất kỳ tài xế nào có trạng thái <strong className="text-emerald-700 font-semibold">"ĐÃ DUYỆT (APPROVED)"</strong> và có hạng giấy phép lái xe phù hợp với phân khúc dòng xe điện.
+                Tài xế <strong className="text-slate-800 font-semibold">không gán cố định</strong> vào bất kỳ phương tiện nào. Khi khách hàng đặt xe kèm tài xế, chủ xe có toàn quyền chọn điều phối bất kỳ tài xế nào có trạng thái <strong className="text-emerald-700 font-semibold">"Đã duyệt"</strong> và có hạng giấy phép lái xe phù hợp với phân khúc dòng xe điện.
               </p>
             </div>
           </div>
@@ -867,18 +1019,19 @@ export default function ProviderDriverPage() {
       </main>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto transform transition-all flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-hidden transform transition-all flex flex-col">
 
-            <div className="p-6 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-20">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white z-20">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700">
-                  <span className="material-symbols-outlined text-[24px]">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 shrink-0">
+                  <span className="material-symbols-outlined text-[22px]">
                     {isEditing ? 'edit_document' : 'person_add'}
                   </span>
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">
+                  <h2 className="text-base font-bold text-slate-900">
                     {isEditing ? 'Cập nhật Hồ sơ tài xế' : 'Tạo hộ tài khoản & Hồ sơ tài xế'}
                   </h2>
                   <p className="text-xs text-slate-500">
@@ -890,219 +1043,252 @@ export default function ProviderDriverPage() {
               </div>
               <button
                 onClick={handleCloseModal}
-                className="w-9 h-9 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[20px]">close</span>
+                <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            {/* Modal Form */}
+            <form onSubmit={handleSubmitForm} className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-start gap-3">
-                <span className="material-symbols-outlined text-amber-600 text-[20px] mt-0.5">info</span>
-                <p className="text-xs text-amber-800 leading-relaxed">
-                  Tài xế do nhà xe tạo hộ sẽ ở trạng thái <strong className="font-bold">Chờ duyệt (PENDING)</strong>. Sau khi Quản trị viên (Admin) thẩm định bằng lái, tài xế mới có thể nhận cuốc xe.
-                </p>
-              </div>
+                {/* Info Banner */}
+                <div className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200/80 flex items-start sm:items-center gap-2.5 text-xs text-amber-800">
+                  <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0 mt-0.5 sm:mt-0">info</span>
+                  <p>
+                    {isEditing
+                      ? 'Chỉnh sửa giấy phép lái xe hoặc ảnh chân dung sẽ chuyển tài xế về trạng thái Chờ duyệt để Quản trị viên thẩm định lại.'
+                      : 'Tài xế tạo hộ sẽ ở trạng thái Chờ duyệt cho đến khi Quản trị viên phê duyệt bằng lái.'}
+                  </p>
+                </div>
 
-              <form onSubmit={handleSubmitForm}>
+                {/* 2-Column Grid for Balanced Form */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  {/* Column 1: Account & Driver License */}
+                  <div className="space-y-3.5">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-slate-100">
                       <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                      1. Thông tin tài khoản người dùng
+                      1. Tài khoản & Giấy phép lái xe
                     </h3>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         Họ và tên tài xế *
                       </label>
                       <input
                         type="text"
                         required
+                        maxLength={150}
                         value={formFullName}
                         onChange={(e) => setFormFullName(e.target.value)}
                         placeholder="Ví dụ: Hoàng Minh Đức"
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         Email đăng nhập *
                       </label>
                       <input
                         type="email"
                         required
                         disabled={isEditing}
+                        maxLength={255}
                         value={formEmail}
                         onChange={(e) => setFormEmail(e.target.value)}
                         placeholder="duc.driver@ecomotion.vn"
-                        className={`w-full border px-3.5 py-2.5 rounded-xl text-sm ${isEditing
+                        className={`w-full border px-3.5 py-2 rounded-xl text-xs ${isEditing
                             ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                             : 'bg-slate-50 text-slate-800 border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40'
                           }`}
                       />
                       {isEditing && (
-                        <p className="text-[11px] text-slate-400 mt-1">Email đăng nhập không thể thay đổi sau khi tạo.</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Email không thể thay đổi sau khi tạo.</p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
                         Số điện thoại *
                       </label>
                       <input
                         type="tel"
                         required
+                        maxLength={20}
                         value={formPhone}
                         onChange={(e) => setFormPhone(e.target.value)}
                         placeholder="0987 654 321"
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                       />
                     </div>
 
                     {!isEditing && (
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Mật khẩu khởi tạo ban đầu
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Mật khẩu ban đầu
                         </label>
                         <div className="relative">
                           <input
                             type="text"
                             readOnly
                             value={formInitialPassword}
-                            className="w-full bg-slate-100 border border-slate-200 px-3.5 py-2.5 rounded-xl font-mono text-sm text-slate-500 cursor-not-allowed"
+                            className="w-full bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-xl font-mono text-xs text-slate-500 cursor-not-allowed"
                           />
-                          <span className="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
+                          <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">
                             lock
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          Tài xế sẽ được yêu cầu đổi mật khẩu ở lần đăng nhập đầu tiên.
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Tài xế sẽ đổi mật khẩu ở lần đăng nhập đầu tiên.
                         </p>
                       </div>
                     )}
 
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Số GPLX *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            maxLength={20}
+                            value={formLicenseNo}
+                            onChange={(e) => setFormLicenseNo(e.target.value)}
+                            placeholder="790184920194"
+                            className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Hạng bằng *
+                          </label>
+                          <select
+                            required
+                            value={formLicenseClass}
+                            onChange={(e) => setFormLicenseClass(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
+                          >
+                            <option value="B1">B1 (&le; 9 chỗ TĐ)</option>
+                            <option value="B2">B2 (&le; 9 chỗ KD)</option>
+                            <option value="C">C (&gt; 3.5 tấn)</option>
+                            <option value="D">D (10-30 chỗ)</option>
+                            <option value="E">E (&gt; 30 chỗ)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Ảnh chân dung đại diện (portrait_url) *
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Ngày hết hạn GPLX *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        min={new Date().toLocaleDateString('en-CA')}
+                        value={formLicenseExpiry}
+                        onChange={(e) => setFormLicenseExpiry(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Column 2: Verification Images */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-slate-100">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                      2. Hình ảnh hồ sơ xác thực
+                    </h3>
+
+                    {/* Portrait Photo */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Ảnh chân dung đại diện *
                       </label>
                       <input
                         type="file"
                         ref={portraitInputRef}
                         accept="image/png,image/jpeg,image/webp"
                         className="hidden"
-                        onChange={(e) => handleFileUpload(e.target.files[0], 'portrait')}
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) handleFileUpload(e.target.files[0], 'portrait')
+                          e.target.value = ''
+                        }}
                       />
                       {formPortraitUrl ? (
-                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 group h-36 bg-slate-100 flex items-center justify-center">
+                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 group h-32 bg-slate-100 flex items-center justify-center shadow-sm">
                           <img src={formPortraitUrl} alt="Portrait preview" className="h-full w-full object-cover" />
                           <button
                             type="button"
                             onClick={() => portraitInputRef.current?.click()}
-                            className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1 cursor-pointer"
+                            className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1.5 cursor-pointer backdrop-blur-[2px]"
                           >
                             <span className="material-symbols-outlined text-[18px]">cached</span>
-                            Đổi ảnh khác
+                            Đổi ảnh chân dung
                           </button>
                         </div>
                       ) : (
                         <div
                           onClick={() => portraitInputRef.current?.click()}
-                          className="border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:bg-slate-50 transition-colors cursor-pointer group"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            if (!uploadingPortrait && e.dataTransfer.files?.[0]) {
+                              handleFileUpload(e.dataTransfer.files[0], 'portrait')
+                            }
+                          }}
+                          className="border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group h-32 flex flex-col items-center justify-center"
                         >
                           {uploadingPortrait ? (
-                            <div className="py-2 flex flex-col items-center justify-center">
-                              <span className="material-symbols-outlined text-[28px] text-emerald-700 animate-spin">
+                            <div className="flex flex-col items-center justify-center">
+                              <span className="material-symbols-outlined text-[24px] text-emerald-700 animate-spin">
                                 progress_activity
                               </span>
-                              <p className="text-xs text-slate-500 mt-1">Đang tải ảnh lên...</p>
+                              <p className="text-xs text-slate-500 mt-1">Đang tải lên...</p>
                             </div>
                           ) : (
                             <>
-                              <span className="material-symbols-outlined text-[32px] text-slate-400 group-hover:text-emerald-700 transition-colors">
-                                add_a_photo
-                              </span>
-                              <p className="text-xs font-semibold text-slate-700 mt-1">Nhấp tải ảnh chân dung chính diện</p>
-                              <p className="text-[11px] text-slate-400">PNG, JPG, WEBP tối đa 5MB</p>
+                              <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                <span className="material-symbols-outlined text-[20px]">
+                                  add_a_photo
+                                </span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-700">Tải ảnh chân dung</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">JPG, PNG, WEBP &le; 5MB</p>
                             </>
                           )}
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                      2. Hồ sơ Giấy phép lái xe (GPLX)
-                    </h3>
-
+                    {/* License Photo */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Số GPLX (license_no) *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formLicenseNo}
-                        onChange={(e) => setFormLicenseNo(e.target.value)}
-                        placeholder="Ví dụ: 790184920194"
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl font-mono text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Hạng bằng lái (license_class) *
-                      </label>
-                      <select
-                        required
-                        value={formLicenseClass}
-                        onChange={(e) => setFormLicenseClass(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
-                      >
-                        <option value="B1">Hạng B1 (Xe số tự động đến 9 chỗ)</option>
-                        <option value="B2">Hạng B2 (Xe ô tô kinh doanh dưới 9 chỗ)</option>
-                        <option value="C">Hạng C (Xe tải và ô tô trên 3.5 tấn)</option>
-                        <option value="D">Hạng D (Chở người từ 10 đến 30 chỗ)</option>
-                        <option value="E">Hạng E (Chở người trên 30 chỗ)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Ngày hết hạn bằng lái (license_expiry) *
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={formLicenseExpiry}
-                        onChange={(e) => setFormLicenseExpiry(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Ảnh chụp bằng lái 2 mặt (license_image_url) *
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Ảnh chụp GPLX 2 mặt *
                       </label>
                       <input
                         type="file"
                         ref={licenseInputRef}
                         accept="image/png,image/jpeg,image/webp"
                         className="hidden"
-                        onChange={(e) => handleFileUpload(e.target.files[0], 'license')}
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) handleFileUpload(e.target.files[0], 'license')
+                          e.target.value = ''
+                        }}
                       />
                       {formLicenseImageUrl ? (
-                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 group h-36 bg-slate-100 flex items-center justify-center">
+                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 group h-32 bg-slate-100 flex items-center justify-center shadow-sm">
                           <img src={formLicenseImageUrl} alt="License preview" className="h-full w-full object-cover" />
                           <button
                             type="button"
                             onClick={() => licenseInputRef.current?.click()}
-                            className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1 cursor-pointer"
+                            className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1.5 cursor-pointer backdrop-blur-[2px]"
                           >
                             <span className="material-symbols-outlined text-[18px]">cached</span>
                             Đổi ảnh GPLX
@@ -1111,24 +1297,31 @@ export default function ProviderDriverPage() {
                       ) : (
                         <div
                           onClick={() => licenseInputRef.current?.click()}
-                          className="border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:bg-slate-50 transition-colors cursor-pointer group"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            if (!uploadingLicense && e.dataTransfer.files?.[0]) {
+                              handleFileUpload(e.dataTransfer.files[0], 'license')
+                            }
+                          }}
+                          className="border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group h-32 flex flex-col items-center justify-center"
                         >
                           {uploadingLicense ? (
-                            <div className="py-2 flex flex-col items-center justify-center">
-                              <span className="material-symbols-outlined text-[28px] text-emerald-700 animate-spin">
+                            <div className="flex flex-col items-center justify-center">
+                              <span className="material-symbols-outlined text-[24px] text-emerald-700 animate-spin">
                                 progress_activity
                               </span>
-                              <p className="text-xs text-slate-500 mt-1">Đang tải ảnh GPLX...</p>
+                              <p className="text-xs text-slate-500 mt-1">Đang tải lên...</p>
                             </div>
                           ) : (
                             <>
-                              <span className="material-symbols-outlined text-[32px] text-slate-400 group-hover:text-emerald-700 transition-colors">
-                                badge
-                              </span>
-                              <p className="text-xs font-semibold text-slate-700 mt-1">
-                                Kéo thả hoặc nhấn để tải ảnh mặt trước/sau
-                              </p>
-                              <p className="text-[11px] text-slate-400">Ảnh chụp rõ số và mộc đỏ kiểm định</p>
+                              <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                <span className="material-symbols-outlined text-[20px]">
+                                  badge
+                                </span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-700">Tải ảnh bằng lái</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Rõ số và mộc đỏ &le; 5MB</p>
                             </>
                           )}
                         </div>
@@ -1136,35 +1329,36 @@ export default function ProviderDriverPage() {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="pt-6 mt-6 border-t border-slate-200 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                  >
-                    Hủy bỏ
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    {submitting ? (
-                      <>
-                        <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                        <span>Đang xử lý...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined text-[18px]">verified_user</span>
-                        <span>{isEditing ? 'Cập nhật & Gửi duyệt lại' : 'Xác nhận & Gửi duyệt Admin'}</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
+              {/* Fixed Modal Footer - Always Visible Without Scrolling */}
+              <div className="px-6 py-3 border-t border-slate-200 bg-slate-50/90 flex items-center justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold px-5 py-2 rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                      <span>Đang xử lý...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[16px]">verified_user</span>
+                      <span>{isEditing ? 'Cập nhật & Gửi duyệt lại' : 'Xác nhận & Gửi duyệt Admin'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1187,16 +1381,23 @@ export default function ProviderDriverPage() {
               </button>
             </div>
 
-            <div className="rounded-2xl overflow-hidden bg-slate-100 mb-4 aspect-[16/10] relative flex items-center justify-center">
-              <img
-                src={previewData.imageUrl || 'https://lh3.googleusercontent.com/aida-public/AB6AXuDwAeaBGOzou7JdNsnsO4BmTXrG974YzwszeQhZB68gHcoEHWVnQz8GNzWsRIBDJfam7ATjixTkJLlDTrDPh71EcGN6HIZclYZhavztVCGWhPF3xM7i6EARO5yKgBFJy__tAggqgVp1fQXzwa9JOqAocHu21WcfWG8UwBM0I4Ou4ULq10ucD-A8gUU0e5edLuSOeU_5lSN1Gr6aYssYXmcA6f1w62hJe_Vk2Uyz-t3DFM-E-z14jH1J'}
-                alt="License Document Preview"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.target.onerror = null
-                  e.target.src = 'https://lh3.googleusercontent.com/aida-public/AB6AXuDwAeaBGOzou7JdNsnsO4BmTXrG974YzwszeQhZB68gHcoEHWVnQz8GNzWsRIBDJfam7ATjixTkJLlDTrDPh71EcGN6HIZclYZhavztVCGWhPF3xM7i6EARO5yKgBFJy__tAggqgVp1fQXzwa9JOqAocHu21WcfWG8UwBM0I4Ou4ULq10ucD-A8gUU0e5edLuSOeU_5lSN1Gr6aYssYXmcA6f1w62hJe_Vk2Uyz-t3DFM-E-z14jH1J'
-                }}
-              />
+            <div className="rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 mb-4 min-h-[220px] max-h-[65vh] relative flex items-center justify-center p-2">
+              {previewData.imageUrl ? (
+                <img
+                  src={previewData.imageUrl}
+                  alt="License Document Preview"
+                  className="max-h-[60vh] w-full object-contain rounded-xl"
+                  onError={(e) => {
+                    e.target.onerror = null
+                    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200"><rect width="100%" height="100%" fill="%23f8fafc"/><text x="50%" y="50%" fill="%2394a3b8" font-size="13" font-family="sans-serif" text-anchor="middle">Không thể tải ảnh GPLX</text></svg>'
+                  }}
+                />
+              ) : (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                  <span className="material-symbols-outlined text-4xl">badge</span>
+                  <span className="text-xs mt-1 font-medium">Chưa có ảnh GPLX</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between text-xs text-slate-500">

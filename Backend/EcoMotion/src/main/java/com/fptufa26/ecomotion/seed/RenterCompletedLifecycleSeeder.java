@@ -204,7 +204,7 @@ public class RenterCompletedLifecycleSeeder {
         entityManager.persist(depositCharge);
 
         BookingCharge radiusCharge = createCharge(booking, provider.getUser(), ChargeType.OUT_OF_RADIUS,
-                null, OUT_OF_RADIUS_FEE, null, OUT_OF_RADIUS_FEE, tripEndAt,
+                1, OUT_OF_RADIUS_FEE, null, OUT_OF_RADIUS_FEE, tripEndAt,
                 "Phí vượt bán kính giao nhận (điểm đón ngoài depot)");
         entityManager.persist(radiusCharge);
 

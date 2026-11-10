@@ -38,7 +38,7 @@ export default function ProviderOnboardingPage() {
     Promise.all([api.get(), identity.status(), api.options()]).then(([app, state, options]) => {
       if (!alive) return
       setApplication(app); setSummary(state); setBanks(options)
-      setStep(['SUBMITTED', 'APPROVED', 'REJECTED', 'NEEDS_CHANGES'].includes(app.status) ? 3 : app.profile ? 2 : state.phoneVerified && (app.identityVerified || ['SUBMITTED', 'READY_TO_SUBMIT'].includes(state.attemptStatus)) ? 1 : 0)
+      setStep(['SUBMITTED', 'APPROVED', 'REJECTED', 'NEEDS_CHANGES'].includes(app.status) ? 3 : app.profile ? 2 : state.phoneVerified && (app.identityVerified || (state.attemptStatus === 'SUBMITTED' || state.attemptStatus === 'READY_TO_SUBMIT' && app.nextAction !== 'VERIFY_IDENTITY')) ? 1 : 0)
       setForm({ ...emptyForm, ...Object.fromEntries(Object.entries(app.profile || {}).filter(([, value]) => value !== null)) })
     }).catch(err => { if (alive) setError(identityMessage(err)) })
     return () => { alive = false }
@@ -58,7 +58,7 @@ export default function ProviderOnboardingPage() {
   const update = (key, value) => { setForm(previous => ({ ...previous, [key]: value, ...(key === 'bankCode' && !value ? { bankAccountNo: '', bankAccountHolder: '' } : {}) })); setDirty(true); setConsent(false) }
   const canEdit = application?.canEdit && !busy
   const hasPoint = form.latitude !== '' && form.longitude !== '' && form.latitude != null && form.longitude != null
-  const identitySent = application?.identityVerified || ['SUBMITTED', 'READY_TO_SUBMIT'].includes(summary?.attemptStatus)
+  const identitySent = application?.identityVerified || (summary?.attemptStatus === 'SUBMITTED' || summary?.attemptStatus === 'READY_TO_SUBMIT' && application?.nextAction !== 'VERIFY_IDENTITY')
   function go(next) { setStep(next); setError(''); setMessage(''); setConsent(false) }
 
   return <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -70,6 +70,7 @@ export default function ProviderOnboardingPage() {
       {!application && !error && <p role="status" className={cardClass}>Đang tải hồ sơ…</p>}
       {application && step === 3 && <div className="grid gap-3 sm:grid-cols-3">{[['Điện thoại', summary?.phoneVerified ? 'Đã xác nhận' : 'Chưa xác nhận'], ['Danh tính', application.identityVerified ? 'Admin đã duyệt' : statusLabels[summary?.attemptStatus] || 'Chưa hoàn tất'], ['Hồ sơ Provider', statusLabels[application.status] || application.status]].map(([label, value]) => <div key={label} className={cardClass}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-2 font-bold">{value}</p></div>)}</div>}
       {step === 3 && application?.status === 'APPROVED' && <div className={`${cardClass} space-y-3 border-emerald-300`}><h2 className="font-bold text-emerald-800">Hồ sơ Provider đã được duyệt</h2><button className={buttonClass} disabled={!!busy} onClick={() => perform('Đang mở tài khoản…', async () => { const me = await refreshSession(); if (me.sessionScope !== 'FULL') throw new Error('Tài khoản vẫn bị hạn chế. Vui lòng liên hệ hỗ trợ.'); navigate('/provider', { replace: true }) })}>Cập nhật quyền và vào dashboard</button></div>}
+      {application?.reviewNote && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Admin hướng dẫn: {application.reviewNote}</p>}
       {application?.reasonCode && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Lý do phản hồi: {identityMessage(application.reasonCode)}</p>}
       {step === 3 && application?.status === 'REJECTED' && <p className="text-sm text-slate-600">Hồ sơ bị từ chối. Bạn có thể sửa thông tin, bổ sung giấy tờ và gửi lại.</p>}
       {step === 0 && summary && !summary.phoneVerified && <section className={cardClass}><PhoneVerification verified={summary.phoneVerified} onVerified={async () => { await load(); await refreshUser() }} /></section>}
@@ -96,7 +97,7 @@ export default function ProviderOnboardingPage() {
           <label className="text-sm">Số tài khoản<input className={`${inputClass} mt-1`} inputMode="numeric" required={!!form.bankCode} pattern="[0-9]{6,30}" value={form.bankAccountNo} disabled={!canEdit} onChange={event => update('bankAccountNo', event.target.value)} /></label>
           <label className="text-sm sm:col-span-2">Chủ tài khoản<input className={`${inputClass} mt-1`} required={!!form.bankCode} maxLength={150} value={form.bankAccountHolder} disabled={!canEdit} onChange={event => update('bankAccountHolder', event.target.value)} /></label>
           </div></details>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 sm:col-span-2"><button type="button" className={secondaryClass} disabled={!!busy} onClick={() => go(0)}>← Xác minh</button><div className="flex gap-2">{application.canEdit ? <><button type="submit" className={secondaryClass} disabled={!!busy}>Lưu nháp</button><button type="submit" value="continue" className={buttonClass} disabled={!!busy}>Lưu và tiếp tục →</button></> : <button type="button" className={buttonClass} onClick={() => go(2)}>Xem hồ sơ →</button>}</div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 sm:col-span-2"><button type="button" className={secondaryClass} disabled={!!busy} onClick={() => go(0)}>← Xác minh</button><div className="flex gap-2">{application.canEdit ? <><button type="submit" className={secondaryClass} disabled={!!busy}>Lưu thông tin</button><button type="submit" value="continue" className={buttonClass} disabled={!!busy}>Lưu và tiếp tục →</button></> : <button type="button" className={buttonClass} onClick={() => go(2)}>Xem hồ sơ →</button>}</div></div>
           <p className="text-xs text-slate-500 sm:col-span-2">{dirty ? 'Có thay đổi chưa lưu.' : application.profile ? 'Hồ sơ đã được lưu.' : 'Các trường có dấu * là bắt buộc.'}</p>
         </form>
 

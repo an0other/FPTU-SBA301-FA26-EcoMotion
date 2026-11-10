@@ -7,6 +7,7 @@ import {
   IconAlertTriangle,
   IconTag,
 } from '../../../components/icons/Icons'
+import AdminPopupModal from './AdminPopupModal'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -40,6 +41,7 @@ export default function VehicleDetailModal({
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [popupModal, setPopupModal] = useState(null)
 
   if (!vehicle) return null
 
@@ -48,7 +50,13 @@ export default function VehicleDetailModal({
   function handleRejectSubmit(e) {
     e.preventDefault()
     if (!rejectReason.trim()) {
-      alert('Vui lòng nhập lý do từ chối duyệt xe.')
+      setPopupModal({
+        mode: 'alert',
+        tone: 'warning',
+        title: 'Thiếu lý do từ chối',
+        message: 'Vui lòng nhập lý do từ chối duyệt xe.',
+        confirmText: 'Đã hiểu',
+      })
       return
     }
     onReject(vehicle.id, rejectReason.trim())
@@ -325,7 +333,7 @@ export default function VehicleDetailModal({
 
           {/* Reject Reason Form (if opened) */}
           {showRejectForm && (
-            <form onSubmit={handleRejectSubmit} className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 space-y-3">
+            <form onSubmit={handleRejectSubmit} noValidate className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 space-y-3">
               <div className="flex items-center gap-2 text-rose-900 font-bold">
                 <IconAlertTriangle className="h-4 w-4 text-rose-600" />
                 <span>Nhập lý do từ chối kiểm duyệt xe này</span>
@@ -394,6 +402,18 @@ export default function VehicleDetailModal({
           </div>
         </div>
       </div>
+
+      <AdminPopupModal
+        open={Boolean(popupModal)}
+        mode={popupModal?.mode}
+        tone={popupModal?.tone}
+        title={popupModal?.title}
+        message={popupModal?.message}
+        confirmText={popupModal?.confirmText}
+        cancelText={popupModal?.cancelText}
+        onClose={() => setPopupModal(null)}
+        onConfirm={popupModal?.onConfirm}
+      />
     </div>
   )
 }

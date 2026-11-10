@@ -4,7 +4,7 @@ import com.fptufa26.ecomotion.booking.policy.BookingStartPolicy;
 
 import java.time.format.DateTimeFormatter;
 import com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest;
-import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
 import com.fptufa26.ecomotion.finance.service.RefundMath;
 import com.fptufa26.ecomotion.booking.dto.request.CheckoutRequest;
 import com.fptufa26.ecomotion.booking.dto.request.CreateBookingRequest;
@@ -156,6 +156,7 @@ public class BookingServiceImpl implements BookingService {
     private final RentalPricingService rentalPricingService;
     private final CloudinaryService cloudinaryService;
     private final RefundEventService refundEventService;
+    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService cancellationClosure;
 
     @Override
     @Transactional(readOnly = true)
@@ -802,9 +803,23 @@ public class BookingServiceImpl implements BookingService {
     public CancelBookingResponse cancel(Long userId, String bookingCode) {
         Booking booking = bookingRepository.findByBookingCodeAndRenterUserIdForUpdate(normalizeBookingCode(bookingCode), userId)
                 .orElseThrow(() -> new NotFoundException("Booking not found"));
-        if (paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
-                .filter(PaymentRequest::isSecurityDeposit).isPresent()) {
-            throw new ConflictException("Hợp đồng năm mới dùng yêu cầu trả xe và quyết toán, không dùng hủy chuyến thường");
+        boolean newYearly = paymentRequestService.findPaymentRequest(booking.getId(), PaymentRequestType.DEPOSIT)
+                .filter(PaymentRequest::isSecurityDeposit).isPresent();
+        if (newYearly) {
+            if (booking.getActualStartAt() != null) throw new ConflictException("Xe đã nhận: dùng trả xe và quyết toán năm");
+            if (booking.getCancelledAt() != null) return bookingMapper.toCancel(booking, BigDecimal.ZERO);
+            if (!CANCELLABLE.contains(booking.getStatus())) throw new ConflictException("Không thể hủy ở bước hiện tại");
+            booking.setCancelledBy(booking.getRenter().getUser()); booking.setCancelReason(CancelReason.RENTER_REQUEST);
+            booking.setCancelledAt(clock.instant()); booking.setStatus(BookingStatus.CANCELLATION_REVIEW);
+            bookingRepository.saveAndFlush(booking);
+            cancellationClosure.stopYearlyCollections(booking.getId());
+            scheduleService.release(booking.getId());
+            boolean received = paymentTransactionRepository.findByBooking_Id(booking.getId()).stream()
+                    .anyMatch(tx -> tx.getDirection() == PaymentDirection.IN && tx.getStatus() == PaymentStatus.PAID);
+            if (received) disputeService.open(booking, booking.getRenter().getUser(), DisputeCategory.YEARLY_CANCELLATION, null,
+                    "Hủy trước nhận xe: cần phân xử nghĩa vụ tiền theo hợp đồng, không tự áp tỷ lệ hoàn mới", java.util.List.of());
+            cancellationClosure.reconcile(booking.getId());
+            return bookingMapper.toCancel(booking, BigDecimal.ZERO);
         }
         if (booking.getCancelReason() == CancelReason.RENTER_REQUEST && booking.getCancelledAt() != null
                 && (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)) {
@@ -851,6 +866,8 @@ public class BookingServiceImpl implements BookingService {
         if (booking.getDriver() != null) {
             driverStatusService.updateStatusTimestamp(booking.getDriver().getId());
         }
+        bookingRepository.saveAndFlush(booking);
+        cancellationClosure.reconcile(booking.getId());
         return bookingMapper.toCancel(booking, refundAmount);
     }
 
@@ -960,6 +977,7 @@ public class BookingServiceImpl implements BookingService {
             case DEPOSIT_REFUND -> (booking.getStatus() == BookingStatus.CANCELLED || booking.getStatus() == BookingStatus.CANCELLATION_REVIEW)
                     && paymentTransactionRepository.findByBooking_Id(booking.getId()).stream().anyMatch(t -> t.getType() == PaymentType.DEPOSIT_PAY
                         && t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID && t.getAmount().signum() > 0);
+            case YEARLY_SETTLEMENT, YEARLY_CANCELLATION, YEARLY_REFUND, YEARLY_INCIDENT -> false;
             case TRIP_NOT_CONFIRMED -> booking.getStatus() == BookingStatus.AWAITING_END_CONFIRMATION
                     && ((booking.getRenterConfirmedAt() != null) != (booking.getProviderConfirmedAt() != null));
         };
@@ -1638,5 +1656,11 @@ public class BookingServiceImpl implements BookingService {
     @Transactional(readOnly = true)
     public long countTotalBookings(Instant from, Instant to) {
         return bookingRepository.countBookingsCreatedBetween(from, to);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Instant findEarliestCompletedBookingDate() {
+        return bookingRepository.findEarliestCompletedBookingDate();
     }
 }

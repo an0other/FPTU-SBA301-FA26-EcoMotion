@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { providerService } from "../../services/providerService";
@@ -22,13 +22,34 @@ export default function ProviderHeader({
   const location = useLocation(); 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  const userMenuRef = useRef(null);
 
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
   if (prevPathname !== location.pathname) {
     setPrevPathname(location.pathname);
     setUserMenuOpen(false);
     setMobileNavOpen(false);
   }
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleClickOutside(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenuOpen(false);
+      }
+    }
+    function handleKeyDown(e) {
+      if (e.key === "Escape") {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [userMenuOpen]);
 
   const currentTab = (() => {
     if (activeTab) return activeTab;
@@ -42,28 +63,34 @@ export default function ProviderHeader({
     return "home";
   })();
 
+  const depotStorageKey = user?.id
+    ? `ecomotion_provider_depot_${user.id}`
+    : (user?.email ? `ecomotion_provider_depot_${user.email}` : "ecomotion_provider_depot");
+
+  const isRealDepotName = (name) =>
+    Boolean(name && name !== "Chủ xe" && name !== "..." && name.trim().length > 0);
+  const isRealDepotAddress = (addr) =>
+    Boolean(addr && addr !== "Đang tải thông tin trạm..." && addr !== "..." && addr.trim().length > 0);
+
   const [depotInfo, setDepotInfo] = useState(() => {
     try {
-      const cached = sessionStorage.getItem("ecomotion_provider_depot");
+      const cached = sessionStorage.getItem(depotStorageKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.name && parsed.name !== "Chủ xe") return parsed;
+        if (isRealDepotName(parsed.name)) return parsed;
       }
     } catch {}
     return {
-      name: providerName && providerName !== "Chủ xe" ? providerName : "",
-      address: depotAddress || "",
+      name: isRealDepotName(providerName) ? providerName : "",
+      address: isRealDepotAddress(depotAddress) ? depotAddress : "",
     };
   });
 
   useEffect(() => {
-    if (providerName && providerName !== "Chủ xe" && depotAddress) {
+    if (isRealDepotName(providerName) && isRealDepotAddress(depotAddress)) {
       const info = { name: providerName, address: depotAddress };
       try {
-        sessionStorage.setItem(
-          "ecomotion_provider_depot",
-          JSON.stringify(info)
-        );
+        sessionStorage.setItem(depotStorageKey, JSON.stringify(info));
       } catch {}
       return;
     }
@@ -79,7 +106,7 @@ export default function ProviderHeader({
           };
           setDepotInfo(info);
           try {
-            sessionStorage.setItem("ecomotion_provider_depot", JSON.stringify(info));
+            sessionStorage.setItem(depotStorageKey, JSON.stringify(info));
           } catch {}
         }
       } catch (err) {
@@ -90,9 +117,14 @@ export default function ProviderHeader({
     return () => {
       isMounted = false;
     };
-  }, [providerName, depotAddress, user?.fullName]);
+  }, [providerName, depotAddress, user?.fullName, depotStorageKey]);
 
   async function handleLogout() {
+    try {
+      sessionStorage.removeItem("ecomotion_provider_depot");
+      if (user?.id) sessionStorage.removeItem(`ecomotion_provider_depot_${user.id}`);
+      if (user?.email) sessionStorage.removeItem(`ecomotion_provider_depot_${user.email}`);
+    } catch {}
     await logout();
     navigate("/login", { replace: true });
   }
@@ -183,11 +215,11 @@ export default function ProviderHeader({
 
         {/* Right Section: User Profile & Mobile Nav Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <div className="relative">
+          <div className="relative" ref={userMenuRef}>
             <button
               type="button"
               onClick={() => setUserMenuOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              className="cursor-pointer flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
               aria-label="Tài khoản người dùng"
             >
               <span className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-emerald-100 text-[12px] font-bold text-emerald-700 ring-2 ring-emerald-500/20 shrink-0">
@@ -227,7 +259,7 @@ export default function ProviderHeader({
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                  className="cursor-pointer w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
                 >
                   <span className="material-symbols-outlined text-[16px]">
                     logout
@@ -241,7 +273,7 @@ export default function ProviderHeader({
           <button
             type="button"
             onClick={() => setMobileNavOpen((prev) => !prev)}
-            className="md:hidden flex items-center justify-center h-10 w-10 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            className="cursor-pointer md:hidden flex items-center justify-center h-10 w-10 rounded-xl text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
             aria-label="Mở menu điều hướng"
           >
             <span className="material-symbols-outlined text-[24px]">menu</span>
@@ -273,7 +305,7 @@ export default function ProviderHeader({
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="cursor-pointer p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 aria-label="Đóng menu"
               >
                 <span className="material-symbols-outlined text-[22px]">close</span>
@@ -361,7 +393,7 @@ export default function ProviderHeader({
                     setMobileNavOpen(false);
                     handleLogout();
                   }}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 bg-red-50/60 border border-red-100 hover:bg-red-50 transition-colors"
+                  className="cursor-pointer flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 bg-red-50/60 border border-red-100 hover:bg-red-50 transition-colors"
                 >
                   <span className="material-symbols-outlined text-[16px]">
                     logout

@@ -138,7 +138,9 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
   const editable = attempt && !terminal && !['SUBMITTED', 'PROCESSING'].includes(attempt.status)
   const writable = constraints?.verificationEnabled && !busy && !loading && !capturing
   const availableStep = attempt?.status === 'READY_TO_SUBMIT' ? 2 : attempt?.document?.requiredFieldsReadable ? 1 : 0
-  const step = Math.min(selectedStep ?? availableStep, availableStep)
+  const resumeStep = attempt?.decisionReason === 'DOCUMENT_UNREADABLE' && !attempt.canSubmit ? 0
+    : attempt?.decisionReason === 'FACE_UNCLEAR' && !attempt.canSubmit ? 1 : availableStep
+  const step = Math.min(selectedStep ?? resumeStep, availableStep)
   return <section className={`${cardClass} space-y-5`}>
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold">Xác minh CCCD và khuôn mặt</h2><p className="mt-1 text-sm text-slate-500">Đọc hai mặt CCCD, quay video và xác nhận gửi.</p></div><button className={secondaryClass} disabled={!!busy || capturing} onClick={() => perform('Đang cập nhật…', async () => { const limits = await api.constraints(); setConstraints(limits); await load(); onChanged?.() })}>Cập nhật trạng thái</button></div>
     {loading && <p role="status">Đang tải phiên xác minh…</p>}

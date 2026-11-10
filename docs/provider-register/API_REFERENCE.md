@@ -136,16 +136,25 @@ Chấp nhận:
 Yêu cầu bổ sung:
 
 ```json
-{ "version": 5, "decision": "NEEDS_CHANGES", "reasonCode": "ADDRESS_REQUIRED" }
+{ "version": 5, "decision": "NEEDS_CHANGES", "reasonCode": "ADDRESS_REQUIRED", "note": "Vui lòng chọn lại ghim khớp địa chỉ điểm giao nhận." }
 ```
 
 Từ chối:
 
 ```json
-{ "version": 5, "decision": "REJECT", "reasonCode": "DETAILS_INCONSISTENT" }
+{ "version": 5, "decision": "REJECT", "reasonCode": "DETAILS_INCONSISTENT", "note": "Vui lòng bổ sung lại thông tin chưa khớp với giấy tờ." }
 ```
 
-Quyết định ngoài APPROVE phải có lý do dạng mã viết hoa theo regex `[A-Z][A-Z0-9_]{2,99}`. Các mã có nhãn trên FE gồm `DOCUMENT_UNREADABLE`, `FACE_UNCLEAR`, `DETAILS_INCONSISTENT`, `ADDRESS_REQUIRED`, `BANK_FIELDS_REQUIRED`, `OTHER_REVIEW_REQUIRED`.
+Quyết định ngoài APPROVE phải có lý do dạng mã viết hoa theo regex `[A-Z][A-Z0-9_]{2,99}` và `note` không rỗng, tối đa 1000 ký tự. Các mã có nhãn trên FE gồm `DOCUMENT_UNREADABLE`, `FACE_UNCLEAR`, `DETAILS_INCONSISTENT`, `ADDRESS_REQUIRED`, `BANK_FIELDS_REQUIRED`, `OTHER_REVIEW_REQUIRED`. Response hồ sơ có thêm `reviewNote`.
+
+History trả thêm `id`, `note`, `hasIdentitySnapshot`, `profileSnapshotJson`. `id` là ID lượt duyệt, khác userId và attemptId.
+
+| Method | Endpoint | Kết quả |
+| --- | --- | --- |
+| GET | `/api/admin/provider-applications/{userId}/history/{reviewId}/identity` | Snapshot dữ liệu CCCD/video tại lần duyệt |
+| GET | `/api/admin/provider-applications/{userId}/history/{reviewId}/evidence/{kind}` | Binary bằng chứng cũ; front/back/video; chỉ ADMIN |
+
+Các lỗi bổ sung: `IDENTITY_NEW_EVIDENCE_REQUIRED` khi gửi lại nguyên bằng chứng bị yêu cầu thay, `PROVIDER_REVIEW_NOTE_REQUIRED` khi Admin chưa ghi hướng dẫn cụ thể. History cũ chưa có snapshot sẽ trả lỗi không có snapshot, không thay bằng dữ liệu mới nhất.
 
 `REOPEN` còn được API hỗ trợ cho dữ liệu cũ bị từ chối, nhưng không phải bước bắt buộc của flow gửi lại mới.
 

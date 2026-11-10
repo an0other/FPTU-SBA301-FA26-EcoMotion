@@ -53,12 +53,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/location/map", "/api/location/map/reverse",
                                 "/api/location/map/search", "/api/location/route").permitAll()
                         .requestMatchers(
-                                "/api/v1/payment/vnpay/ipn", "/api/v1/payment/vnpay/callback",
-                                "/api/v1/payments/vnpay/ipn", "/api/v1/payments/vnpay/callback",
-                                "/api/payment/vnpay/ipn", "/api/payment/vnpay/callback",
-                                "/api/payments/vnpay/ipn", "/api/payments/vnpay/callback",
-                                "/v1/payment/vnpay/ipn", "/v1/payment/vnpay/callback",
-                                "/payment/vnpay/ipn", "/payment/vnpay/callback").permitAll()
+                                "/api/v1/payment/vnpay/ipn",
+                                "/api/v1/payments/vnpay/ipn",
+                                "/api/payment/vnpay/ipn",
+                                "/api/payments/vnpay/ipn",
+                                "/v1/payment/vnpay/ipn",
+                                "/payment/vnpay/ipn").permitAll()
                         .requestMatchers("/api/admin/**", "/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/provider/onboarding", "/api/provider/onboarding/**")
                             .hasAnyAuthority("ROLE_PROVIDER", "ROLE_PROVIDER_ONBOARDING")

@@ -2,11 +2,23 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { providerService } from '../../services/providerService'
 import { formatCurrency, TRANSMISSION_LABELS } from '../../utils/formatCurrency'
+import { getErrorMessage } from '../../utils/errorMessage'
 import Toast from '../../components/Toast'
 import ProviderHeader from '../../components/provider/ProviderHeader'
+const DEFAULT_VEHICLE_IMAGE =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250"><rect width="100%" height="100%" fill="%23f1f5f9"/><text x="50%" y="50%" fill="%2394a3b8" font-size="16" font-family="sans-serif" text-anchor="middle">EcoMotion Vehicle</text></svg>'
+
+const STATUS_LABELS = {
+  APPROVED: 'Đã duyệt',
+  PENDING: 'Chờ duyệt',
+  HIDDEN: 'Tạm ẩn',
+  REJECTED: 'Cần bổ sung',
+}
+
 
 export default function ProviderVehicleListPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [retryTick, setRetryTick] = useState(0)
 
   const [summary, setSummary] = useState(null)
   const [vehicles, setVehicles] = useState([])
@@ -25,6 +37,14 @@ export default function ProviderVehicleListPage() {
   const [sortBy, setSortBy] = useState('newest')
   const [viewMode, setViewMode] = useState('grid')
   const [togglingIds, setTogglingIds] = useState(new Set())
+
+  const [prevStatusParam, setPrevStatusParam] = useState(() => searchParams.get('status') || '')
+  const currentStatusParam = searchParams.get('status') || ''
+  if (currentStatusParam !== prevStatusParam) {
+    setPrevStatusParam(currentStatusParam)
+    setStatusFilter(currentStatusParam)
+    setPage(0)
+  }
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -79,7 +99,7 @@ export default function ProviderVehicleListPage() {
     return () => {
       ignore = true
     }
-  }, [debouncedKeyword, fuelFilter, statusFilter, sortBy, page])
+  }, [debouncedKeyword, fuelFilter, statusFilter, sortBy, page, retryTick])
 
   async function handleToggleVisibility(vehicle) {
     if (vehicle.status === 'PENDING' || vehicle.status === 'REJECTED') {
@@ -131,7 +151,7 @@ export default function ProviderVehicleListPage() {
         }
       })
       setToast({
-        message: err?.response?.data?.message || 'Thao tác cập nhật trạng thái thất bại.',
+        message: getErrorMessage(err, 'Thao tác cập nhật trạng thái thất bại.'),
         type: 'error',
       })
     } finally {
@@ -146,6 +166,15 @@ export default function ProviderVehicleListPage() {
   function handleFilterStatus(target) {
     setStatusFilter(target)
     setPage(0)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (target) {
+        next.set('status', target)
+      } else {
+        next.delete('status')
+      }
+      return next
+    }, { replace: true })
   }
 
   function handleClearFilters() {
@@ -155,6 +184,11 @@ export default function ProviderVehicleListPage() {
     setFuelFilter('')
     setSortBy('newest')
     setPage(0)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('status')
+      return next
+    }, { replace: true })
   }
 
   function renderStatusBadge(status) {
@@ -466,6 +500,7 @@ export default function ProviderVehicleListPage() {
               </span>
               <input
                 type="text"
+                maxLength={100}
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 placeholder="Tìm kiếm theo biển số, hãng xe, dòng xe..."
@@ -474,8 +509,12 @@ export default function ProviderVehicleListPage() {
               {keyword && (
                 <button
                   type="button"
-                  onClick={() => setKeyword('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  onClick={() => {
+                    setKeyword('')
+                    setDebouncedKeyword('')
+                    setPage(0)
+                  }}
+                  className="cursor-pointer absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   ✕
                 </button>
@@ -490,7 +529,7 @@ export default function ProviderVehicleListPage() {
                   setFuelFilter(e.target.value)
                   setPage(0)
                 }}
-                className="px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-hidden focus:border-emerald-600"
+                className="cursor-pointer px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-hidden focus:border-emerald-600"
               >
                 <option value="">Tất cả nhiên liệu</option>
                 <option value="EV">Điện EV</option>
@@ -505,7 +544,7 @@ export default function ProviderVehicleListPage() {
                   setSortBy(e.target.value)
                   setPage(0)
                 }}
-                className="px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-hidden focus:border-emerald-600"
+                className="cursor-pointer px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-700 bg-white focus:outline-hidden focus:border-emerald-600"
               >
                 <option value="newest">Mới nhất</option>
                 <option value="price-asc">Giá: Thấp đến cao</option>
@@ -519,7 +558,7 @@ export default function ProviderVehicleListPage() {
                   type="button"
                   title="Chế độ lưới"
                   onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-lg transition-colors ${
+                  className={`cursor-pointer p-2 rounded-lg transition-colors ${
                     viewMode === 'grid' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
@@ -529,7 +568,7 @@ export default function ProviderVehicleListPage() {
                   type="button"
                   title="Chế độ bảng"
                   onClick={() => setViewMode('table')}
-                  className={`p-2 rounded-lg transition-colors ${
+                  className={`cursor-pointer p-2 rounded-lg transition-colors ${
                     viewMode === 'table' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
@@ -544,8 +583,8 @@ export default function ProviderVehicleListPage() {
               <span className="text-slate-400">Đang lọc theo:</span>
               {statusFilter && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-medium">
-                  Trạng thái: {statusFilter}
-                  <button type="button" onClick={() => handleFilterStatus('')} className="hover:text-emerald-900">
+                  Trạng thái: {STATUS_LABELS[statusFilter] || statusFilter}
+                  <button type="button" onClick={() => handleFilterStatus('')} className="cursor-pointer hover:text-emerald-900">
                     ✕
                   </button>
                 </span>
@@ -553,7 +592,7 @@ export default function ProviderVehicleListPage() {
               {fuelFilter && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-medium">
                   Nhiên liệu: {FUEL_CONFIG[fuelFilter]?.label || fuelFilter}
-                  <button type="button" onClick={() => setFuelFilter('')} className="hover:text-blue-900">
+                  <button type="button" onClick={() => { setFuelFilter(''); setPage(0); }} className="cursor-pointer hover:text-blue-900">
                     ✕
                   </button>
                 </span>
@@ -561,7 +600,15 @@ export default function ProviderVehicleListPage() {
               {debouncedKeyword && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium">
                   Từ khóa: &quot;{debouncedKeyword}&quot;
-                  <button type="button" onClick={() => setKeyword('')} className="hover:text-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKeyword('')
+                      setDebouncedKeyword('')
+                      setPage(0)
+                    }}
+                    className="cursor-pointer hover:text-slate-900"
+                  >
                     ✕
                   </button>
                 </span>
@@ -569,7 +616,7 @@ export default function ProviderVehicleListPage() {
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="text-xs text-rose-600 hover:underline font-semibold ml-auto"
+                className="cursor-pointer text-xs text-rose-600 hover:underline font-semibold ml-auto"
               >
                 Xóa tất cả bộ lọc
               </button>
@@ -592,8 +639,12 @@ export default function ProviderVehicleListPage() {
             <p className="mt-2 text-sm font-semibold text-rose-700">{error}</p>
             <button
               type="button"
-              onClick={handleClearFilters}
-              className="mt-4 px-4 py-2 rounded-xl bg-white border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100"
+              onClick={() => {
+                setError(null)
+                setLoading(true)
+                setRetryTick((t) => t + 1)
+              }}
+              className="cursor-pointer mt-4 px-4 py-2 rounded-xl bg-white border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100"
             >
               Thử lại
             </button>
@@ -612,7 +663,7 @@ export default function ProviderVehicleListPage() {
             <button
               type="button"
               onClick={handleClearFilters}
-              className="mt-5 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs"
+              className="cursor-pointer mt-5 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs"
             >
               Đặt lại bộ lọc
             </button>
@@ -634,12 +685,12 @@ export default function ProviderVehicleListPage() {
                   
                   <div className="relative aspect-16/10 bg-slate-100 overflow-hidden group">
                     <img
-                      src={vehicle.coverImageUrl || '/placeholder-car.jpg'}
+                      src={vehicle.coverImageUrl || DEFAULT_VEHICLE_IMAGE}
                       alt={`${vehicle.brand} ${vehicle.model}`}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       onError={(e) => {
                         e.target.onerror = null
-                        e.target.src = 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80'
+                        e.target.src = DEFAULT_VEHICLE_IMAGE
                       }}
                     />
 
@@ -744,15 +795,18 @@ export default function ProviderVehicleListPage() {
                               </div>
                               <div className="divide-y divide-slate-100 mt-1">
                                 {plans.map((p, idx) => (
-                                  <div key={idx} className="flex items-center justify-between py-1.5 text-xs">
-                                    <span className="font-extrabold text-emerald-700">
+                                  <div key={idx} className="flex items-center justify-between py-1.5 text-xs gap-2">
+                                    <span className="font-extrabold text-emerald-700 whitespace-nowrap shrink-0">
                                       {formatCurrency(p.price)}
                                     </span>
-                                    <span className="font-medium text-slate-700 flex items-center gap-1.5">
+                                    <span className="font-medium text-slate-700 flex items-center gap-1.5 shrink-0 text-right">
                                       <span className="material-symbols-outlined text-[14px] text-slate-400">
                                         {p.icon}
                                       </span>
-                                      {p.name}
+                                      <span>
+                                        {p.shortName}{' '}
+                                        <span className="text-[11px] text-slate-400 font-normal">({p.unit})</span>
+                                      </span>
                                     </span>
                                   </div>
                                 ))}
@@ -774,12 +828,12 @@ export default function ProviderVehicleListPage() {
                               ? (vehicle.status === 'PENDING' ? 'Xe đang chờ kiểm duyệt' : 'Xe bị từ chối hồ sơ')
                               : (isApproved ? 'Nhấn để tạm ẩn xe' : 'Nhấn để bật nhận khách')
                           }
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                            isPendingOrRejected
+                          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                            isPendingOrRejected || isToggling
                               ? 'opacity-40 cursor-not-allowed bg-slate-200'
                               : isApproved
-                              ? 'bg-emerald-600'
-                              : 'bg-slate-300'
+                              ? 'cursor-pointer bg-emerald-600'
+                              : 'cursor-pointer bg-slate-300'
                           }`}
                         >
                           <span
@@ -796,7 +850,7 @@ export default function ProviderVehicleListPage() {
                       <Link
                         to={`/provider/vehicles/${vehicle.id}/edit`}
                         className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-                        title="Chỉnh sửa thông tin xe (Màn O03)"
+                        title="Chỉnh sửa thông tin xe"
                       >
                         <span className="material-symbols-outlined text-[16px]">edit</span>
                         Sửa thông tin
@@ -835,12 +889,12 @@ export default function ProviderVehicleListPage() {
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
                             <img
-                              src={vehicle.coverImageUrl || '/placeholder-car.jpg'}
+                              src={vehicle.coverImageUrl || DEFAULT_VEHICLE_IMAGE}
                               alt=""
-                              className="w-12 h-9 rounded-lg object-cover bg-slate-100 border border-slate-200"
+                              className="w-12 h-9 rounded-lg object-cover bg-slate-100 border border-slate-200 shrink-0"
                               onError={(e) => {
                                 e.target.onerror = null
-                                e.target.src = 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=200&q=80'
+                                e.target.src = DEFAULT_VEHICLE_IMAGE
                               }}
                             />
                             <div>
@@ -883,12 +937,12 @@ export default function ProviderVehicleListPage() {
                             type="button"
                             disabled={isPendingOrRejected || isToggling}
                             onClick={() => handleToggleVisibility(vehicle)}
-                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                              isPendingOrRejected
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                              isPendingOrRejected || isToggling
                                 ? 'opacity-40 cursor-not-allowed bg-slate-200'
                                 : isApproved
-                                ? 'bg-emerald-600'
-                                : 'bg-slate-300'
+                                ? 'cursor-pointer bg-emerald-600'
+                                : 'cursor-pointer bg-slate-300'
                             }`}
                           >
                             <span
@@ -902,7 +956,7 @@ export default function ProviderVehicleListPage() {
                           <Link
                             to={`/provider/vehicles/${vehicle.id}/edit`}
                             className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800"
-                            title="Chỉnh sửa thông tin xe (Màn O03)"
+                            title="Chỉnh sửa thông tin xe"
                           >
                             <span className="material-symbols-outlined text-[16px]">edit</span>
                             Sửa
@@ -928,7 +982,7 @@ export default function ProviderVehicleListPage() {
                 type="button"
                 disabled={page <= 0}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="cursor-pointer px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Trước
               </button>
@@ -944,7 +998,7 @@ export default function ProviderVehicleListPage() {
                       key={idx}
                       type="button"
                       onClick={() => setPage(idx)}
-                      className={`w-8 h-8 rounded-xl text-xs font-bold transition-colors ${
+                      className={`cursor-pointer w-8 h-8 rounded-xl text-xs font-bold transition-colors ${
                         page === idx
                           ? 'bg-emerald-600 text-white'
                           : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -968,7 +1022,7 @@ export default function ProviderVehicleListPage() {
                 type="button"
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="cursor-pointer px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Sau
               </button>

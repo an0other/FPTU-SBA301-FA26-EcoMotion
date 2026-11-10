@@ -11,5 +11,8 @@ public interface ProviderOnboardingService {
     ProviderApplicationResponse adminGet(Long adminId, Long userId);
     List<ProviderApplicationResponse> pending(Long adminId, int page, com.fptufa26.ecomotion.user.enums.ProviderApplicationStatus status);
     ProviderApplicationResponse review(Long adminId, Long userId, long version, String decision, String reasonCode);
+    ProviderApplicationResponse review(Long adminId, Long userId, long version, String decision, String reasonCode, String note);
+    com.fptufa26.ecomotion.verification.identity.dto.response.IdentityAttemptResponse historyIdentity(Long adminId, Long userId, Long reviewId);
+    byte[] historyEvidence(Long adminId, Long userId, Long reviewId, String kind);
     List<com.fptufa26.ecomotion.user.entity.ProviderApplicationReview> history(Long adminId, Long userId);
 }

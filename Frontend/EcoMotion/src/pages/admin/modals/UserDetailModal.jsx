@@ -17,6 +17,12 @@ const STATUS_BADGES = {
   REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
+function resolveValidImageUrl(url) {
+  if (!url || typeof url !== 'string') return null
+  if (/^\/images\/(portrait|license)-\d+\.webp$/i.test(url.trim())) return null
+  return url
+}
+
 export default function UserDetailModal({
   user,
   onClose,
@@ -30,7 +36,10 @@ export default function UserDetailModal({
   const [avatarError, setAvatarError] = useState(false)
   if (!user) return null
 
-  const displayAvatar = !avatarError ? (user.portraitUrl || user.avatarUrl) : null
+  const validPortraitUrl = resolveValidImageUrl(user.portraitUrl)
+  const validAvatarUrl = resolveValidImageUrl(user.avatarUrl)
+  const validLicenseUrl = resolveValidImageUrl(user.licenseImageUrl)
+  const displayAvatar = !avatarError ? (validPortraitUrl || validAvatarUrl) : null
   const isDriver = user.role === 'DRIVER' || Boolean(user.portraitUrl || user.licenseImageUrl || user.licenseNo)
 
   return (
@@ -198,12 +207,12 @@ export default function UserDetailModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* Portrait photo */}
                   <div
-                    onClick={() => (user.portraitUrl || user.avatarUrl) && onPreviewImage && onPreviewImage(user.portraitUrl || user.avatarUrl)}
+                    onClick={() => (validPortraitUrl || validAvatarUrl) && onPreviewImage && onPreviewImage(validPortraitUrl || validAvatarUrl)}
                     className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-brand-500 transition-all"
                   >
-                    {user.portraitUrl || user.avatarUrl ? (
+                    {validPortraitUrl || validAvatarUrl ? (
                       <img
-                        src={user.portraitUrl || user.avatarUrl}
+                        src={validPortraitUrl || validAvatarUrl}
                         alt="Ảnh chân dung tài xế"
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
@@ -220,12 +229,12 @@ export default function UserDetailModal({
 
                   {/* License image */}
                   <div
-                    onClick={() => user.licenseImageUrl && onPreviewImage && onPreviewImage(user.licenseImageUrl)}
+                    onClick={() => validLicenseUrl && onPreviewImage && onPreviewImage(validLicenseUrl)}
                     className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-brand-500 transition-all"
                   >
-                    {user.licenseImageUrl ? (
+                    {validLicenseUrl ? (
                       <img
-                        src={user.licenseImageUrl}
+                        src={validLicenseUrl}
                         alt="Ảnh GPLX"
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />

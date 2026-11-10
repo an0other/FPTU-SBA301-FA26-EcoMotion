@@ -70,6 +70,8 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
         return attempts.findFirstByUser_IdOrderByIdDesc(userId)
                 .filter(a -> a.getRole() == Role.PROVIDER && (a.getStatus() == SUBMITTED
                         || a.getStatus() == READY_TO_SUBMIT && a.getExpiresAt().isAfter(clock.instant())))
+                .filter(this::hasRequiredNewEvidence)
+                .filter(a -> a.getVideoJson() != null && acceptedVideo(mapper.readValue(a.getVideoJson(), IdentityVideoResult.class)))
                 .isPresent();
     }
 
@@ -87,6 +89,13 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
         var attempt = attempts.findOwnedForUpdate(id, userId).orElseThrow(this::notFound);
         review(adminId, id, attempt.getVersion(), decision, reason);
         if ("NEEDS_CHANGES".equals(decision)) {
+            if ("DOCUMENT_UNREADABLE".equals(reason)) {
+                attempt.setRequiredPreviousFrontSha(attempt.getFrontSha256());
+                attempt.setRequiredPreviousBackSha(attempt.getBackSha256());
+            }
+            if ("FACE_UNCLEAR".equals(reason) || "DOCUMENT_UNREADABLE".equals(reason)) {
+                attempt.setRequiredPreviousVideoSha(attempt.getVideoSha256() == null ? attempt.getVideoKey() : attempt.getVideoSha256());
+            }
             attempt.setStatus(READY_TO_SUBMIT);
             attempts.saveAndFlush(attempt);
         }
@@ -103,6 +112,7 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
             return view(attempt);
         }
         requireVersion(attempt, version);
+        if (!hasRequiredNewEvidence(attempt)) throw failure(HttpStatus.CONFLICT, "IDENTITY_NEW_EVIDENCE_REQUIRED");
         if (attempt.getStatus() != READY_TO_SUBMIT || !attempt.getExpiresAt().isAfter(clock.instant())) {
             throw failure(HttpStatus.CONFLICT, "IDENTITY_ATTEMPT_STATE_INVALID");
         }
@@ -124,14 +134,7 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
             throw failure(HttpStatus.SERVICE_UNAVAILABLE, "IDENTITY_THRESHOLD_NOT_CONFIGURED");
         }
         attempt.setSubmittedAt(clock.instant());
-        var scores = video.faceMatching();
-        boolean accepted = scores != null && scores.scoredFrames() != null
-                && scores.candidateFrames() != null && scores.candidateFrames() > 0
-                && scores.scoredFrames() >= MINIMUM_FRAMES
-                && scores.scoredFrames() <= scores.candidateFrames() && scores.median() != null
-                && Double.isFinite(scores.median()) && scores.median() <= 1
-                && scores.median() >= acceptanceThreshold
-                && (double) scores.scoredFrames() / scores.candidateFrames() >= MINIMUM_COVERAGE;
+        boolean accepted = acceptedVideo(video);
         attempt.setDecisionPolicyVersion(policyVersion);
         if (!accepted) {
             attempt.setDecisionActor("SYSTEM");
@@ -147,6 +150,43 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
             approve(attempt, document, null);
         }
         return view(attempts.saveAndFlush(attempt));
+    }
+
+    private boolean acceptedVideo(IdentityVideoResult video) {
+        var scores = video.faceMatching();
+        return acceptanceThreshold != null && video.workflow() != null && "READY_FOR_REVIEW".equals(video.workflow().status())
+                && video.motionChallenge() != null && "PASS".equals(video.motionChallenge().status())
+                && scores != null && scores.scoredFrames() != null && scores.candidateFrames() != null && scores.candidateFrames() > 0
+                && scores.scoredFrames() >= MINIMUM_FRAMES && scores.scoredFrames() <= scores.candidateFrames()
+                && scores.median() != null && Double.isFinite(scores.median()) && scores.median() <= 1 && scores.median() >= acceptanceThreshold
+                && (double) scores.scoredFrames() / scores.candidateFrames() >= MINIMUM_COVERAGE;
+    }
+
+    private boolean hasRequiredNewEvidence(IdentityVerificationAttempt a) {
+        return a.hasRequiredNewEvidence();
+    }
+
+    public record EvidenceSnapshot(IdentityAttemptResponse detail, String frontKey, String backKey, String videoKey) {}
+
+    @Override
+    public String snapshotProviderEvidence(Long adminId, UUID id) {
+        var detail = detail(adminId, id);
+        var attempt = providerAttempt(id);
+        attempt.setEvidenceRetained(true);
+        attempts.saveAndFlush(attempt);
+        return mapper.writeValueAsString(new EvidenceSnapshot(detail, attempt.getFrontKey(), attempt.getBackKey(), attempt.getVideoKey()));
+    }
+
+    @Override
+    public IdentityAttemptResponse reviewSnapshot(String snapshot) {
+        return mapper.readValue(snapshot, EvidenceSnapshot.class).detail();
+    }
+
+    @Override
+    public byte[] reviewSnapshotEvidence(String snapshot, String kind) {
+        var stored = mapper.readValue(snapshot, EvidenceSnapshot.class);
+        var key = switch (kind) { case "front" -> stored.frontKey(); case "back" -> stored.backKey(); case "video" -> stored.videoKey(); default -> throw notFound(); };
+        return sessions.storedEvidence(key, kind);
     }
 
     @Override

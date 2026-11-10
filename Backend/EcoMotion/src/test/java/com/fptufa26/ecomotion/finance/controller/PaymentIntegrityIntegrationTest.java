@@ -1,9 +1,9 @@
- package com.fptufa26.ecomotion.finance.controller;
+package com.fptufa26.ecomotion.finance.controller;
 
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.finance.entity.RefundRequest;
 import com.fptufa26.ecomotion.finance.enums.RefundStatus;
-import com.fptufa26.ecomotion.finance.service.implement.RefundEventService;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
 import com.fptufa26.ecomotion.booking.service.BookingService;
 import org.junit.jupiter.params.provider.CsvSource;
 import com.fptufa26.ecomotion.booking.entity.Booking;
@@ -277,7 +277,7 @@ class PaymentIntegrityIntegrationTest {
     void cancellationUsesRecordedDepositWithoutPaymentRequest(String plan, long leadHours, String expected) {
         String code = legacyDeposit(plan, leadHours);
         bookingService.cancel(renterId, code);
-        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(new BigDecimal(expected).signum() == 0 ? BookingStatus.CANCELLED : BookingStatus.CANCELLATION_REVIEW);
         tx.executeWithoutResult(s -> {
             var refunds = em.createQuery("select r from RefundRequest r where r.booking.id=:id", RefundRequest.class)
                     .setParameter("id", bookingId).getResultList();
@@ -467,22 +467,177 @@ class PaymentIntegrityIntegrationTest {
         assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);
     }
 
-    // ĐANG CHỜ QUYẾT ĐỊNH NGHIỆP VỤ: code hiện từ chối chuyển thừa (xem invalidAmountAndWrongProviderDoNotRecordMoney
-    // và docs/AUDIT_TV5 §5.7). Yêu cầu mới muốn ghi nhận đủ và hoàn phần thừa. Bật lại test khi đã chốt quy tắc.
-    @org.junit.jupiter.api.Disabled("Chờ quyết định nghiệp vụ: chuyển thừa bị chặn hay ghi nhận và hoàn phần thừa")
+    private String reconciliationBody(String amount, String bankRef, String key) {
+        return """
+                {"receivedAmount":%s,"bankTransactionRef":"%s","bankStatementReference":"STATEMENT-2026-11-08",
+                 "bankReceiptVerified":true,"reconciliationId":"%s","receivedAt":"%s","note":"Verified credited bank statement"}
+                """.formatted(amount, bankRef, key, Instant.now().minusSeconds(60));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions reconcileHttp(long actor, String body) throws Exception {
+        return reconcileHttpAt(requestId, actor, body);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions reconcileHttpAt(long targetId, long actor, String body) throws Exception {
+        String token = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, actor)));
+        return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/provider/payment-requests/" + targetId + "/bank-reconciliation")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType("application/json").content(body));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"10000", "40000"})
+    void verifiedWrongAmountIsRetainedUnappliedWithoutAutomaticRefund(String amount) throws Exception {
+        String body = reconciliationBody(amount, "BANK-" + requestId, "RECON-" + requestId);
+        reconcileHttp(providerId, body).andExpect(status().isOk());
+        reconcileHttp(providerId, body).andExpect(status().isOk());
+        assertReconciliation(BookingStatus.CANCELLATION_REVIEW);
+        var row = ledger.findByBooking_Id(bookingId).getFirst();
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        assertThat(row.getAmount()).isEqualByComparingTo(amount);
+        assertThat(row.getAppliedAmount()).isZero();
+        assertThat(row.getGatewayRef()).isEqualTo("BANK-" + requestId);
+        assertThat(row.getProcessingNote()).contains("STATEMENT-2026-11-08");
+        assertThat(requests.findById(requestId).orElseThrow().getPaidAmount()).isZero();
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+        assertThat(schedules.findByBooking_Id(bookingId)).noneMatch(h -> h.getStatus() == ScheduleStatus.ACTIVE);
+        assertThatThrownBy(() -> confirm("30000", "BYPASS-" + requestId)).isInstanceOf(ConflictException.class);
+    }
+
     @Test
-    void overpaymentIsRecordedInFullAppliesOnlyObligationAndRefundsExcessExactlyOnce() {
-        // Renter chuyển 40.000đ cho nghĩa vụ 30.000đ: phải ghi đủ 40.000đ thực nhận,
-        // áp 30.000đ vào nghĩa vụ và tạo đúng một yêu cầu hoàn 10.000đ. Không được từ chối âm thầm.
-        confirm("40000", "OVER-" + requestId);
-        var txs = ledger.findByBooking_Id(bookingId);
-        assertThat(txs).hasSize(1);
-        assertThat(txs.getFirst().getAmount()).isEqualByComparingTo("40000");
-        assertThat(txs.getFirst().getAppliedAmount()).isEqualByComparingTo("30000");
-        assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.CONFIRMED);
-        var refundRows = refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId);
-        assertThat(refundRows).hasSize(1);
-        assertThat(refundRows.getFirst().getAmount()).isEqualByComparingTo("10000");
+    void reconciliationRejectsChangedReplayAndDuplicateBankReference() throws Exception {
+        String body = reconciliationBody("40000", "SAME-" + requestId, "KEY-" + requestId);
+        reconcileHttp(providerId, body).andExpect(status().isOk());
+        reconcileHttp(providerId, body.replace("40000", "41000")).andExpect(status().isConflict());
+        reconcileHttp(providerId, body.replace("KEY-", "NEW-KEY-")).andExpect(status().isConflict());
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+    }
+
+    @Test
+    void bankReconciliationRequiresOwnerAndVerifiedStatementEvidence() throws Exception {
+        String body = reconciliationBody("40000", "AUTH-" + requestId, "AUTH-" + requestId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                "/api/provider/payment-requests/" + requestId + "/bank-reconciliation")
+                .contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+        reconcileHttp(renterId, body).andExpect(status().isForbidden());
+        reconcileHttp(outsiderId, body).andExpect(status().isForbidden());
+        reconcileHttp(providerId, body.replace("true", "false")).andExpect(status().isBadRequest());
+        reconcileHttp(providerId, body.replace("STATEMENT-2026-11-08", " ")).andExpect(status().isBadRequest());
+        reconcileHttp(providerId, body.replace("AUTH-" + requestId, " ")).andExpect(status().isBadRequest());
+        assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0", "-1", "1.001", "1000000000000"})
+    void bankReconciliationRejectsInvalidAmounts(String amount) throws Exception {
+        reconcileHttp(providerId, reconciliationBody(amount, "BAD-" + requestId, "BAD-" + requestId))
+                .andExpect(status().isBadRequest());
+        assertThat(ledger.findByBooking_Id(bookingId)).isEmpty();
+    }
+
+    @Test
+    void verifiedLateTransferReopensCancelledFinancialReviewWithoutResurrectingBooking() throws Exception {
+        tx.executeWithoutResult(s -> {
+            em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLED);
+            em.find(PaymentRequest.class, requestId).setStatus(PaymentRequestStatus.VOIDED);
+            schedule.release(bookingId);
+        });
+        reconcileHttp(providerId, reconciliationBody("40000", "LATE-" + requestId, "LATE-" + requestId))
+                .andExpect(status().isOk());
+        assertReconciliation(BookingStatus.CANCELLATION_REVIEW);
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+        assertThat(schedules.findByBooking_Id(bookingId)).noneMatch(h -> h.getStatus() == ScheduleStatus.ACTIVE);
+    }
+
+    @Autowired com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    @Autowired com.fptufa26.ecomotion.finance.service.FinancialAuditService financialAudit;
+
+    @Test
+    void bankReceiptReviewClosesOnlyAfterExplicitFullManualRefund() throws Exception {
+        reconcileHttp(providerId, reconciliationBody("40000", "CLOSE-" + requestId, "CLOSE-" + requestId))
+                .andExpect(status().isOk());
+        assertThat(closure.reconcile(bookingId)).isFalse();
+        assertThat(financialAudit.history("BANK_RECEIPT", requestId)).singleElement().satisfies(a -> {
+            assertThat(a.actorId()).isEqualTo(providerId);
+            assertThat(a.payload()).contains("40000", "STATEMENT-2026-11-08", "Verified credited bank statement");
+        });
+        String code = bookings.findById(bookingId).orElseThrow().getBookingCode();
+        var refund = refundService.createRefundRequest(providerId,
+                new com.fptufa26.ecomotion.finance.dto.request.CreateRefundRequest(code, new BigDecimal("40000"),
+                        "Manual decision to return entire bank exception", "statement-ref"));
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(1);
+        assertThat(closure.reconcile(bookingId)).isFalse();
+        refundService.reviewRefundRequest(providerId, refund.id(),
+                new com.fptufa26.ecomotion.finance.dto.request.ReviewRefundRequest("APPROVE", null));
+        long outId = tx.execute(s -> refunds.findById(refund.id()).orElseThrow().getPaymentTransaction().getId());
+        refundService.completeRefund(providerId, outId,
+                new org.springframework.mock.web.MockMultipartFile("file", "bank.pdf", "application/pdf", "%PDF-1.4 qa".getBytes()),
+                "RETURN-" + requestId, "Operator verified returned funds");
+        assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(requests.findById(requestId).orElseThrow().getStatus()).isEqualTo(PaymentRequestStatus.VOIDED);
+        assertThat(closure.reconcile(bookingId)).isTrue();
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).hasSize(1);
+        assertThat(ledger.findByBooking_Id(bookingId)).filteredOn(t -> t.getDirection() == PaymentDirection.IN)
+                .singleElement().satisfies(t -> assertThat(t.getAmount()).isEqualByComparingTo("40000"));
+    }
+
+    @Test
+    void concurrentBankReceiptRetriesPersistOneReceiptAndOneAuditRecord() throws Exception {
+        String body = reconciliationBody("40000", "RACE-" + requestId, "RACE-" + requestId);
+        var start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var one = pool.submit(() -> { start.await(); return reconcileHttp(providerId, body).andReturn().getResponse().getStatus(); });
+            var two = pool.submit(() -> { start.await(); return reconcileHttp(providerId, body).andReturn().getResponse().getStatus(); });
+            start.countDown();
+            assertThat(List.of(one.get(20, TimeUnit.SECONDS), two.get(20, TimeUnit.SECONDS))).containsExactly(200, 200);
+        }
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(1);
+        assertThat(financialAudit.history("BANK_RECEIPT", requestId)).hasSize(1);
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
+    }
+
+    @Test
+    void sameBankReceiptCannotBeAssignedToTwoBookingsConcurrently() throws Exception {
+        long secondRequest = tx.execute(s -> {
+            var original = em.find(Booking.class, bookingId);
+            var other = new Booking(); other.setBookingCode("BANK-RACE-" + UUID.randomUUID().toString().substring(0, 18));
+            other.setRenter(original.getRenter()); other.setVehicle(original.getVehicle()); other.setPlan(original.getPlan());
+            other.setPickupTime(original.getPickupTime().plusSeconds(86400)); other.setPickupAddress("Bank race fixture");
+            other.setPassengerCount(1); other.setTotalAmount(original.getTotalAmount()); other.setStatus(BookingStatus.AWAITING_DEPOSIT);
+            em.persist(other);
+            return payments.createDepositPaymentRequest(other).getId();
+        });
+        String oneBody = reconciliationBody("40000", "CROSS-" + requestId, "CROSS-ONE-" + requestId);
+        String twoBody = reconciliationBody("40000", "CROSS-" + requestId, "CROSS-TWO-" + requestId);
+        var start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var one = pool.submit(() -> { start.await(); return reconcileHttpAt(requestId, providerId, oneBody).andReturn().getResponse().getStatus(); });
+            var two = pool.submit(() -> { start.await(); return reconcileHttpAt(secondRequest, providerId, twoBody).andReturn().getResponse().getStatus(); });
+            start.countDown();
+            assertThat(List.of(one.get(20, TimeUnit.SECONDS), two.get(20, TimeUnit.SECONDS))).containsExactlyInAnyOrder(200, 409);
+        }
+        long rows = tx.execute(s -> em.createQuery("select count(t) from PaymentTransaction t where t.gatewayRef = :r", Long.class)
+                .setParameter("r", "CROSS-" + requestId).getSingleResult());
+        assertThat(rows).isEqualTo(1);
+    }
+
+    @Test
+    void bankExceptionDoesNotDiscardPendingGatewayAttempt() throws Exception {
+        tx.executeWithoutResult(s -> {
+            var pending = new PaymentTransaction(); pending.setBooking(em.find(Booking.class, bookingId));
+            pending.setPaymentRequest(em.find(PaymentRequest.class, requestId)); pending.setType(PaymentType.DEPOSIT_PAY);
+            pending.setDirection(PaymentDirection.IN); pending.setMethod(PaymentMethod.VNPAY); pending.setStatus(PaymentStatus.PENDING);
+            pending.setAmount(new BigDecimal("30000")); pending.setVnpTxnRef("PENDING-" + requestId); em.persist(pending);
+        });
+        reconcileHttp(providerId, reconciliationBody("40000", "BANK-PENDING-" + requestId, "BANK-PENDING-" + requestId))
+                .andExpect(status().isOk());
+        assertThat(ledger.findByBooking_Id(bookingId)).hasSize(2).anySatisfy(t -> {
+            assertThat(t.getMethod()).isEqualTo(PaymentMethod.VNPAY); assertThat(t.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        });
+        assertThat(closure.reconcile(bookingId)).isFalse();
+        assertThat(refunds.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
     }
 
     @Test

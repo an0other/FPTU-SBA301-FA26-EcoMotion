@@ -86,3 +86,14 @@ Nếu chỉ hồ sơ dịch vụ bị từ chối trên tài khoản đã có da
 ## 7. Khi cần báo lỗi
 
 Gửi endpoint, HTTP status, `errorCode`, `traceId`, bước thao tác và thời điểm. Với lỗi validation, gửi phần response liên quan trường lỗi. Không gửi mật khẩu, token, API key hoặc ảnh giấy tờ trong log công khai.
+
+## 8. Các ca bổ sung ngày 10/11/2026
+
+- Admin yêu cầu `FACE_UNCLEAR` kèm ghi chú: Provider gửi lại nguyên video phải bị chặn; thay video và đạt policy mới được gửi.
+- `DOCUMENT_UNREADABLE`: thay ảnh CCCD, kiểm tra video lại. `ADDRESS_REQUIRED`: sửa địa chỉ/ghim mà không bắt buộc thay video hợp lệ.
+- Admin để trống ghi chú khi yêu cầu bổ sung/từ chối: backend phải từ chối.
+- Sau upload bản thay thế, mở lịch sử lượt duyệt trước: OCR/AI và ảnh/video cũ phải giữ nguyên.
+- Duyệt Provider không khai báo ngân hàng: vào được dashboard nhưng có checklist; chấp nhận đơn thuê bị chặn đến khi thiết lập tài khoản nhận tiền.
+- Lưu thông tin chưa đủ trường: validation thông báo đúng trường; giao diện không gọi thao tác này là lưu nháp.
+
+Áp dụng migration `20261110_yearly_provider_business_closure.sql` sau các migration trước đó. Migration này cập nhật cả dữ liệu Provider và nhóm phân xử gói năm; không chạy schema.sql để thay migration trên DB cần giữ dữ liệu. Các unit test đã chạy không thay thế các ca verify thực tế trên đây.

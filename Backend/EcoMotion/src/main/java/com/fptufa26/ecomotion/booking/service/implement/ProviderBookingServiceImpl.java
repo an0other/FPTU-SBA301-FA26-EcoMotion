@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.booking.service.implement;
 
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
+
 import com.fptufa26.ecomotion.booking.dto.request.AddChargeRequest;
 import com.fptufa26.ecomotion.booking.dto.request.ResolveOperationalRiskRequest;
 import com.fptufa26.ecomotion.booking.dto.response.OperationalResolutionResponse;
@@ -96,6 +98,7 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProviderBookingServiceImpl implements ProviderBookingService {
+    private final com.fptufa26.ecomotion.finance.service.ProviderFinanceService providerFinance;
     private final com.fptufa26.ecomotion.booking.service.BookingPaymentStateService paymentStates;
 
     private static final Logger log = LoggerFactory.getLogger(ProviderBookingServiceImpl.class);
@@ -114,7 +117,7 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     private final com.fptufa26.ecomotion.booking.repository.BookingChargeEvidenceRepository chargeEvidenceRepository;
     private final com.fptufa26.ecomotion.booking.service.ChargeEvidenceValidator chargeEvidenceValidator;
     private final com.fptufa26.ecomotion.common.cloudinary.CloudinaryService cloudinaryService;
-    private final com.fptufa26.ecomotion.finance.service.implement.RefundEventService refundEventService;
+    private final com.fptufa26.ecomotion.finance.service.RefundEventService refundEventService;
     private final BookingPolicySnapshotRepository bookingPolicySnapshotRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final DriverAssignmentService driverAssignmentService;
@@ -413,6 +416,9 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     @Transactional
     public ProviderBookingResponse acceptBooking(Long currentUserId, String bookingCodeOrId) {
         Provider provider = resolveProvider(currentUserId);
+        if (providerFinance.getBankAccount(currentUserId) == null) {
+            throw new ConflictException("Vui lòng thiết lập tài khoản ngân hàng nhận tiền tại mục Tài chính trước khi chấp nhận đơn thuê.");
+        }
         Booking booking = resolveBookingForUpdate(provider, bookingCodeOrId);
         vehicleService.findVehicleByIdForUpdate(booking.getVehicle().getId()).orElseThrow();
 

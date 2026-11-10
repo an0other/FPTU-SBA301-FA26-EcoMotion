@@ -1,0 +1,17 @@
+BEGIN;
+ALTER TABLE dispute DROP CONSTRAINT IF EXISTS dispute_category_check;
+ALTER TABLE dispute DROP CONSTRAINT IF EXISTS ck_dispute_category;
+ALTER TABLE dispute ADD CONSTRAINT ck_dispute_category CHECK (category IN ('CHARGE','SERVICE_QUALITY','DEPOSIT_REFUND','TRIP_NOT_CONFIRMED','YEARLY_SETTLEMENT','YEARLY_CANCELLATION','YEARLY_REFUND','YEARLY_INCIDENT'));
+ALTER TABLE IF EXISTS yearly_workflow ADD COLUMN IF NOT EXISTS refund_review_dispute_id bigint;
+ALTER TABLE IF EXISTS yearly_workflow ADD COLUMN IF NOT EXISTS refund_verified_received numeric(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE IF EXISTS yearly_incident ADD COLUMN IF NOT EXISTS review_dispute_id bigint;
+ALTER TABLE provider_application ADD COLUMN IF NOT EXISTS review_note varchar(1000);
+ALTER TABLE provider_application_review ADD COLUMN IF NOT EXISTS review_note varchar(1000);
+ALTER TABLE provider_application_review ADD COLUMN IF NOT EXISTS identity_snapshot_json text;
+ALTER TABLE identity_verification_attempt ADD COLUMN IF NOT EXISTS video_sha256 varchar(64);
+ALTER TABLE identity_verification_attempt ADD COLUMN IF NOT EXISTS required_previous_front_sha varchar(64);
+ALTER TABLE identity_verification_attempt ADD COLUMN IF NOT EXISTS required_previous_back_sha varchar(64);
+ALTER TABLE identity_verification_attempt ADD COLUMN IF NOT EXISTS required_previous_video_sha varchar(100);
+ALTER TABLE identity_verification_attempt ADD COLUMN IF NOT EXISTS evidence_retained boolean NOT NULL DEFAULT false;
+UPDATE identity_verification_attempt SET evidence_retained = true WHERE submitted_at IS NOT NULL;
+COMMIT;

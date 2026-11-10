@@ -5,7 +5,7 @@ import { buttonClass, secondaryClass, cardClass, inputClass, identityMessage, st
 
 const reasons = { DOCUMENT_UNREADABLE: 'Giấy tờ chưa rõ', FACE_UNCLEAR: 'Khuôn mặt/video chưa rõ', DETAILS_INCONSISTENT: 'Thông tin chưa nhất quán', ADDRESS_REQUIRED: 'Cần bổ sung địa chỉ/vị trí', BANK_FIELDS_REQUIRED: 'Cần bổ sung thông tin ngân hàng', OTHER_REVIEW_REQUIRED: 'Cần kiểm tra, bổ sung thêm', APPEAL_ACCEPTED: 'Chấp nhận mở lại hồ sơ' }
 
-function PrivateEvidence({ id, kind }) {
+function PrivateEvidence({ id, kind, reviewId }) {
   const [blob, setBlob] = useState(null)
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
@@ -14,7 +14,7 @@ function PrivateEvidence({ id, kind }) {
   return <div className="space-y-2 rounded-xl border border-slate-200 p-3"><button className={secondaryClass} disabled={busy} onClick={async () => {
     setBusy(true); setError('')
     try {
-      const data = await identity.downloadProviderIdentityEvidence(id, kind)
+      const data = await (reviewId ? provider.historyEvidence(id, reviewId, kind) : identity.downloadProviderIdentityEvidence(id, kind))
       const header = new Uint8Array(await data.slice(0, 12).arrayBuffer())
       const type = kind === 'video' ? header[0] === 0x1a ? 'video/webm' : 'video/mp4' : header[0] === 0x89 ? 'image/png' : 'image/jpeg'
       setBlob(new Blob([data], { type }))
@@ -32,15 +32,16 @@ function ProfileDetails({ data }) {
   return <dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Tên hiển thị', profile.displayName], ['Hotline', profile.hotline], ['Điểm giao nhận', profile.depotAddress], ['Tọa độ', `${profile.latitude}, ${profile.longitude}`], ['Ngân hàng', profile.bankCode], ['Số tài khoản', profile.bankAccountNo], ['Chủ tài khoản', profile.bankAccountHolder]].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd className="break-words font-medium">{value || 'Chưa khai báo'}</dd></div>)}</dl>
 }
 
-function SubmittedIdentity({ attemptId }) {
+function SubmittedIdentity({ attemptId, userId, reviewId }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => {
     let alive = true
-    identity.providerIdentityDetail(attemptId).then(result => { if (alive) setData(result) }).catch(err => { if (alive) setError(identityMessage(err)) })
+    const request = reviewId ? provider.historyIdentity(userId, reviewId) : identity.providerIdentityDetail(attemptId)
+    request.then(result => { if (alive) setData(result) }).catch(err => { if (alive) setError(identityMessage(err)) })
     return () => { alive = false }
-  }, [attemptId])
-  return <div className="space-y-3"><h3 className="font-bold">CCCD và video kèm hồ sơ</h3>{error && <p role="alert" className="text-sm text-red-700">{error}</p>}{!data && !error && <p role="status">Đang tải bằng chứng…</p>}{data && <><dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Họ tên CCCD', data.document?.fullName], ['Số CCCD', data.document?.documentNumber], ['Ngày sinh', data.document?.dateOfBirth], ['Ngày hết hạn', data.document?.expiryDate], ['Địa chỉ', data.document?.address]].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd>{value || 'Chưa đọc được'}</dd></div>)}</dl><div className="rounded-xl bg-blue-50 p-4 text-sm"><p>Động tác: {data.video?.motionChallenge?.status === 'PASS' ? 'Đã hoàn thành' : 'Chưa hoàn thành'}</p><p>Số frame chấm được: {data.video?.faceMatching?.scoredFrames ?? '—'}</p><p>Điểm đối chiếu trung vị: {data.video?.faceMatching?.median?.toFixed(4) ?? '—'} (không phải phần trăm)</p></div><div className="grid gap-3">{['front', 'back', 'video'].map(kind => <PrivateEvidence key={kind} id={attemptId} kind={kind} />)}</div></>}</div>
+  }, [attemptId, userId, reviewId])
+  return <div className="space-y-3"><h3 className="font-bold">CCCD và video kèm hồ sơ</h3>{error && <p role="alert" className="text-sm text-red-700">{error}</p>}{!data && !error && <p role="status">Đang tải bằng chứng…</p>}{data && <><dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Họ tên CCCD', data.document?.fullName], ['Số CCCD', data.document?.documentNumber], ['Ngày sinh', data.document?.dateOfBirth], ['Ngày hết hạn', data.document?.expiryDate], ['Địa chỉ', data.document?.address]].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd>{value || 'Chưa đọc được'}</dd></div>)}</dl><div className="rounded-xl bg-blue-50 p-4 text-sm"><p>Động tác: {data.video?.motionChallenge?.status === 'PASS' ? 'Đã hoàn thành' : 'Chưa hoàn thành'}</p><p>Số frame chấm được: {data.video?.faceMatching?.scoredFrames ?? '—'}</p><p>Điểm đối chiếu trung vị: {data.video?.faceMatching?.median?.toFixed(4) ?? '—'} (không phải phần trăm)</p></div><div className="grid gap-3">{['front', 'back', 'video'].map(kind => <PrivateEvidence key={kind} id={reviewId ? userId : attemptId} reviewId={reviewId} kind={kind} />)}</div></>}</div>
 }
 
 function ReviewDetail({ mode, id, onReviewed, onClose }) {
@@ -51,6 +52,7 @@ function ReviewDetail({ mode, id, onReviewed, onClose }) {
   const [busy, setBusy] = useState(false)
   const [decision, setDecision] = useState('APPROVE')
   const [reason, setReason] = useState('')
+  const [note, setNote] = useState('')
   const [checked, setChecked] = useState(false)
   const load = useCallback(async () => { const result = mode === 'identity' ? await identity.providerIdentityDetail(id) : await provider.detail(id); setData(result); setChecked(false); setDecision(result.status === 'REJECTED' ? 'REOPEN' : 'APPROVE') }, [mode, id])
   useEffect(() => { let alive = true; (mode === 'identity' ? identity.providerIdentityDetail(id) : provider.detail(id)).then(result => { if (alive) { setData(result); setDecision(result.status === 'REJECTED' ? 'REOPEN' : 'APPROVE') } }).catch(err => { if (alive) setError(identityMessage(err)) }); return () => { alive = false } }, [mode, id])
@@ -72,14 +74,15 @@ function ReviewDetail({ mode, id, onReviewed, onClose }) {
         <div className="rounded-xl bg-blue-50 p-4 text-sm"><p>Động tác: {data.video?.motionChallenge?.status === 'PASS' ? 'Đã hoàn thành' : 'Chưa hoàn thành'}</p><p>Số frame chấm được: {data.video?.faceMatching?.scoredFrames ?? '—'}</p><p>Điểm đối chiếu trung vị: {data.video?.faceMatching?.median?.toFixed(4) ?? '—'} (không phải phần trăm)</p><p className="mt-2">Đối chiếu giấy tờ và video trước khi quyết định. Kết quả AI chỉ hỗ trợ xét duyệt.</p></div>
         <div className="grid gap-3">{['front', 'back', 'video'].map(kind => <PrivateEvidence key={kind} id={id} kind={kind} />)}</div>
         <button className={secondaryClass} disabled={busy} onClick={() => perform(async () => setRelated(await provider.detail(data.userId)))}>Xem form Provider đã lưu</button>{related && <ProfileDetails data={related} />}
-      </> : <>{data.identityAttemptId && <SubmittedIdentity key={data.identityAttemptId} attemptId={data.identityAttemptId} />}<ProfileDetails data={data} /><p className="text-sm">Danh tính: {data.identityVerified ? 'Đã xác minh' : 'Sẽ xác minh cùng khi chấp nhận hồ sơ'}</p><button className={secondaryClass} disabled={busy} onClick={() => perform(async () => setHistory(await provider.history(id)))}>Xem lịch sử xét duyệt</button>{history && <ol className="space-y-2 text-sm">{history.map((entry, index) => <li key={`${entry.version}-${index}`} className="rounded-xl bg-slate-50 p-3">{humanDate(entry.reviewedAt)} · {entry.decision} · {entry.reasonCode || 'Đã chấp nhận'} · Admin {entry.adminId}</li>)}</ol>}</>}
+      </> : <>{data.identityAttemptId && <SubmittedIdentity key={data.identityAttemptId} attemptId={data.identityAttemptId} />}<ProfileDetails data={data} /><p className="text-sm">Danh tính: {data.identityVerified ? 'Đã xác minh' : 'Sẽ xác minh cùng khi chấp nhận hồ sơ'}</p><button className={secondaryClass} disabled={busy} onClick={() => perform(async () => setHistory(await provider.history(id)))}>Xem lịch sử xét duyệt</button>{history && <ol className="space-y-2 text-sm">{history.map((entry, index) => <li key={`${entry.version}-${index}`} className="rounded-xl bg-slate-50 p-3">{humanDate(entry.reviewedAt)} · {entry.decision} · {entry.reasonCode || 'Đã chấp nhận'} · Admin {entry.adminId}<p className="mt-1">{entry.note}</p><details className="mt-2"><summary className="cursor-pointer font-semibold">Xem hồ sơ tại lần duyệt này</summary>{entry.profileSnapshotJson && <ProfileDetails data={{ profile: JSON.parse(entry.profileSnapshotJson) }} />}{entry.hasIdentitySnapshot && <SubmittedIdentity userId={id} reviewId={entry.id} />}</details></li>)}</ol>}</>}
       {data.status === 'SUBMITTED' && <form className="space-y-3 border-t border-slate-200 pt-4" onSubmit={event => { event.preventDefault(); perform(async () => {
         if (mode === 'identity') await identity.reviewProviderIdentity(id, data.version, decision, decision === 'APPROVE' ? null : reason)
-        else await provider.review(id, data.version, decision, decision === 'APPROVE' ? null : reason)
+        else await provider.review(id, data.version, decision, decision === 'APPROVE' ? null : reason, decision === 'APPROVE' ? null : note)
         await onReviewed()
       }) }}>
         <label className="block text-sm">Quyết định<select className={`${inputClass} mt-1`} disabled={busy} value={decision} onChange={event => { setDecision(event.target.value); setChecked(false) }}>{(data.status === 'REJECTED' ? [['REOPEN', 'Mở lại để bổ sung']] : [['APPROVE', 'Chấp nhận'], ['NEEDS_CHANGES', 'Yêu cầu bổ sung'], ['REJECT', 'Từ chối']]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {decision !== 'APPROVE' && <label className="block text-sm">Lý do bắt buộc<select className={`${inputClass} mt-1`} required value={reason} disabled={busy} onChange={event => setReason(event.target.value)}><option value="">Chọn lý do</option>{Object.entries(reasons).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>}
+        {decision !== 'APPROVE' && <label className="block text-sm">Hướng dẫn bổ sung / lý do cụ thể<textarea className={`${inputClass} mt-1`} required maxLength={1000} value={note} disabled={busy} onChange={event => setNote(event.target.value)} /></label>}
         <label className="flex gap-2 text-sm"><input type="checkbox" checked={checked} disabled={busy} onChange={event => setChecked(event.target.checked)} />Tôi đã kiểm tra thông tin và bằng chứng liên quan, xác nhận quyết định này.</label>
         <button className={buttonClass} disabled={busy || !checked || decision !== 'APPROVE' && !reason}>{busy ? 'Đang lưu quyết định…' : 'Xác nhận quyết định'}</button>
       </form>}

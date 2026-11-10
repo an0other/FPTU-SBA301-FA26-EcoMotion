@@ -1,4 +1,6 @@
-> Chính sách demo đã mở rộng: B, B1, B2 được hỗ trợ, bỏ mốc ngày cấp 2025. Các mô tả chỉ hỗ trợ B hiện hành bên dưới là phạm vi cũ; điều kiện tuổi, hạn GPLX và số chỗ vẫn được kiểm tra.
+> Chính sách demo đã mở rộng: B, B1, B2 được hỗ trợ, bỏ mốc ngày cấp 2025. Chính sách theo commit `11ef8eb`; điều kiện tuổi, hạn GPLX và số chỗ vẫn được kiểm tra.
+
+> **Seed/demo cập nhật 10/11/2026:** cả ba renter new/monthly/happy-end đều có B2 demo, không cần upload GPLX thật để đi tuyến yearly. Dùng 3 renter + Provider + Admin; EM-Y2-CANCEL dùng chung renter happy-end, khác xe/khoảng thuê. Các bảng A1, EM-SEED-YEARLY-* và mô tả seed cũ bên dưới là lịch sử; lấy trạng thái hiện hành từ [kịch bản demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).
 
 > **Bộ demo hiện hành:** 3 renter + 1 provider, ghép các bước trên cùng booking; xem [danh sách đăng nhập và workflow](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md). Các mô tả seed lịch sử bên dưới không dùng cho demo mới.
 
@@ -16,7 +18,7 @@ Chính sách bản demo được tham khảo từ **Luật Trật tự, an toàn
 - Cổng văn bản pháp luật chính thức của Chính phủ: [vanban.chinhphu.vn](https://vanban.chinhphu.vn/?pageid=27160) (tìm `36/2024/QH15`).
 - Bản tham khảo dễ đọc: [Luật số 36/2024/QH15](https://thuvienphapluat.vn/van-ban/Giao-thong-Van-tai/Luat-Trat-tu-an-toan-giao-thong-duong-bo-2024-so-36-2024-QH15-615463.aspx).
 
-Đây là chính sách phục vụ đồ án, không phải tư vấn pháp lý hay kết luận đầy đủ về điều kiện lái xe. Mô hình xe hiện lưu số chỗ nhưng chưa có khối lượng toàn bộ và đầy đủ thông tin phân loại xe, nên hệ thống chưa thể kiểm tra mọi điều kiện theo luật. Bản demo chỉ tự động hỗ trợ GPLX hạng B được đọc là cấp từ ngày 01/01/2025 trở đi. GPLX B1/B2 cấp theo hạng cũ được hiển thị là chưa tự động hỗ trợ; điều đó **không có nghĩa** các giấy phép này không còn giá trị. Cần đối chiếu riêng quy định đổi hạng, hạn chế và thời hạn còn lại trước khi mở rộng chính sách tự động.
+Đây là chính sách phục vụ đồ án, không phải tư vấn pháp lý hay kết luận đầy đủ về điều kiện lái xe. Mô hình xe hiện lưu số chỗ nhưng chưa có khối lượng toàn bộ và đầy đủ thông tin phân loại xe, nên hệ thống chưa thể kiểm tra mọi điều kiện theo luật. Bản demo tự động hỗ trợ GPLX B/B1/B2 còn hiệu lực theo commit `11ef8eb`, không áp dụng mốc ngày cấp 2025 (ngày cấp không quyết định eligibility). Phải có ngày hết hạn hữu hạn, không trước ngày hiện tại tại Việt Nam và bao phủ hết thời hạn thuê; người thuê phải đủ 18 tuổi khi bắt đầu thuê, đã xác minh OCR/QR và xe tối đa 9 chỗ kể cả người lái. Đây là quy tắc sản phẩm demo, không phải kết luận pháp lý cho mọi GPLX B1/B2.
 
 ## Nghiệp vụ đã triển khai
 

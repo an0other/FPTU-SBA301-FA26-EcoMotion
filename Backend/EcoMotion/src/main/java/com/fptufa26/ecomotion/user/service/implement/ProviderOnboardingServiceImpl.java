@@ -117,6 +117,11 @@ public class ProviderOnboardingServiceImpl implements ProviderOnboardingService 
 
     @Override
     public ProviderApplicationResponse review(Long adminId, Long id, long version, String decision, String reason) {
+        return review(adminId, id, version, decision, reason, reason);
+    }
+
+    @Override
+    public ProviderApplicationResponse review(Long adminId, Long id, long version, String decision, String reason, String note) {
         admin(adminId);
         User user = owner(id);
         var application = applications.findById(id).orElseThrow(() -> conflict("PROVIDER_PROFILE_REQUIRED"));
@@ -130,6 +135,9 @@ public class ProviderOnboardingServiceImpl implements ProviderOnboardingService 
         if (!"APPROVE".equals(decision) && (reason == null || !reason.matches("[A-Z][A-Z0-9_]{2,99}"))) {
             throw invalid("PROVIDER_REVIEW_REASON_REQUIRED");
         }
+        if (!"APPROVE".equals(decision) && (note == null || note.isBlank() || note.length() > 1000)) throw invalid("PROVIDER_REVIEW_NOTE_REQUIRED");
+        String identitySnapshot = application.getSubmittedAttemptId() == null ? null
+                : identityDecisions.snapshotProviderEvidence(adminId, application.getSubmittedAttemptId());
         if ("APPROVE".equals(decision)) {
             requireAccountEvidence(user);
             if (application.getSubmittedAttemptId() != null) {
@@ -173,6 +181,7 @@ public class ProviderOnboardingServiceImpl implements ProviderOnboardingService 
         application.setReviewedBy(adminId);
         application.setReviewedAt(clock.instant());
         application.setReasonCode("APPROVE".equals(decision) ? null : reason);
+        application.setReviewNote("APPROVE".equals(decision) ? null : note.trim());
         var review = new ProviderApplicationReview();
         review.setUserId(id);
         review.setApplicationVersion(version);
@@ -181,6 +190,8 @@ public class ProviderOnboardingServiceImpl implements ProviderOnboardingService 
         review.setReasonCode(application.getReasonCode());
         review.setReviewedAt(clock.instant());
         review.setProfileSnapshotJson(application.getProfileJson());
+        review.setReviewNote(application.getReviewNote());
+        review.setIdentitySnapshotJson(identitySnapshot);
         review.setSubmittedAttemptId(application.getSubmittedAttemptId());
         reviews.save(review);
         return view(user, applications.saveAndFlush(application));
@@ -190,6 +201,23 @@ public class ProviderOnboardingServiceImpl implements ProviderOnboardingService 
     public List<ProviderApplicationReview> history(Long adminId, Long id) {
         admin(adminId);
         return reviews.findByUserIdOrderByIdAsc(id);
+    }
+
+    private ProviderApplicationReview historicalReview(Long adminId, Long userId, Long reviewId) {
+        admin(adminId);
+        var record = reviews.findById(reviewId).orElseThrow(() -> invalid("PROVIDER_REVIEW_NOT_FOUND"));
+        if (!record.getUserId().equals(userId) || record.getIdentitySnapshotJson() == null) throw invalid("PROVIDER_REVIEW_SNAPSHOT_UNAVAILABLE");
+        return record;
+    }
+
+    @Override
+    public com.fptufa26.ecomotion.verification.identity.dto.response.IdentityAttemptResponse historyIdentity(Long adminId, Long userId, Long reviewId) {
+        return identityDecisions.reviewSnapshot(historicalReview(adminId, userId, reviewId).getIdentitySnapshotJson());
+    }
+
+    @Override
+    public byte[] historyEvidence(Long adminId, Long userId, Long reviewId, String kind) {
+        return identityDecisions.reviewSnapshotEvidence(historicalReview(adminId, userId, reviewId).getIdentitySnapshotJson(), kind);
     }
 
     private User owner(Long id) {
@@ -274,7 +302,7 @@ public class ProviderOnboardingServiceImpl implements ProviderOnboardingService 
                 application.getStatus(), currentProfile, application.getSubmittedAt(), application.getReviewedAt(),
                 application.getReviewedBy(), application.getReasonCode(), verified(user), canEdit,
                 canEdit && (verified(user) || identityDecisions.providerEvidenceReady(user.getId())) && user.getPhoneVerifiedAt() != null && application.getProfileJson() != null,
-                next, user.getEmail(), user.getFullName(), application.getSubmittedAttemptId());
+                next, user.getEmail(), user.getFullName(), application.getSubmittedAttemptId(), application.getReviewNote());
     }
 
     private boolean present(String value) { return value != null && !value.isBlank(); }

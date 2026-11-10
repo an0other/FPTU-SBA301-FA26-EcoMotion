@@ -35,16 +35,38 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = {"booking.max-advance-months=300"})
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
 @org.springframework.transaction.annotation.Transactional
 class BookingConflictRegressionIntegrationTest {
+    @org.springframework.boot.test.context.TestConfiguration
+    static class TimeFixture {
+        @org.springframework.context.annotation.Bean
+        @org.springframework.context.annotation.Primary
+        java.time.Clock regressionClock() {
+            return java.time.Clock.fixed(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS),
+                    java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        }
+    }
+
+    @Autowired
+    private java.time.Clock clock;
+    private Instant now;
+    private Instant pickup;
+
+    @Autowired
+    private com.fptufa26.ecomotion.schedule.service.ProviderScheduleService providerSchedules;
+    @Autowired
+    private com.fptufa26.ecomotion.schedule.repository.VehicleScheduleRepository schedules;
+
     @MockitoBean
     private com.fptufa26.ecomotion.location.service.implement.VietmapClient vietmap;
 
     @BeforeEach
     void roadRoutingFixture() {
+        now = clock.instant();
+        pickup = now.plus(Duration.ofDays(45));
         org.mockito.Mockito.when(vietmap.route(org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
                 org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble()))
                 .thenReturn(new com.fptufa26.ecomotion.location.dto.response.RoadRouteResponse(4500, 600,
@@ -109,14 +131,14 @@ class BookingConflictRegressionIntegrationTest {
                   "vehicleId": %d,
                   "planId": %d,
                   "slotCount": 3,
-                  "pickupTime": "2036-10-27T14:00:00Z",
+                  "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
                   "pickupLatitude": 10.801234,
                   "pickupLongitude": 106.652345,
                   "passengerCount": 2,
                   "driverNote": "Dat xe cong tac"
                 }
-                """.formatted(vehicle.getId(), daily.getId());
+                """.formatted(vehicle.getId(), daily.getId(), pickup);
 
         mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -124,7 +146,8 @@ class BookingConflictRegressionIntegrationTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.status").value("AWAITING_DEPOSIT"))
-                .andExpect(jsonPath("$.data.bookingCode").exists());
+                .andExpect(jsonPath("$.data.bookingCode").exists())
+                .andDo(result -> assertPersistedHold(result.getResponse().getContentAsString()));
     }
 
     @Test
@@ -146,19 +169,22 @@ class BookingConflictRegressionIntegrationTest {
                   "vehicleId": %d,
                   "planId": %d,
                   "slotCount": 3,
-                  "pickupTime": "2037-01-10T08:00:00Z",
+                  "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
                   "pickupLatitude": 10.801234,
                   "pickupLongitude": 106.652345,
                   "passengerCount": 2
                 }
-                """.formatted(vehicle.getId(), daily.getId());
+                """.formatted(vehicle.getId(), daily.getId(), pickup);
 
         mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body1))
                 .andExpect(status().isCreated());
+
+        long bookingsBefore = bookingRepository.count();
+        long schedulesBefore = schedules.count();
 
         Vehicle secondVehicle = vehicleRepository.findAll().stream()
                 .filter(v -> !v.getId().equals(vehicle.getId()))
@@ -171,13 +197,13 @@ class BookingConflictRegressionIntegrationTest {
                   "vehicleId": %d,
                   "planId": %d,
                   "slotCount": 1,
-                  "pickupTime": "2037-01-11T08:00:00Z",
+                  "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
                   "pickupLatitude": 10.801234,
                   "pickupLongitude": 106.652345,
                   "passengerCount": 2
                 }
-                """.formatted(secondVehicle.getId(), secondPlan.getId());
+                """.formatted(secondVehicle.getId(), secondPlan.getId(), pickup.plus(Duration.ofDays(1)));
 
         mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -185,13 +211,16 @@ class BookingConflictRegressionIntegrationTest {
                         .content(body2))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Bạn đã có đơn thuê trùng khoảng thời gian này"));
+        assertThat(bookingRepository.count()).isEqualTo(bookingsBefore);
+        assertThat(schedules.count()).isEqualTo(schedulesBefore);
     }
 
     @Test
     @DisplayName("Renter có đơn PENDING cũ trong quá khứ không bị coi là xung đột khi đặt đơn mới trong tương lai")
     void createBookingSucceedsEvenIfRenterHasStalePastPendingBooking() throws Exception {
         String token = login(DevDataSeeder.RENTER_EMAIL);
-        Renter renter = renterRepository.findAll().getFirst();
+        Renter renter = renterRepository.findAll().stream()
+                .filter(r -> DevDataSeeder.RENTER_EMAIL.equals(r.getUser().getEmail())).findFirst().orElseThrow();
         Vehicle vehicle = vehicleRepository.findAll().getFirst();
         RentalPlan daily = rentalPlanRepository.findByVehicle_IdOrderByIdAsc(vehicle.getId()).stream()
                 .filter(p -> "DAILY".equals(p.getPlanType().name()))
@@ -219,20 +248,22 @@ class BookingConflictRegressionIntegrationTest {
                   "vehicleId": %d,
                   "planId": %d,
                   "slotCount": 1,
-                  "pickupTime": "2038-05-01T10:00:00Z",
+                  "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
                   "pickupLatitude": 10.801234,
                   "pickupLongitude": 106.652345,
                   "passengerCount": 2
                 }
-                """.formatted(vehicle.getId(), daily.getId());
+                """.formatted(vehicle.getId(), daily.getId(), pickup);
 
         mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.status").value("AWAITING_DEPOSIT"));
+                .andExpect(jsonPath("$.data.status").value("AWAITING_DEPOSIT"))
+                .andDo(result -> assertPersistedHold(result.getResponse().getContentAsString()));
+        assertThat(bookingRepository.findById(pastPending.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING);
     }
 
     @Test
@@ -248,24 +279,28 @@ class BookingConflictRegressionIntegrationTest {
                 .findFirst()
                 .orElseThrow();
 
-        Instant blockStart = Instant.parse("2039-06-01T00:00:00Z");
-        Instant blockEnd = Instant.parse("2039-06-05T00:00:00Z");
+        Instant blockStart = pickup.minus(Duration.ofDays(1));
+        Instant blockEnd = pickup.plus(Duration.ofDays(3));
 
         // Book schedule for vehicle
-        scheduleService.book(vehicle, null, blockStart, blockEnd);
+        providerSchedules.createBlockSchedule(vehicle.getProvider().getUser().getId(),
+                new com.fptufa26.ecomotion.schedule.dto.request.CreateBlockScheduleRequest(vehicle.getId(),
+                        com.fptufa26.ecomotion.schedule.enums.ScheduleType.MAINTENANCE, blockStart, blockEnd, "QA maintenance"));
+        long bookingsBefore = bookingRepository.count();
+        long schedulesBefore = schedules.count();
 
         String body = """
                 {
                   "vehicleId": %d,
                   "planId": %d,
                   "slotCount": 1,
-                  "pickupTime": "2039-06-02T00:00:00Z",
+                  "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
                   "pickupLatitude": 10.801234,
                   "pickupLongitude": 106.652345,
                   "passengerCount": 2
                 }
-                """.formatted(vehicle.getId(), daily.getId());
+                """.formatted(vehicle.getId(), daily.getId(), pickup);
 
         mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -273,6 +308,9 @@ class BookingConflictRegressionIntegrationTest {
                         .content(body))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Xe không còn trống trong khoảng thời gian đã chọn, bao gồm thời gian đệm"));
+        assertThat(bookingRepository.count()).isEqualTo(bookingsBefore);
+        assertThat(schedules.count()).isEqualTo(schedulesBefore);
+        assertThat(scheduleService.isRangeFree(vehicle.getId(), blockStart, blockEnd)).isFalse();
     }
 
     @Test
@@ -296,13 +334,13 @@ class BookingConflictRegressionIntegrationTest {
                   "vehicleId": %d,
                   "planId": %d,
                   "slotCount": 1,
-                  "pickupTime": "2040-01-01T08:00:00Z",
+                  "pickupTime": "%s",
                   "pickupAddress": "18 Hoang Hoa Tham, Tan Binh",
                   "pickupLatitude": 10.801234,
                   "pickupLongitude": 106.652345,
                   "passengerCount": %d
                 }
-                """.formatted(vehicle.getId(), daily.getId(), excessiveCount);
+                """.formatted(vehicle.getId(), daily.getId(), pickup, excessiveCount);
 
         mockMvc.perform(post("/api/renter/bookings")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -310,6 +348,16 @@ class BookingConflictRegressionIntegrationTest {
                         .content(body))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Số lượng hành khách vượt quá số chỗ ngồi khả dụng của xe (tối đa " + maxAllowed + " khách)"));
+    }
+
+    private void assertPersistedHold(String response) throws Exception {
+        String code = objectMapper.readTree(response).get("data").get("bookingCode").asText();
+        Booking created = bookingRepository.findAll().stream().filter(b -> code.equals(b.getBookingCode())).findFirst().orElseThrow();
+        assertThat(created.getStatus()).isEqualTo(BookingStatus.AWAITING_DEPOSIT);
+        assertThat(schedules.findByBooking_Id(created.getId())).singleElement().satisfies(hold -> {
+            assertThat(hold.getStatus()).isEqualTo(com.fptufa26.ecomotion.schedule.enums.ScheduleStatus.HELD);
+            assertThat(hold.getExpiresAt()).isEqualTo(now.plus(Duration.ofMinutes(15)));
+        });
     }
 
     private String login(String email) throws Exception {

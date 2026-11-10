@@ -512,7 +512,7 @@ class EndUserWorkflowIntegrationTest {
             schedule.hold(b.getVehicle(), b, b.getPickupTime(), b.getPickupTime().plusSeconds(3600), Instant.now().plusSeconds(60));
             return vnpay.createPaymentUrl(renterId, new CreateVnpayPaymentUrlRequest(code(), "DEPOSIT", null, "vn"), "127.0.0.1");
         });
-        tx.executeWithoutResult(s -> em.createQuery("select s from VehicleSchedule s where s.booking.id = :id",
+        tx.executeWithoutResult(s -> em.createQuery("select s from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s where s.booking.id = :id",
                 com.fptufa26.ecomotion.schedule.entity.VehicleSchedule.class).setParameter("id", bookingId)
                 .getResultList().forEach(h -> h.setExpiresAt(Instant.now().minusSeconds(1))));
         expiry.expireDueHolds(Instant.now()); expiry.expireDueHolds(Instant.now());
@@ -552,15 +552,30 @@ class EndUserWorkflowIntegrationTest {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.data.proposal.status").value("REJECTED"));
     }
 
+    @Autowired com.fptufa26.ecomotion.schedule.service.ProviderScheduleService providerSchedules;
+
     @Test void competingScheduleAtAcceptanceRollsBackConsentAndKeepsOriginalBooking() {
         ready(); Instant original = bookings.findById(bookingId).orElseThrow().getPickupTime();
         Instant next = original.plusSeconds(86400); workflow.proposeAlternative(providerId, code(), proposal(next));
         String id = workflow.getWorkflow(renterId, code()).proposal().id();
         tx.executeWithoutResult(s -> {
             Booking b = em.find(Booking.class, bookingId);
-            schedule.book(b.getVehicle(), null, next, next.plusSeconds(3600));
+            providerSchedules.createBlockSchedule(b.getVehicle().getProvider().getUser().getId(),
+                    new com.fptufa26.ecomotion.schedule.dto.request.CreateBlockScheduleRequest(b.getVehicle().getId(),
+                            com.fptufa26.ecomotion.schedule.enums.ScheduleType.BLOCKED, next, next.plusSeconds(3600), "QA conflict"));
         });
-        assertThatThrownBy(() -> workflow.respondToProposal(renterId, code(), id, response("ACCEPT"))).isInstanceOf(RuntimeException.class);
+        long schedulesBefore = tx.execute(s -> em.createQuery("select count(s) from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s", Long.class).getSingleResult());
+        long bookingsBefore = bookings.count();
+        var before = bookings.findById(bookingId).orElseThrow();
+        assertThatThrownBy(() -> workflow.respondToProposal(renterId, code(), id, response("ACCEPT")))
+                .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
+        long schedulesAfter = tx.execute(s -> em.createQuery("select count(s) from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s", Long.class).getSingleResult());
+        assertThat(schedulesAfter).isEqualTo(schedulesBefore);
+        assertThat(bookings.count()).isEqualTo(bookingsBefore);
+        var after = bookings.findById(bookingId).orElseThrow();
+        assertThat(after.getPlannedEndAt()).isEqualTo(before.getPlannedEndAt());
+        assertThat(after.getStatus()).isEqualTo(before.getStatus());
+        assertThat(after.getTotalAmount()).isEqualByComparingTo(before.getTotalAmount());
         assertThat(workflow.getWorkflow(renterId, code()).proposal().status()).isEqualTo("PENDING");
         assertThat(bookings.findById(bookingId).orElseThrow().getPickupTime()).isEqualTo(original);
     }
@@ -577,7 +592,7 @@ class EndUserWorkflowIntegrationTest {
             d.setStatus(DriverStatus.APPROVED); d.setLicenseNo(UUID.randomUUID().toString().substring(0, 18));
             d.setLicenseClass("B2"); d.setLicenseExpiry(java.time.LocalDate.now().plusYears(1));
             d.setPortraitUrl("test"); d.setLicenseImageUrl("test"); em.persist(d);
-            if (em.createQuery("select count(s) from VehicleSchedule s where s.booking.id = :id", Long.class).setParameter("id", bookingId).getSingleResult() == 0)
+            if (em.createQuery("select count(s) from com.fptufa26.ecomotion.schedule.entity.VehicleSchedule s where s.booking.id = :id", Long.class).setParameter("id", bookingId).getSingleResult() == 0)
                 schedule.book(b.getVehicle(), b, b.getPickupTime(), b.getPickupTime().plusSeconds(3600));
             return new long[]{d.getId(), d.getUser().getId(), b.getVehicle().getProvider().getId()};
         });
@@ -755,7 +770,7 @@ class EndUserWorkflowIntegrationTest {
     @Autowired PaymentTransactionRepository ledger;
     @Autowired BookingRepository bookings;
     @Autowired RefundRequestRepository requests;
-    @Autowired com.fptufa26.ecomotion.finance.service.implement.RefundReceiptService receipts;
+    @Autowired com.fptufa26.ecomotion.finance.service.RefundReceiptService receipts;
     @Autowired BookingPolicySnapshotRepository snapshots;
     @Autowired com.fptufa26.ecomotion.finance.config.VnpayConfig config;
     @Autowired org.springframework.test.web.servlet.MockMvc mvc;

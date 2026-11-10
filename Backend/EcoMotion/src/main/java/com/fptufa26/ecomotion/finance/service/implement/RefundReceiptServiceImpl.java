@@ -1,5 +1,7 @@
 package com.fptufa26.ecomotion.finance.service.implement;
 
+import com.fptufa26.ecomotion.finance.service.RefundReceiptService;
+
 import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
@@ -16,7 +18,8 @@ import java.time.Clock;
 
 @Service
 @RequiredArgsConstructor
-public class RefundReceiptService {
+public class RefundReceiptServiceImpl implements RefundReceiptService {
+    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
     private final RefundRequestRepository refunds;
     private final BookingPaymentLedgerService ledger;
     private final BookingNotificationService notifications;
@@ -24,8 +27,8 @@ public class RefundReceiptService {
     private final Clock clock;
 
     private RefundRequest locked(Long id) {
-        var candidate = refunds.findById(id).orElseThrow(() -> new NotFoundException("Không tìm thấy khoản hoàn"));
-        ledger.requireBookingForUpdate(candidate.getBooking().getId());
+        Long bookingId = refunds.findBookingIdById(id).orElseThrow(() -> new NotFoundException("Không tìm thấy khoản hoàn"));
+        ledger.requireBookingForUpdate(bookingId);
         var refund = refunds.findByIdForUpdate(id).orElseThrow();
         entityManager.refresh(refund);
         return refund;
@@ -50,13 +53,15 @@ public class RefundReceiptService {
             refund.setReceiptConfirmedAt(clock.instant());
             refund.setReceiptConfirmedBy(userId);
         } else {
-            if ("CONFIRMED".equals(refund.getReceiptStatus()))
+            if ("CONFIRMED".equals(refund.getReceiptStatus()) || "ADMIN_VERIFIED".equals(refund.getReceiptStatus()))
                 throw new ConflictException("Bạn đã xác nhận nhận khoản tiền này");
             refund.setReceiptStatus("REPORTED_NOT_RECEIVED");
             refund.setReceiptReportedAt(clock.instant());
             refund.setReceiptConfirmedAt(null);
             refund.setReceiptConfirmedBy(null);
         }
+        refunds.flush();
+        closure.reconcile(refund.getBooking().getId());
         notifications.changed(refund.getBooking(), "REFUND_RECEIPT_UPDATED");
     }
 

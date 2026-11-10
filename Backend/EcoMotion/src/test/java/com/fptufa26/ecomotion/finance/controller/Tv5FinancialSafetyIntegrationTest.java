@@ -162,18 +162,16 @@ class Tv5FinancialSafetyIntegrationTest {
         assertThat(ledger.findById(refund).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PENDING);
     }
 
-    @Test void sandboxPayoutIsPersistentPendingAndIdempotent() throws Exception {
-        var payout = finance.createSandboxPayout(adminId, bookingId);
-        assertThat(payout.netAmount()).isEqualByComparingTo("90000");
-        assertThat(payout.status()).isEqualTo(PaymentStatus.PENDING); assertThat(payout.paidAt()).isNull();
-        assertThat(payout.verificationMethod()).isEqualTo(PaymentVerificationMethod.MOCK_SIMULATED);
-        assertThat(finance.createSandboxPayout(adminId, bookingId).id()).isEqualTo(payout.id());
-        assertThat(finance.listPayouts(providerId, null, 0, 10).items()).extracting("id").contains(payout.id());
+    @Test void vnpayMoneyIsNeverPaidOutByPlatform() throws Exception {
+        assertThatThrownBy(() -> finance.createSandboxPayout(adminId, bookingId))
+                .isInstanceOf(com.fptufa26.ecomotion.finance.exception.PayoutIneligibleException.class)
+                .hasMessageContaining("VNPAY");
         var admin = tx.execute(s -> em.find(User.class, adminId));
         String token = jwt.generateAccessToken(admin);
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
                 "/api/v1/provider/finance/sandbox/payouts/" + bookingId).header("Authorization", "Bearer " + token))
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().is4xxClientError());
+        assertThat(finance.getFinanceSummary(providerId).directReceived()).isEqualByComparingTo("100000");
     }
 
     @Test void directProviderMoneyCannotBePaidOutByPlatform() {
@@ -182,7 +180,6 @@ class Tv5FinancialSafetyIntegrationTest {
         }));
         assertThatThrownBy(() -> finance.createSandboxPayout(adminId, bookingId)).isInstanceOf(RuntimeException.class);
         assertThat(finance.getFinanceSummary(providerId).directReceived()).isEqualByComparingTo("100000");
-        assertThat(finance.getFinanceSummary(providerId).platformReceived()).isZero();
     }
 
     @Test void providerAndUnsettledBookingCannotCreatePayout() {
@@ -196,17 +193,14 @@ class Tv5FinancialSafetyIntegrationTest {
         assertThatThrownBy(() -> finance.createSandboxPayout(adminId, bookingId)).isInstanceOf(RuntimeException.class);
     }
 
-    @Test void mixedCollectionsOnlyAllocatePlatformMoneyAndKeepFeeSnapshot() {
+    @Test void mixedCollectionsAreAllDirectProviderReceipts() {
         tx.executeWithoutResult(status -> {
             ledger.findByBooking_Id(bookingId).forEach(t -> t.setAmount(new BigDecimal("30000")));
             incoming(em.find(Booking.class, bookingId), PaymentMethod.BANK_TRANSFER, new BigDecimal("70000"));
         });
-        var payout = finance.createSandboxPayout(adminId, bookingId);
-        assertThat(payout.grossAmount()).isEqualByComparingTo("30000");
-        assertThat(payout.platformFee()).isEqualByComparingTo("3000");
-        assertThat(payout.netAmount()).isEqualByComparingTo("27000");
-        tx.executeWithoutResult(status -> em.find(Booking.class, bookingId).getVehicle().getProvider().setCommissionRate(new BigDecimal("0.5")));
-        assertThat(finance.listPayouts(providerId, null, 0, 10).items().getFirst().platformFee()).isEqualByComparingTo("3000");
+        assertThat(finance.getFinanceSummary(providerId).directReceived()).isEqualByComparingTo("100000");
+        assertThatThrownBy(() -> finance.createSandboxPayout(adminId, bookingId))
+                .isInstanceOf(com.fptufa26.ecomotion.finance.exception.PayoutIneligibleException.class);
     }
 
     @Test void mixedSourceRefundRequiresSourceReconciliationBeforePayout() {
@@ -322,10 +316,10 @@ class Tv5FinancialSafetyIntegrationTest {
         assertThat(session.amount()).isEqualByComparingTo("544000");
         var params = signed(session);
         assertThat(params.get("vnp_Amount")).isEqualTo("54400000");
-        assertThat(vnpay.processCallback(params).status()).isEqualTo("PENDING_VERIFICATION");
-        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("00");
+        assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("SUCCESS");
         assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("02");
-        assertThat(vnpay.processCallback(params).status()).isEqualTo("SUCCESS");
+        assertThat(vnpay.processIpn(params).rspCode()).isEqualTo("02");
+        assertThat(vnpay.processCallback(renterId, params).status()).isEqualTo("SUCCESS");
         assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isEqualTo(BookingStatus.COMPLETED);
         assertThat(ledger.findByBooking_Id(bookingId)).filteredOn(t -> t.getType() == PaymentType.SETTLEMENT)
                 .singleElement().satisfies(t -> {

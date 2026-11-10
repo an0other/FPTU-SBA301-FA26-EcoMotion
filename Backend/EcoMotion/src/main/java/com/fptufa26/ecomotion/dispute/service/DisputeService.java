@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 
 public interface DisputeService {
+    void resolveYearlyReview(Long disputeId, Long adminId, String resolution);
 
     DisputeOpenedResponse open(Booking booking, User raisedBy, DisputeCategory category, BookingCharge charge);
 

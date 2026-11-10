@@ -66,6 +66,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     @Query("SELECT COUNT(b) FROM Booking b WHERE b.createdAt >= :from AND b.createdAt < :to")
     long countBookingsCreatedBetween(@Param("from") Instant from, @Param("to") Instant to);
 
+    @Query("SELECT MIN(COALESCE(b.actualEndAt, b.createdAt)) FROM Booking b " +
+           "WHERE b.status = com.fptufa26.ecomotion.booking.enums.BookingStatus.COMPLETED")
+    Instant findEarliestCompletedBookingDate();
+
     @Override
     @EntityGraph(attributePaths = {
             "vehicle", "renter", "renter.user", "driver", "driver.user", "plan"

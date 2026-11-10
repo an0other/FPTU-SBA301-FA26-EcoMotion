@@ -27,6 +27,7 @@ public interface PaymentRequestService {
     void finalizeYearlyObligations(Long bookingId, BigDecimal balance);
     boolean yearlyBalancePaid(Long bookingId, BigDecimal balance);
     void recordYearlyRefund(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long renterUserId);
+    void recordYearlyRefundByAdmin(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long adminId);
 
 
     boolean yearlyInitialPaymentsComplete(Long bookingId);
@@ -74,6 +75,9 @@ public interface PaymentRequestService {
     PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, int offset, int limit);
 
     PaymentRequestResponse confirmPayment(Long paymentRequestId, Long currentUserId, ConfirmPaymentRequest request);
+
+    PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
+            com.fptufa26.ecomotion.finance.dto.request.BankTransferReconciliationRequest request);
 
     PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request);
 

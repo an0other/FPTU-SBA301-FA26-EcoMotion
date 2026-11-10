@@ -6,6 +6,12 @@ const STATUS_BADGES = {
   REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
+function resolveValidImageUrl(url) {
+  if (!url || typeof url !== 'string') return null
+  if (/^\/images\/(portrait|license)-\d+\.webp$/i.test(url.trim())) return null
+  return url
+}
+
 export default function DriverDetailModal({
   driver,
   onClose,
@@ -18,6 +24,8 @@ export default function DriverDetailModal({
 }) {
   if (!driver) return null
 
+  const portraitUrl = resolveValidImageUrl(driver.portraitUrl)
+  const licenseImageUrl = resolveValidImageUrl(driver.licenseImageUrl)
   const isExpired = driver.licenseExpiry ? new Date(driver.licenseExpiry) < new Date() : false
 
   return (
@@ -28,14 +36,14 @@ export default function DriverDetailModal({
           <div className="flex items-center gap-3">
             <div
               className={`h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xs ${
-                driver.portraitUrl ? 'cursor-pointer hover:ring-2 hover:ring-brand-500' : ''
+                portraitUrl ? 'cursor-pointer hover:ring-2 hover:ring-brand-500' : ''
               }`}
-              onClick={() => driver.portraitUrl && onPreviewImage && onPreviewImage(driver.portraitUrl)}
-              title={driver.portraitUrl ? 'Bấm để phóng to ảnh' : ''}
+              onClick={() => portraitUrl && onPreviewImage && onPreviewImage(portraitUrl)}
+              title={portraitUrl ? 'Bấm để phóng to ảnh' : ''}
             >
-              {driver.portraitUrl ? (
+              {portraitUrl ? (
                 <img
-                  src={driver.portraitUrl}
+                  src={portraitUrl}
                   alt={driver.userFullName}
                   className="h-full w-full object-cover"
                   onError={(e) => {
@@ -48,7 +56,7 @@ export default function DriverDetailModal({
               ) : null}
               <div
                 className="flex h-full w-full items-center justify-center text-slate-400"
-                style={{ display: driver.portraitUrl ? 'none' : 'flex' }}
+                style={{ display: portraitUrl ? 'none' : 'flex' }}
               >
                 <IconUsers className="h-6 w-6" />
               </div>
@@ -204,12 +212,12 @@ export default function DriverDetailModal({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {/* License Front */}
               <div
-                onClick={() => driver.licenseImageUrl && onPreviewImage(driver.licenseImageUrl)}
+                onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
                 className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
               >
-                {driver.licenseImageUrl ? (
+                {licenseImageUrl ? (
                   <img
-                    src={driver.licenseImageUrl}
+                    src={licenseImageUrl}
                     alt="GPLX Mặt trước"
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   />
@@ -223,12 +231,12 @@ export default function DriverDetailModal({
 
               {/* License Back / Alternate */}
               <div
-                onClick={() => driver.licenseImageUrl && onPreviewImage(driver.licenseImageUrl)}
+                onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
                 className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
               >
-                {driver.licenseImageUrl ? (
+                {licenseImageUrl ? (
                   <img
-                    src={driver.licenseImageUrl}
+                    src={licenseImageUrl}
                     alt="GPLX Tài liệu"
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   />
@@ -242,12 +250,12 @@ export default function DriverDetailModal({
 
               {/* Portrait */}
               <div
-                onClick={() => driver.portraitUrl && onPreviewImage(driver.portraitUrl)}
+                onClick={() => portraitUrl && onPreviewImage(portraitUrl)}
                 className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
               >
-                {driver.portraitUrl ? (
+                {portraitUrl ? (
                   <img
-                    src={driver.portraitUrl}
+                    src={portraitUrl}
                     alt="Ảnh chân dung"
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   />

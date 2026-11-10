@@ -32,6 +32,9 @@ public class YearlyWorkflow {
     private Long totalKm;
     private Long settlementEvidenceId;
     private Long refundEvidenceId;
+    private Long refundReviewDisputeId;
+    @Column(precision = 14, scale = 2)
+    private BigDecimal refundVerifiedReceived = BigDecimal.ZERO;
     private long completedKm;
     private LocalDate returnedOn;
     private LocalDate failureOn;

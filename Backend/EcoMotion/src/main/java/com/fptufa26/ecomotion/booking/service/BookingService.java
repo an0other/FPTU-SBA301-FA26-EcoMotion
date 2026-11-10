@@ -104,4 +104,5 @@ public interface BookingService {
     BigDecimal sumEscrowDeposits(Instant from, Instant to);
     long countCompletedBookings(Instant from, Instant to);
     long countTotalBookings(Instant from, Instant to);
+    Instant findEarliestCompletedBookingDate();
 }

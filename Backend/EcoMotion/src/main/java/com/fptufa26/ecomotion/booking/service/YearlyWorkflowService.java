@@ -6,6 +6,19 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface YearlyWorkflowService {
+    View disputeRefund(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.RefundComplaint request);
+    View escalateIncident(Long userId, String code, Long incidentId, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Complaint request);
+    View adjudicateRefund(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.RefundRuling request);
+    View adjudicateIncident(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.IncidentRuling request);
+    View adminView(Long adminId, String code);
+    List<ReviewCase> reviewCases(Long userId, String code);
+    record ReviewCase(Long id, String category, String status, String description, List<String> evidenceUrls, String resolution) {}
+    View disputeSettlement(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Complaint request);
+    View replyReview(Long userId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.Reply request);
+    View adjudicateSettlement(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.SettlementRuling request);
+    void adjudicateCancellation(Long adminId, String code, com.fptufa26.ecomotion.booking.dto.request.YearlyReviewRequests.CancellationRuling request);
+    java.util.List<com.fptufa26.ecomotion.finance.service.FinancialAuditService.Entry> reviewHistory(Long userId, String code);
+
     View get(Long userId, String code);
     Preview preview(Long userId, String code, PreviewRequest request);
     View terms(Long userId, String code, Terms request);
@@ -71,5 +84,6 @@ public interface YearlyWorkflowService {
                 int graceDays, BigDecimal lateDailyRate, BigDecimal roundingUnit, String returnMode,
                 LocalDate returnedOn, LocalDate failureOn, Long finalKm, Long returnEvidenceId, Long totalKm, long completedKm, Long currentInitialKm,
                 Money money, Long settlementEvidenceId, Long refundEvidenceId, String refundReference,
-                List<Incident> incidents, List<Replacement> replacements) {}
+                List<Incident> incidents, List<Replacement> replacements,
+                BigDecimal refundVerifiedReceived, BigDecimal refundRemaining) {}
 }

@@ -21,4 +21,5 @@ public interface IdentityVerificationAttemptService {
     IdentityAttemptResponse cancel(Long userId, UUID attemptId, long version);
 
     byte[] evidence(Long userId, UUID attemptId, String kind);
+    byte[] storedEvidence(String key, String kind);
 }

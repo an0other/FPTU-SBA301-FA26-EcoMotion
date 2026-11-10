@@ -94,6 +94,17 @@ public class IdentityVerificationAttempt {
 
     @Column(name = "back_sha256", length = 64)
     private String backSha256;
+    @Column(length = 64)
+    private String videoSha256;
+    @Column(length = 64)
+    private String requiredPreviousFrontSha;
+    @Column(length = 64)
+    private String requiredPreviousBackSha;
+    @Column(length = 100)
+    private String requiredPreviousVideoSha;
+    @org.hibernate.annotations.ColumnDefault("false")
+    @Column(nullable = false)
+    private boolean evidenceRetained;
 
     @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "document_json", columnDefinition = "text")
@@ -117,6 +128,13 @@ public class IdentityVerificationAttempt {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    public boolean hasRequiredNewEvidence() {
+        return (requiredPreviousFrontSha == null || !java.util.Objects.equals(requiredPreviousFrontSha, frontSha256)
+                || !java.util.Objects.equals(requiredPreviousBackSha, backSha256))
+                && (requiredPreviousVideoSha == null || !java.util.Objects.equals(requiredPreviousVideoSha,
+                        videoSha256 == null ? videoKey : videoSha256));
+    }
 
     @PrePersist
     void onCreate() {

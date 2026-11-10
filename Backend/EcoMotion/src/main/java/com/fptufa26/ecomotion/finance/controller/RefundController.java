@@ -8,7 +8,7 @@ import com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse;
 import com.fptufa26.ecomotion.finance.dto.response.RefundProofResponse;
 import com.fptufa26.ecomotion.finance.dto.response.RefundResponse;
 import com.fptufa26.ecomotion.finance.service.RefundService;
-import com.fptufa26.ecomotion.finance.service.implement.RefundReceiptService;
+import com.fptufa26.ecomotion.finance.service.RefundReceiptService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;

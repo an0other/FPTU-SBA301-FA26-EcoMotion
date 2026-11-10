@@ -37,7 +37,7 @@ flowchart TD
 
 Với Provider, thao tác xác nhận tại bước này chỉ chuẩn bị/sàng lọc dữ liệu, không tạo một lượt duyệt Admin riêng. `READY_TO_SUBMIT` chưa có nghĩa Provider đã hoạt động.
 
-Camera MVP dùng hướng dẫn theo thời gian. Giao diện không đo góc đầu trực tiếp; Python kiểm tra động tác sau khi upload.
+Camera MVP dùng hướng dẫn theo thời gian. Giao diện không đo góc đầu trực tiếp; Python kiểm tra động tác sau khi upload. Trạng thái đã upload chưa đủ để bật gửi hồ sơ: backend kiểm tra ngưỡng điểm và yêu cầu bằng chứng mới của Admin.
 
 ### Bước 2 — Thông tin dịch vụ
 
@@ -45,7 +45,7 @@ Camera MVP dùng hướng dẫn theo thời gian. Giao diện không đo góc đ
 - Chọn vị trí trên bản đồ; có lựa chọn định vị hiện tại trong bộ chọn bản đồ, hoặc mở tọa độ thủ công.
 - Ngân hàng là mục tùy chọn. Nếu khai báo phải nhập đủ bộ thông tin.
 - Có thể lưu hồ sơ khi chưa được Admin duyệt. Nút lưu nháp hiện vẫn yêu cầu dữ liệu hợp lệ theo DTO, không phải lưu mọi form đang bỏ trống.
-- `Lưu và tiếp tục` lưu phiên bản mới rồi chuyển sang bước kiểm tra.
+- `Lưu thông tin` lưu form hợp lệ; `Lưu và tiếp tục` lưu phiên bản mới rồi chuyển sang bước kiểm tra. Không dùng tên Lưu nháp khi form còn yêu cầu đủ trường bắt buộc.
 
 ### Bước 3 — Kiểm tra hồ sơ
 
@@ -59,7 +59,7 @@ Backend kiểm tra OTP, thông tin dịch vụ và kết quả AI; gắn `submit
 
 - `SUBMITTED`: hồ sơ đang chờ; không sửa bản hồ sơ đã gửi.
 - `NEEDS_CHANGES` hoặc `REJECTED`: đọc phản hồi, sửa/bổ sung và gửi lại.
-- `APPROVED`: refresh session, nhận quyền phù hợp rồi vào dashboard Provider.
+- `APPROVED`: refresh session, nhận quyền phù hợp rồi vào dashboard Provider. Nếu chưa có ngân hàng nhận tiền, hoàn thiện checklist tại mục Tài chính trước khi chấp nhận đơn thuê.
 
 ## 3. Admin duyệt chung
 
@@ -78,6 +78,8 @@ Với hồ sơ mới chưa có danh tính được duyệt, `APPROVE` thực hi�
 5. Lưu quyết định, người duyệt, thời gian và snapshot thông tin dịch vụ vào lịch sử.
 
 Lỗi ở bất kỳ bước nào làm rollback transaction. Không kích hoạt Provider chỉ vì AI đã đạt điểm.
+
+Yêu cầu bổ sung/từ chối phải có ghi chú hướng dẫn. Mỗi lượt duyệt mới lưu snapshot form và CCCD/video; Admin có thể mở lại đúng bằng chứng cũ từ lịch sử.
 
 ## 4. Bổ sung và gửi lại
 

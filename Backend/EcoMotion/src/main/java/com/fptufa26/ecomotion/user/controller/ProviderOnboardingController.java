@@ -86,22 +86,40 @@ public class ProviderOnboardingController {
     @PreAuthorize("hasRole('ADMIN')")
     public ProviderApplicationResponse review(@AuthenticationPrincipal SecurityUser user, @PathVariable Long userId,
             @Valid @RequestBody ReviewRequest request) {
-        return onboarding.review(user.getUserId(), userId, request.version(), request.decision(), request.reasonCode());
+        return onboarding.review(user.getUserId(), userId, request.version(), request.decision(), request.reasonCode(), request.note());
     }
 
     @GetMapping("/api/admin/provider-applications/{userId}/history")
     @PreAuthorize("hasRole('ADMIN')")
     public List<ReviewHistory> history(@AuthenticationPrincipal SecurityUser user, @PathVariable Long userId) {
         return onboarding.history(user.getUserId(), userId).stream().map(review -> new ReviewHistory(
-                review.getApplicationVersion(), review.getAdminId(), review.getDecision(), review.getReasonCode(), review.getReviewedAt())).toList();
+                review.getApplicationVersion(), review.getAdminId(), review.getDecision(), review.getReasonCode(), review.getReviewedAt(),
+                review.getId(), review.getReviewNote(), review.getIdentitySnapshotJson() != null, review.getProfileSnapshotJson())).toList();
+    }
+
+    @GetMapping("/api/admin/provider-applications/{userId}/history/{reviewId}/identity")
+    @PreAuthorize("hasRole('ADMIN')")
+    public com.fptufa26.ecomotion.verification.identity.dto.response.IdentityAttemptResponse historyIdentity(
+            @AuthenticationPrincipal SecurityUser user, @PathVariable Long userId, @PathVariable Long reviewId) {
+        return onboarding.historyIdentity(user.getUserId(), userId, reviewId);
+    }
+
+    @GetMapping("/api/admin/provider-applications/{userId}/history/{reviewId}/evidence/{kind}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public org.springframework.http.ResponseEntity<byte[]> historyEvidence(@AuthenticationPrincipal SecurityUser user,
+            @PathVariable Long userId, @PathVariable Long reviewId, @PathVariable String kind) {
+        return org.springframework.http.ResponseEntity.ok().header("Cache-Control", "no-store")
+                .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
+                .body(onboarding.historyEvidence(user.getUserId(), userId, reviewId, kind));
     }
 
     public record VersionRequest(@NotNull @Min(0) Long version) { }
     public record BankOption(String code, String name, int minimumAccountLength, int maximumAccountLength) { }
     public record ReviewRequest(@NotNull @Min(0) Long version,
             @NotBlank @io.swagger.v3.oas.annotations.media.Schema(allowableValues={"APPROVE","NEEDS_CHANGES","REJECT","REOPEN"}) String decision,
-            String reasonCode) { }
+            String reasonCode, @Size(max=1000) String note) { }
     public record PhoneRequest(@NotBlank @Pattern(regexp = "^0[0-9]{9,10}$") String phone) { }
     public record OtpRequest(@NotBlank String otp) { }
-    public record ReviewHistory(Long version, Long adminId, String decision, String reasonCode, java.time.Instant reviewedAt) { }
+    public record ReviewHistory(Long version, Long adminId, String decision, String reasonCode, java.time.Instant reviewedAt,
+            Long id, String note, boolean hasIdentitySnapshot, String profileSnapshotJson) { }
 }

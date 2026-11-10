@@ -1,6 +1,6 @@
 # Đăng ký Provider cá nhân
 
-Tài liệu đối chiếu mã nguồn ngày 09/11/2026. Luồng hiện tại: chuẩn bị CCCD/video, nhập thông tin dịch vụ, gửi một hồ sơ và Admin duyệt một lần.
+Tài liệu đối chiếu mã nguồn ngày 10/11/2026, sau khi cập nhật code xử lý bổ sung hồ sơ, snapshot bằng chứng và thiết lập nhận tiền. Luồng hiện tại: chuẩn bị CCCD/video, nhập thông tin dịch vụ, gửi một hồ sơ và Admin duyệt một lần.
 
 | Tài liệu | Nội dung |
 | --- | --- |

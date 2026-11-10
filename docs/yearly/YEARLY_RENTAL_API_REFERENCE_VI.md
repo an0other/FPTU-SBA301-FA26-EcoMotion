@@ -1,5 +1,7 @@
 # API gói năm — mô tả và cách sử dụng
 
+> Kịch bản seed cập nhật 10/11/2026 dùng 3 renter, Provider và Admin. Booking MONTHLY/HAPPY-END phục vụ vận hành và quyết toán; EM-Y2-CANCEL thuộc renter happy-end, đã trả cọc/kỳ đầu nhưng chưa bàn giao. Hủy đơn này dùng API hủy trước nhận và phân xử YEARLY_CANCELLATION, không dùng returns/settlement của hợp đồng đã nhận xe. Thứ tự màn hình, dữ liệu mẫu và cách xử lý thay đổi nằm tại [hướng dẫn demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).
+
 Đối chiếu controller/service hiện tại ngày 07/11/2026. Chuẩn URL của luồng này là **/api**, không thêm /v1 trong request mới. Các alias /api/v1 đã có ở API dùng chung được giữ để tương thích; tài liệu này chỉ dùng đường dẫn chính /api.
 
 Nghiệp vụ: [đặc tả](YEARLY_RENTAL_BUSINESS_SPEC_VI.md). Tài khoản và thao tác demo: [hướng dẫn demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).
@@ -289,3 +291,41 @@ Gói năm chưa cấu hình bán kính/đơn giá giao xe dùng giá trị mặc
 
 
 Ảnh minh chứng giao/nhận, sự cố, hóa đơn và hoàn tiền của gói năm được lưu local qua FileStorageService (app.upload.provider=local, app.upload.dir giống ảnh GPLX). POST /api/bookings/{code}/evidences/upload nhận JPG/PNG, tên UUID; GET /api/bookings/{code}/evidences/{id}/file trả binary với kiểm tra quyền và no-store. Client cần gửi Bearer token, không mở URL local bảo vệ trực tiếp bằng img không có Authorization. Không cần Cloudinary cho luồng minh chứng này.
+
+## API bổ sung ngày 10/11/2026: report và tiền hoàn
+
+R là `/api/renter/yearly-bookings/{code}`, A là `/api/admin/yearly-bookings/{code}`. Tất cả có Bearer token; R chỉ renter sở hữu booking, A chỉ Admin đang hoạt động.
+
+| Method | Endpoint | Body |
+| --- | --- | --- |
+| POST | R/refund/review | requestId, version của workflow, note, evidenceId, receivedAmount |
+| POST | R/incidents/{incidentId}/review | requestId, version của workflow, note, evidenceId |
+| POST | A/reviews/refund | requestId, version, disputeId, outcome, receivedAmount, note, evidenceReference |
+| POST | A/reviews/incident | requestId, version, disputeId, incidentId, outcome, approvedAmount, note, evidenceReference |
+
+`receivedAmount` là số tiền cộng dồn. Trong request renter đó chỉ là khai báo; trong kết luận Admin đó là số đã được xác minh.
+
+- Refund outcome: `HOLD`, `FAILED_VERIFIED`, `PARTIAL_RECEIVED`, `CONFIRMED_RECEIVED`.
+- Incident outcome: `HOLD`, `FIXED`, `RENTER_PAID`, `REIMBURSE`, `END_PROVIDER`, `TRANSFER_VERIFIED`, `FAILED_TRANSFER`.
+- `REIMBURSE` mới có approvedAmount dương, không vượt hóa đơn. Hai outcome đối soát chuyển hoàn ứng giữ nguyên nghĩa vụ cũ, approvedAmount gửi 0.
+- `note` bắt buộc, tối đa 1000 ký tự; `evidenceReference` bắt buộc, tối đa 500; requestId tối đa 80. EvidenceId phải thuộc booking.
+- Response là workflow trong ApiResponse, có thêm `refundVerifiedReceived` và `refundRemaining`.
+- GET A/review và GET R/reviews/history hiện có tiếp tục được dùng để xem hồ sơ/audit.
+- `YEARLY_REFUND` và `YEARLY_INCIDENT` không được kết luận qua API dispute chung; phải dùng API áp dụng kết luận gói năm để đồng bộ trạng thái.
+- Gửi lại đúng payload dùng cùng requestId. Khi đổi nội dung phải dùng requestId khác. Không retry mù bằng version mới để né kiểm tra trùng.
+
+Ví dụ renter báo mới nhận một phần:
+
+```json
+{
+  "requestId": "<uuid>",
+  "version": 8,
+  "receivedAmount": 1000000,
+  "note": "Da nhan mot phan, con thieu so tien theo quyet toan.",
+  "evidenceId": 123
+}
+```
+
+Khi thiếu ngân hàng nhận tiền, API Provider chấp nhận booking trả conflict với hướng dẫn thiết lập tại Tài chính. Không bỏ điều kiện này bằng cách upload lại hợp đồng.
+
+Các bảng hiện hữu cần migration `20261110_yearly_provider_business_closure.sql`; không thực thi schema.sql trên dữ liệu cần giữ. Các số tiền ví dụ chỉ minh họa request.

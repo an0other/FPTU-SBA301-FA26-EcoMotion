@@ -232,18 +232,20 @@ Các điểm đã phát hiện tại bbdfab2:
 - Hoa hồng báo cáo hiện lọc COMPLETED và cộng tiền vào; khi bổ sung cọc/chi phí ngoài thuê phải phân loại, không mặc định mọi PAID IN là tiền thuê.
 - Hủy trước nhận xe chưa có chính sách mới được chốt; không suy diễn từ quy tắc trả sớm sau nhận xe. Giữ/đánh giá luồng cũ riêng, không tuyên bố hoàn toàn bộ là quyết định đã duyệt.
 
-## 17. Demo: 3 renter + 1 provider
+## 17. Demo: 3 renter + 1 Provider + 1 Admin
 
-Chỉ dùng renter.yearly.new@ecomotion.vn (108), renter.yearly.monthly@ecomotion.vn (109), renter.yearly.happy-end@ecomotion.vn (110) và provider.a@ecomotion.vn.
+Chỉ dùng renter.yearly.new@ecomotion.vn (108), renter.yearly.monthly@ecomotion.vn (109), renter.yearly.happy-end@ecomotion.vn (110), provider.a@ecomotion.vn và admin01@ecomotion.vn. Không tạo renter riêng cho failure/cancel.
 
-- New: đi từ GPLX/đặt xe đến nhận xe; có thể kết thúc do lỗi provider trên chính booking này.
+- New: có B2 demo sẵn, đi từ đặt xe đến nhận xe; có thể kết thúc do lỗi Provider trên chính booking này. Kiểm tra OCR thật là phần riêng.
 - Monthly: thanh toán → hoàn bảo trì → renter tự trả sửa chữa → đổi xe, đóng từng report trước bước tiếp theo → cuối cùng trả sớm.
 - Happy-end: đã trả đủ năm, kiểm định → phí trễ/phụ phí nếu có → quyết toán → hoàn cọc → hoàn tất.
+- Cancel: EM-Y2-CANCEL thuộc cùng renter happy-end, xe 51Y-00011 riêng, đã trả cọc/kỳ đầu nhưng chưa nhận xe. Ngày nhận sau hạn gốc happy-end và ít nhất một tuần từ ngày tạo fixture, trong cửa sổ đặt xe hiện hành.
 - Provider chung xử lý tất cả thao tác bên cho thuê.
+- Admin xử lý các hồ sơ sự cố, tiền hoàn, quyết toán hoặc hủy có tranh chấp.
 
-Như vậy mỗi renter chỉ có một hợp đồng đang chạy. Ba kiểu kết thúc được trình diễn trên ba booking độc lập, không cần tài khoản cho từng biến thể số học. Các ca tháng 11/12, dư/thiếu tiền là kiểm tra bổ sung hoặc lựa chọn tại thời điểm quyết toán, không dựng đồng thời nhiều hợp đồng trùng lịch.
+Mỗi renter có tối đa một booking đã nhận xe trong fixture ban đầu; renter happy-end có thêm booking tương lai chưa bàn giao để demo hủy, không trùng khoảng thuê gốc. Ba kiểu kết thúc được trình diễn trên ba booking độc lập; các biến thể tiền/ngày không cần tài khoản riêng.
 
-Seeder không dùng biến env chọn nhánh. Không tạo thêm các tài khoản nhánh đã từng đề xuất; chuẩn bị DB demo sạch bằng create-drop theo lựa chọn người dùng, không cần logic đổi email hoặc dọn seed cũ. Xem [hướng dẫn demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md) để theo dõi thứ tự tránh kết thúc booking trước các bước tiếp tục thuê.
+Seeder không dùng biến env chọn nhánh. Booking đã có được giữ nguyên, kể cả ngày và tiến trình; không reset khi restart. Xe bị chiếm lịch hoặc ngày CANCEL không hợp lệ làm fixture tương ứng bị bỏ qua kèm cảnh báo. Chỉ khởi tạo lại trên DB demo riêng khi chủ động chuẩn bị lại dữ liệu. Xem [hướng dẫn demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md) để theo dõi thứ tự màn hình, số tiền và nhánh xử lý khi thay đổi dữ liệu.
 
 ### Kiểm thử biên và chống sai nghiệp vụ
 
@@ -274,3 +276,17 @@ Bộ seed dùng ba renter 108–110 và một provider; các bước dùng chung
 
 
 Danh sách endpoint, body và thứ tự gọi hiện hành: [API gói năm — chuẩn /api](YEARLY_RENTAL_API_REFERENCE_VI.md). Các bảng route đề xuất ban đầu cần đối chiếu với tài liệu API này.
+
+## Bổ sung xử lý ngoại lệ đã triển khai ngày 10/11/2026
+
+- Renter có thể báo chưa nhận/nhận thiếu tiền hoàn sau khi Provider ghi nhận chuyển. Số tiền renter khai đã nhận không tự trở thành số tiền hệ thống xác minh.
+- Hồ sơ `YEARLY_REFUND` chặn xác nhận/đóng hợp đồng và chuyển lại trong khi đang đối soát. Admin chọn giữ chờ, xác minh chuyển thất bại/tiền quay về, xác minh nhận một phần hoặc xác minh đã nhận đủ.
+- Với hoàn một phần, số tiền Admin xác minh là tổng cộng dồn, không được giảm hoặc vượt tổng phải hoàn. Chỉ mở chuyển phần còn thiếu khi giao dịch cũ không còn treo; lần chuyển lại dùng mã giao dịch mới. Không tự chuyển lại nếu chứng cứ chưa rõ hoặc chuyển nhầm chưa thu hồi.
+- Khi renter xác nhận đủ hoặc Admin xác minh đủ, hệ thống ghi khoản hoàn một lần theo khóa giao dịch nghiệp vụ. Lượt Admin đối soát dùng `ADMIN_RECONCILED`, không gán thành xác nhận của renter.
+- Renter có thể chuyển report chưa giải quyết sang Admin qua hồ sơ `YEARLY_INCIDENT`. Admin có thể giữ chờ, đóng report đã xử lý, yêu cầu hoàn ứng, kết thúc vì phía Provider, hoặc đối soát khoản hoàn ứng đã chuyển. Lý do, tham chiếu bằng chứng, người xử lý và trạng thái trước được ghi audit.
+- Khi report đang được Admin xem xét, hai bên không tự thay kết luận hoặc tiếp tục đổi xe; vẫn cho hủy đề nghị đổi xe đang chờ để có thể phân xử. Admin không kết luận report khi còn lượt đổi xe chưa xử lý/hủy.
+- Khoản hoàn ứng đã có kết luận nhưng đang chờ chuyển/xác nhận nhận tiền không chặn riêng việc yêu cầu trả xe. Khoản đó vẫn phải hoàn tất trước khi đóng tài chính. Report OPEN hoặc tranh chấp đang mở vẫn chặn bước chốt liên quan và có đường yêu cầu Admin xử lý.
+- Giao diện hiển thị ngày áp dụng bảng ước tính, các khoản tiền và số hoàn còn thiếu. Bảng trước kiểm định không phải số cuối cùng.
+- Provider chưa có ngân hàng nhận tiền phải thiết lập ở Tài chính trước khi chấp nhận đơn, không đợi đến lúc renter upload hợp đồng mới báo thiếu.
+
+Các thao tác này là phân xử thủ công có bằng chứng, không tự giám định và không tự động kết luận đúng/sai theo timeout. API và checklist kiểm tra nằm trong hai tài liệu cùng thư mục. Cần migration `20261110_yearly_provider_business_closure.sql` để cập nhật cột dữ liệu và CHECK constraint nhóm khiếu nại trên database hiện hữu.

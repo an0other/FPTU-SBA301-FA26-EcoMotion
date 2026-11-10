@@ -29,6 +29,11 @@ public class ProviderApplicationReview {
     @Convert(converter = com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter.class)
     @Column(name = "profile_snapshot_json", columnDefinition = "text")
     private String profileSnapshotJson;
+    @Column(length = 1000)
+    private String reviewNote;
+    @Convert(converter = com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter.class)
+    @Column(columnDefinition = "text")
+    private String identitySnapshotJson;
 
     @Column(name = "submitted_attempt_id")
     private java.util.UUID submittedAttemptId;
