@@ -300,6 +300,8 @@ export default function CustomerPaymentPage() {
     ? { label: 'Chờ thanh toán kỳ tháng', bg: STATUS_BADGES.PENDING.bg }
     : yearlyUpfront && selectedRequest.status === 'PENDING'
       ? { label: 'Chờ thanh toán trả trước', bg: STATUS_BADGES.PENDING.bg }
+    : isFinalBalance && selectedRequest.status === 'PENDING'
+      ? { label: 'Chờ thanh toán quyết toán', bg: STATUS_BADGES.PENDING.bg }
     : STATUS_BADGES[selectedRequest.status]
     || { label: selectedRequest.status, bg: 'bg-slate-100 text-slate-700 border-slate-300' }
 

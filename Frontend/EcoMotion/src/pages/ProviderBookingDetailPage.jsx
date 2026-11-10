@@ -23,6 +23,7 @@ import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary
 import TripEndConfirmationBanner from '../components/booking/TripEndConfirmationBanner'
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 import { paymentStatusLabel } from '../utils/bookingStatus'
+import { estimatedGrandTotal } from '../utils/bookingFinancialSummary'
 import { CHARGE_TYPE_LABELS, formatChargeQuantity, PAYMENT_TYPE_LABELS } from '../utils/paymentDisplay'
 
 // Trạng thái giao dịch của BE (PaymentStatus) hiển thị bằng tiếng Việt.
@@ -674,10 +675,10 @@ export default function ProviderBookingDetailPage() {
                 <div className="mt-3 rounded-lg border border-brand-200 bg-slate-50 p-4 text-center">
                   <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Tổng chi phí</span>
                   <span className="text-2xl font-black font-mono text-brand-900 mt-1 block">
-                    {formatVnd(booking.totalAmount)}
+                    {formatVnd(estimatedGrandTotal({ totalAmount: booking.totalAmount, pickupFee: booking.pickupFee, charges: booking.charges }))}
                   </span>
                   <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán & quyết toán' : 'Bao gồm tiền thuê gốc & phụ phí'}
+                    {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán & quyết toán' : 'Tiền thuê, phí đón và phụ phí chưa miễn'}
                   </span>
                 </div>
               </div>

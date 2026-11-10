@@ -367,7 +367,7 @@ export default function AssignDriverModal({ booking, currentDriverId, isOpen, on
                                 ETA: {candidate.etaMinutes != null ? `${candidate.etaMinutes} phút` : '—'}
                               </div>
                               <div className="text-[11px] text-slate-500">
-                                Khoảng cách: {candidate.distanceKm != null ? `${candidate.distanceKm} km` : '—'}
+                                Khoảng cách: {candidate.distanceKm != null ? `${Number(candidate.distanceKm).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} km` : '—'}
                               </div>
                             </div>
                           </div>

@@ -87,3 +87,18 @@ test('không cộng phí đón hai lần khi đã có dòng charge OUT_OF_RADIUS
   assert.equal(paid.find((l) => l.key === 'grand').amount, 1580000)
   assert.equal(paid.find((l) => l.key === 'remaining').amount, 1142000)
 })
+
+test('estimatedGrandTotal: tổng gồm phí đón và phụ phí chưa miễn, nhận cả waived lẫn isWaived', async () => {
+  const { estimatedGrandTotal } = await import('../src/utils/bookingFinancialSummary.js')
+  // Trang "đã gửi": chưa có charge phí đón, dùng pickupFee
+  assert.equal(estimatedGrandTotal({ totalAmount: 1460000, pickupFee: 90000, charges: [] }), 1550000)
+  // Nhà xe: charge OUT_OF_RADIUS đã có, không cộng pickupFee lần nữa; khoản đã miễn (waived) bị loại
+  assert.equal(estimatedGrandTotal({
+    totalAmount: 1460000, pickupFee: 90000,
+    charges: [
+      { chargeType: 'BASE_RENTAL', amount: 1460000 },
+      { chargeType: 'OUT_OF_RADIUS', amount: 90000, waived: false },
+      { chargeType: 'OVERTIME', amount: 1320000, waived: true },
+    ],
+  }), 1550000)
+})
