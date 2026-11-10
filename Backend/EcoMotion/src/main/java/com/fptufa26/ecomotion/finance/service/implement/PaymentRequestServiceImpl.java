@@ -680,12 +680,14 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
 
         BookingStatus bookingStatus = booking.getStatus();
-        boolean cancelling = bookingStatus == BookingStatus.CANCELLED
-                || bookingStatus == BookingStatus.CANCELLATION_REVIEW;
+        // A cancellation under review may still carry an open receipt: the provider must be able to
+        // record the money that actually arrived and have it refunded, instead of being blocked.
+        boolean cancelling = bookingStatus == BookingStatus.CANCELLATION_REVIEW;
+        boolean terminalCancellation = bookingStatus == BookingStatus.CANCELLED;
         BigDecimal alreadyPaid = pr.getPaidAmount() == null ? BigDecimal.ZERO : pr.getPaidAmount();
         boolean fullyCollected = pr.getStatus() == PaymentRequestStatus.CONFIRMED
                 || alreadyPaid.compareTo(pr.getAmount()) >= 0;
-        if (cancelling || fullyCollected) {
+        if (terminalCancellation || fullyCollected) {
             throw new ConflictException("Khoản cọc đã được ghi nhận. Hãy xử lý hoàn tiền.");
         }
         if (pr.getStatus() == PaymentRequestStatus.REJECTED
@@ -698,6 +700,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                     t.getPaymentRequest() != null && t.getPaymentRequest().getId().equals(paymentRequestId)
                             && t.getStatus() == PaymentStatus.PAID && t.getProcessingNote() != null
                             && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED"))) {
+            if (cancelling) {
+                throw new ConflictException("Khoản cọc đã được ghi nhận. Hãy xử lý hoàn tiền.");
+            }
             throw new InvalidPaymentOperationException("Yêu cầu thanh toán đã được xử lý hoặc không còn hiệu lực");
         }
 
@@ -731,7 +736,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new InvalidPaymentOperationException("Khoản xác nhận này đã được ghi nhận. Vui lòng tải lại thông tin thanh toán.");
         }
 
-        BigDecimal appliedAmount = receivedAmount.min(neededAmount);
+        // Money received for a cancelled booking is never applied to the rental obligation; it is
+        // refunded in full right after it is recorded.
+        BigDecimal appliedAmount = cancelling ? BigDecimal.ZERO : receivedAmount.min(neededAmount);
         PaymentTransaction tx = new PaymentTransaction();
         tx.setBooking(pr.getBooking());
         tx.setType(pr.isSecurityDeposit() ? PaymentType.SECURITY_DEPOSIT
@@ -757,7 +764,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         tx.setBankAccountNoSnapshot(maskAccountNumber(pr.getAccountNumberSnapshot()));
         tx.setBankAccountHolderSnapshot(pr.getAccountHolderSnapshot());
 
-        String reconciliationReason = prepareManualPaymentApplication(pr, booking, receivedAmount.compareTo(neededAmount) >= 0);
+        String reconciliationReason = cancelling ? null
+                : prepareManualPaymentApplication(pr, booking, receivedAmount.compareTo(neededAmount) >= 0);
         if (reconciliationReason != null) {
             if (request.receivedAmount() == null) {
                 throw new InvalidPaymentOperationException("Cần nhập số tiền thực nhận để ghi nhận khoản tiền cần đối soát");
@@ -779,10 +787,11 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             return toResponse(paymentRequestRepository.save(pr));
         }
 
-        BigDecimal newPaidTotal = pr.getPaidAmount().add(appliedAmount).min(pr.getAmount());
+        BigDecimal newPaidTotal = pr.getPaidAmount()
+                .add(cancelling ? receivedAmount : appliedAmount).min(pr.getAmount());
         int comparison = newPaidTotal.compareTo(pr.getAmount());
 
-        if (comparison >= 0) {
+        if (!cancelling && comparison >= 0) {
             if (pr.getPaymentType() == PaymentRequestType.DEPOSIT) {
                 if (!pr.isSecurityDeposit() || yearlyFirstMonthPaid(booking.getId())) {
                     booking.setStatus(BookingStatus.CONFIRMED);
@@ -816,6 +825,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         } else if (comparison < 0) {
             pr.setStatus(PaymentRequestStatus.PARTIALLY_PAID);
         }
+        if (cancelling) {
+            pr.setIssueNote("Đã ghi nhận khoản tiền thực nhận của đơn đã hủy; hệ thống tạo hoàn 100%.");
+        }
 
         // Mark latest evidence as accepted if present
         if (!pr.getEvidences().isEmpty()) {
@@ -827,11 +839,33 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         }
 
         PaymentRequest saved = paymentRequestRepository.save(pr);
+        if (cancelling) {
+            refundReceivedAfterCancellation(booking, tx, provider.getUser());
+        }
         bookingNotificationService.changed(booking, "PAYMENT_VERIFIED");
         log.info("Provider {} confirmed payment for PaymentRequest #{} with amount={}",
                 provider.getId(), paymentRequestId, receivedAmount);
 
         return toResponse(saved);
+    }
+
+    /**
+     * A booking cancelled while a deposit receipt was still being verified must still be closed
+     * financially: record the money that arrived and immediately reserve a 100% refund, exactly like
+     * a provider-initiated cancellation. The refund follows the provider's manual transfer path when
+     * the source was a bank transfer, and the VNPAY path when the receipt came from the gateway.
+     */
+    private void refundReceivedAfterCancellation(Booking booking, PaymentTransaction receipt, User actor) {
+        BigDecimal refundable = refundEventService.remainingReceived(booking.getId());
+        if (refundable.signum() <= 0) {
+            return;
+        }
+        String eventId = "CANCEL:RECEIPT:" + booking.getId() + ":" + receipt.getId();
+        refundEventService.reserve(booking.getId(), eventId, refundable,
+                "Hoàn 100% khoản tiền đã nhận sau khi hủy đơn: " + booking.getBookingCode(), actor);
+        closure.reconcile(booking.getId());
+        log.info("Reserved full refund of {} for cancelled booking {} from receipt #{}",
+                refundable, booking.getBookingCode(), receipt.getId());
     }
 
     @Override

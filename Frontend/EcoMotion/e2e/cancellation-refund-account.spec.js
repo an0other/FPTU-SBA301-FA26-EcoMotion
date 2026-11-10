@@ -44,7 +44,51 @@ test('cancellation explains the deadline, saves recipient and hides stale vehicl
   await expect.poll(() => received).toEqual(account)
   await expect(dialog).toHaveCount(0)
   await expect(page.getByText('Nguy cơ xe về trễ', { exact: true })).toHaveCount(0)
-  await expect(page.getByLabel('Số tài khoản nhận hoàn')).toHaveValue(account.accountNumber)
+  await page.getByRole('button', { name: 'Cập nhật tài khoản nhận hoàn' }).click()
+  const refundDialog = page.getByRole('dialog', { name: 'Tài khoản nhận hoàn' })
+  await expect(refundDialog.getByLabel('Số tài khoản nhận hoàn')).toHaveValue(account.accountNumber)
+})
+
+test('renter is prompted in a popup to add the refund account when it is missing', async ({ page }) => {
+  let saved
+  await page.addInitScript(() => localStorage.setItem('ecomotion_access_token', 'account-test'))
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/stream')) return route.abort()
+    if (path === '/api/auth/me') return route.fulfill({ json: { id: 1, role: 'RENTER', fullName: 'Người thuê' } })
+    let data = {}
+    if (path.endsWith('/refund-account') && route.request().method() === 'PATCH') {
+      saved = route.request().postDataJSON()
+      data = { bookingCode: code, status: 'CANCELLATION_REVIEW' }
+    } else if (path.endsWith('/workflow')) {
+      data = {
+        bookingCode: code, bookingStatus: 'CANCELLATION_REVIEW', confirmedPaid: 300000, refundedAmount: 0,
+        pendingRefundAmount: 150000, remainingAmount: 0,
+        refunds: [{ id: 1, status: 'PROCESSING', amount: 150000, refundMethod: 'BANK_TRANSFER',
+          recipientBankName: null, recipientAccountHolder: null, recipientAccountNumber: null }],
+      }
+    } else if (path.endsWith('/operational-risk')) {
+      data = {}
+    } else if (path.endsWith('/' + code)) {
+      data = {
+        bookingCode: code, status: 'CANCELLATION_REVIEW', canCancel: false,
+        planType: 'DAILY', vehicleId: 1, vehicleName: 'VinFast VF 6', manufactureYear: 2024, licensePlate: '51A-11111',
+        pickupAddress: 'Điểm đón', pickupTime: '2026-12-10T03:00:00Z', endTime: '2026-12-11T03:00:00Z',
+        passengerCount: 1, slotCount: 1, totalAmount: 1000000, depositAmount: 300000, charges: [], timeline: [], disputeCategories: [],
+        refundPreview: { amount: 150000, ratio: 0.5, requiresBankAccount: true, explanation: 'Hoàn 50% cọc theo chính sách.' },
+      }
+    }
+    return route.fulfill({ json: { data } })
+  })
+  await page.goto('/renter/bookings/' + code)
+  const dialog = page.getByRole('dialog', { name: 'Bổ sung tài khoản nhận hoàn' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel('Ngân hàng nhận hoàn').fill(account.bankName)
+  await dialog.getByLabel('Tên chủ tài khoản').fill(account.accountHolder)
+  await dialog.getByLabel('Số tài khoản nhận hoàn').fill(account.accountNumber)
+  await dialog.getByRole('button', { name: 'Lưu tài khoản nhận hoàn' }).click()
+  await expect.poll(() => saved).toEqual(account)
+  await expect(dialog.getByText('Đã lưu tài khoản nhận hoàn. Nhà xe có thể xem thông tin này để chuyển khoản.')).toBeVisible()
 })
 
 async function mockFinance(page, onConfirm, onProof) {
@@ -81,6 +125,30 @@ test('provider sees refund recipient and submits proof without bank reference or
   await dialog.getByRole('button', { name: 'Gửi biên lai xác nhận' }).click()
   await expect.poll(() => submitted).toBe(true)
   await expect(dialog).toHaveCount(0)
+})
+
+test('provider refund popup keeps the button visible and shows the waiting state when renter account is missing', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('ecomotion_access_token', 'finance-test'))
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/stream')) return route.abort()
+    if (path === '/api/auth/me') return route.fulfill({ json: { id: 2, role: 'PROVIDER', fullName: 'Nhà xe' } })
+    let data = {}
+    if (path.endsWith('/refunds')) data = [{ id: 1, bookingCode: code, amount: 150000, status: 'PROCESSING',
+      paymentTransactionId: 12, refundMethod: 'BANK_TRANSFER',
+      recipientBankName: null, recipientAccountHolder: null, recipientAccountNumber: null }]
+    if (path.endsWith('/bank-accounts')) data = []
+    if (path.endsWith('/transactions')) data = { items: [], total: 0 }
+    if (path.endsWith('/payment-requests')) data = { items: [], total: 0 }
+    return route.fulfill({ json: { data } })
+  })
+  await page.goto('/provider/finance')
+  await page.getByRole('button', { name: /Yêu cầu hoàn tiền/ }).click()
+  const row = page.getByRole('row').filter({ hasText: code })
+  await row.getByRole('button', { name: 'Xác nhận đã hoàn tiền' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Biên lai hoàn tiền' })
+  await expect(dialog.getByText('Đang chờ khách cung cấp tài khoản nhận hoàn')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Gửi biên lai xác nhận' })).toHaveCount(0)
 })
 
 test('provider confirms received money with both optional metadata fields empty', async ({ page }) => {

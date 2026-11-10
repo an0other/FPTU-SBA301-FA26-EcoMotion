@@ -147,28 +147,7 @@ function TerminalCancellationPanel({
           ) : null}
         </div>
 
-        {!refundData.hasFinancialObligation ? (
-          <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50/90 to-white p-4 sm:flex sm:items-start sm:gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-              <Icon name="verified" className="text-xl" />
-            </div>
-            <div className="mt-3 sm:mt-0">
-              <p className="text-sm font-bold text-emerald-950">Không còn nghĩa vụ tài chính</p>
-              <p className="mt-1 text-xs leading-relaxed text-emerald-900/80">
-                Đơn đã đóng. Bạn không cần thanh toán thêm và cũng không có khoản hoàn tiền đang chờ xử lý.
-              </p>
-              {showRebook ? (
-                <Link
-                  to={rebookPath}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs font-bold text-brand-900 hover:bg-brand-50 transition"
-                >
-                  <Icon name="directions_car" className="text-base" />
-                  Đặt lại xe này
-                </Link>
-              ) : null}
-            </div>
-          </div>
-        ) : (
+        {refundData.hasFinancialObligation ? (
           <div className="space-y-4 rounded-xl border border-amber-200/80 bg-amber-50/40 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-800">
               <span className="flex items-center gap-1.5">
@@ -223,7 +202,16 @@ function TerminalCancellationPanel({
               </div>
             </div>
           </div>
-        )}
+        ) : null}
+        {!refundData.hasFinancialObligation && showRebook ? (
+          <Link
+            to={rebookPath}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs font-bold text-brand-900 hover:bg-brand-50 transition"
+          >
+            <Icon name="directions_car" className="text-base" />
+            Đặt lại xe này
+          </Link>
+        ) : null}
       </div>
     </div>
   )

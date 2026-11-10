@@ -633,6 +633,8 @@ class EndUserWorkflowIntegrationTest {
                     .forEach(t -> t.setMethod(PaymentMethod.BANK_TRANSFER));
         });
         renterBookings.cancel(renterId, code());
+        renterBookings.updateRefundAccount(renterId, code(),
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank", "NGUYEN VAN TEST", "0123456789"));
         var pending = workflow.getWorkflow(renterId, code());
         assertThat(pending.paymentStatus()).isEqualTo("REFUND_PENDING");
         refunds.completeRefund(providerId, pending.refunds().getFirst().paymentTransactionId(),
