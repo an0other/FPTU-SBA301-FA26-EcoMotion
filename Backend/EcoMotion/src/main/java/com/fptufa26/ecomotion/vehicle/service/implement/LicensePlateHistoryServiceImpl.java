@@ -46,8 +46,11 @@ public class LicensePlateHistoryServiceImpl implements LicensePlateHistoryServic
                 .orElseThrow(() -> new VehicleNotFoundException(vehicleId));
         return repository.findByVehicle_IdOrderByChangedAtDesc(vehicleId).stream()
                 .map(row -> new VehicleLicensePlateHistoryResponse(
-                        row.getId(), row.getPreviousPlate(), row.getNewPlate(),
-                        row.getChangedBy().getFullName(), row.getChangedAt()))
+                        row.getId(),
+                        LicensePlatePolicy.display(row.getPreviousPlate()),
+                        LicensePlatePolicy.display(row.getNewPlate()),
+                        row.getChangedBy().getFullName(),
+                        row.getChangedAt()))
                 .toList();
     }
 }
