@@ -6,7 +6,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-/** Bảng kê hoa hồng tháng (hoặc bản tạm tính của kỳ đang chạy khi id = null). */
 public record CommissionStatementResponse(
         Long id,
         Long providerId,
@@ -21,7 +20,6 @@ public record CommissionStatementResponse(
         BigDecimal paidAmount,
         BigDecimal remainingAmount,
         int bookingCount,
-        /** null với kỳ đang chạy (chưa lập bảng kê). */
         CommissionStatementStatus status,
         long overdueDays,
         boolean blocking,

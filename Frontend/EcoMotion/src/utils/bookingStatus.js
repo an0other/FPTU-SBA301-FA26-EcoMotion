@@ -166,7 +166,6 @@ export function paymentStatusLabel(paymentStatus) {
   return PAYMENT_STATUS_LABELS[paymentStatus] ?? paymentStatus
 }
 
-/** Mã lý do hủy từ backend (CancelReason) → copy hiển thị cho người dùng. */
 export const CANCEL_REASON_META = {
   RENTER_REQUEST: {
     label: 'Khách chủ động hủy',

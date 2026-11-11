@@ -18,7 +18,6 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/** Một chuyến trong bảng kê hoa hồng. Mỗi đơn chỉ được tính hoa hồng một lần (unique booking). */
 @Entity
 @Table(name = "commission_statement_line",
         uniqueConstraints = @UniqueConstraint(name = "uk_commission_line_booking", columnNames = "booking_id"))

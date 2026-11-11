@@ -102,7 +102,6 @@ public class VnpayServiceImpl implements VnpayService {
             throw new InvalidPaymentOperationException("Hợp đồng năm mới thanh toán trực tiếp cho provider; không dùng VNPAY");
         }
 
-
         boolean isFinalPayment = "FINAL_PAYMENT".equalsIgnoreCase(request.paymentType())
                 || "FINAL_BALANCE".equalsIgnoreCase(request.paymentType())
                 || "SETTLEMENT".equalsIgnoreCase(request.paymentType());
@@ -520,9 +519,7 @@ public class VnpayServiceImpl implements VnpayService {
                         .orElse(null);
         transaction.setPaymentRequest(linkedRequest);
         if (booking.getCancelledAt() != null || disputeQueryService.blocksPayment(booking.getId(),
-                    linkedRequest == null ? null : linkedRequest.getId(),
-                    linkedRequest != null ? linkedRequest.getPaymentType() == PaymentRequestType.FINAL_BALANCE
-                            : transaction.getType() == PaymentType.SETTLEMENT)
+                    linkedRequest == null ? null : linkedRequest.getId())
                 || !monthlyInstallment && linkedRequest != null && (linkedRequest.getStatus() != PaymentRequestStatus.PENDING
                     && linkedRequest.getStatus() != PaymentRequestStatus.REJECTED
                     || linkedRequest.getExpiresAt() != null && !linkedRequest.getExpiresAt().isAfter(clock.instant())
@@ -983,7 +980,6 @@ public class VnpayServiceImpl implements VnpayService {
         return base.multiply(ratio).setScale(0, RoundingMode.HALF_UP);
     }
 
-
     private boolean matchesDepositAmount(PaymentTransaction transaction, Booking booking) {
         try {
             return transaction.getAmount().compareTo(calculateDepositAmount(booking)) == 0;
@@ -991,7 +987,6 @@ public class VnpayServiceImpl implements VnpayService {
             return false;
         }
     }
-
 
     private PaymentType initialPaymentType(Booking booking) {
         return booking.getPlan().getPlanType() == PlanType.YEARLY
@@ -1087,10 +1082,9 @@ public class VnpayServiceImpl implements VnpayService {
         }
     }
 
-    /** Quyết toán chỉ bị chặn bởi khiếu nại liên quan tới số tiền quyết toán (phụ phí, giờ kết thúc, ghi sai khoản quyết toán). */
     private boolean settlementBlockedByDispute(Booking booking) {
         Long finalRequestId = paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
                 .map(PaymentRequest::getId).orElse(null);
-        return disputeQueryService.blocksPayment(booking.getId(), finalRequestId, true);
+        return disputeQueryService.blocksPayment(booking.getId(), finalRequestId);
     }
 }

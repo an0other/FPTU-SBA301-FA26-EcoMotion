@@ -30,10 +30,8 @@ public record ProviderTransactionResponse(
         String processingNote,
         Instant paidAt,
         Instant createdAt,
-        /** Yêu cầu thanh toán mà giao dịch thuộc về (để khách đối chiếu "nhà xe xác nhận đã nhận"). */
         Long paymentRequestId,
         PaymentRequestType paymentRequestType,
-        /** Vai trò người xác nhận (PROVIDER/ADMIN) — null với giao dịch cổng thanh toán. */
         Role confirmedByRole
 ) {
 }

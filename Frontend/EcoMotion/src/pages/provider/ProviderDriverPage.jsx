@@ -11,7 +11,6 @@ import { getErrorMessage } from '../../utils/errorMessage'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { isValidEmail, isValidVnPhone } from '../../utils/validation'
 
-// Nhà xe cần biết tài xế đang chạy chuyến nào và sắp chạy những chuyến nào trước khi phân công.
 function DriverTripSummary({ driver, compact = false }) {
   const upcomingCount = Number(driver.upcomingTripCount || 0)
   if (!driver.currentTripBookingCode && !driver.nextTripBookingCode) {

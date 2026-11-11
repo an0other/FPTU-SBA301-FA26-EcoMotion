@@ -12,10 +12,6 @@ const MISMATCH_TYPES = [
   { value: 'OTHER', label: 'Khác' },
 ]
 
-/**
- * Biên nhận cho khách: nhà xe xác nhận đã nhận bao nhiêu tiền. Khách chỉ cần đối chiếu với app ngân hàng;
- * nếu sai thì bấm "Số tiền không đúng?" để gửi khiếu nại kèm ảnh chuyển khoản.
- */
 export default function PaymentReceiptsCard({ bookingCode, bookingStatus, workflow, disputeCategories = [], onOpenDispute, onUploadEvidence, onChanged }) {
   const [receipts, setReceipts] = useState([])
   const [requestsById, setRequestsById] = useState({})

@@ -25,7 +25,6 @@ public final class ProviderWorkflowSpecification {
             "COMPLETED", List.of(BookingStatus.COMPLETED),
             "CLOSED", List.of(BookingStatus.CANCELLED, BookingStatus.REJECTED));
 
-    /** Khách đã báo chuyển khoản (có/không ảnh biên lai) và đang chờ nhà xe xác nhận. */
     public static final String PAYMENT_CONFIRM = "PAYMENT_CONFIRM";
 
     public static jakarta.persistence.criteria.Subquery<Long> awaitingPaymentConfirmation(

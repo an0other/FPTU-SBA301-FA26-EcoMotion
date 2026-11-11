@@ -455,7 +455,6 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         for (Booking b : completedBookings) {
             BigDecimal base = b.getTotalAmount() != null ? b.getTotalAmount() : BigDecimal.ZERO;
             List<PaymentTransaction> txList = bookingPaymentLedgerService.listTransactions(b.getId());
-            // Cùng công thức với bảng kê hoa hồng tháng: tiền áp vào đơn − tiền đã hoàn, bỏ phần chuyển dư.
             BigDecimal confirmedRev = CommissionServiceImpl.revenueOf(txList);
 
             BigDecimal commAmt = confirmedRev.multiply(rate).setScale(0, RoundingMode.HALF_UP);
@@ -684,7 +683,7 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
                 tx.getBankNameSnapshot(),
                 tx.getBankAccountNoSnapshot(),
                 tx.getBankAccountHolderSnapshot(),
-                tx.getReceiptUrl() == null ? null : "/api/v1/payment-transactions/" + tx.getId() + "/refund-proof",
+                tx.getReceiptUrl() == null ? null : "/api/payment-transactions/" + tx.getId() + "/refund-proof",
                 tx.getProcessingNote(),
                 tx.getPaidAt(),
                 tx.getCreatedAt(),

@@ -32,7 +32,6 @@ public interface DriverTripService {
             int size,
             String sort);
 
-    /** Số chuyến theo từng tab lịch trình (TODAY, REQUESTS, UPCOMING, ACTIVE, HISTORY). */
     java.util.Map<String, Long> countDriverTripsByView(Long currentUserId);
 
     DriverTripDetailResponse getTripDetail(Long currentUserId, String tripIdOrCode);

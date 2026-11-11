@@ -44,7 +44,6 @@ export function useDriverSchedule(initialOptions = {}) {
     setPageState(0)
   }, [])
 
-  // silent: làm mới ngầm (realtime/poll/sau thao tác) — giữ danh sách cũ, không bật skeleton.
   const fetchData = useCallback(async ({ silent = false } = {}) => {
     const currentRequestId = ++requestIdRef.current
     if (!silent) setLoading(true)

@@ -22,14 +22,13 @@ public class DisputeQueryServiceImpl implements DisputeQueryService {
     }
 
     @Override
-    public boolean blocksPayment(Long bookingId, Long paymentRequestId, boolean finalBalance) {
+    public boolean blocksPayment(Long bookingId, Long paymentRequestId) {
         return disputeRepository.findByBooking_Id(bookingId).stream()
                 .filter(d -> d.getStatus() == DisputeStatus.OPEN || d.getStatus() == DisputeStatus.IN_REVIEW)
                 .anyMatch(d -> switch (d.getCategory()) {
                     case SERVICE_QUALITY, OTHER -> false;
                     case PAYMENT_MISMATCH -> d.getPaymentRequestId() == null || paymentRequestId == null
                             || paymentRequestId.equals(d.getPaymentRequestId());
-                    case CHARGE, TRIP_NOT_CONFIRMED -> finalBalance;
                     default -> true;
                 });
     }

@@ -9,12 +9,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * Tỉ lệ phụ thu (quá giờ, cuối tuần) được lưu là phần trăm CỘNG THÊM (0.2 = +20%),
- * công thức tính là đơn giá × (1 + tỉ lệ). Dữ liệu seed cũ lưu dạng hệ số (1.2),
- * khiến phí quá giờ bị nhân 2.2. Chạy một lần lúc khởi động để chuẩn hoá dữ liệu cũ:
- * mọi giá trị > 1 được trừ đi 1. Idempotent — chạy lại không đổi gì.
- */
 @Slf4j
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)

@@ -36,12 +36,10 @@ test('reports return-before-pickup separately and waits for complete date/hour s
 
 test('giờ nhận xe sớm nhất = bây giờ + 3 giờ, làm tròn lên giờ chẵn (giờ VN)', async () => {
   const { rentalStartTimeConstraints } = await import('../src/utils/rentalPricing.js')
-  // 09/11/2026 12:40 giờ VN = 05:40Z → sớm nhất 16:00 cùng ngày
   const c = rentalStartTimeConstraints(Date.parse('2026-11-09T05:40:00Z'))
   assert.equal(c.minDate, '2026-11-09')
   assert.equal(c.minHourForDate('2026-11-09'), '16:00')
   assert.equal(c.minHourForDate('2026-11-10'), null)
-  // 22:30 giờ VN → sang ngày hôm sau 02:00
   const late = rentalStartTimeConstraints(Date.parse('2026-11-09T15:30:00Z'))
   assert.equal(late.minDate, '2026-11-10')
   assert.equal(late.minHourForDate('2026-11-10'), '02:00')

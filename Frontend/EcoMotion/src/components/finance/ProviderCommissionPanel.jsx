@@ -30,7 +30,6 @@ function Lines({ lines }) {
   )
 }
 
-/** Tab "Hoa hồng" của nhà xe: kỳ đang chạy, bảng kê các tháng, nộp hoa hồng qua VietQR. */
 export default function ProviderCommissionPanel({ onToast }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')

@@ -304,7 +304,6 @@ class EndUserWorkflowIntegrationTest {
     @Test void driverEndMovesToChargesAndOpensTwelveHourRenterWindow() {
         reportTripEnd();
         var b=bookings.findById(bookingId).orElseThrow();
-        // Không chặn luồng: đơn sang bước phụ phí ngay khi tài xế kết thúc.
         assertThat(b.getStatus()).isEqualTo(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
         assertThat(b.getActualEndAt()).isEqualTo(b.getDriverEndConfirmedAt());
         assertThat(b.getRenterConfirmedAt()).isNull();
@@ -314,7 +313,6 @@ class EndUserWorkflowIntegrationTest {
         assertThat(h.getDeadline()).isEqualTo(b.getDriverEndConfirmedAt().plus(java.time.Duration.ofHours(12)));
         assertThat(endHistories.findByBooking_IdOrderByIdDesc(bookingId)).hasSize(1);
         assertThat(requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)).isEmpty();
-        // Trong 12 giờ khách khiếu nại được cả chất lượng dịch vụ lẫn giờ kết thúc.
         assertThat(renterBookings.detail(renterId, code()).disputeCategories()).contains(
                 com.fptufa26.ecomotion.dispute.enums.DisputeCategory.SERVICE_QUALITY,
                 com.fptufa26.ecomotion.dispute.enums.DisputeCategory.TRIP_NOT_CONFIRMED);
@@ -325,7 +323,6 @@ class EndUserWorkflowIntegrationTest {
         assertThat(confirmed.getState()).isEqualTo("CONFIRMED");
         assertThat(confirmed.getConfirmationMethod()).isEqualTo("RENTER");
     }
-    /** Đơn đã kết thúc, tài xế báo trễ 3 slot quá giờ; nhà xe đã thêm phí quá giờ 3 slot. */
     long tripEndedWithOvertime() {
         reportTripEnd();
         return tx.execute(s -> {
@@ -1183,7 +1180,6 @@ class EndUserWorkflowIntegrationTest {
         assertThatThrownBy(() -> refunds.createRefundRequest(renterId, request("100000", "duplicate"))).isInstanceOf(RuntimeException.class);
         long refundId = ledger.findByBooking_Id(bookingId).stream().filter(t -> t.getType() == PaymentType.REFUND).findFirst().orElseThrow().getId();
         var proof = new MockMultipartFile("file", "refund.pdf", "application/pdf", "%PDF-1.4 test evidence".getBytes());
-        // ready() collected via VNPay: a bank-transfer image cannot settle a gateway refund.
         assertThatThrownBy(() -> refunds.completeRefund(providerId, refundId, proof, "JOURNEY-" + UUID.randomUUID(), "Bank transfer confirmed"))
                 .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
         var completed = workflow.getWorkflow(renterId, code());
@@ -1243,7 +1239,6 @@ class EndUserWorkflowIntegrationTest {
         assertThat(workflow.getWorkflow(renterId, code()).tripStatus()).isEqualTo("ENDED");
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("REVIEWING_CHARGES");
         providerBookings.finalizeSettlement(providerId, code());
-        // Số dư 0 nhưng khách còn trong 12 giờ xác nhận giờ kết thúc: chưa hoàn tất.
         assertThat(bookings.findById(bookingId).orElseThrow().getStatus()).isNotEqualTo(BookingStatus.COMPLETED);
         renterBookings.confirmTripEnd(renterId, code());
         assertThat(workflow.getWorkflow(renterId, code()).settlementStatus()).isEqualTo("SETTLED");

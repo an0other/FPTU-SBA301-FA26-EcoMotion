@@ -87,7 +87,6 @@ export const ConfirmRequestStep = ({
         </p>
       </div>
 
-      {/* Vehicle card */}
       <section className="overflow-hidden rounded-2xl border-2 border-[#D9DFD9] shadow-sm">
         <SectionHeader icon={
           <svg className="h-[18px] w-[18px] text-brand-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -120,7 +119,6 @@ export const ConfirmRequestStep = ({
         </div>
       </section>
 
-      {/* Trip details — each field on its own row */}
       <section className="overflow-hidden rounded-2xl border-2 border-[#D9DFD9] shadow-sm">
         <SectionHeader icon={
           <svg className="h-[18px] w-[18px] text-brand-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -142,7 +140,6 @@ export const ConfirmRequestStep = ({
         </dl>
       </section>
 
-      {/* Pickup location — its own section */}
       <section className="overflow-hidden rounded-2xl border-2 border-[#D9DFD9] shadow-sm">
         <SectionHeader icon={
           <svg className="h-[18px] w-[18px] text-brand-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -167,7 +164,6 @@ export const ConfirmRequestStep = ({
         </div>
       </section>
 
-      {/* Cost breakdown */}
       <section className="overflow-hidden rounded-2xl border-2 border-[#D9DFD9] shadow-sm">
         <SectionHeader icon={
           <svg className="h-[18px] w-[18px] text-brand-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -236,7 +232,6 @@ export const ConfirmRequestStep = ({
         </div>
       </section>
 
-      {/* Pre-submit checklist */}
       <section className="overflow-hidden rounded-2xl border-2 border-brand-300 shadow-sm">
         <SectionHeader icon={
           <svg className="h-[18px] w-[18px] text-brand-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -254,7 +249,6 @@ export const ConfirmRequestStep = ({
       </section>
 
       {errorMessage && <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{errorMessage}</p>}
-      {/* Navigation */}
       <div className="flex flex-col-reverse items-center justify-between gap-3 pt-2 sm:flex-row">
         <button
           onClick={onBack}

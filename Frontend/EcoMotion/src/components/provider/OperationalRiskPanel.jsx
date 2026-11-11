@@ -162,7 +162,6 @@ export default function OperationalRiskPanel({ booking, risk, workflow, onSucces
     finally { setSubmitting(false) }
   }
 
-  // Đơn chưa cọc: không có gì để "đề xuất phương án" — chỉ cần huỷ đơn kèm lý do, không phát sinh hoàn tiền.
   const simpleCancel = awaitingDeposit && !risk?.atRisk && !workflow?.needsDriver && !workflow?.proposal
     && !(Number(workflow?.confirmedPaid) > 0)
   if (simpleCancel) {

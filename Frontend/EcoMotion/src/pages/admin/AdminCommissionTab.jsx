@@ -10,7 +10,6 @@ function lastMonthKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-/** Admin: bảng kê hoa hồng tháng của các nhà xe — lập bảng kê, xác nhận đã nhận tiền, theo dõi quá hạn. */
 export default function AdminCommissionTab() {
   const [month, setMonth] = useState('')
   const [status, setStatus] = useState('ALL')
@@ -40,7 +39,6 @@ export default function AdminCommissionTab() {
 
   const sum = (pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0)
   const totals = {
-    // Còn phải thu = phần chưa nộp của các bảng kê chưa "Đã nộp đủ" (không cộng bảng kê đã thu xong).
     due: sum((r) => (r.status === 'PAID' ? 0 : r.remainingAmount)),
     paid: sum((r) => r.paidAmount),
     overdue: sum((r) => (r.status === 'OVERDUE' ? r.remainingAmount : 0)),

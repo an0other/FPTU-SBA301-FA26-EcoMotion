@@ -31,7 +31,6 @@ function fromDetail(detail) {
     pickupAddress: detail.pickupAddress,
     depositAmount: Number(detail.depositAmount ?? 0),
     totalAmount: Number(detail.totalAmount),
-    // Tổng dự kiến gồm phí đón ngoài bán kính — khớp màn xác nhận và trang cọc.
     estimatedTotal: estimatedGrandTotal({ totalAmount: detail.totalAmount, pickupFee: detail.pickupFee, charges: detail.charges }),
     holdExpiresAt: detail.holdExpiresAt,
   }

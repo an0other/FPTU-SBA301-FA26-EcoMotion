@@ -14,7 +14,6 @@ function AuditHistory({ rows = [] }) {
 
 const STALE_PROCESSING_MS = 72 * 3600 * 1000
 
-/** Ca hoàn tiền cần admin can thiệp — không gồm việc thường ngày của nhà xe (khoản vừa tạo chờ chuyển). */
 function refundNeedsAdmin(row, now = Date.now()) {
   if (row.receiptStatus === 'REPORTED_NOT_RECEIVED') return true
   if (['PENDING_RECONCILIATION', 'UNDER_REVIEW', 'FAILED'].includes(row.status)) return true

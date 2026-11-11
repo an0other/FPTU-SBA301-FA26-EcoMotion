@@ -123,7 +123,6 @@ public class Booking {
     @Column(name = "provider_confirmed_at")
     private Instant providerConfirmedAt;
 
-    /** Nhà xe đã chốt quyết toán nhưng chờ Renter chốt giờ kết thúc (cửa sổ 12 giờ) mới hoàn tất. */
     @Column(name = "settlement_requested_at")
     private Instant settlementRequestedAt;
 

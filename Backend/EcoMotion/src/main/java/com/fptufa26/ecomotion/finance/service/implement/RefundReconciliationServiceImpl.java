@@ -58,7 +58,6 @@ public class RefundReconciliationServiceImpl implements RefundReconciliationServ
         String typed = r.transactionReference() == null ? "" : r.transactionReference().trim().toUpperCase(java.util.Locale.ROOT);
         String reference = !typed.isEmpty() ? typed : out.getGatewayRef() != null ? out.getGatewayRef() : "ADMIN-VERIFIED-" + refundId;
         if ("TRANSFER_VERIFIED".equals(r.outcome())) {
-            // Chỉ kết luận "đã chuyển đúng" khi có biên lai chuyển khoản của nhà xe (hoặc mã giao dịch cổng thanh toán).
             if (out.getReceiptUrl() == null && out.getGatewayRef() == null && typed.isEmpty())
                 throw new ConflictException("Chưa có biên lai hay mã giao dịch chuyển hoàn để xác nhận đã chuyển đúng");
             if (!java.util.Objects.equals(out.getGatewayRef(), reference) && ledger.gatewayReferenceExists(reference))
@@ -70,14 +69,12 @@ public class RefundReconciliationServiceImpl implements RefundReconciliationServ
             refund.setStatus(RefundStatus.REFUNDED); refund.setGatewayRefundRef(reference);
             refund.setReceiptStatus("ADMIN_VERIFIED"); refund.setReceiptConfirmedAt(clock.instant()); refund.setReceiptConfirmedBy(adminId);
         } else if ("FAILED_VERIFIED".equals(r.outcome())) {
-            // Đã xác minh tiền chưa tới / đã quay về: khoản hoàn mở lại để nhà xe chuyển lại (khách có thể sửa tài khoản).
             out.setStatus(PaymentStatus.FAILED);
             refund.setStatus(RefundStatus.UNDER_REVIEW);
             refund.setReceiptStatus(null); refund.setReceiptDeadline(null); refund.setReceiptConfirmedAt(null); refund.setReceiptConfirmedBy(null);
             refund.setVnpResponseCode("ADMIN_FAIL");
             refund.setVnpRequestId(null); refund.setGatewaySubmittedAt(null);
         } else if ("WRONG_RECIPIENT".equals(r.outcome())) {
-            // Chuyển nhầm người nhận: khoá chuyển lại cho tới khi admin xác minh tiền đã thu hồi (FAILED_VERIFIED).
             refund.setStatus(RefundStatus.PENDING_RECONCILIATION);
         }
         out.setUpdatedAt(clock.instant());

@@ -142,7 +142,6 @@ export function BookingDetailPage() {
   const [workflow, setWorkflow] = useState(null)
   const [workflowError, setWorkflowError] = useState(null)
   const [tripNotice, setTripNotice] = useState('')
-  // Đánh giá khách đã gửi cho đơn hoàn tất — để hiện "Xem đánh giá của tôi" thay vì luôn mời đánh giá.
   const [myReviews, setMyReviews] = useState(null)
   const completed = detail?.status === 'COMPLETED' && detail?.bookingCode?.toUpperCase() === bookingCode?.toUpperCase()
   useEffect(() => {
@@ -199,8 +198,6 @@ export function BookingDetailPage() {
 
   const openManualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
     && !['REFUNDED', 'REJECTED'].includes(refund.status))
-  // Mọi khoản hoàn chuyển khoản còn mở (huỷ đơn, chuyển dư, quyết toán thu dư, phán quyết khiếu nại...)
-  // đều cần tài khoản người nhận — nhà xe không thể chuyển nếu thiếu.
   const manualRefunds = openManualRefunds
   const refundAccount = manualRefunds.find(refund => refund.recipientAccountNumber)
   const missingRefundAccount = manualRefunds.some(refund => !refund.recipientAccountNumber)

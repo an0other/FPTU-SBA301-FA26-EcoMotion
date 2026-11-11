@@ -53,7 +53,6 @@ public interface BookingService {
 
     BookingDetailResponse detail(Long userId, String bookingCode);
 
-    /** Renter xác nhận giờ kết thúc do tài xế báo là đúng (đóng cửa sổ phản đối 12 giờ). */
     BookingDetailResponse confirmTripEnd(Long userId, String bookingCode);
 
     TripTrackingResponse getTripTracking(Long userId, String bookingCode);
@@ -83,7 +82,6 @@ public interface BookingService {
     List<PaymentTransaction> listTransactions(PaymentStatus status, PaymentType type);
 
     List<PaymentTransaction> getTransactionsForBooking(Long bookingId);
-
 
     long countBookingsByStatus(BookingStatus status);
 

@@ -92,7 +92,6 @@ public class Dispute {
     @Column(name="trip_end_action", length=40)
     private String tripEndAction;
 
-    /** Khiếu nại sai lệch thanh toán: yêu cầu thanh toán bị khiếu nại, số khách khai đã chuyển, loại sai lệch. */
     @Column(name = "payment_request_id")
     private Long paymentRequestId;
 

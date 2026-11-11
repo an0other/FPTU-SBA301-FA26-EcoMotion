@@ -110,7 +110,6 @@ public class RefundServiceImpl implements RefundService {
             throw new ConflictException("Đơn đã đến bước quyết toán; khoản chuyển dư cần được nhà xe hoàn lại");
         }
         Instant now = clock.instant();
-        // Phần dư trở thành tiền đã trả cho đơn: tăng phần áp dụng của giao dịch gốc, huỷ lệnh hoàn.
         PaymentTransaction source = refund.getSourcePaymentTransaction();
         BigDecimal applied = source.getAppliedAmount() == null ? BigDecimal.ZERO : source.getAppliedAmount();
         source.setAppliedAmount(applied.add(refund.getAmount()).min(source.getAmount()));
@@ -268,7 +267,6 @@ public class RefundServiceImpl implements RefundService {
         if (transaction.getMethod() == PaymentMethod.VNPAY) {
             throw new ConflictException("Hoàn qua VNPay không dùng minh chứng chuyển khoản");
         }
-        // Không thể chuyển khoản hoàn khi khách chưa cho số tài khoản nhận tiền.
         refundRequestRepository.findByPaymentTransaction_Id(transaction.getId())
                 .filter(refund -> refund.getRecipientAccountNumber() == null || refund.getRecipientAccountNumber().isBlank())
                 .ifPresent(refund -> {
@@ -309,7 +307,6 @@ public class RefundServiceImpl implements RefundService {
         Instant now = clock.instant();
         transaction.setReceiptUrl(storedPath);
         transaction.setGatewayRef(reference);
-        // Giữ tiền tố EXCESS (tiền khách chuyển dư) để khoản hoàn không bị tính như hoàn tiền thuê.
         String previousNote = transaction.getProcessingNote();
         transaction.setProcessingNote(RefundMath.excess(previousNote)
                 ? (RefundMath.EXCESS_PREFIX + (normalizedNote == null ? "" : ": " + normalizedNote))
@@ -473,7 +470,7 @@ public class RefundServiceImpl implements RefundService {
         return new RefundProofResponse(
                 transaction.getId(), transaction.getBooking().getBookingCode(), transaction.getAmount(),
                 transaction.getStatus(), transaction.getGatewayRef(), transaction.getProcessingNote(),
-                "/api/v1/payment-transactions/" + transaction.getId() + "/refund-proof", transaction.getPaidAt());
+                "/api/payment-transactions/" + transaction.getId() + "/refund-proof", transaction.getPaidAt());
     }
 
     private RefundResponse toRefundResponse(RefundRequest r) {

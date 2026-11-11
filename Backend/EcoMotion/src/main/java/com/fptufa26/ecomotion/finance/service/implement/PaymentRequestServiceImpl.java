@@ -366,7 +366,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         registerTimelyProof(pr);
         pr.setUpdatedAt(clock.instant());
         paymentRequestRepository.save(pr);
-        // Nhà xe thấy ngay "khách đã chuyển khoản – cần xác nhận" trên danh sách đơn.
         bookingNotificationService.changed(pr.getBooking(), "PAYMENT_PROOF_SUBMITTED");
 
         log.info("Renter {} submitted proof for PaymentRequest #{}", currentUserId, paymentRequestId);
@@ -433,7 +432,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
             throw new InvalidPaymentOperationException("Ghi chú tối đa 500 ký tự");
         }
         if (!withImage) {
-            // Khách chỉ bấm "Tôi đã chuyển khoản" — ảnh biên lai là tuỳ chọn, nhà xe đối soát theo sao kê.
             return submitPaymentProof(paymentRequestId, currentUserId,
                     new SubmitProofRequest(null, qrAmount, transactionReference, transferredAt, note));
         }
@@ -744,7 +742,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (receivedAmount.signum() <= 0 || receivedAmount.scale() > 2 || receivedAmount.setScale(2).precision() > 14) {
             throw new InvalidPaymentOperationException("Số tiền xác nhận phải lớn hơn 0");
         }
-        // Khách chuyển dư: vẫn ghi nhận đủ số thực nhận; phần dư thành khoản nhà xe phải hoàn (không được giữ lại).
         BigDecimal excessAmount = receivedAmount.subtract(neededAmount).max(BigDecimal.ZERO);
 
         String bankRef = request.bankTransactionRef() != null && !request.bankTransactionRef().isBlank()
@@ -841,7 +838,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 }
                 endConfirmations.confirmedByPayment(booking, booking.getRenter().getUser().getId());
                 if (excessAmount.signum() > 0 || refundEventService.hasOpenExcessRefunds(booking.getId())) {
-                    // Còn tiền chuyển dư phải hoàn: đơn chờ đến khi nhà xe hoàn xong mới hoàn tất.
                     if (booking.getSettlementRequestedAt() == null) booking.setSettlementRequestedAt(clock.instant());
                 } else {
                     booking.setStatus(BookingStatus.COMPLETED);
@@ -852,7 +848,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
 
         PaymentTransaction savedTx = bookingPaymentLedgerService.saveTransaction(tx);
         if (excessAmount.signum() > 0) {
-            // reserve() khoá và refresh booking: ghi trạng thái vừa đổi xuống DB trước để không bị ghi đè.
             entityManager.flush();
             refundEventService.reserveOnTransaction(booking.getId(),
                     RefundMath.OVERPAY_EVENT + savedTx.getId(), excessAmount,
@@ -973,7 +968,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         tx.setStatus(PaymentStatus.PAID);
         tx.setPaidAt(clock.instant());
         tx.setReceivingBankAccount(pr.getReceivingBankAccount());
-        // applied = 0 phải mang tiền tố EXCESS để không bị tính như tiền đã trả cho đơn.
         tx.setProcessingNote((applied.signum() == 0 ? RefundMath.EXCESS_PREFIX + ": " : "")
                 + "Admin đối soát khiếu nại sai lệch #" + disputeId);
         tx.setVerificationMethod(PaymentVerificationMethod.ADMIN_RECONCILED);
@@ -1024,7 +1018,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (!candidate.getBooking().getVehicle().getProvider().getId().equals(provider.getId())) {
             throw new AccessDeniedException("Bạn không có quyền đối soát khoản tiền của nhà xe khác");
         }
-        // Use the same booking -> request lock order as confirmation, refunds and gateway processing.
         Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
         entityManager.detach(candidate);
         PaymentRequest pr = paymentRequestRepository.findByIdForUpdate(paymentRequestId).orElseThrow();
@@ -1034,7 +1027,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (financialAudit.replay("BANK_RECEIPT", pr.getId(), key, currentUserId, payload)) {
             return toResponse(pr);
         }
-        // Resolve the original receiving account, not a newly configured account after checkout.
         ProviderBankAccount receivingAccount = pr.getReceivingBankAccount();
         if (receivingAccount == null) {
             throw new InvalidPaymentOperationException("Thiếu tài khoản nhận đã chốt; cần đối chiếu trước khi ghi nhận");
@@ -1070,7 +1062,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         receipt.setBankAccountHolderSnapshot(pr.getAccountHolderSnapshot());
         receipt.setProcessingNote("RECONCILIATION_REQUIRED: BANK_STATEMENT " + request.bankStatementReference().trim());
         bookingPaymentLedgerService.saveTransaction(receipt);
-        // PAID records actual cash, not settlement of the obligation. Preserve paidAmount and all prior allocations.
         pr.setStatus(PaymentRequestStatus.REVIEW_REQUIRED);
         pr.setIssueNote("Đã ghi nhận tiền thực nhận theo sao kê; chưa phân bổ, không tự hoàn. Mã ngân hàng: " + bankRef);
         pr.setUpdatedAt(clock.instant());
@@ -1093,8 +1084,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(clock.instant())) {
             return "Yêu cầu thanh toán đã hết hạn";
         }
-        if (disputeQueryService.blocksPayment(booking.getId(), request.getId(),
-                request.getPaymentType() == PaymentRequestType.FINAL_BALANCE)) {
+        if (disputeQueryService.blocksPayment(booking.getId(), request.getId())) {
             return "Khoản thanh toán này đang bị khiếu nại, chờ admin phân xử";
         }
         if (request.getPaymentType() == PaymentRequestType.DEPOSIT) {
@@ -1244,7 +1234,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         pr.setUpdatedAt(clock.instant());
 
         PaymentRequest saved = paymentRequestRepository.save(pr);
-        // Khách và admin cùng thấy sai lệch để xử lý (chuyển thêm / được hoàn / gửi lại biên lai).
         bookingNotificationService.changed(booking, "PAYMENT_ISSUE_REPORTED");
         log.info("Provider {} reported issue on PaymentRequest #{}: {}",
                 provider.getId(), paymentRequestId, composed);
@@ -2043,7 +2032,6 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (isManagedEvidencePath(storedPath)) {
             return "/api/payment-evidences/" + evidenceId + "/file";
         }
-        // Legacy external URLs are intentionally not reflected to clients.
         return null;
     }
 
@@ -2074,7 +2062,7 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 tx.getBankNameSnapshot(),
                 tx.getBankAccountNoSnapshot(),
                 tx.getBankAccountHolderSnapshot(),
-                tx.getReceiptUrl() == null ? null : "/api/v1/payment-transactions/" + tx.getId() + "/refund-proof",
+                tx.getReceiptUrl() == null ? null : "/api/payment-transactions/" + tx.getId() + "/refund-proof",
                 tx.getProcessingNote(),
                 tx.getPaidAt(),
                 tx.getCreatedAt(),

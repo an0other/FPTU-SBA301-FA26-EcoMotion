@@ -18,10 +18,6 @@ function surchargeItemsFromCharges(charges) {
   )
 }
 
-/**
- * Tổng chi phí dự kiến = tiền thuê + phí đón + phụ phí chưa miễn — cùng công thức với dòng "grand"
- * của computeBookingFinancialLines, dùng cho mọi màn cần một con số tổng (đã gửi yêu cầu, thẻ nhà xe).
- */
 export function estimatedGrandTotal({ totalAmount, pickupFee, charges }) {
   const rent = Number(totalAmount) || 0
   const pickupFeeInCharges = Boolean(charges?.some((charge) => charge.chargeType === 'OUT_OF_RADIUS'))
@@ -30,9 +26,6 @@ export function estimatedGrandTotal({ totalAmount, pickupFee, charges }) {
   return rent + fee + extras
 }
 
-/**
- * Dòng hiển thị tài chính — tránh liệt kê cọc + đã trả + còn phải trả như ba khoản cộng dồn.
- */
 export function computeBookingFinancialLines({
   totalAmount,
   pickupFee,
@@ -44,7 +37,6 @@ export function computeBookingFinancialLines({
   charges,
 }) {
   const rent = Number(totalAmount) || 0
-  // Phí đón ngoài bán kính đã là một dòng charge OUT_OF_RADIUS; không cộng pickupFee lần nữa.
   const pickupFeeInCharges = Boolean(charges?.some((charge) => charge.chargeType === 'OUT_OF_RADIUS'))
   const fee = pickupFeeInCharges ? 0 : Number(pickupFee) || 0
   const surcharges = surchargeItemsFromCharges(charges)

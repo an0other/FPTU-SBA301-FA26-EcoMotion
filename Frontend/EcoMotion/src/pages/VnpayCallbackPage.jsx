@@ -117,13 +117,11 @@ const TONE = {
 
 function Shell({ tone, icon, title, children }) {
   return (
-    // Nằm trong BookingShell (đã có header): không dùng min-h-screen để tránh khoảng trắng và thanh cuộn thừa.
     <div className="flex justify-center px-4 py-10 sm:py-16">
       <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white text-center shadow-sm" aria-live="polite">
         <div className={`h-1.5 w-full ${BAR[tone]}`} aria-hidden="true" />
         <div className="space-y-5 p-6 sm:p-8">
         <span className={`material-symbols-rounded mx-auto flex h-16 w-16 items-center justify-center rounded-full leading-none ${TONE[tone]}`}
-          // Stylesheet Google Fonts đặt font-size 24px ngoài layer, lấn class Tailwind — dùng inline style.
           style={{ fontSize: 40, fontVariationSettings: "'FILL' 1" }} aria-hidden="true">
           {icon}
         </span>

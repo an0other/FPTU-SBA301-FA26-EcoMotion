@@ -59,7 +59,6 @@ const CHARGE_STATUS_BADGE = {
   DISPUTED: { label: 'Đang khiếu nại', cls: 'border-red-300 bg-red-50 text-red-800' },
 }
 const WAIVED_BADGE_CLS = 'border-slate-300 bg-slate-100 text-slate-600'
-// Khoản admin đã miễn sau khiếu nại vẫn hiện để đối chiếu nhưng không tính vào số phải thu.
 const chargeBadge = (c) => (c.waived
   ? { label: waivedChargeLabel(c.waivedSource), cls: WAIVED_BADGE_CLS }
   : CHARGE_STATUS_BADGE[c.confirmationStatus])

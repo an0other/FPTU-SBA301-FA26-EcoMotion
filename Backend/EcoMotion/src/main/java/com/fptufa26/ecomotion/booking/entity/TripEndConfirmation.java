@@ -23,6 +23,5 @@ public class TripEndConfirmation {
     private Instant adminActionAt;
     private String adminAction;
     @Column(length=1000) private String adminNote;
-    /** Giờ kết thúc admin chốt khi chấp thuận khiếu nại theo giờ khách (khác giờ tài xế báo). */
     private Instant correctedEndAt;
 }

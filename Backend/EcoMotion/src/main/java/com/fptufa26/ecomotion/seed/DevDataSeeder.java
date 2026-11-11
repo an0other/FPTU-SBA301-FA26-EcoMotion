@@ -411,8 +411,6 @@ public class DevDataSeeder implements ApplicationRunner {
                 2, "1600000.00", null, null, 102L, CancelReason.RENTER_REQUEST,
                 now.minus(4, ChronoUnit.DAYS));
 
-        // Demo hoàn tiền: mỗi đơn một trạng thái (chờ khách nhập STK / chờ nhà xe chuyển / chờ khách xác nhận /
-        // khách báo chưa nhận). Huỷ trước giờ đón hơn 24 giờ nên được hoàn 100% cọc.
         String[][] refundDemos = {
                 {"BK-RF-01", "1", "Bitexco Financial Tower, Q.1", "2"},
                 {"BK-RF-02", "2", "Saigon Centre, Q.1", "3"},
@@ -428,7 +426,6 @@ public class DevDataSeeder implements ApplicationRunner {
 
         seedPastMonthsBookings(driverNam, driverCuong, driverKiet);
     }
-
 
     private void seedPastMonthsBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
         ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -765,7 +762,6 @@ public class DevDataSeeder implements ApplicationRunner {
             snapshot.setOutOfRadiusRate(plan1.getOutOfRadiusRate());
             snapshot.setHourlyToDailyThresholdMinutes(plan1.getHourlyToDailyThresholdMinutes());
             snapshotRepository.save(snapshot);
-
 
             BookingCharge charge1 = new BookingCharge();
             charge1.setBooking(savedBooking1);

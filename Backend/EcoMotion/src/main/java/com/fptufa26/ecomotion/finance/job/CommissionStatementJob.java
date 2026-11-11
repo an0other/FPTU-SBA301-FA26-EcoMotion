@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 import java.time.Clock;
 import java.time.YearMonth;
 
-/** Lập bảng kê hoa hồng đầu tháng và đánh dấu quá hạn (giờ Việt Nam). */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -18,14 +17,12 @@ public class CommissionStatementJob {
     private final CommissionService commissions;
     private final Clock clock;
 
-    /** 00:05 ngày 1: chốt kỳ tháng trước. */
     @Scheduled(cron = "0 5 0 1 * *", zone = "Asia/Ho_Chi_Minh")
     public void issueLastMonth() {
         YearMonth last = YearMonth.now(clock.withZone(CommissionServiceImpl.VIETNAM)).minusMonths(1);
         commissions.generate(last);
     }
 
-    /** 17:00 ngày 5 và mỗi giờ sau đó: bảng kê chưa nộp quá hạn → OVERDUE (idempotent, chạy lại sau khi khởi động). */
     @Scheduled(cron = "0 0 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void markOverdue() {
         int changed = commissions.markOverdue();

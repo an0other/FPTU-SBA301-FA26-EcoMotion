@@ -17,7 +17,6 @@ export const REFUND_WORKFLOW_LABELS = {
   FAILED: 'Hoàn tiền chưa thành công, cần xử lý lại', PENDING_RECONCILIATION: 'Đang đối soát khoản hoàn',
 }
 
-/** Hide redundant refund list when stepper + badges already describe a single in-flight refund. */
 export function shouldShowRefundDetailsList(refunds = [], { provider = false } = {}) {
   if (!refunds?.length) return false
   if (refunds.length > 1) return true

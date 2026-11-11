@@ -883,7 +883,6 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                     "Hoàn phần đã thu vượt nghĩa vụ quyết toán", provider.getUser());
         }
         if (remaining.signum() <= 0 && !endConfirmations.isEndSettled(booking.getId())) {
-            // Khách còn trong 12 giờ xác nhận giờ kết thúc: ghi nhận đã chốt, đơn tự hoàn tất khi mốc được chốt.
             booking.setSettlementRequestedAt(clock.instant());
             bookingRepository.save(booking);
             bookingNotificationService.changed(booking, "BOOKING_CHANGED");
@@ -1654,7 +1653,6 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
         public Pageable withPage(int page) { return new QueuePage(Math.multiplyExact(page, size), size, sort); }
         public boolean hasPrevious() { return offset > 0; }
     }
-
 
     private String resolveDriverRejectionReason(Booking booking) {
         if (booking.getStatus() == BookingStatus.REJECTED) {

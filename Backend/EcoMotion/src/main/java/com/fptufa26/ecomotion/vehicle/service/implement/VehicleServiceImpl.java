@@ -101,7 +101,6 @@ public class VehicleServiceImpl implements VehicleService {
                 .toList();
     }
 
-    /** Xe đã duyệt, trừ xe của nhà xe đang bị khoá nhận đơn vì nợ hoa hồng quá hạn. */
     private List<Vehicle> rentableVehicles() {
         java.util.Set<Long> blocked = commissions.getObject().blockedProviderIds();
         return vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED).stream()

@@ -1,6 +1,5 @@
 import apiClient from './apiClient'
 
-/** Hoa hồng tháng: nhà xe xem/nộp, admin lập bảng kê và xác nhận đã nhận. */
 export const commissionService = {
   async providerOverview() {
     const { data } = await apiClient.get('/provider/finance/commission-statements')

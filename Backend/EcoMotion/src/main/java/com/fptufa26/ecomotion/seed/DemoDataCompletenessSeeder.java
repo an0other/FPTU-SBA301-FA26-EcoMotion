@@ -96,22 +96,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-/**
- * Bổ sung tại chỗ dữ liệu demo cho các đơn seed đã có sẵn trong DB (DevDataSeeder bỏ qua đơn đã tồn tại nên
- * dữ liệu cũ không bao giờ được bổ sung): ảnh offline, lưu vết thanh toán theo ledger, lưu vết chuyến, đánh giá
- * và vài khiếu nại đã phân xử.
- *
- * <p>Chạy sau toàn bộ ApplicationRunner (sự kiện {@link ApplicationReadyEvent}). Mỗi bước chạy trong transaction
- * riêng và chỉ tạo dữ liệu còn thiếu, nên khởi động lại nhiều lần không sinh bản ghi trùng; một đơn lỗi chỉ bị bỏ qua
- * và ghi log, không làm hỏng lần khởi động.</p>
- *
- * <p>Phạm vi: đơn có mã {@code BK-}, {@code EM-2026-9}, {@code EM-SEED-}, {@code EM-2026-DEMO-}. Không đụng đơn
- * {@code EM-2026-0000xx} (người dùng tự tạo khi test), đơn thuê năm {@code EM-Y2-} (nằm trên xe 12/13 thuộc nhóm xe
- * 10–15 người dùng tự test và đã có lưu vết riêng theo mô hình thuê năm), cũng như dữ liệu tiền của
- * {@code EM-2026-9003} và {@code BK-1X8C44} (đã được thao tác tay trên giao diện).</p>
- *
- * <p>Chỉ chạy trên CSDL thật (không chạy với H2 của bộ test).</p>
- */
 @Slf4j
 @Component
 @Profile("dev")
@@ -121,12 +105,10 @@ import java.util.regex.Pattern;
 public class DemoDataCompletenessSeeder {
 
     private static final Pattern TARGET_CODE = Pattern.compile("^(BK-|EM-2026-9|EM-SEED-|EM-2026-DEMO-).*");
-    /** Đơn đã được người dùng thao tác tiền/giờ trực tiếp — chỉ bổ sung lưu vết không ảnh hưởng số liệu. */
     private static final Set<String> MONEY_FROZEN = Set.of("EM-2026-9003", "BK-1X8C44");
     private static final Set<Long> PROTECTED_VEHICLES = Set.of(10L, 11L, 12L, 13L, 14L, 15L);
 
     private static final String REFUND_BOOKING = "BK-5L3M91";
-    /** Đơn huỷ demo hoàn tiền → trạng thái khoản hoàn cần dựng. */
     private static final Map<String, String> REFUND_DEMOS = Map.of(
             "BK-RF-01", "AWAIT_ACCOUNT",
             "BK-RF-02", "AWAIT_PROVIDER",
@@ -136,14 +118,12 @@ public class DemoDataCompletenessSeeder {
     private static final String DISPUTE_RENTER_TIME = "BK-SEP-03";
     private static final String DISPUTE_MISMATCH = "BK-SEP-06";
     private static final BigDecimal MISMATCH_GAP = new BigDecimal("50000.00");
-    /** Phụ phí đã được khách chấp nhận: mã đơn → loại phí. */
     private static final Map<String, ChargeType> ACCEPTED_SURCHARGES = Map.of(
             "BK-6H8U08", ChargeType.OVERTIME,
             "BK-JUL-01", ChargeType.OVERTIME,
             "BK-6J9V09", ChargeType.PARKING,
             "BK-SEP-05", ChargeType.PARKING,
             "BK-JUN-02", ChargeType.PARKING);
-    /** Tài xế bổ sung cho đơn đã chạy nhưng thiếu tài xế. */
     private static final Map<String, String> MISSING_DRIVERS = Map.of(
             "BK-6F6S06", "driver.kiet@ecomotion.vn",
             "BK-6K0W10", "driver.nam@ecomotion.vn");
@@ -218,17 +198,9 @@ public class DemoDataCompletenessSeeder {
         log.info("Demo data completeness pass finished for {} seed bookings", codes.size());
     }
 
-    // ------------------------------------------------------------------ commission
-
-    /** Đánh dấu đã đưa dữ liệu hoa hồng về trạng thái demo (chạy một lần, không ghi đè thao tác thật sau đó). */
     private static final String COMMISSION_DEMO_MARKER = "FT26310987654";
     private static final String DEPOT_B_TRIP_PREFIX = "EM-COM-B";
 
-    /**
-     * Bảng kê hoa hồng các tháng đã qua, lập theo thứ tự thời gian để mỗi chuyến vào đúng tháng hoàn tất.
-     * Chỉ nhà xe CHƯA có bảng kê nào mới được dựng lịch sử demo (các tháng cũ đã nộp đủ; tháng gần nhất Depot A
-     * đã báo chuyển). Bảng kê của nhà xe đã có dữ liệu không bao giờ bị đổi trạng thái lúc khởi động.
-     */
     private void seedCommissionStatements() {
         java.time.ZoneId vn = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
         java.time.YearMonth lastMonth = java.time.YearMonth.now(vn).minusMonths(1);
@@ -257,10 +229,6 @@ public class DemoDataCompletenessSeeder {
         }
     }
 
-    /**
-     * Một lần: đưa bảng kê tháng gần nhất của Depot A về "đã báo chuyển, chờ admin xác nhận" để demo nút Xác nhận /
-     * Chưa thấy tiền. Depot B (bảng kê quá hạn hơn 3 ngày) tự bị khoá nhận đơn — demo nộp VietQR rồi admin mở khoá.
-     */
     private void seedCommissionDemoStates() {
         var all = commissionStatements.findAllByOrderByPeriodMonthDescIdAsc();
         if (all.stream().anyMatch(st -> COMMISSION_DEMO_MARKER.equals(st.getPaymentReference()))) return;
@@ -303,10 +271,6 @@ public class DemoDataCompletenessSeeder {
         return users.findAll().stream().filter(u -> u.getRole() == com.fptufa26.ecomotion.user.enums.Role.ADMIN).findFirst().orElse(null);
     }
 
-    /**
-     * Depot B chưa có chuyến hoàn tất nào nên không có bảng kê. Tạo 3 chuyến đã hoàn tất, đã thanh toán đủ trong tháng
-     * trước để bảng kê tháng đó của B được lập; vì đã qua hạn 17:00 ngày 5 hơn 3 ngày nên B bị khoá nhận đơn.
-     */
     private void seedDepotBCommissionTrips() {
         if (!em.createQuery("select b.id from Booking b where b.bookingCode like :p", Long.class)
                 .setParameter("p", DEPOT_B_TRIP_PREFIX + "%").setMaxResults(1).getResultList().isEmpty()) return;
@@ -373,8 +337,6 @@ public class DemoDataCompletenessSeeder {
         return tx;
     }
 
-    // ------------------------------------------------------------------ infrastructure
-
     private void step(String name, Runnable work) {
         try {
             TransactionTemplate tx = new TransactionTemplate(transactionManager);
@@ -402,7 +364,6 @@ public class DemoDataCompletenessSeeder {
         return resolved;
     }
 
-    /** Ghi file vào thư mục images (phục vụ ở /images/**) nếu chưa có; trả về URL công khai. */
     private String writeImage(String relative, java.util.function.Supplier<byte[]> content) {
         Path target = imagesRoot.resolve(relative).normalize();
         if (!target.startsWith(imagesRoot)) throw new IllegalArgumentException("Invalid image path " + relative);
@@ -416,8 +377,6 @@ public class DemoDataCompletenessSeeder {
         }
         return "/images/" + relative.replace('\\', '/');
     }
-
-    // ------------------------------------------------------------------ 1. offline images & documents
 
     private void completeAvatars() {
         List<User> seedUsers = em.createQuery(
@@ -511,7 +470,6 @@ public class DemoDataCompletenessSeeder {
         return DemoAssetFactory.documentPdf(title, lines);
     }
 
-    /** Các URL /seed/... cũ không tồn tại ở đâu cả: thay bằng ảnh thật của xe hoặc biên nhận sinh offline. */
     private void repairSeedImageUrls() {
         List<TripEvidence> evidence = em.createQuery(
                 "select e from TripEvidence e join fetch e.booking b where e.imageUrl like '/seed/%'", TripEvidence.class)
@@ -548,8 +506,6 @@ public class DemoDataCompletenessSeeder {
         if (photos.isEmpty()) return null;
         return photos.get(Math.floorMod(index, photos.size()));
     }
-
-    // ------------------------------------------------------------------ 2–5. per booking
 
     private void completeBooking(String code, int completedIndex) {
         Booking booking = bookings.findByBookingCode(code).orElseThrow();
@@ -599,7 +555,6 @@ public class DemoDataCompletenessSeeder {
         }
     }
 
-    /** Mốc thời gian dẫn xuất từ giờ đón/kết thúc của đơn, cố định để các lần chạy cho cùng kết quả. */
     private static final class Timeline {
         final Instant created;
         final Instant depositPaid;
@@ -652,7 +607,6 @@ public class DemoDataCompletenessSeeder {
         static final long HOURS = 12;
     }
 
-    /** Đơn nhiều ngày/giờ: giờ kết thúc dự kiến phải khớp số slot đã tính tiền. */
     private void normalizePlannedTimes(Booking b, BookingPolicySnapshot s) {
         if (s.getSlotPrice() == null || s.getSlotPrice().signum() <= 0 || s.getSlotLengthMinutes() == null
                 || b.getTotalAmount() == null || b.getPickupTime() == null) return;
@@ -668,8 +622,6 @@ public class DemoDataCompletenessSeeder {
             b.setActualEndAt(b.getPlannedEndAt());
         }
     }
-
-    // ------------------------------------------------------------------ payments
 
     private ProviderBankAccount bank(Booking b) {
         return banks.findByProvider_IdAndStatus(b.getVehicle().getProvider().getId(), BankAccountStatus.ACTIVE)
@@ -687,7 +639,7 @@ public class DemoDataCompletenessSeeder {
         List<PaymentTransaction> deposits = paidIn(b, PaymentType.DEPOSIT_PAY);
         if (deposits.isEmpty() && b.getStatus() == BookingStatus.COMPLETED && !paidIn(b, PaymentType.SETTLEMENT).isEmpty()
                 && s.getDepositAmount() == null) {
-            return; // đơn đã thu một lần trọn gói từ trước — không thêm cọc để tránh thu trùng
+            return;
         }
         if (s.getDepositAmount() == null) {
             BigDecimal amount = deposits.isEmpty()
@@ -844,7 +796,6 @@ public class DemoDataCompletenessSeeder {
         return charge;
     }
 
-    /** Đơn huỷ sau khi đã cọc: hoàn 100% cọc qua chuyển khoản, khách đã xác nhận đã nhận tiền. */
     private void completeCancelledRefund(Booking b, BookingPolicySnapshot s, Timeline t) {
         if (!refunds.findByBooking_IdOrderByCreatedAtDesc(b.getId()).isEmpty()) return;
         Instant cancelledAt = b.getCancelledAt() != null ? b.getCancelledAt() : b.getPickupTime().minus(6, ChronoUnit.HOURS);
@@ -913,16 +864,9 @@ public class DemoDataCompletenessSeeder {
         refunds.save(refund);
     }
 
-    /**
-     * Khoản hoàn cọc 100% (huỷ trước 24 giờ) ở một trạng thái demo cụ thể. Ngày tháng tính theo thời điểm seed để
-     * mốc 72 giờ chờ khách xác nhận còn hiệu lực khi demo.
-     */
     private void completeRefundDemo(Booking b, BookingPolicySnapshot s, Timeline t, String state) {
         List<RefundRequest> existing = refunds.findByBooking_IdOrderByCreatedAtDesc(b.getId());
         if (!existing.isEmpty()) {
-            // Khoản "chờ khách nhập STK / chờ nhà xe chuyển" chưa ai đụng tới: giữ mốc tạo gần đây để không bị coi là
-            // nhà xe chậm chuyển (>72 giờ) khi demo vào ngày khác.
-            // Biên lai cũ dạng SVG không xem được (endpoint chỉ phục vụ JPG/PNG/WebP/PDF) → thay bằng PNG.
             for (RefundRequest refund : existing) {
                 PaymentTransaction out = refund.getPaymentTransaction();
                 if (out != null && out.getReceiptUrl() != null && out.getReceiptUrl().endsWith(".svg")) {
@@ -934,10 +878,8 @@ public class DemoDataCompletenessSeeder {
             }
             if (("AWAIT_ACCOUNT".equals(state) || "AWAIT_PROVIDER".equals(state))) {
                 for (RefundRequest refund : existing) {
-                    // Chỉ áp dụng cho đơn demo BK-RF-*: nhà xe chưa chuyển (khoản hoàn vẫn PROCESSING).
                     boolean untouched = refund.getStatus() == RefundStatus.PROCESSING;
                     if (untouched && refund.getCreatedAt().isBefore(Instant.now().minus(24, ChronoUnit.HOURS))) {
-                        // created_at không cập nhật được qua entity (updatable = false) nên dùng câu lệnh trực tiếp.
                         em.createNativeQuery("update refund_request set created_at = ?1, updated_at = ?1 where id = ?2")
                                 .setParameter(1, Instant.now().minus(3, ChronoUnit.HOURS))
                                 .setParameter(2, refund.getId())
@@ -1032,12 +974,10 @@ public class DemoDataCompletenessSeeder {
             refund.setUpdatedAt(refund.getCreatedAt());
         }
         refunds.save(refund);
-        // Còn khoản hoàn mở (hoặc khách báo chưa nhận) → đơn chờ đối soát huỷ; đã chuyển và đang chờ khách → đã huỷ.
         b.setStatus("AWAIT_RENTER".equals(state) ? BookingStatus.CANCELLED : BookingStatus.CANCELLATION_REVIEW);
         bookings.save(b);
     }
 
-    /** Biên lai chuyển khoản hoàn tiền dạng PNG (endpoint biên lai chỉ phục vụ ảnh raster / PDF). */
     private String storeRefundReceipt(User provider, String bookingCode, String bankName, String holder, String account,
                                       BigDecimal amount, Instant at, String reference) {
         java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(420, 640, java.awt.image.BufferedImage.TYPE_INT_RGB);
@@ -1089,8 +1029,6 @@ public class DemoDataCompletenessSeeder {
     private static String nz(String value) {
         return value == null ? "" : DemoAssetFactory.stripDiacritics(value);
     }
-
-    // ------------------------------------------------------------------ trip trail
 
     private void assignMissingDriver(Booking b) {
         if (b.getDriver() != null) return;
@@ -1194,8 +1132,6 @@ public class DemoDataCompletenessSeeder {
         endConfirmations.save(history);
     }
 
-    // ------------------------------------------------------------------ disputes
-
     private User admin() {
         return users.findByEmailIgnoreCase("admin01@ecomotion.vn").orElseThrow();
     }
@@ -1204,7 +1140,6 @@ public class DemoDataCompletenessSeeder {
         return disputes.findByBooking_Id(b.getId()).stream().anyMatch(d -> d.getCategory() == category);
     }
 
-    /** Khách khiếu nại phí quá giờ; admin đối chiếu GPS và giảm một phần (PARTIAL_WAIVE). */
     private void ensurePartialWaiveDispute(Booking b, BookingPolicySnapshot s) {
         if (hasDispute(b, DisputeCategory.CHARGE) || !paidIn(b, PaymentType.SETTLEMENT).isEmpty()) return;
         int grace = s == null || s.getAllowedOvertimeMinutes() == null ? 30 : s.getAllowedOvertimeMinutes();
@@ -1220,13 +1155,12 @@ public class DemoDataCompletenessSeeder {
                 "Tôi chỉ trả xe trễ khoảng 1 tiếng do kẹt xe trên cao tốc Phan Thiết – Dầu Giây, không phải 2 tiếng rưỡi như tài xế ghi.",
                 List.of()).disputeId();
         em.flush();
-        em.clear(); // resolveDispute refresh() cần dispute được nạp lại từ DB
+        em.clear();
         disputeService.resolveDispute(id, admin().getId(), DisputeStatus.RESOLVED, DisputeResolutionDecision.PARTIAL_WAIVE,
                 "Đối chiếu GPS: xe về bãi trễ khoảng 1 giờ 20 phút. Giảm 1 giờ quá giờ, giữ lại 1 giờ.", unit);
         backdateDispute(id, reportedEnd.plus(40, ChronoUnit.MINUTES), reportedEnd.plus(26, ChronoUnit.HOURS));
     }
 
-    /** Khách phản đối giờ kết thúc tài xế báo; admin chốt theo giờ khách (ACCEPT_RENTER_TIME + correctedEndAt). */
     private void ensureRenterTimeDispute(Booking b, BookingPolicySnapshot s) {
         if (hasDispute(b, DisputeCategory.TRIP_NOT_CONFIRMED) || !paidIn(b, PaymentType.SETTLEMENT).isEmpty()) return;
         if (endConfirmations.findFirstByBooking_IdOrderByIdDesc(b.getId()).isPresent()) return;
@@ -1255,7 +1189,7 @@ public class DemoDataCompletenessSeeder {
                 "Tôi đã trả xe tại bãi lúc khoảng 10 phút sau giờ hẹn, tài xế bấm kết thúc chuyến muộn hơn gần 1 tiếng rưỡi.",
                 List.of()).disputeId();
         em.flush();
-        em.clear(); // resolveDispute refresh() cần dispute được nạp lại từ DB
+        em.clear();
         disputeService.resolveDispute(id, admin().getId(), DisputeStatus.RESOLVED, null,
                 "Camera bãi xe và GPS xác nhận xe về lúc 10 phút sau giờ hẹn; chốt giờ kết thúc theo khách, miễn phí quá giờ.",
                 null, "ACCEPT_RENTER_TIME", renterSays);
@@ -1270,7 +1204,6 @@ public class DemoDataCompletenessSeeder {
         backdateDispute(id, reportedAt.plus(35, ChronoUnit.MINUTES), settledAt);
     }
 
-    /** Nhà xe ghi thiếu 50.000 đ tiền quyết toán; admin đối chiếu sao kê và ghi bù (PAYMENT_MISMATCH). */
     private void ensureMismatchDispute(Booking b, Timeline t) {
         if (hasDispute(b, DisputeCategory.PAYMENT_MISMATCH)) return;
         PaymentRequest request = paymentRequests.findByBooking_IdAndPaymentType(b.getId(), PaymentRequestType.FINAL_BALANCE)
@@ -1317,8 +1250,6 @@ public class DemoDataCompletenessSeeder {
                 .setParameter(1, resolvedAt).setParameter(2, disputeId).setParameter(3, resolvedAt).executeUpdate();
     }
 
-    // ------------------------------------------------------------------ reviews
-
     private static final String[] VEHICLE_5 = {
             "Xe sạch sẽ, thơm tho, điều hoà mát lạnh. Cả nhà đi rất thoải mái.",
             "Xe mới, chạy êm, cách âm tốt. Sẽ thuê lại lần sau.",
@@ -1347,7 +1278,7 @@ public class DemoDataCompletenessSeeder {
     private static final int[] DRIVER_RATINGS = {5, 5, 4, 5, 5, 3, 5, 4, 5, 4, 5, 5};
 
     private void ensureReviews(Booking b, Timeline t, int index) {
-        if (index < 0 || index % 5 == 1 || index % 5 == 3) return; // ~60% đơn hoàn tất có đánh giá
+        if (index < 0 || index % 5 == 1 || index % 5 == 3) return;
         Instant base = (b.getProviderConfirmedAt() != null ? b.getProviderConfirmedAt()
                 : t.completed != null ? t.completed : b.getActualEndAt()).plus(3 + index % 7, ChronoUnit.HOURS);
         int vehicleRating = VEHICLE_RATINGS[index % VEHICLE_RATINGS.length];

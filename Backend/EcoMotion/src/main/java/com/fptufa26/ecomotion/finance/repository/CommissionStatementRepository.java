@@ -23,7 +23,6 @@ public interface CommissionStatementRepository extends JpaRepository<CommissionS
 
     List<CommissionStatement> findByStatusInAndDueAtBefore(Collection<CommissionStatementStatus> statuses, Instant dueAt);
 
-    /** Nhà xe còn bảng kê chưa nộp đủ, đã quá hạn trước mốc cutoff (hạn nộp + số ngày ân hạn). */
     @Query("select distinct s.provider.id from CommissionStatement s where s.status in :statuses and s.dueAt < :cutoff")
     List<Long> findProvidersOverdueBefore(@Param("statuses") Collection<CommissionStatementStatus> statuses,
                                           @Param("cutoff") Instant cutoff);

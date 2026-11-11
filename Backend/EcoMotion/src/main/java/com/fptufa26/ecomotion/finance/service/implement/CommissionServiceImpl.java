@@ -49,10 +49,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Hoa hồng tháng: doanh thu thực nhận của các chuyến hoàn tất trong kỳ × tỉ lệ hoa hồng của nhà xe.
- * Kỳ = tháng dương lịch (giờ Việt Nam); hạn nộp 17:00 ngày 5 tháng sau; quá hạn {@code graceDays} ngày thì khoá nhận đơn mới.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -61,10 +57,6 @@ public class CommissionServiceImpl implements CommissionService {
     public static final ZoneId VIETNAM = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final Set<CommissionStatementStatus> UNPAID = Set.of(
             CommissionStatementStatus.ISSUED, CommissionStatementStatus.OVERDUE);
-    /**
-     * Trạng thái khoá nhận đơn khi quá hạn. Nhà xe báo "đã chuyển" (PAYMENT_REPORTED) được tạm mở trong lúc admin đối soát;
-     * admin bấm "Chưa thấy tiền" thì bảng kê về lại OVERDUE và khoá ngay.
-     */
     private static final Set<CommissionStatementStatus> LOCKING = UNPAID;
 
     private final CommissionStatementRepository statements;
@@ -80,8 +72,6 @@ public class CommissionServiceImpl implements CommissionService {
     @Value("${app.platform.bank.name:Vietcombank}") private String bankName;
     @Value("${app.platform.bank.account:1029384756}") private String bankAccount;
     @Value("${app.platform.bank.holder:CONG TY ECOMOTION}") private String bankHolder;
-
-    // ------------------------------------------------------------------ nhà xe
 
     @Override
     @Transactional(readOnly = true)
@@ -129,8 +119,6 @@ public class CommissionServiceImpl implements CommissionService {
         return toResponse(statement, true);
     }
 
-    // ------------------------------------------------------------------ admin
-
     @Override
     @Transactional(readOnly = true)
     public List<CommissionStatementResponse> adminStatements(String periodMonth, CommissionStatementStatus status) {
@@ -165,7 +153,6 @@ public class CommissionServiceImpl implements CommissionService {
         if (statement.remainingAmount().signum() <= 0) {
             statement.setStatus(CommissionStatementStatus.PAID);
         } else {
-            // Nhận thiếu: còn nợ phần chênh, trạng thái theo hạn nộp.
             statement.setStatus(statement.getDueAt().isBefore(clock.instant())
                     ? CommissionStatementStatus.OVERDUE : CommissionStatementStatus.ISSUED);
         }
@@ -188,8 +175,6 @@ public class CommissionServiceImpl implements CommissionService {
         notifyProvider(statement, "COMMISSION_REPORT_REJECTED");
         return toResponse(statement, true);
     }
-
-    // ------------------------------------------------------------------ job
 
     @Override
     @Transactional
@@ -266,17 +251,9 @@ public class CommissionServiceImpl implements CommissionService {
         return new HashSet<>(statements.findProvidersOverdueBefore(LOCKING, cutoff));
     }
 
-    // ------------------------------------------------------------------ tính toán
-
     private record Eligible(Booking booking, Instant completedAt, BigDecimal revenue) {
     }
 
-    /**
-     * Đơn hoàn tất trong kỳ {@code month} (tới {@code cutoff}), chưa nằm trong bảng kê nào và không còn khiếu nại mở.
-     * Đơn hoàn tất ở tháng trước chỉ được gom vào kỳ này khi tháng đó ĐÃ có bảng kê (đơn sót, ví dụ vừa hết khiếu nại);
-     * tháng chưa lập bảng kê thì đơn thuộc về bảng kê của chính tháng đó. Doanh thu = tiền thực nhận áp vào đơn − tiền
-     * đã hoàn; không tính tiền bảo đảm gói năm và phần khách chuyển dư.
-     */
     private List<Eligible> eligibleBookings(Provider provider, YearMonth month, Instant cutoff) {
         Instant start = periodStart(month);
         Set<String> issuedMonths = new HashSet<>();
@@ -337,8 +314,6 @@ public class CommissionServiceImpl implements CommissionService {
     static Instant dueAt(YearMonth month) {
         return month.plusMonths(1).atDay(5).atTime(17, 0).atZone(VIETNAM).toInstant();
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private CommissionStatementResponse toResponse(CommissionStatement s, boolean withLines) {
         Instant now = clock.instant();

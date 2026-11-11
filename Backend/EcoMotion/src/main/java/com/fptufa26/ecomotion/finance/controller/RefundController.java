@@ -60,7 +60,7 @@ public class RefundController {
         return ApiResponse.success(refundService.offsetExcessRefund(principal.getUserId(), refundId));
     }
 
-    @PostMapping({"/api/v1/refunds", "/api/refunds"})
+    @PostMapping("/api/refunds")
     @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
     @Operation(summary = "Provider (own booking) or Admin creates a voluntary refund; renters cannot self-issue refunds")
     public ApiResponse<RefundResponse> createRefund(
@@ -69,7 +69,7 @@ public class RefundController {
         return ApiResponse.success(refundService.createRefundRequest(principal.getUserId(), request));
     }
 
-    @PostMapping({"/api/v1/refunds/{refundId}/review", "/api/refunds/{refundId}/review"})
+    @PostMapping("/api/refunds/{refundId}/review")
     @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
     @Operation(summary = "Provider or Admin approves or rejects a refund request")
     public ApiResponse<RefundResponse> reviewRefund(
@@ -79,7 +79,7 @@ public class RefundController {
         return ApiResponse.success(refundService.reviewRefundRequest(principal.getUserId(), refundId, request));
     }
 
-    @GetMapping({"/api/v1/refunds/booking/{bookingId}", "/api/refunds/booking/{bookingId}"})
+    @GetMapping("/api/refunds/booking/{bookingId}")
     @Operation(summary = "List all refund requests for a specific booking")
     public ApiResponse<List<RefundResponse>> listRefundsByBooking(
             @AuthenticationPrincipal SecurityUser principal,
@@ -87,7 +87,7 @@ public class RefundController {
         return ApiResponse.success(refundService.listRefundsByBooking(principal.getUserId(), bookingId));
     }
 
-    @GetMapping({"/api/v1/refunds", "/api/refunds"})
+    @GetMapping("/api/refunds")
     @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
     @Operation(summary = "List all refund requests for the authenticated provider")
     public ApiResponse<List<RefundResponse>> listRefundsForProvider(
@@ -95,8 +95,7 @@ public class RefundController {
         return ApiResponse.success(refundService.listRefundsForProvider(principal.getUserId()));
     }
 
-    @PostMapping(value = {"/api/v1/payment-transactions/{id}/refund-proof",
-            "/api/payment-transactions/{id}/refund-proof"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/api/payment-transactions/{id}/refund-proof", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
     @Operation(summary = "Attach bank-transfer proof and mark a pending refund ledger row as paid")
     public ApiResponse<RefundProofResponse> completeRefund(
@@ -108,8 +107,7 @@ public class RefundController {
         return ApiResponse.success(refundService.completeRefund(principal.getUserId(), id, file, bankReference, note));
     }
 
-    @GetMapping({"/api/v1/payment-transactions/{id}/refund-proof",
-            "/api/payment-transactions/{id}/refund-proof"})
+    @GetMapping("/api/payment-transactions/{id}/refund-proof")
     @Operation(summary = "View an authorized refund-proof file")
     public ResponseEntity<byte[]> viewRefundProof(
             @AuthenticationPrincipal SecurityUser principal,

@@ -361,7 +361,6 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
         User u = d.getUser();
         DriverOperationalStatus opStatus = driverStatusService.calculateOperationalStatus(d);
 
-        // Chuyến đang làm dở: đang chạy, hoặc đã tới điểm đón / chờ khách xác nhận bắt đầu.
         String currentTripBookingCode = bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.IN_PROGRESS)
                 .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.AWAITING_START_CONFIRMATION))
                 .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.DRIVER_ARRIVED))

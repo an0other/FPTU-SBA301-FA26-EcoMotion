@@ -44,10 +44,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** Hoa hồng tháng: tính đúng theo kỳ, dời đơn đang khiếu nại, idempotent, chỉ admin xác nhận. */
 class CommissionServiceImplTest {
 
-    // 11/11/2026 10:00 giờ VN
     private static final Instant NOW = Instant.parse("2026-11-11T03:00:00Z");
 
     private final CommissionStatementRepository statements = mock(CommissionStatementRepository.class);
@@ -96,7 +94,6 @@ class CommissionServiceImplTest {
     @Test
     void octoberStatementTaxesOnlyOctoberTripsAndDefersDisputedOnes() {
         Booking inOctober = completed(1, "2026-10-20T05:00:00Z", "3000000");
-        // 23:30 ngày 31/10 giờ VN vẫn thuộc kỳ tháng 10
         Booking lastMinute = completed(2, "2026-10-31T16:30:00Z", "1000000");
         Booking november = completed(3, "2026-11-02T05:00:00Z", "9000000");
         Booking disputed = completed(4, "2026-10-10T05:00:00Z", "5000000");
@@ -108,7 +105,7 @@ class CommissionServiceImplTest {
         assertThat(october.getBookingCount()).isEqualTo(2);
         assertThat(october.getGrossRevenue()).isEqualByComparingTo("4000000");
         assertThat(october.getCommissionAmount()).isEqualByComparingTo("400000");
-        assertThat(october.getDueAt()).isEqualTo(Instant.parse("2026-11-05T10:00:00Z")); // 17:00 ngày 5 giờ VN
+        assertThat(october.getDueAt()).isEqualTo(Instant.parse("2026-11-05T10:00:00Z"));
         assertThat(october.getStatus()).as("đã qua hạn 5/11 lúc lập").isEqualTo(CommissionStatementStatus.OVERDUE);
 
         assertThat(service.generate(YearMonth.of(2026, 10))).as("chạy lại không tạo trùng").isZero();

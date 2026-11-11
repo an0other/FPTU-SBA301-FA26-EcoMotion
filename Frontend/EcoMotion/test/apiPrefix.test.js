@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-// apiClient đã có baseURL '/api'; mọi service gọi đường dẫn không có '/v1' để thống nhất một tiền tố.
 function files(dir) {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name)

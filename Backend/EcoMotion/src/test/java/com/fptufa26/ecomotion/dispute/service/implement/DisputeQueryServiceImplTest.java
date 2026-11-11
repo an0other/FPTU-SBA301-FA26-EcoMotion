@@ -12,7 +12,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** Khiếu nại chỉ chặn khoản thanh toán đang bị tranh chấp, không chặn khách trả các khoản khác. */
 class DisputeQueryServiceImplTest {
 
     private final DisputeRepository repository = mock(DisputeRepository.class);
@@ -33,28 +32,28 @@ class DisputeQueryServiceImplTest {
     @Test
     void serviceComplaintNeverBlocksPayments() {
         disputes(dispute(DisputeCategory.SERVICE_QUALITY, DisputeStatus.OPEN, null));
-        assertThat(service.blocksPayment(1L, 10L, false)).isFalse();
-        assertThat(service.blocksPayment(1L, 11L, true)).isFalse();
+        assertThat(service.blocksPayment(1L, 10L)).isFalse();
+        assertThat(service.blocksPayment(1L, 11L)).isFalse();
     }
 
     @Test
     void mismatchBlocksOnlyTheDisputedRequest() {
         disputes(dispute(DisputeCategory.PAYMENT_MISMATCH, DisputeStatus.IN_REVIEW, 10L));
-        assertThat(service.blocksPayment(1L, 10L, false)).isTrue();
-        assertThat(service.blocksPayment(1L, 20L, false)).as("kỳ thanh toán khác vẫn trả được").isFalse();
+        assertThat(service.blocksPayment(1L, 10L)).isTrue();
+        assertThat(service.blocksPayment(1L, 20L)).as("kỳ thanh toán khác vẫn trả được").isFalse();
     }
 
     @Test
-    void chargeDisputeBlocksSettlementButNotDeposit() {
+    void chargeDisputeBlocksEveryPayment() {
         disputes(dispute(DisputeCategory.CHARGE, DisputeStatus.OPEN, null));
-        assertThat(service.blocksPayment(1L, 30L, true)).isTrue();
-        assertThat(service.blocksPayment(1L, 31L, false)).isFalse();
+        assertThat(service.blocksPayment(1L, 30L)).isTrue();
+        assertThat(service.blocksPayment(1L, 31L)).isTrue();
     }
 
     @Test
     void resolvedDisputesDoNotBlock() {
         disputes(dispute(DisputeCategory.CHARGE, DisputeStatus.RESOLVED, null),
                 dispute(DisputeCategory.YEARLY_SETTLEMENT, DisputeStatus.REJECTED, null));
-        assertThat(service.blocksPayment(1L, 30L, true)).isFalse();
+        assertThat(service.blocksPayment(1L, 30L)).isFalse();
     }
 }

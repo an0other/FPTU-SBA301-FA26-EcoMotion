@@ -634,7 +634,6 @@ function DisputeDetailForm({
 
               {error && <p role="alert" className="text-xs font-semibold text-red-700">{error}</p>}
 
-              {/* Phán quyết theo loại khiếu nại */}
               <fieldset className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
                 <legend className="px-1 font-bold text-slate-700">Phán quyết</legend>
                 {verdictOptions(dispute.category).map((option) => (

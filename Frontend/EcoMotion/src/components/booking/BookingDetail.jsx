@@ -53,7 +53,6 @@ export const BookingDetail = ({
   const [disputeNote, setDisputeNote] = useState('');
   const [editing, setEditing] = useState(false);
   const statusMeta = bookingStatusMeta(booking.status);
-  // Sai lệch thanh toán có luồng riêng ở thẻ "Biên nhận thanh toán".
   const formCategories = (booking.disputeCategories || []).filter((category) => category !== 'PAYMENT_MISMATCH');
   const paymentLabel = paymentStatusLabel(workflow?.paymentStatus);
 
@@ -326,7 +325,6 @@ export const BookingDetail = ({
           )}
 
           {booking.status === 'AWAITING_DEPOSIT' && (() => {
-            // Nhà xe mới ghi nhận một phần cọc: nhắc khách chuyển phần còn thiếu.
             const depositShortfall = booking.confirmedPaid > 0 && booking.depositAmount > booking.confirmedPaid
               ? booking.depositAmount - booking.confirmedPaid : 0
             return (
@@ -397,7 +395,6 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {/* ACCEPTED CALL TO ACTION BANNER */}
           {booking.status === 'ACCEPTED' && (
             <div className="p-5 bg-[#E8F6EE] border border-[#15803D]/30 rounded-[16px] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -436,7 +433,6 @@ export const BookingDetail = ({
             </div>
           )}
 
-          {/* CONFIRMED HERO BANNER WITH CANCEL BUTTON */}
           {booking.status === 'CONFIRMED' && (
             <div className="p-5 bg-white border border-[#E6EBE8] rounded-[16px] shadow-[0_8px_24px_rgba(20,34,26,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -598,13 +594,11 @@ export const BookingDetail = ({
             </div>
           </div>
 
-          {/* CARD: PICKUP DETAILS */}
           <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
             <h3 className="text-sm font-bold text-[#14221A] uppercase tracking-wider text-gray-500">
               Điểm đón
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Address */}
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F7F8F6]">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-[#E8F6EE] text-[#15803D]">
                   <span className="material-symbols-outlined text-[18px]">pin_drop</span>
@@ -619,7 +613,6 @@ export const BookingDetail = ({
                 </div>
               </div>
 
-              {/* Time */}
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F7F8F6]">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-[#E8F6EE] text-[#15803D]">
                   <span className="material-symbols-outlined text-[18px]">schedule</span>
@@ -634,7 +627,6 @@ export const BookingDetail = ({
                 </div>
               </div>
 
-              {/* Passengers */}
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#F7F8F6]">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-[#E8F6EE] text-[#15803D]">
                   <span className="material-symbols-outlined text-[18px]">group</span>
@@ -834,7 +826,6 @@ export const BookingDetail = ({
           )}
         </div>
 
-        {/* Right Column (5 cols) */}
         <div className="lg:col-span-5 flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
           <BookingOrderSummaryCard
             bookingCode={booking.id}
@@ -853,7 +844,6 @@ export const BookingDetail = ({
             totalOnly={booking.charges?.length > 0}
           />
 
-          {/* Timeline Card */}
           <div className="bg-white p-5 flex flex-col gap-4 rounded-[16px] border border-[#E6EBE8] shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
             <h3 className="text-sm font-bold text-[#14221A]">Tiến trình đơn</h3>
 
@@ -889,7 +879,6 @@ export const BookingDetail = ({
             </div>
           </div>
 
-          {/* Navigation Card for Rejected/General */}
           {booking.status === 'REJECTED' && (
             <div className="rounded-[16px] bg-[#F7F8F6] border border-[#E6EBE8] p-5 shadow-xs flex flex-col gap-3">
               <p className="text-xs text-gray-700 leading-relaxed">
@@ -921,7 +910,6 @@ export const BookingDetail = ({
         </div>
       </div>
 
-      {/* Cancel Confirmation Dialog Modal */}
       <CancelBookingModal
         bookingCode={booking.id}
         isOpen={isCancelModalOpen}

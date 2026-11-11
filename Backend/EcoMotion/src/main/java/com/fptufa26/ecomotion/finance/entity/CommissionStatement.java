@@ -29,10 +29,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Bảng kê hoa hồng tháng của một nhà xe: doanh thu các chuyến hoàn tất trong kỳ × tỉ lệ hoa hồng.
- * Kỳ = tháng dương lịch, chốt 23:59 ngày cuối tháng, hạn nộp 17:00 ngày 5 tháng sau (giờ Việt Nam).
- */
 @Entity
 @Table(name = "commission_statement",
         uniqueConstraints = @UniqueConstraint(name = "uk_commission_provider_period", columnNames = {"provider_id", "period_month"}))
@@ -49,7 +45,6 @@ public class CommissionStatement {
     @JoinColumn(name = "provider_id", nullable = false)
     private Provider provider;
 
-    /** YYYY-MM */
     @Column(name = "period_month", nullable = false, length = 7)
     private String periodMonth;
 
@@ -65,7 +60,6 @@ public class CommissionStatement {
     @Column(name = "gross_revenue", nullable = false, precision = 14, scale = 2)
     private BigDecimal grossRevenue = BigDecimal.ZERO;
 
-    /** Tỉ lệ chốt lúc lập bảng kê (nhà xe đổi tỉ lệ sau đó không ảnh hưởng kỳ này). */
     @Column(name = "commission_rate", nullable = false, precision = 6, scale = 4)
     private BigDecimal commissionRate = BigDecimal.ZERO;
 
