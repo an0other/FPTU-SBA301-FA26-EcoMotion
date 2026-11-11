@@ -1,5 +1,6 @@
 package com.fptufa26.ecomotion.auth.controller;
 
+import com.fptufa26.ecomotion.auth.dto.request.FirstLoginChangePasswordRequest;
 import com.fptufa26.ecomotion.auth.dto.request.LoginRequest;
 import com.fptufa26.ecomotion.auth.dto.request.RegisterRequest;
 import com.fptufa26.ecomotion.auth.dto.request.ResetPasswordRequest;
@@ -81,6 +82,12 @@ public class AuthController {
     public Map<String, String> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         passwordResetService.reset(request);
         return Map.of("message", "Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.");
+    }
+
+    @PostMapping("/first-login/change-password")
+    public Map<String, String> changeTemporaryPassword(@Valid @RequestBody FirstLoginChangePasswordRequest request) {
+        passwordResetService.changeTemporaryPassword(request);
+        return Map.of("message", "Đổi mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.");
     }
 
     @PostMapping("/login")

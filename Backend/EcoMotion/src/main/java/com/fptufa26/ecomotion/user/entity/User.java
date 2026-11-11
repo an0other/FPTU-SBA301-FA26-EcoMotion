@@ -25,6 +25,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.Check;
+import org.hibernate.annotations.ColumnDefault;
 import java.time.Instant;
 import java.util.Locale;
 
@@ -78,6 +79,10 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(name = "ekyc_status", nullable = false, length = 20)
     private EkycStatus ekycStatus = EkycStatus.UNVERIFIED;
+
+    @ColumnDefault("false")
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = false;
 
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;

@@ -14,6 +14,7 @@ import DriverSchedulePage from './pages/DriverSchedulePage'
 import DriverTripDetailPage from './pages/DriverTripDetailPage'
 import LoginPage from './pages/LoginPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import FirstLoginPasswordPage from './pages/FirstLoginPasswordPage'
 import MePage from './pages/MePage'
 import PaymentHistoryPage from './pages/PaymentHistoryPage'
 import PaymentSuccessPage from './pages/PaymentSuccessPage'
@@ -72,6 +73,7 @@ export default function App() {
 
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/first-login" element={<FirstLoginPasswordPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/activate" element={<ActivatePage />} />
       <Route

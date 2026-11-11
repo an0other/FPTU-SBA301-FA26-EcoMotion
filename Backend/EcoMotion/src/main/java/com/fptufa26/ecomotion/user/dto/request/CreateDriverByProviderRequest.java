@@ -40,8 +40,6 @@ public record CreateDriverByProviderRequest(
 
         @NotBlank(message = "Ảnh GPLX không được để trống")
         @Size(max = 500, message = "Đường dẫn ảnh GPLX tối đa 500 ký tự")
-        String licenseImageUrl,
-
-        String initialPassword
+        String licenseImageUrl
 ) {
 }

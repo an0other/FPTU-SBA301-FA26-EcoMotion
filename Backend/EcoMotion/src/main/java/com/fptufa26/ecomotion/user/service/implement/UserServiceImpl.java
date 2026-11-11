@@ -217,8 +217,18 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public Long resetPassword(String email, String rawPassword) {
+        return applyNewPassword(email, rawPassword);
+    }
+
+    @Override
+    public Long completeFirstLoginPasswordChange(String email, String rawPassword) {
+        return applyNewPassword(email, rawPassword);
+    }
+
+    private Long applyNewPassword(String email, String rawPassword) {
         User user = findByEmail(email).orElseThrow(() -> new NotFoundException("User not found"));
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setMustChangePassword(false);
         userRepository.saveAndFlush(user);
         return user.getUserId();
     }

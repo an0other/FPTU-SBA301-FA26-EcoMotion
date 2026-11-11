@@ -123,6 +123,11 @@ export const providerService = {
     return data?.data
   },
 
+  async getDriverTrips(id) {
+    const { data } = await apiClient.get(`/provider/drivers/${id}/trips`)
+    return data?.data ?? []
+  },
+
   async createDriver(payload) {
     const { data } = await apiClient.post('/provider/drivers', payload)
     return data?.data

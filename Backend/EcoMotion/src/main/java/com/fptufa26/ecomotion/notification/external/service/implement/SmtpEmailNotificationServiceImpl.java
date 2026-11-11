@@ -1,7 +1,9 @@
 package com.fptufa26.ecomotion.notification.external.service.implement;
 
+import com.fptufa26.ecomotion.notification.external.dto.request.AccountCredentialNotificationRequest;
 import com.fptufa26.ecomotion.notification.external.dto.request.OtpNotificationRequest;
 import com.fptufa26.ecomotion.notification.external.dto.request.BookingNotificationRequest;
+import com.fptufa26.ecomotion.notification.external.service.AccountExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.service.BookingExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.dto.response.NotificationResult;
 import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
@@ -25,7 +27,7 @@ import java.util.Locale;
 @Slf4j
 @Service
 @ConditionalOnProperty(name = "app.notification.external.email.mode", havingValue = "smtp")
-public class SmtpEmailNotificationServiceImpl implements OtpExternalNotificationService, BookingExternalNotificationService {
+public class SmtpEmailNotificationServiceImpl implements OtpExternalNotificationService, BookingExternalNotificationService, AccountExternalNotificationService {
 
     private final JavaMailSender mailSender;
     private final Validator validator;
@@ -76,6 +78,46 @@ public class SmtpEmailNotificationServiceImpl implements OtpExternalNotification
     @Override
     public NotificationResult sendDepositPaid(BookingNotificationRequest request) {
         return sendBooking(request, true);
+    }
+
+    @Override
+    public NotificationResult sendDriverCredentials(AccountCredentialNotificationRequest request) {
+        if (request == null
+                || !validator.validate(request).isEmpty()
+                || !validator.validate(new EmailAddress(request.email())).isEmpty()) {
+            return new NotificationResult(false, "A valid account credential email notification request is required");
+        }
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(request.email());
+        message.setSubject("EcoMotion - Thông tin tài khoản tài xế");
+        message.setText("""
+                Xin chào %s,
+
+                Nhà xe %s đã tạo tài khoản tài xế EcoMotion cho bạn.
+
+                Email đăng nhập: %s
+                Mật khẩu tạm thời: %s
+
+                Vì lý do bảo mật, bạn phải đổi mật khẩu trước khi sử dụng.
+                Đổi mật khẩu ngay: %s
+
+                Không chia sẻ mật khẩu này với bất kỳ ai, kể cả nhà xe.
+                """.formatted(
+                request.fullName(),
+                request.providerName(),
+                request.email(),
+                request.temporaryPassword(),
+                request.changePasswordUrl()));
+
+        try {
+            mailSender.send(message);
+            return new NotificationResult(true, null);
+        } catch (MailException ex) {
+            log.warn("Failed to send driver credential email notification", ex);
+            return new NotificationResult(false, "Could not send driver credential email notification");
+        }
     }
 
     private NotificationResult sendBooking(BookingNotificationRequest request, boolean depositPaid) {

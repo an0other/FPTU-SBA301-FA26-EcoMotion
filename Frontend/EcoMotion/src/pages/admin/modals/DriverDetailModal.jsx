@@ -252,8 +252,7 @@ export default function DriverDetailModal({
           <h4 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <span>📷</span> Hình ảnh bằng lái xe &amp; Chân dung đối chiếu
           </h4>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {/* License Front */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div
               onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
               className="group relative flex h-36 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
@@ -261,33 +260,14 @@ export default function DriverDetailModal({
               {licenseImageUrl ? (
                 <img
                   src={licenseImageUrl}
-                  alt="GPLX Mặt trước"
+                  alt="Ảnh Bằng lái xe (GPLX)"
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"
                 />
               ) : (
-                <span className="p-2 text-center text-slate-400">Chưa tải lên ảnh mặt trước</span>
+                <span className="p-2 text-center text-slate-400">Chưa có ảnh GPLX</span>
               )}
               <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
-                <IconEye className="h-3 w-3" /> GPLX Mặt trước
-              </span>
-            </div>
-
-            {/* License Back / Alternate */}
-            <div
-              onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
-              className="group relative flex h-36 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
-            >
-              {licenseImageUrl ? (
-                <img
-                  src={licenseImageUrl}
-                  alt="GPLX Tài liệu"
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                />
-              ) : (
-                <span className="p-2 text-center text-slate-400">Chưa có ảnh mặt sau</span>
-              )}
-              <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
-                <IconEye className="h-3 w-3" /> Chi tiết GPLX
+                <IconEye className="h-3 w-3" /> Ảnh Bằng lái xe (GPLX)
               </span>
             </div>
 

@@ -39,6 +39,8 @@ public interface UserService {
 
     Long resetPassword(String email, String rawPassword);
 
+    Long completeFirstLoginPasswordChange(String email, String rawPassword);
+
     boolean existsByPhone(String phone);
 
     boolean canUsePhone(Long userId, String phone);

@@ -52,6 +52,7 @@ apiClient.interceptors.response.use(
     const isAuthAction = path === '/auth/login'
       || path === '/auth/forgot-password'
       || path === '/auth/reset-password'
+      || path === '/auth/first-login/change-password'
       || path === '/auth/logout'
       || path === '/auth/refresh'
       || path?.startsWith('/auth/register')
