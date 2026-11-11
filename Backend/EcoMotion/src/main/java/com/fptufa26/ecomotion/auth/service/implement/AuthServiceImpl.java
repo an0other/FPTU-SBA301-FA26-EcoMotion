@@ -10,6 +10,7 @@ import com.fptufa26.ecomotion.auth.exception.AccountInactiveException;
 import com.fptufa26.ecomotion.auth.exception.AccountPendingException;
 import com.fptufa26.ecomotion.auth.exception.InvalidCredentialsException;
 import com.fptufa26.ecomotion.auth.exception.InvalidRefreshTokenException;
+import com.fptufa26.ecomotion.auth.exception.PasswordChangeRequiredException;
 import com.fptufa26.ecomotion.auth.mapper.AuthMapper;
 import com.fptufa26.ecomotion.auth.repository.RefreshTokenRepository;
 import com.fptufa26.ecomotion.auth.service.AuthService;
@@ -98,6 +99,10 @@ public class AuthServiceImpl implements AuthService {
             throw new AccountInactiveException();
         }
 
+        if (user.isMustChangePassword()) {
+            throw new PasswordChangeRequiredException();
+        }
+
         String accessToken = jwtService.generateAccessToken(user);
 
         String rawRefreshToken = generateOpaqueToken();
@@ -145,6 +150,9 @@ public class AuthServiceImpl implements AuthService {
         User user = stored.getUser();
         if (!user.isActive()) {
             throw new AccountInactiveException();
+        }
+        if (user.isMustChangePassword()) {
+            throw new InvalidRefreshTokenException();
         }
 
         String familyId = stored.getFamilyId() == null

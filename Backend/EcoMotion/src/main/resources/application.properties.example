@@ -130,6 +130,7 @@ app.registration-token.ttl=30m
 # mode=logging -> writes the code to the app log (local dev / tests).
 app.notification.external.email.mode=smtp
 app.notification.external.fallback-order=EMAIL,SMS
+app.frontend.base-url=${FRONTEND_BASE_URL:http://localhost:5173}
 app.otp.length=6
 app.otp.ttl=5m
 app.otp.max-attempts=5

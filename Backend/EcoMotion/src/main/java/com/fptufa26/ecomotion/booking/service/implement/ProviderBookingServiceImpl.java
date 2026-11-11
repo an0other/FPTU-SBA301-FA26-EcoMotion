@@ -179,6 +179,43 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ProviderBookingResponse> getDriverBookings(Long currentUserId, Long driverId) {
+        Provider provider = resolveProvider(currentUserId);
+        Specification<Booking> spec = Specification.where(BookingSpecification.hasProvider(provider.getId()))
+                .and(BookingSpecification.hasDriver(driverId));
+        List<Booking> bookings = bookingRepository.findAll(spec);
+        List<Booking> sorted = bookings.stream()
+                .sorted(this::compareDriverBookings)
+                .toList();
+        return toResponses(sorted);
+    }
+
+    private int compareDriverBookings(Booking b1, Booking b2) {
+        int p1 = getBookingOperationalPriority(b1.getStatus());
+        int p2 = getBookingOperationalPriority(b2.getStatus());
+        if (p1 != p2) {
+            return Integer.compare(p1, p2);
+        }
+        Instant t1 = b1.getPickupTime() != null ? b1.getPickupTime() : Instant.EPOCH;
+        Instant t2 = b2.getPickupTime() != null ? b2.getPickupTime() : Instant.EPOCH;
+        if (p1 <= 2) {
+            return t1.compareTo(t2);
+        }
+        return t2.compareTo(t1);
+    }
+
+    private int getBookingOperationalPriority(BookingStatus status) {
+        if (status == null) return 5;
+        return switch (status) {
+            case IN_PROGRESS, AWAITING_START_CONFIRMATION, AWAITING_END_CONFIRMATION, DRIVER_ARRIVED, DRIVER_CONFIRMED -> 1;
+            case DRIVER_ASSIGNED, CONFIRMED, ACCEPTED, AWAITING_DEPOSIT, PENDING -> 2;
+            case COMPLETED, AWAITING_EXTRA_CHARGE_CONFIRMATION, AWAITING_FINAL_PAYMENT -> 3;
+            case CANCELLATION_REVIEW, CANCELLED, REJECTED -> 4;
+        };
+    }
+
+    @Override
     public ProviderBookingSummaryResponse getSummary(Long currentUserId) {
         Provider provider = resolveProvider(currentUserId);
         Long providerId = provider.getId();

@@ -1,7 +1,9 @@
 package com.fptufa26.ecomotion.notification.external.service.implement;
 
+import com.fptufa26.ecomotion.notification.external.dto.request.AccountCredentialNotificationRequest;
 import com.fptufa26.ecomotion.notification.external.dto.request.OtpNotificationRequest;
 import com.fptufa26.ecomotion.notification.external.dto.request.BookingNotificationRequest;
+import com.fptufa26.ecomotion.notification.external.service.AccountExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.service.BookingExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.dto.response.NotificationResult;
 import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
@@ -16,7 +18,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @ConditionalOnProperty(name = "app.notification.external.email.mode", havingValue = "logging", matchIfMissing = true)
-public class LoggingEmailNotificationServiceImpl implements OtpExternalNotificationService, BookingExternalNotificationService {
+public class LoggingEmailNotificationServiceImpl implements OtpExternalNotificationService, BookingExternalNotificationService, AccountExternalNotificationService {
 
     private final Validator validator;
 
@@ -49,6 +51,18 @@ public class LoggingEmailNotificationServiceImpl implements OtpExternalNotificat
     @Override
     public NotificationResult sendDepositPaid(BookingNotificationRequest request) {
         return logBooking(request, true);
+    }
+
+    @Override
+    public NotificationResult sendDriverCredentials(AccountCredentialNotificationRequest request) {
+        if (request == null
+                || !validator.validate(request).isEmpty()
+                || !validator.validate(new EmailAddress(request.email())).isEmpty()) {
+            return new NotificationResult(false, "A valid account credential email notification request is required");
+        }
+        log.info("Simulated driver credential email notification: email={}, tempPassword={}, changePasswordUrl={}",
+                request.email(), request.temporaryPassword(), request.changePasswordUrl());
+        return new NotificationResult(true, null);
     }
 
     private NotificationResult logBooking(BookingNotificationRequest request, boolean depositPaid) {

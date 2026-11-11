@@ -50,6 +50,15 @@ export default function LoginPage() {
       navigate(redirectTo || homeRouteForRole(user.role), { replace: true })
     } catch (err) {
       const raw = err?.original?.response?.data?.message || ''
+      if (err?.status === 403 && /password change required/i.test(raw)) {
+        navigate('/first-login', {
+          state: {
+            email: form.email.trim(),
+            notice: 'Bạn cần đổi mật khẩu tạm thời trước khi đăng nhập lần đầu.',
+          },
+        })
+        return
+      }
       if (err?.status === 403 && /pending/i.test(raw)) {
         navigate('/activate', {
           state: {

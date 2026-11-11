@@ -115,6 +115,7 @@ CREATE TABLE users (
     role            varchar(20)  NOT NULL,
     status          varchar(20)  NOT NULL DEFAULT 'PENDING',
     ekyc_status     varchar(20)  NOT NULL DEFAULT 'UNVERIFIED',
+    must_change_password boolean NOT NULL DEFAULT false,
     created_at      timestamptz  NOT NULL DEFAULT now(),
     updated_at      timestamptz  NOT NULL DEFAULT now(),
     CONSTRAINT uk_users_email UNIQUE (email),

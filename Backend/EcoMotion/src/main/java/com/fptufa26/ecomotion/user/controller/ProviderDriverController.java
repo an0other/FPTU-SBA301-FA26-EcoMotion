@@ -100,6 +100,15 @@ public class ProviderDriverController {
         return ApiResponse.success(providerDriverService.getDriverById(principal.getUserId(), id));
     }
 
+    @GetMapping("/{id}/trips")
+    @Operation(summary = "Get list of all trips assigned to a specific driver")
+    public ApiResponse<List<com.fptufa26.ecomotion.booking.dto.response.ProviderBookingResponse>> getDriverTrips(
+            @AuthenticationPrincipal SecurityUser principal,
+            @PathVariable Long id
+    ) {
+        return ApiResponse.success(providerBookingService.getDriverBookings(principal.getUserId(), id));
+    }
+
     @PostMapping
     @Operation(summary = "Proxy create new driver profile and account")
     public ApiResponse<ProviderDriverItemResponse> createDriver(

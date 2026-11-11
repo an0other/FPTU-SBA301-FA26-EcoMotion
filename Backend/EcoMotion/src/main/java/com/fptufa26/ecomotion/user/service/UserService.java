@@ -33,6 +33,8 @@ public interface UserService {
 
     Long resetPassword(String email, String rawPassword);
 
+    Long completeFirstLoginPasswordChange(String email, String rawPassword);
+
     boolean existsByPhone(String phone);
 
     User createUser(String email, String rawPassword, String fullName, String phone, Role role, UserStatus status);
