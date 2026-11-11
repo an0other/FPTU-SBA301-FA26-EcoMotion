@@ -240,7 +240,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconShield className="h-4 w-4" />
-              <span>A01 — Tổng quan (Overview)</span>
+              <span>Tổng quan (Overview)</span>
             </button>
 
             <button
@@ -253,7 +253,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconUsers className="h-4 w-4" />
-              <span>A02 — Người dùng &amp; Hồ sơ</span>
+              <span>Người dùng &amp; Hồ sơ</span>
               {pendingUsersCount > 0 && (
                 <span className="rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] font-extrabold text-white">
                   {pendingUsersCount}
@@ -271,7 +271,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconCar className="h-4 w-4" />
-              <span>A03 — Duyệt xe mở bán</span>
+              <span>Duyệt xe mở bán</span>
               {pendingVehiclesCount > 0 && (
                 <span className="rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] font-extrabold text-white">
                   {pendingVehiclesCount}
@@ -289,7 +289,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconClock className="h-4 w-4" />
-              <span>A04 — Vận hành &amp; Hoàn tiền</span>
+              <span>Vận hành &amp; Hoàn tiền</span>
               {openDisputesCount > 0 && (
                 <span className="rounded-full bg-rose-500 px-1.5 py-0.2 text-[10px] font-extrabold text-white">
                   {openDisputesCount}
@@ -322,7 +322,6 @@ export default function AdminDashboard() {
             selectedMonthKey={selectedMonthKey}
             customDateRange={customDateRange}
             onMonthChange={handleMonthChange}
-            onRefresh={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}

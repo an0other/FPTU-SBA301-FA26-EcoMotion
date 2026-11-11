@@ -9,12 +9,16 @@ import {
   IconCheckCircle,
   IconArrowRight,
   IconSparkles,
-  IconRefresh,
   IconCalendar,
   IconChevronDown,
   IconChevronRight,
   IconX,
 } from '../../components/icons/Icons'
+import {
+  DEFAULT_TREND_WINDOW_SIZE,
+  getTrendMonthWindow,
+  stepTrendOffset,
+} from '../../utils/adminTrendWindow'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -122,10 +126,10 @@ export default function AdminOverviewTab({
   customDateRange = { fromDate: '', toDate: '' },
   onMonthChange,
   onNavigate,
-  onRefresh,
 }) {
   const [chartView, setChartView] = useState('both') // 'both' | 'donut' | 'bar' | 'trend'
   const [activeSegment, setActiveSegment] = useState(null)
+  const [trendOffset, setTrendOffset] = useState(0)
   const [visiblePeriodCount, setVisiblePeriodCount] = useState(5)
   const [periodDisplayMode, setPeriodDisplayMode] = useState('5') // '5' | '10' | '15' | 'ALL' | 'CUSTOM'
   const [customPeriodInput, setCustomPeriodInput] = useState('8')
@@ -169,6 +173,34 @@ export default function AdminOverviewTab({
     if (!chronologicalMonths || chronologicalMonths.length === 0) return 1
     return Math.max(...chronologicalMonths.map((m) => Number(m.grossMerchandiseValue ?? 0)), 1)
   }, [chronologicalMonths])
+
+  const {
+    visibleMonths: visibleTrendMonths,
+    canShiftOlder: canShiftTrendOlder,
+    canShiftNewer: canShiftTrendNewer,
+  } = useMemo(
+    () => getTrendMonthWindow(chronologicalMonths, trendOffset, DEFAULT_TREND_WINDOW_SIZE),
+    [chronologicalMonths, trendOffset]
+  )
+
+  const trendGridColsClass =
+    visibleTrendMonths.length <= 1
+      ? 'grid-cols-1 max-w-xs mx-auto'
+      : visibleTrendMonths.length === 2
+        ? 'grid-cols-2 max-w-md mx-auto'
+        : visibleTrendMonths.length === 3
+          ? 'grid-cols-3 max-w-2xl mx-auto'
+          : visibleTrendMonths.length === 4
+            ? 'grid-cols-4 max-w-4xl mx-auto'
+            : 'grid-cols-5'
+
+  function handleShiftTrendOlder() {
+    setTrendOffset((prev) => stepTrendOffset(prev, 1, chronologicalMonths.length, DEFAULT_TREND_WINDOW_SIZE))
+  }
+
+  function handleShiftTrendNewer() {
+    setTrendOffset((prev) => stepTrendOffset(prev, -1, chronologicalMonths.length, DEFAULT_TREND_WINDOW_SIZE))
+  }
 
   const isAllTime = selectedMonthKey === 'ALL'
   const isCustomDate = selectedMonthKey === 'CUSTOM'
@@ -504,7 +536,7 @@ export default function AdminOverviewTab({
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
-                Bảng điều khiển Tài chính &amp; Dòng tiền
+                Tài chính &amp; Dòng tiền
               </h2>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-200/60 shadow-2xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -642,15 +674,6 @@ export default function AdminOverviewTab({
                 Xu hướng các tháng
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={onRefresh}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs transition-all hover:border-slate-300 hover:bg-slate-50 active:scale-95"
-            >
-              <IconRefresh className="h-3.5 w-3.5 text-slate-500" />
-              <span>Làm mới</span>
-            </button>
           </div>
         </div>
 
@@ -1167,121 +1190,139 @@ export default function AdminOverviewTab({
                   </div>
                 </div>
 
-                {/* 6-Month Comparative Scale Chart */}
-                <div className="relative mt-6 pt-10 pb-4">
-                  {/* Grid Lines */}
-                  <div className="pointer-events-none absolute inset-x-0 bottom-16 top-10 flex flex-col justify-between">
-                    <div className="flex items-center border-b border-dashed border-slate-200/80">
-                      <span className="pr-1 text-[9px] font-medium text-slate-400">100% ({formatCompactVND(maxTrendGmv)})</span>
-                    </div>
-                    <div className="flex items-center border-b border-dashed border-slate-200/80">
-                      <span className="pr-1 text-[9px] font-medium text-slate-400">75%</span>
-                    </div>
-                    <div className="flex items-center border-b border-dashed border-slate-200/80">
-                      <span className="pr-1 text-[9px] font-medium text-slate-400">50%</span>
-                    </div>
-                    <div className="flex items-center border-b border-dashed border-slate-200/80">
-                      <span className="pr-1 text-[9px] font-medium text-slate-400">25%</span>
-                    </div>
-                    <div className="flex items-center border-b border-slate-200">
-                      <span className="pr-1 text-[9px] font-medium text-slate-400">0 ₫</span>
-                    </div>
-                  </div>
-
-                  {/* Columns Grid */}
-                  <div
-                    className={`relative z-10 grid gap-3 sm:gap-4 items-end px-2 sm:px-6 ${
-                      chronologicalMonths.length === 1
-                        ? 'grid-cols-1 max-w-xs mx-auto'
-                        : chronologicalMonths.length === 2
-                          ? 'grid-cols-2 max-w-md mx-auto'
-                          : chronologicalMonths.length === 3
-                            ? 'grid-cols-2 sm:grid-cols-3'
-                            : chronologicalMonths.length === 4
-                              ? 'grid-cols-2 sm:grid-cols-4'
-                              : chronologicalMonths.length === 5
-                                ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5'
-                                : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-6'
-                    }`}
+                {/* 5-Month Single-Row Comparative Scale Chart */}
+                <div className="mt-6 flex items-center gap-2 sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={handleShiftTrendOlder}
+                    disabled={!canShiftTrendOlder}
+                    aria-label="Xem các tháng trước đó"
+                    title="Xem các tháng trước đó"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-xs transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-600"
                   >
-                    {chronologicalMonths.map((m) => {
-                      const rowKey = `${m.year}-${String(m.month).padStart(2, '0')}`
-                      const isSelected = selectedMonthKey === rowKey
-                      const gmvVal = Number(m.grossMerchandiseValue ?? 0)
-                      const commVal = Number(m.platformCommission ?? 0)
-                      const gmvHeight = maxTrendGmv > 0 ? Math.max(Math.round((gmvVal / maxTrendGmv) * 100), 8) : 8
-                      const commHeight = maxTrendGmv > 0 ? Math.max(Math.round((commVal / maxTrendGmv) * 100), 5) : 5
+                    <IconChevronRight className="h-4 w-4 rotate-180" />
+                  </button>
 
-                      return (
-                        <div
-                          key={rowKey}
-                          onClick={() => onMonthChange?.(rowKey)}
-                          className={`group relative flex flex-col items-center justify-end rounded-xl p-2 transition-all cursor-pointer ${isSelected
-                              ? 'bg-brand-50/60 ring-2 ring-brand-500 shadow-sm'
-                              : 'hover:bg-slate-50/80'
-                            }`}
-                        >
-                          {/* Top Growth Rate Tag */}
-                          <div className="mb-2 flex flex-col items-center">
-                            {m.commissionGrowthRate != null ? (
-                              <GrowthBadge
-                                rate={m.commissionGrowthRate}
-                                diff={m.commissionDiff}
-                                isCurrency={true}
-                                size="xs"
-                              />
-                            ) : (
-                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
-                                Kỳ gốc
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Dual Bars: GMV & Commission */}
-                          <div className="flex h-56 items-end justify-center gap-1.5 sm:gap-2 w-full">
-                            {/* GMV Bar */}
-                            <div className="flex flex-col items-center h-full justify-end flex-1 max-w-[36px]">
-                              <span className="mb-1 text-[10px] font-bold text-sky-800 opacity-90 truncate group-hover:scale-105 transition-transform">
-                                {formatCompactVND(gmvVal)}
-                              </span>
-                              <div
-                                style={{ height: `${gmvHeight}%` }}
-                                className="w-full rounded-t-lg bg-gradient-to-t from-sky-600 via-sky-500 to-sky-400 transition-all duration-500 shadow-xs group-hover:brightness-110"
-                                title={`Tổng GMV: ${formatVND(gmvVal)}`}
-                              />
-                            </div>
-
-                            {/* Commission Bar */}
-                            <div className="flex flex-col items-center h-full justify-end flex-1 max-w-[36px]">
-                              <span className="mb-1 text-[10px] font-bold text-emerald-800 opacity-90 truncate group-hover:scale-105 transition-transform">
-                                {formatCompactVND(commVal)}
-                              </span>
-                              <div
-                                style={{ height: `${commHeight}%` }}
-                                className="w-full rounded-t-lg bg-gradient-to-t from-emerald-600 via-emerald-500 to-teal-400 transition-all duration-500 shadow-xs group-hover:brightness-110"
-                                title={`Hoa hồng sàn: ${formatVND(commVal)}`}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Month Bottom Label */}
-                          <div className="mt-3 text-center border-t border-slate-100 pt-2 w-full">
-                            <div className="text-xs font-bold text-slate-800 truncate">
-                              {m.label}
-                            </div>
-                            <div className="mt-0.5 text-[10px] font-medium text-slate-500 flex items-center justify-center gap-1">
-                              <span>{m.completedBookings} chuyến</span>
-                              {isSelected && (
-                                <span className="rounded bg-brand-600 text-white px-1 py-0.2 text-[8px] font-extrabold">
-                                  CHỌN
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                  <div className="min-w-0 flex-1 overflow-x-auto">
+                    <div
+                      className={`relative pt-10 pb-4 ${
+                        visibleTrendMonths.length >= 4 ? 'min-w-[520px] sm:min-w-0' : ''
+                      }`}
+                    >
+                      {/* Grid Lines */}
+                      <div className="pointer-events-none absolute inset-x-0 bottom-16 top-10 flex flex-col justify-between">
+                        <div className="flex items-center border-b border-dashed border-slate-200/80">
+                          <span className="pr-1 text-[9px] font-medium text-slate-400">100% ({formatCompactVND(maxTrendGmv)})</span>
                         </div>
-                      )
-                    })}
+                        <div className="flex items-center border-b border-dashed border-slate-200/80">
+                          <span className="pr-1 text-[9px] font-medium text-slate-400">75%</span>
+                        </div>
+                        <div className="flex items-center border-b border-dashed border-slate-200/80">
+                          <span className="pr-1 text-[9px] font-medium text-slate-400">50%</span>
+                        </div>
+                        <div className="flex items-center border-b border-dashed border-slate-200/80">
+                          <span className="pr-1 text-[9px] font-medium text-slate-400">25%</span>
+                        </div>
+                        <div className="flex items-center border-b border-slate-200">
+                          <span className="pr-1 text-[9px] font-medium text-slate-400">0 ₫</span>
+                        </div>
+                      </div>
+
+                      {/* Columns Grid (Single Row) */}
+                      <div
+                        className={`relative z-10 grid gap-2 sm:gap-4 items-end pl-7 pr-2 sm:px-8 ${trendGridColsClass}`}
+                      >
+                        {visibleTrendMonths.map((m) => {
+                          const rowKey = `${m.year}-${String(m.month).padStart(2, '0')}`
+                          const isSelected = selectedMonthKey === rowKey
+                          const gmvVal = Number(m.grossMerchandiseValue ?? 0)
+                          const commVal = Number(m.platformCommission ?? 0)
+                          const gmvHeight = maxTrendGmv > 0 ? Math.max(Math.round((gmvVal / maxTrendGmv) * 100), 8) : 8
+                          const commHeight = maxTrendGmv > 0 ? Math.max(Math.round((commVal / maxTrendGmv) * 100), 5) : 5
+
+                          return (
+                            <div
+                              key={rowKey}
+                              onClick={() => onMonthChange?.(rowKey)}
+                              className={`group relative flex flex-col items-center justify-end rounded-xl p-2 transition-all cursor-pointer ${isSelected
+                                  ? 'bg-brand-50/60 ring-2 ring-brand-500 shadow-sm'
+                                  : 'hover:bg-slate-50/80'
+                                }`}
+                            >
+                              {/* Top Growth Rate Tag */}
+                              <div className="mb-2 flex flex-col items-center">
+                                {m.commissionGrowthRate != null ? (
+                                  <GrowthBadge
+                                    rate={m.commissionGrowthRate}
+                                    diff={m.commissionDiff}
+                                    isCurrency={true}
+                                    size="xs"
+                                  />
+                                ) : (
+                                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+                                    Kỳ gốc
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Dual Bars: GMV & Commission */}
+                              <div className="flex h-56 items-end justify-center gap-1.5 sm:gap-2 w-full">
+                                {/* GMV Bar */}
+                                <div className="flex flex-col items-center h-full justify-end flex-1 max-w-[36px]">
+                                  <span className="mb-1 text-[10px] font-bold text-sky-800 opacity-90 truncate group-hover:scale-105 transition-transform">
+                                    {formatCompactVND(gmvVal)}
+                                  </span>
+                                  <div
+                                    style={{ height: `${gmvHeight}%` }}
+                                    className="w-full rounded-t-lg bg-gradient-to-t from-sky-600 via-sky-500 to-sky-400 transition-all duration-500 shadow-xs group-hover:brightness-110"
+                                    title={`Tổng GMV: ${formatVND(gmvVal)}`}
+                                  />
+                                </div>
+
+                                {/* Commission Bar */}
+                                <div className="flex flex-col items-center h-full justify-end flex-1 max-w-[36px]">
+                                  <span className="mb-1 text-[10px] font-bold text-emerald-800 opacity-90 truncate group-hover:scale-105 transition-transform">
+                                    {formatCompactVND(commVal)}
+                                  </span>
+                                  <div
+                                    style={{ height: `${commHeight}%` }}
+                                    className="w-full rounded-t-lg bg-gradient-to-t from-emerald-600 via-emerald-500 to-teal-400 transition-all duration-500 shadow-xs group-hover:brightness-110"
+                                    title={`Hoa hồng sàn: ${formatVND(commVal)}`}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Month Bottom Label */}
+                              <div className="mt-3 text-center border-t border-slate-100 pt-2 w-full">
+                                <div className="text-xs font-bold text-slate-800 truncate">
+                                  {m.label}
+                                </div>
+                                <div className="mt-0.5 text-[10px] font-medium text-slate-500 flex items-center justify-center gap-1">
+                                  <span>{m.completedBookings} chuyến</span>
+                                  {isSelected && (
+                                    <span className="rounded bg-brand-600 text-white px-1 py-0.2 text-[8px] font-extrabold">
+                                      CHỌN
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={handleShiftTrendNewer}
+                    disabled={!canShiftTrendNewer}
+                    aria-label="Xem các tháng sau đó"
+                    title="Xem các tháng sau đó"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-xs transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-600"
+                  >
+                    <IconChevronRight className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
@@ -1589,7 +1630,7 @@ export default function AdminOverviewTab({
               <IconUsers className="h-5 w-5" />
             </span>
             <div>
-              <div className="text-xs font-bold text-slate-900">A02 — Người dùng &amp; Hồ sơ</div>
+              <div className="text-xs font-bold text-slate-900">Người dùng &amp; Hồ sơ</div>
               <div className="text-[11px] text-slate-500">Khóa user, duyệt NCC, tài xế, eKYC</div>
             </div>
           </button>
@@ -1603,7 +1644,7 @@ export default function AdminOverviewTab({
               <IconCar className="h-5 w-5" />
             </span>
             <div>
-              <div className="text-xs font-bold text-slate-900">A03 — Duyệt xe mở bán</div>
+              <div className="text-xs font-bold text-slate-900">Duyệt xe mở bán</div>
               <div className="text-[11px] text-slate-500">Kiểm định giấy tờ, duyệt độc lập</div>
             </div>
           </button>
@@ -1617,7 +1658,7 @@ export default function AdminOverviewTab({
               <IconClock className="h-5 w-5" />
             </span>
             <div>
-              <div className="text-xs font-bold text-slate-900">A04 — Vận hành &amp; Hoàn tiền</div>
+              <div className="text-xs font-bold text-slate-900">Vận hành &amp; Hoàn tiền</div>
               <div className="text-[11px] text-slate-500">Đơn thuê, phân xử tranh chấp, hoàn tiền</div>
             </div>
           </button>
