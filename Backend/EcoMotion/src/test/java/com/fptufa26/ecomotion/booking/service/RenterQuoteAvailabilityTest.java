@@ -22,12 +22,17 @@ class RenterQuoteAvailabilityTest {
     @Mock BookingRepository bookings;
     @Mock UserService users;
     @Mock RentalPricingService pricing;
+    @Mock com.fptufa26.ecomotion.vehicle.service.VehicleCatalogService vehicles;
     @InjectMocks BookingServiceImpl service;
     final Instant start=Instant.parse("2030-11-01T00:00:00Z");
     final Instant end=start.plusSeconds(5*3600);
     private void setup(Instant busyStart, Instant busyEnd) {
         Renter renter=new Renter(); renter.setId(7L);
         when(users.requireRenterByUserId(12L)).thenReturn(renter);
+        var providerUser=new com.fptufa26.ecomotion.user.entity.User(); providerUser.setId(99L);
+        var provider=new com.fptufa26.ecomotion.user.entity.Provider(); provider.setUser(providerUser);
+        var vehicle=new com.fptufa26.ecomotion.vehicle.entity.Vehicle(); vehicle.setProvider(provider);
+        when(vehicles.requireApproved(1L)).thenReturn(vehicle);
         Booking busy=new Booking(); busy.setPickupTime(busyStart); busy.setPlannedEndAt(busyEnd);
         when(bookings.findByRenter_IdAndStatusIn(eq(7L),any())).thenReturn(List.of(busy));
         when(pricing.quote(any())).thenReturn(new RentalQuoteResponse(true,null,start,end,List.of(),List.of(
@@ -51,5 +56,6 @@ class RenterQuoteAvailabilityTest {
         assertThat(quote.options()).hasSize(2);
         assertThat(quote.reason()).isNull();
         verify(users).requireRenterByUserId(12L);
+        verify(users).assertRentalAllowed(12L, 99L);
     }
 }

@@ -1275,7 +1275,8 @@ class EndUserWorkflowIntegrationTest {
 
     User user(Role role) {
         User u = new User(); u.setEmail(UUID.randomUUID() + "@safety.test"); u.setPasswordHash("test-only");
-        u.setFullName("TV5 safety"); u.setRole(role); u.setStatus(UserStatus.ACTIVE); em.persist(u); return u;
+        u.setFullName("TV5 safety"); u.setRole(role); u.setStatus(UserStatus.ACTIVE); em.persist(u);
+        return com.fptufa26.ecomotion.support.IdentityTestFixtures.verify(em, u);
     }
 
     @BeforeEach void fixture() {
