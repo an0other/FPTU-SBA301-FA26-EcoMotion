@@ -81,23 +81,33 @@ export function AdminYearlyReviewPanel({ dispute, onChanged }) {
       pending.current = null; await onChanged?.()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
-  return <section className="space-y-3 rounded-lg border border-amber-300 p-4">
-    <h3 className="font-bold">Phân xử {cancellation ? 'hủy trước nhận xe' : 'kiểm định và quyết toán năm'}</h3>
+  return <section className="space-y-2.5 rounded-lg border border-amber-300 p-3 text-xs">
+    <h3 className="text-sm font-bold">Phân xử {cancellation ? 'hủy trước nhận xe' : 'kiểm định và quyết toán năm'}</h3>
     {error && <p role="alert" className="text-red-700">{error}</p>}
-    {data && <><AuditHistory rows={data.history} /><details className="rounded-lg border p-3"><summary>Bằng chứng của hợp đồng</summary><div className="grid gap-3 sm:grid-cols-2">{data.evidence.map(item => <figure key={item.id}><EvidenceImage src={item.imageUrl} alt={item.note || 'Bằng chứng hợp đồng'} openable className="max-h-48 max-w-full rounded-lg object-contain" /><figcaption className="text-sm">{item.note || item.originalFileName}</figcaption></figure>)}</div></details><form onSubmit={submit} className="space-y-3">
-      {cancellation ? <>
-        <label className="block">Tổng tiền được hoàn theo kết luận (đ)<input name="refundAmount" type="number" min="0" step="0.01" required className={inputClass} /></label>
-        <label className="block">Chứng cứ hợp đồng và đối soát<input name="evidenceReference" required maxLength={500} className={inputClass} /></label>
-      </> : <>
-        <label className="block">Ngày trả xe được xác minh<input name="returnedOn" type="date" required defaultValue={data.workflow.returnedOn || ''} className={inputClass} /></label>
-        <label className="block">Km khi trả xe<input name="finalKm" type="number" min="0" step="1" required defaultValue={data.workflow.finalKm ?? ''} className={inputClass} /></label>
-        <label className="block">Phụ phí được giữ lại (đ)<input name="otherCharges" type="number" min="0" step="0.01" required defaultValue={data.workflow.money.otherCharges} className={inputClass} /></label>
-        <label className="block">Khấu trừ tiền bảo đảm (đ)<input name="depositDeduction" type="number" min="0" step="0.01" required defaultValue={data.workflow.money.depositDeduction} className={inputClass} /></label>
-        <label className="block">Bằng chứng đã kiểm tra<select name="evidenceId" required className={inputClass}><option value="">Chọn bằng chứng của hợp đồng</option>{data.evidence.map(e => <option key={e.id} value={e.id}>{e.note || e.originalFileName || 'Bằng chứng'} · {new Date(e.createdAt).toLocaleDateString('vi-VN')}</option>)}</select></label>
-      </>}
-      <label className="block">Kết luận phân xử<textarea name="note" required maxLength={1000} className={inputClass} /></label>
-      <p className="text-sm">Kết luận sẽ tính lại tiền phải thu/hoàn; chưa xác nhận tiền đã chuyển.</p>
-      <button disabled={busy} className={buttonClass}>{busy ? 'Đang xử lý…' : 'Áp dụng phán quyết'}</button>
-    </form></>}
+    {data && <>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <AuditHistory rows={data.history} />
+        <details className="rounded-lg border p-2.5"><summary className="cursor-pointer font-semibold">Bằng chứng của hợp đồng</summary><div className="mt-2 grid gap-2 sm:grid-cols-2">{data.evidence.map(item => <figure key={item.id}><EvidenceImage src={item.imageUrl} alt={item.note || 'Bằng chứng hợp đồng'} openable className="max-h-36 max-w-full rounded-lg object-contain" /><figcaption className="text-xs">{item.note || item.originalFileName}</figcaption></figure>)}</div></details>
+      </div>
+      <form onSubmit={submit} className="space-y-2.5">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          {cancellation ? <>
+            <label className="block font-medium">Tổng tiền được hoàn theo kết luận (đ)<input name="refundAmount" type="number" min="0" step="0.01" required className={`${inputClass} mt-1`} /></label>
+            <label className="block font-medium">Chứng cứ hợp đồng và đối soát<input name="evidenceReference" required maxLength={500} className={`${inputClass} mt-1`} /></label>
+          </> : <>
+            <label className="block font-medium">Ngày trả xe được xác minh<input name="returnedOn" type="date" required defaultValue={data.workflow.returnedOn || ''} className={`${inputClass} mt-1`} /></label>
+            <label className="block font-medium">Km khi trả xe<input name="finalKm" type="number" min="0" step="1" required defaultValue={data.workflow.finalKm ?? ''} className={`${inputClass} mt-1`} /></label>
+            <label className="block font-medium">Phụ phí được giữ lại (đ)<input name="otherCharges" type="number" min="0" step="0.01" required defaultValue={data.workflow.money.otherCharges} className={`${inputClass} mt-1`} /></label>
+            <label className="block font-medium">Khấu trừ tiền bảo đảm (đ)<input name="depositDeduction" type="number" min="0" step="0.01" required defaultValue={data.workflow.money.depositDeduction} className={`${inputClass} mt-1`} /></label>
+            <label className="block font-medium sm:col-span-2">Bằng chứng đã kiểm tra<select name="evidenceId" required className={`${inputClass} mt-1`}><option value="">Chọn bằng chứng của hợp đồng</option>{data.evidence.map(e => <option key={e.id} value={e.id}>{e.note || e.originalFileName || 'Bằng chứng'} · {new Date(e.createdAt).toLocaleDateString('vi-VN')}</option>)}</select></label>
+          </>}
+          <label className="block font-medium sm:col-span-2">Kết luận phân xử<textarea name="note" rows="2" required maxLength={1000} className={`${inputClass} mt-1`} /></label>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200/70 pt-2">
+          <p className="text-xs text-slate-600">Kết luận sẽ tính lại tiền phải thu/hoàn; chưa xác nhận tiền đã chuyển.</p>
+          <button disabled={busy} className={buttonClass}>{busy ? 'Đang xử lý…' : 'Áp dụng phán quyết'}</button>
+        </div>
+      </form>
+    </>}
   </section>
 }

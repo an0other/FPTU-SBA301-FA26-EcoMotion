@@ -1,4 +1,5 @@
 import { IconX, IconCheckCircle, IconEye, IconUsers, IconAlertTriangle } from '../../../components/icons/Icons'
+import AdminModalShell from './AdminModalShell'
 
 const STATUS_BADGES = {
   APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -29,13 +30,13 @@ export default function DriverDetailModal({
   const isExpired = driver.licenseExpiry ? new Date(driver.licenseExpiry) < new Date() : false
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-      <div className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+    <AdminModalShell
+      maxWidth="max-w-5xl"
+      header={(
+        <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div
-              className={`h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xs ${
+              className={`h-11 w-11 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-2xs ${
                 portraitUrl ? 'cursor-pointer hover:ring-2 hover:ring-brand-500' : ''
               }`}
               onClick={() => portraitUrl && onPreviewImage && onPreviewImage(portraitUrl)}
@@ -63,7 +64,7 @@ export default function DriverDetailModal({
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-lg font-bold text-slate-900">
                   {driver.userFullName || 'Hồ sơ Thẩm định Tài xế'}
                 </h3>
@@ -75,13 +76,13 @@ export default function DriverDetailModal({
                   {driver.status}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                 <span>Tài xế #{driver.id} • Đơn vị quản lý:</span>
                 {driver.providerId && onSelectProvider ? (
                   <button
                     type="button"
                     onClick={() => onSelectProvider(driver.providerId)}
-                    className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 font-bold text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                    className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-bold text-indigo-700 transition-colors hover:bg-indigo-100"
                   >
                     {driver.providerDisplayName || `NCC #${driver.providerId}`} →
                   </button>
@@ -100,182 +101,13 @@ export default function DriverDetailModal({
             <IconX className="h-5 w-5" />
           </button>
         </div>
-
-        {/* Content Body */}
-        <div className="mt-5 space-y-5 text-xs">
-          {/* Reject Notice if rejected */}
-          {driver.rejectReason && (
-            <div className="flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-rose-800">
-              <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-              <div>
-                <strong className="block font-bold">Lý do từ chối trước đó:</strong>
-                <p className="mt-0.5">{driver.rejectReason}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Section 1: Personal & Organization */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <span>👤</span> Thông tin tài xế &amp; Đơn vị chủ quản
-              </span>
-              {driver.userId && onSelectUser && (
-                <button
-                  type="button"
-                  onClick={() => onSelectUser(driver.userId)}
-                  className="text-[11px] font-bold text-brand-600 hover:underline"
-                >
-                  Xem tài khoản gốc (User #{driver.userId}) →
-                </button>
-              )}
-            </h4>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <span className="text-slate-500 block">Họ và tên:</span>
-                <strong className="text-slate-900 text-sm">{driver.userFullName || '—'}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Email:</span>
-                <strong className="text-slate-900">{driver.userEmail || '—'}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Số điện thoại:</span>
-                <strong className="text-slate-900 font-bold">{driver.userPhone || '—'}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Nhà cung cấp quản lý:</span>
-                {driver.providerId && onSelectProvider ? (
-                  <button
-                    type="button"
-                    onClick={() => onSelectProvider(driver.providerId)}
-                    className="font-bold text-indigo-700 hover:underline text-left"
-                  >
-                    {driver.providerDisplayName || `NCC #${driver.providerId}`} →
-                  </button>
-                ) : (
-                  <strong className="text-brand-700">{driver.providerDisplayName || 'Chưa gán'}</strong>
-                )}
-              </div>
-              <div>
-                <span className="text-slate-500 block">Điểm đánh giá uy tín:</span>
-                <strong className="text-slate-900">
-                  ★ {driver.ratingAvg || '5.0'} ({driver.ratingCount || 0} lượt)
-                </strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Ngày tạo hồ sơ:</span>
-                <strong className="text-slate-900">
-                  {driver.createdAt ? new Date(driver.createdAt).toLocaleString('vi-VN') : '—'}
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Driver License Details */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-              <span>🪪</span> Giấy phép lái xe (GPLX)
-            </h4>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div>
-                <span className="text-slate-500 block">Số Giấy phép lái xe:</span>
-                <strong className="text-slate-900 font-mono text-sm">{driver.licenseNo || '—'}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Hạng bằng lái:</span>
-                <span className="inline-block rounded-md bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-800">
-                  Hạng {driver.licenseClass || 'B2'}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Ngày hết hạn bằng lái:</span>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <strong className={`font-semibold ${isExpired ? 'text-rose-600' : 'text-slate-900'}`}>
-                    {driver.licenseExpiry || 'Không thời hạn'}
-                  </strong>
-                  {isExpired && (
-                    <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
-                      Đã hết hạn!
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Driver License Photos */}
-          <div>
-            <h4 className="font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-              <span>📷</span> Hình ảnh bằng lái xe &amp; Chân dung đối chiếu
-            </h4>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {/* License Front */}
-              <div
-                onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
-                className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
-              >
-                {licenseImageUrl ? (
-                  <img
-                    src={licenseImageUrl}
-                    alt="GPLX Mặt trước"
-                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                ) : (
-                  <span className="text-slate-400 text-center p-2">Chưa tải lên ảnh mặt trước</span>
-                )}
-                <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
-                  <IconEye className="h-3 w-3" /> GPLX Mặt trước
-                </span>
-              </div>
-
-              {/* License Back / Alternate */}
-              <div
-                onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
-                className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
-              >
-                {licenseImageUrl ? (
-                  <img
-                    src={licenseImageUrl}
-                    alt="GPLX Tài liệu"
-                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                ) : (
-                  <span className="text-slate-400 text-center p-2">Chưa có ảnh mặt sau</span>
-                )}
-                <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
-                  <IconEye className="h-3 w-3" /> Chi tiết GPLX
-                </span>
-              </div>
-
-              {/* Portrait */}
-              <div
-                onClick={() => portraitUrl && onPreviewImage(portraitUrl)}
-                className="group relative flex aspect-4/3 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
-              >
-                {portraitUrl ? (
-                  <img
-                    src={portraitUrl}
-                    alt="Ảnh chân dung"
-                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                  />
-                ) : (
-                  <span className="text-slate-400 text-center p-2">Chưa có ảnh chân dung</span>
-                )}
-                <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
-                  <IconEye className="h-3 w-3" /> Ảnh nhận diện chân dung
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+      )}
+      footer={(
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             Đóng
           </button>
@@ -289,7 +121,7 @@ export default function DriverDetailModal({
                   onClose()
                   onRejectClick(driver)
                 }}
-                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
               >
                 Từ chối hồ sơ
               </button>
@@ -300,7 +132,7 @@ export default function DriverDetailModal({
                 type="button"
                 disabled={actionLoading}
                 onClick={() => onApprove(driver.id)}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
               >
                 <IconCheckCircle className="h-4 w-4" />
                 <span>Phê duyệt tài xế</span>
@@ -308,7 +140,178 @@ export default function DriverDetailModal({
             )}
           </div>
         </div>
+      )}
+    >
+      <div className="space-y-3 text-xs">
+        {/* Reject Notice if rejected */}
+        {driver.rejectReason && (
+          <div className="flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50/80 p-3 text-rose-800">
+            <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            <div>
+              <strong className="font-bold">Lý do từ chối trước đó:</strong>{' '}
+              <span>{driver.rejectReason}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Top 2-Column Info Grid */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+          {/* Section 1: Personal & Organization */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 lg:col-span-7">
+            <h4 className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <span>👤</span> Thông tin tài xế &amp; Đơn vị chủ quản
+              </span>
+              {driver.userId && onSelectUser && (
+                <button
+                  type="button"
+                  onClick={() => onSelectUser(driver.userId)}
+                  className="text-[11px] font-bold normal-case tracking-normal text-brand-600 hover:underline"
+                >
+                  Xem User #{driver.userId} →
+                </button>
+              )}
+            </h4>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+              <div>
+                <span className="block text-slate-500">Họ và tên:</span>
+                <strong className="text-sm text-slate-900">{driver.userFullName || '—'}</strong>
+              </div>
+              <div>
+                <span className="block text-slate-500">Email:</span>
+                <strong className="break-all text-slate-900">{driver.userEmail || '—'}</strong>
+              </div>
+              <div>
+                <span className="block text-slate-500">Số điện thoại:</span>
+                <strong className="font-bold text-slate-900">{driver.userPhone || '—'}</strong>
+              </div>
+              <div>
+                <span className="block text-slate-500">Nhà cung cấp quản lý:</span>
+                {driver.providerId && onSelectProvider ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectProvider(driver.providerId)}
+                    className="text-left font-bold text-indigo-700 hover:underline"
+                  >
+                    {driver.providerDisplayName || `NCC #${driver.providerId}`} →
+                  </button>
+                ) : (
+                  <strong className="text-brand-700">{driver.providerDisplayName || 'Chưa gán'}</strong>
+                )}
+              </div>
+              <div>
+                <span className="block text-slate-500">Đánh giá uy tín:</span>
+                <strong className="text-slate-900">
+                  ★ {driver.ratingAvg || '5.0'} ({driver.ratingCount || 0} lượt)
+                </strong>
+              </div>
+              <div>
+                <span className="block text-slate-500">Ngày tạo hồ sơ:</span>
+                <strong className="text-slate-900">
+                  {driver.createdAt ? new Date(driver.createdAt).toLocaleString('vi-VN') : '—'}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Driver License Details */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 lg:col-span-5">
+            <h4 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span>🪪</span> Giấy phép lái xe (GPLX)
+            </h4>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="col-span-2">
+                <span className="block text-slate-500">Số Giấy phép lái xe:</span>
+                <strong className="font-mono text-sm text-slate-900">{driver.licenseNo || '—'}</strong>
+              </div>
+              <div>
+                <span className="block text-slate-500">Hạng bằng lái:</span>
+                <span className="mt-0.5 inline-block rounded-md bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-800">
+                  Hạng {driver.licenseClass || 'B2'}
+                </span>
+              </div>
+              <div>
+                <span className="block text-slate-500">Ngày hết hạn:</span>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <strong className={`font-semibold ${isExpired ? 'text-rose-600' : 'text-slate-900'}`}>
+                    {driver.licenseExpiry || 'Không thời hạn'}
+                  </strong>
+                  {isExpired && (
+                    <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
+                      Đã hết hạn!
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: Driver License & Portrait Photos */}
+        <div>
+          <h4 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <span>📷</span> Hình ảnh bằng lái xe &amp; Chân dung đối chiếu
+          </h4>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {/* License Front */}
+            <div
+              onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
+              className="group relative flex h-36 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
+            >
+              {licenseImageUrl ? (
+                <img
+                  src={licenseImageUrl}
+                  alt="GPLX Mặt trước"
+                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
+              ) : (
+                <span className="p-2 text-center text-slate-400">Chưa tải lên ảnh mặt trước</span>
+              )}
+              <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                <IconEye className="h-3 w-3" /> GPLX Mặt trước
+              </span>
+            </div>
+
+            {/* License Back / Alternate */}
+            <div
+              onClick={() => licenseImageUrl && onPreviewImage(licenseImageUrl)}
+              className="group relative flex h-36 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
+            >
+              {licenseImageUrl ? (
+                <img
+                  src={licenseImageUrl}
+                  alt="GPLX Tài liệu"
+                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
+              ) : (
+                <span className="p-2 text-center text-slate-400">Chưa có ảnh mặt sau</span>
+              )}
+              <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                <IconEye className="h-3 w-3" /> Chi tiết GPLX
+              </span>
+            </div>
+
+            {/* Portrait */}
+            <div
+              onClick={() => portraitUrl && onPreviewImage(portraitUrl)}
+              className="group relative flex h-36 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 transition-all hover:border-brand-500"
+            >
+              {portraitUrl ? (
+                <img
+                  src={portraitUrl}
+                  alt="Ảnh chân dung"
+                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
+              ) : (
+                <span className="p-2 text-center text-slate-400">Chưa có ảnh chân dung</span>
+              )}
+              <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white">
+                <IconEye className="h-3 w-3" /> Ảnh chân dung
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </AdminModalShell>
   )
 }

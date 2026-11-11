@@ -11,6 +11,7 @@ import ProviderDetailModal from './modals/ProviderDetailModal'
 import DriverDetailModal from './modals/DriverDetailModal'
 import EkycDetailModal from './modals/EkycDetailModal'
 import UserDetailModal from './modals/UserDetailModal'
+import AdminModalShell from './modals/AdminModalShell'
 import AdminPopupModal from './modals/AdminPopupModal'
 
 const ROLE_LABELS = {
@@ -1047,9 +1048,12 @@ export default function AdminUsersTab({
 
       {/* Driver Reject Reason Modal */}
       {driverRejectModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <AdminModalShell
+          maxWidth="max-w-md"
+          zIndex="z-60"
+          panelClassName="rounded-2xl border border-slate-200 bg-white shadow-xl"
+          header={(
+            <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900">Từ chối tài xế</h3>
               <button
                 type="button"
@@ -1059,45 +1063,47 @@ export default function AdminUsersTab({
                 <IconX className="h-5 w-5" />
               </button>
             </div>
+          )}
+          footer={(
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDriverRejectModal(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                form="admin-driver-reject-form"
+                disabled={actionLoading}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-rose-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Đang gửi...' : 'Xác nhận từ chối'}
+              </button>
+            </div>
+          )}
+        >
+          <form id="admin-driver-reject-form" noValidate onSubmit={handleConfirmRejectDriver} className="space-y-3">
+            <p className="text-xs text-slate-600">
+              Nhập lý do từ chối hồ sơ của tài xế <strong>{driverRejectModal.userFullName || driverRejectModal.fullName}</strong>. Lý do sẽ được lưu vào hệ thống và hiển thị cho tài xế/chủ xe.
+            </p>
 
-            <form noValidate onSubmit={handleConfirmRejectDriver} className="mt-4 space-y-4">
-              <p className="text-xs text-slate-600">
-                Nhập lý do từ chối hồ sơ của tài xế <strong>{driverRejectModal.userFullName || driverRejectModal.fullName}</strong>. Lý do sẽ được lưu vào hệ thống và hiển thị cho tài xế/chủ xe.
-              </p>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Lý do từ chối <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows="3"
-                  required
-                  placeholder="Ví dụ: Giấy phép lái xe hết hạn, ảnh chân dung không rõ mặt..."
-                  value={driverRejectReason}
-                  onChange={(e) => setDriverRejectReason(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 p-3 text-xs outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDriverRejectModal(null)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-rose-700"
-                >
-                  {actionLoading ? 'Đang gửi...' : 'Xác nhận từ chối'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">
+                Lý do từ chối <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                rows="3"
+                required
+                placeholder="Ví dụ: Giấy phép lái xe hết hạn, ảnh chân dung không rõ mặt..."
+                value={driverRejectReason}
+                onChange={(e) => setDriverRejectReason(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 p-2.5 text-xs outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+              />
+            </div>
+          </form>
+        </AdminModalShell>
       )}
 
       {/* Image Preview Modal */}

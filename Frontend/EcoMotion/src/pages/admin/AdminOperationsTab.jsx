@@ -13,6 +13,7 @@ import {
 import BookingDetailModal from './modals/BookingDetailModal'
 import DisputeDetailModal from './modals/DisputeDetailModal'
 import PaymentDetailModal from './modals/PaymentDetailModal'
+import AdminModalShell from './modals/AdminModalShell'
 import AdminPopupModal from './modals/AdminPopupModal'
 
 function formatVND(amount) {
@@ -754,9 +755,10 @@ export default function AdminOperationsTab({
 
       {/* Mock Refund Modal */}
       {showRefundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+        <AdminModalShell
+          maxWidth="max-w-md"
+          header={(
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
                   Tạo giao dịch hoàn tiền (Mock Refund)
@@ -773,69 +775,71 @@ export default function AdminOperationsTab({
                 <IconX className="h-5 w-5" />
               </button>
             </div>
+          )}
+          footer={(
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRefundModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                form="admin-mock-refund-form"
+                disabled={actionLoading}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'Đang thực hiện...' : 'Xác nhận hoàn tiền'}
+              </button>
+            </div>
+          )}
+        >
+          <form id="admin-mock-refund-form" onSubmit={handleRefundSubmit} noValidate className="space-y-3 text-xs">
+            <div>
+              <label className="mb-1 block font-bold text-slate-700">
+                Mã đơn hàng (Booking ID) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                placeholder="Ví dụ: 1"
+                value={refundForm.bookingId}
+                onChange={(e) => setRefundForm((prev) => ({ ...prev, bookingId: e.target.value }))}
+                className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
+              />
+            </div>
 
-            <form onSubmit={handleRefundSubmit} noValidate className="mt-4 space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Mã đơn hàng (Booking ID) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  required
-                  placeholder="Ví dụ: 1"
-                  value={refundForm.bookingId}
-                  onChange={(e) => setRefundForm((prev) => ({ ...prev, bookingId: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
-                />
-              </div>
+            <div>
+              <label className="mb-1 block font-bold text-slate-700">
+                Số tiền hoàn (VND) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                placeholder="Ví dụ: 100000"
+                value={refundForm.amount}
+                onChange={(e) => setRefundForm((prev) => ({ ...prev, amount: e.target.value }))}
+                className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
+              />
+            </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Số tiền hoàn (VND) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  required
-                  placeholder="Ví dụ: 100000"
-                  value={refundForm.amount}
-                  onChange={(e) => setRefundForm((prev) => ({ ...prev, amount: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Lý do hoàn tiền <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows="3"
-                  required
-                  placeholder="Ví dụ: Khách huỷ đơn trước hạn, Bồi hoàn phụ phí theo phán quyết dispute..."
-                  value={refundForm.reason}
-                  onChange={(e) => setRefundForm((prev) => ({ ...prev, reason: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowRefundModal(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="rounded-xl bg-rose-600 px-4 py-2 font-bold text-white hover:bg-rose-700"
-                >
-                  {actionLoading ? 'Đang thực hiện...' : 'Xác nhận hoàn tiền'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div>
+              <label className="mb-1 block font-bold text-slate-700">
+                Lý do hoàn tiền <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                rows="3"
+                required
+                placeholder="Ví dụ: Khách huỷ đơn trước hạn, Bồi hoàn phụ phí theo phán quyết dispute..."
+                value={refundForm.reason}
+                onChange={(e) => setRefundForm((prev) => ({ ...prev, reason: e.target.value }))}
+                className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
+              />
+            </div>
+          </form>
+        </AdminModalShell>
       )}
 
       {/* Custom Popup Modal for Alerts / Confirmations */}
