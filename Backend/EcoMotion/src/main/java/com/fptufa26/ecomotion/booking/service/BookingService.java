@@ -84,7 +84,6 @@ public interface BookingService {
 
     List<PaymentTransaction> getTransactionsForBooking(Long bookingId);
 
-    PaymentTransaction processMockRefund(Long bookingId, BigDecimal amount, String reason);
 
     long countBookingsByStatus(BookingStatus status);
 

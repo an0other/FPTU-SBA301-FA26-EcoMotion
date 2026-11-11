@@ -10,7 +10,10 @@ export function tripEndWindow(workflow, now = Date.now()) {
   const deadline = Date.parse(latest.deadline)
   const secondsLeft = Number.isFinite(deadline) ? Math.max(0, Math.floor((deadline - now) / 1000)) : 0
   const base = {
-    reportedAt: latest.reportedAt,
+    // Admin chấp thuận khiếu nại theo giờ khách → hiện giờ đã chốt, không phải giờ tài xế báo.
+    reportedAt: latest.correctedEndAt || latest.reportedAt,
+    driverReportedAt: latest.reportedAt,
+    corrected: Boolean(latest.correctedEndAt),
     deadline: latest.deadline,
     confirmationMethod: latest.confirmationMethod || null,
     confirmedAt: latest.confirmedAt || null,

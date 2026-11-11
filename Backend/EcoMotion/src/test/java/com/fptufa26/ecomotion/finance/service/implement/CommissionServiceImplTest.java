@@ -159,6 +159,30 @@ class CommissionServiceImplTest {
     }
 
     @Test
+    void reportedPaymentPausesLockWhileAdminReviews() {
+        org.mockito.ArgumentCaptor<java.util.Collection<CommissionStatementStatus>> statuses = org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+        when(statements.findProvidersOverdueBefore(statuses.capture(), any())).thenReturn(List.of());
+        service.blockedProviderIds();
+        assertThat(statuses.getValue()).as("chỉ bảng kê chưa nộp mới khoá; đã báo chuyển được tạm mở, admin từ chối thì khoá lại")
+                .containsExactlyInAnyOrder(CommissionStatementStatus.ISSUED, CommissionStatementStatus.OVERDUE);
+    }
+
+    @Test
+    void earlierMonthWithoutStatementIsNotSweptIntoLaterPeriod() {
+        Booking september = completed(11, "2026-09-20T05:00:00Z", "2000000");
+        Booking october = completed(12, "2026-10-20T05:00:00Z", "3000000");
+        when(ledger.listProviderBookings(7L)).thenReturn(List.of(september, october));
+
+        service.generate(YearMonth.of(2026, 10));
+        assertThat(saved.getFirst().getBookingCount()).as("tháng 9 chưa lập bảng kê nên chuyến tháng 9 không vào kỳ 10").isEqualTo(1);
+        assertThat(saved.getFirst().getGrossRevenue()).isEqualByComparingTo("3000000");
+        when(statements.findByProvider_IdOrderByPeriodMonthDesc(7L)).thenReturn(List.copyOf(saved));
+        service.generate(YearMonth.of(2026, 9));
+        assertThat(saved).hasSize(2);
+        assertThat(saved.get(1).getGrossRevenue()).as("chuyến tháng 9 vào đúng bảng kê tháng 9").isEqualByComparingTo("2000000");
+    }
+
+    @Test
     void lockAppliesOnlyAfterGraceDays() {
         when(statements.findProvidersOverdueBefore(anyCollection(), eq(NOW.minusSeconds(3 * 86400L)))).thenReturn(List.of(7L));
         assertThat(service.isBookingBlocked(7L)).isTrue();

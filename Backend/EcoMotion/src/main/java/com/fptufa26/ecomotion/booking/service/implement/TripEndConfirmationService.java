@@ -45,7 +45,7 @@ public class TripEndConfirmationService {
 
     @Transactional(readOnly=true)
     public List<TripEndHistoryResponse> history(Long bookingId) {
-        return histories.findByBooking_IdOrderByIdDesc(bookingId).stream().map(h -> new TripEndHistoryResponse(h.getId(),h.getReportedBy(),h.getReportedAt(),h.getDeadline(),h.getState(),h.getConfirmationMethod(),h.getConfirmedAt(),h.getConfirmedBy(),h.getDisputeId(),h.getAdminId(),h.getAdminNote(),h.getAdminActionAt(),h.getAdminAction())).toList();
+        return histories.findByBooking_IdOrderByIdDesc(bookingId).stream().map(h -> new TripEndHistoryResponse(h.getId(),h.getReportedBy(),h.getReportedAt(),h.getDeadline(),h.getState(),h.getConfirmationMethod(),h.getConfirmedAt(),h.getConfirmedBy(),h.getDisputeId(),h.getAdminId(),h.getAdminNote(),h.getAdminActionAt(),h.getAdminAction(),h.getCorrectedEndAt())).toList();
     }
 
     @Transactional
@@ -120,12 +120,18 @@ public class TripEndConfirmationService {
     /** Admin phân xử xong khiếu nại giờ kết thúc mà không mở lại/tiếp tục chuyến: chốt mốc hiện tại. */
     @Transactional
     public void adminSettled(Booking booking, Long disputeId, Long adminId, String note) {
+        adminSettled(booking, disputeId, adminId, note, null);
+    }
+
+    /** Như trên; {@code correctedEndAt} là giờ kết thúc admin chốt theo khách (null = giữ giờ tài xế báo). */
+    @Transactional
+    public void adminSettled(Booking booking, Long disputeId, Long adminId, String note, Instant correctedEndAt) {
         histories.findFirstByBooking_IdOrderByIdDesc(booking.getId())
                 .filter(h -> OPEN_STATES.contains(h.getState()))
                 .ifPresent(h -> {
                     h.setState("CONFIRMED"); h.setConfirmationMethod("ADMIN"); h.setConfirmedAt(clock.instant());
                     h.setConfirmedBy(adminId); h.setAdminId(adminId); h.setAdminActionAt(clock.instant());
-                    h.setAdminNote(note); h.setDisputeId(disputeId);
+                    h.setAdminNote(note); h.setDisputeId(disputeId); h.setCorrectedEndAt(correctedEndAt);
                     histories.save(h);
                 });
         notifications.changed(booking, "TRIP_END_CONFIRMATION_CHANGED");

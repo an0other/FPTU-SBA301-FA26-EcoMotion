@@ -61,6 +61,11 @@ public class CommissionServiceImpl implements CommissionService {
     public static final ZoneId VIETNAM = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final Set<CommissionStatementStatus> UNPAID = Set.of(
             CommissionStatementStatus.ISSUED, CommissionStatementStatus.OVERDUE);
+    /**
+     * Trạng thái khoá nhận đơn khi quá hạn. Nhà xe báo "đã chuyển" (PAYMENT_REPORTED) được tạm mở trong lúc admin đối soát;
+     * admin bấm "Chưa thấy tiền" thì bảng kê về lại OVERDUE và khoá ngay.
+     */
+    private static final Set<CommissionStatementStatus> LOCKING = UNPAID;
 
     private final CommissionStatementRepository statements;
     private final CommissionStatementLineRepository lines;
@@ -83,7 +88,7 @@ public class CommissionServiceImpl implements CommissionService {
     public CommissionOverviewResponse overview(Long providerUserId) {
         Provider provider = requireProvider(providerUserId);
         YearMonth current = YearMonth.now(clock.withZone(VIETNAM));
-        List<Eligible> pending = eligibleBookings(provider, clock.instant());
+        List<Eligible> pending = eligibleBookings(provider, current, clock.instant());
         BigDecimal rate = rateOf(provider);
         BigDecimal revenue = pending.stream().map(Eligible::revenue).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal commission = pending.stream().map(e -> commissionOf(e.revenue(), rate)).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -197,7 +202,7 @@ public class CommissionServiceImpl implements CommissionService {
         int created = 0;
         for (Provider provider : userService.listProviders(ProviderStatus.APPROVED)) {
             if (statements.findByProvider_IdAndPeriodMonth(provider.getId(), month.toString()).isPresent()) continue;
-            List<Eligible> due = eligibleBookings(provider, end);
+            List<Eligible> due = eligibleBookings(provider, month, end);
             if (due.isEmpty()) continue;
             BigDecimal rate = rateOf(provider);
             CommissionStatement statement = new CommissionStatement();
@@ -258,7 +263,7 @@ public class CommissionServiceImpl implements CommissionService {
     @Transactional(readOnly = true)
     public Set<Long> blockedProviderIds() {
         Instant cutoff = clock.instant().minus(Duration.ofDays(graceDays));
-        return new HashSet<>(statements.findProvidersOverdueBefore(UNPAID, cutoff));
+        return new HashSet<>(statements.findProvidersOverdueBefore(LOCKING, cutoff));
     }
 
     // ------------------------------------------------------------------ tính toán
@@ -267,14 +272,20 @@ public class CommissionServiceImpl implements CommissionService {
     }
 
     /**
-     * Đơn hoàn tất trước {@code cutoff}, chưa nằm trong bảng kê nào và không còn khiếu nại mở
-     * (đơn đang khiếu nại được dời sang kỳ sau). Doanh thu = tiền thực nhận áp vào đơn − tiền đã hoàn;
-     * không tính tiền bảo đảm gói năm và phần khách chuyển dư.
+     * Đơn hoàn tất trong kỳ {@code month} (tới {@code cutoff}), chưa nằm trong bảng kê nào và không còn khiếu nại mở.
+     * Đơn hoàn tất ở tháng trước chỉ được gom vào kỳ này khi tháng đó ĐÃ có bảng kê (đơn sót, ví dụ vừa hết khiếu nại);
+     * tháng chưa lập bảng kê thì đơn thuộc về bảng kê của chính tháng đó. Doanh thu = tiền thực nhận áp vào đơn − tiền
+     * đã hoàn; không tính tiền bảo đảm gói năm và phần khách chuyển dư.
      */
-    private List<Eligible> eligibleBookings(Provider provider, Instant cutoff) {
+    private List<Eligible> eligibleBookings(Provider provider, YearMonth month, Instant cutoff) {
+        Instant start = periodStart(month);
+        Set<String> issuedMonths = new HashSet<>();
+        statements.findByProvider_IdOrderByPeriodMonthDesc(provider.getId()).forEach(st -> issuedMonths.add(st.getPeriodMonth()));
         List<Booking> completed = ledger.listProviderBookings(provider.getId()).stream()
                 .filter(b -> b.getStatus() == BookingStatus.COMPLETED)
                 .filter(b -> completedAt(b).isBefore(cutoff))
+                .filter(b -> !completedAt(b).isBefore(start)
+                        || issuedMonths.contains(YearMonth.from(completedAt(b).atZone(VIETNAM)).toString()))
                 .toList();
         if (completed.isEmpty()) return List.of();
         Set<Long> billed = lines.findBilledBookingIds(completed.stream().map(Booking::getId).toList());

@@ -65,8 +65,13 @@ export function buildDisputeResolution(category, form) {
   }
   if (verdict === 'OTHER') return { status: 'IN_REVIEW', resolution }
   const status = verdict === 'REJECTED' ? 'REJECTED' : 'RESOLVED'
-  const withAmount = status === 'RESOLVED' && (category === 'DEPOSIT_REFUND' || category === 'PAYMENT_MISMATCH') && amount != null
+  const compensable = category === 'SERVICE_QUALITY' || category === 'OTHER'
+  const withAmount = status === 'RESOLVED' && (category === 'DEPOSIT_REFUND' || category === 'PAYMENT_MISMATCH' || compensable) && amount != null
   if (status === 'RESOLVED' && category === 'DEPOSIT_REFUND' && amount == null) return { error: 'Nhập tổng tiền cọc khách được hoàn.' }
+  // Chấp thuận "ghi sai tiền" phải có số khách thực chuyển, nếu không phán quyết không có tác dụng.
+  if (status === 'RESOLVED' && category === 'PAYMENT_MISMATCH' && (amount == null || amount <= 0))
+    return { error: 'Nhập tổng số tiền khách thực chuyển theo sao kê. Nếu chỉ ghi kết luận, hãy chọn Bác bỏ hoặc Khác.' }
+  if (withAmount && compensable && amount <= 0) return { error: 'Khoản bồi hoàn phải lớn hơn 0 (để trống nếu không bồi hoàn).' }
   return { status, resolution, ...(withAmount ? { refundAwardTotal: amount } : {}) }
 }
 
@@ -87,6 +92,8 @@ export function disputeVerdictLabel(dispute) {
     if (dispute.decision === 'WAIVE_CHARGE' || (!dispute.decision && dispute.status === 'RESOLVED')) return 'Đã chốt: miễn phụ phí'
     return 'Đã chốt: giữ phụ phí'
   }
+  if ((dispute.category === 'SERVICE_QUALITY' || dispute.category === 'OTHER') && dispute.status === 'RESOLVED' && dispute.refundAwardTotal != null)
+    return `Đã chốt: bồi hoàn ${formatCurrency(dispute.refundAwardTotal)}`
   if (dispute.category === 'PAYMENT_MISMATCH' && dispute.status === 'RESOLVED' && dispute.refundAwardTotal != null)
     return `Đã chốt: khách thực chuyển ${formatCurrency(dispute.refundAwardTotal)}`
   return dispute.status === 'RESOLVED' ? 'Đã chốt: chấp thuận' : 'Đã chốt: bác khiếu nại'

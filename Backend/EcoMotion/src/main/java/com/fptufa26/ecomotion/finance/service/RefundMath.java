@@ -60,7 +60,8 @@ public final class RefundMath {
         if (sourceEventId == null) {
             return true;
         }
-        return !sourceEventId.startsWith("EXCESS:") && !sourceEventId.startsWith("LATE_IPN:");
+        // Hoàn tiền chuyển dư (OVERPAY:/MISMATCH:) không thuộc tiền phân bổ cho đơn nên không trừ vào hạn mức hoàn sau.
+        return !sourceEventId.startsWith("EXCESS:") && !sourceEventId.startsWith("LATE_IPN:") && !excessEvent(sourceEventId);
     }
 
     public static String partId(String sourceEventId, Long transactionId) {

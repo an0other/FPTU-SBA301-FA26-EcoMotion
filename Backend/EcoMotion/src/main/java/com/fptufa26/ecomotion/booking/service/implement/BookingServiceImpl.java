@@ -1699,26 +1699,6 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    @Transactional
-    public PaymentTransaction processMockRefund(Long bookingId, BigDecimal amount, String reason) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new ResourceNotFoundException("Đơn thuê không tồn tại: " + bookingId));
-
-        PaymentTransaction refund = new PaymentTransaction();
-        refund.setBooking(booking);
-        refund.setAmount(amount != null && amount.compareTo(BigDecimal.ZERO) > 0 ? amount : booking.getTotalAmount());
-        refund.setType(PaymentType.REFUND);
-        refund.setDirection(PaymentDirection.OUT);
-        refund.setMethod(PaymentMethod.BANK_TRANSFER);
-        refund.setStatus(PaymentStatus.PAID);
-        refund.setGatewayRef("MOCK-REFUND-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
-        refund.setPaidAt(Instant.now());
-        refund.setReceiptUrl("/receipts/refund-" + booking.getBookingCode() + ".pdf");
-
-        return paymentTransactionRepository.save(refund);
-    }
-
-    @Override
     @Transactional(readOnly = true)
     public long countBookingsByStatus(BookingStatus status) {
         return bookingRepository.countByStatus(status);

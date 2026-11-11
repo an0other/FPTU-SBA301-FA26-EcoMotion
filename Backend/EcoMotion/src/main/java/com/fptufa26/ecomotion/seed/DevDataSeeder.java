@@ -411,6 +411,21 @@ public class DevDataSeeder implements ApplicationRunner {
                 2, "1600000.00", null, null, 102L, CancelReason.RENTER_REQUEST,
                 now.minus(4, ChronoUnit.DAYS));
 
+        // Demo hoàn tiền: mỗi đơn một trạng thái (chờ khách nhập STK / chờ nhà xe chuyển / chờ khách xác nhận /
+        // khách báo chưa nhận). Huỷ trước giờ đón hơn 24 giờ nên được hoàn 100% cọc.
+        String[][] refundDemos = {
+                {"BK-RF-01", "1", "Bitexco Financial Tower, Q.1", "2"},
+                {"BK-RF-02", "2", "Saigon Centre, Q.1", "3"},
+                {"BK-RF-03", "3", "Vincom Đồng Khởi, Q.1", "4"},
+                {"BK-RF-04", "4", "Ga Sài Gòn, Q.3", "5"},
+        };
+        for (String[] demo : refundDemos) {
+            Instant pickup = now.minus(Long.parseLong(demo[3]), ChronoUnit.DAYS).truncatedTo(ChronoUnit.HOURS);
+            seedBooking(demo[0], 5L, Long.parseLong(demo[1]), PlanType.HOURLY, null, BookingStatus.CANCELLED,
+                    demo[2], pickup, 2, "720000.00", null, null, 5L, CancelReason.RENTER_REQUEST,
+                    pickup.minus(30, ChronoUnit.HOURS));
+        }
+
         seedPastMonthsBookings(driverNam, driverCuong, driverKiet);
     }
 

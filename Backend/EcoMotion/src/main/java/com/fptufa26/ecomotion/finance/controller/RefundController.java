@@ -61,7 +61,8 @@ public class RefundController {
     }
 
     @PostMapping({"/api/v1/refunds", "/api/refunds"})
-    @Operation(summary = "Submit a new refund request for a booking")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
+    @Operation(summary = "Provider (own booking) or Admin creates a voluntary refund; renters cannot self-issue refunds")
     public ApiResponse<RefundResponse> createRefund(
             @AuthenticationPrincipal SecurityUser principal,
             @Valid @RequestBody CreateRefundRequest request) {

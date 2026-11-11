@@ -199,10 +199,9 @@ export function BookingDetailPage() {
 
   const openManualRefunds = (workflow?.refunds || []).filter(refund => refund.refundMethod !== 'VNPAY'
     && !['REFUNDED', 'REJECTED'].includes(refund.status))
-  // Đơn huỷ: mọi khoản hoàn chuyển khoản. Đơn chưa huỷ: chỉ khoản khách chuyển dư (nhà xe bắt buộc hoàn).
-  const manualRefunds = ['CANCELLED', 'CANCELLATION_REVIEW'].includes(detail?.status)
-    ? openManualRefunds
-    : openManualRefunds.filter(refund => refund.excess)
+  // Mọi khoản hoàn chuyển khoản còn mở (huỷ đơn, chuyển dư, quyết toán thu dư, phán quyết khiếu nại...)
+  // đều cần tài khoản người nhận — nhà xe không thể chuyển nếu thiếu.
+  const manualRefunds = openManualRefunds
   const refundAccount = manualRefunds.find(refund => refund.recipientAccountNumber)
   const missingRefundAccount = manualRefunds.some(refund => !refund.recipientAccountNumber)
   const refundPromptKey = manualRefunds

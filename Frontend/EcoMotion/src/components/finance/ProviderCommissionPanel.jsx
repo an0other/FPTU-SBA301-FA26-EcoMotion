@@ -81,7 +81,7 @@ export default function ProviderCommissionPanel({ onToast }) {
       {data.bookingBlocked && (
         <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
           <strong className="block">Đang tạm ngưng nhận đơn mới</strong>
-          Có bảng kê hoa hồng quá hạn hơn {data.graceDays} ngày. Xe của bạn tạm ẩn với khách cho tới khi admin xác nhận đã nhận tiền. Đơn đang chạy không bị ảnh hưởng.
+          Có bảng kê hoa hồng quá hạn hơn {data.graceDays} ngày. Xe của bạn tạm ẩn với khách. Nộp hoa hồng và bấm「Tôi đã chuyển khoản」để mở lại trong lúc admin đối soát — nếu admin không thấy tiền, khoá lại ngay. Đơn đang chạy không bị ảnh hưởng.
         </div>
       )}
 

@@ -22,6 +22,7 @@ export default function AdminCommissionTab() {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [generateMonth, setGenerateMonth] = useState(lastMonthKey())
+  const [detail, setDetail] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -39,7 +40,8 @@ export default function AdminCommissionTab() {
 
   const sum = (pick) => rows.reduce((total, r) => total + Number(pick(r) || 0), 0)
   const totals = {
-    due: sum((r) => r.commissionAmount),
+    // Còn phải thu = phần chưa nộp của các bảng kê chưa "Đã nộp đủ" (không cộng bảng kê đã thu xong).
+    due: sum((r) => (r.status === 'PAID' ? 0 : r.remainingAmount)),
     paid: sum((r) => r.paidAmount),
     overdue: sum((r) => (r.status === 'OVERDUE' ? r.remainingAmount : 0)),
   }
@@ -48,7 +50,12 @@ export default function AdminCommissionTab() {
     setBusy(true)
     try {
       const result = await commissionService.generate(generateMonth)
-      setMessage({ type: 'success', text: `Đã lập ${result.created} bảng kê mới cho ${periodLabel(result.month)}.` })
+      setMessage({
+        type: 'success',
+        text: result.created > 0
+          ? `Đã lập ${result.created} bảng kê mới cho ${periodLabel(result.month)}.`
+          : `Không có bảng kê mới cho ${periodLabel(result.month)}: các nhà xe đã có bảng kê kỳ này hoặc không có chuyến hoàn tất trong kỳ.`,
+      })
       await load()
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Không lập được bảng kê' })
@@ -67,6 +74,14 @@ export default function AdminCommissionTab() {
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Không xác nhận được' })
     } finally { setBusy(false) }
+  }
+
+  const openDetail = async (row) => {
+    try {
+      setDetail(await commissionService.adminDetail(row.id))
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Không tải được chi tiết bảng kê' })
+    }
   }
 
   const reject = async (row) => {
@@ -98,7 +113,7 @@ export default function AdminCommissionTab() {
       {message && <p role="status" className={`rounded-lg px-3 py-2 text-xs font-semibold ${message.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-emerald-50 text-emerald-800'}`}>{message.text}</p>}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        {[['Phải thu', totals.due, 'text-slate-900'], ['Đã thu', totals.paid, 'text-emerald-700'], ['Quá hạn chưa thu', totals.overdue, 'text-rose-700']].map(([label, value, cls]) => (
+        {[['Còn phải thu', totals.due, 'text-slate-900'], ['Đã thu', totals.paid, 'text-emerald-700'], ['Quá hạn chưa thu', totals.overdue, 'text-rose-700']].map(([label, value, cls]) => (
           <div key={label} className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
             <p className={`mt-1 text-xl font-extrabold tabular-nums ${cls}`}>{formatCurrency(value)}</p>
@@ -148,15 +163,18 @@ export default function AdminCommissionTab() {
                     )}
                   </td>
                   <td className="px-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => openDetail(r)} className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-50">Chi tiết</button>
                     {r.status !== 'PAID' && (
-                      <div className="flex justify-end gap-2">
+                      <>
                         {r.status === 'PAYMENT_REPORTED' && (
                           <button type="button" disabled={busy} onClick={() => reject(r)} className="rounded-lg border border-rose-200 px-2.5 py-1 font-semibold text-rose-700 hover:bg-rose-50">Chưa thấy tiền</button>
                         )}
                         <button type="button" onClick={() => { setConfirming(r); setAmount(String(Math.round(Number(r.remainingAmount)))); setNote('') }}
                           className="rounded-lg bg-emerald-700 px-2.5 py-1 font-bold text-white hover:bg-emerald-800">Xác nhận đã nhận</button>
-                      </div>
+                      </>
                     )}
+                    </div>
                   </td>
                 </tr>
               )
@@ -164,6 +182,54 @@ export default function AdminCommissionTab() {
           </tbody>
         </table>
       </div>
+
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setDetail(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Chi tiết bảng kê hoa hồng" onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{detail.providerName} — {periodLabel(detail.periodMonth)}</h3>
+                <p className="text-xs text-slate-500">Hạn nộp {formatBookingWhen(detail.dueAt)} · tỷ lệ {Math.round(Number(detail.commissionRate) * 100)}% · nội dung CK <span className="font-mono font-bold">{detail.transferContent}</span></p>
+              </div>
+              <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${commissionStatus(detail.status).cls}`}>{commissionStatus(detail.status).label}</span>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+              {[['Doanh thu', detail.grossRevenue], ['Hoa hồng', detail.commissionAmount], ['Đã nhận', detail.paidAmount], ['Còn phải nộp', detail.remainingAmount]].map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-slate-50 p-3"><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-mono text-sm font-bold text-slate-900">{formatCurrency(value)}</dd></div>
+              ))}
+            </dl>
+            {(detail.reportedAt || detail.confirmedAt) && (
+              <div className="space-y-1 rounded-lg border border-slate-200 p-3 text-xs text-slate-700">
+                {detail.reportedAt && <p>Nhà xe báo đã chuyển lúc <strong>{formatBookingWhen(detail.reportedAt)}</strong>{detail.paymentReference ? <> · Mã GD <span className="font-mono">{detail.paymentReference}</span></> : null}{detail.reportedNote ? <> · “{detail.reportedNote}”</> : null}</p>}
+                {detail.confirmedAt && <p>Admin xác nhận lúc <strong>{formatBookingWhen(detail.confirmedAt)}</strong>{detail.adminNote ? <> · {detail.adminNote}</> : null}</p>}
+              </div>
+            )}
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
+                  <tr><th className="px-3 py-2 text-left">Đơn</th><th className="px-3 text-left">Hoàn tất</th><th className="px-3 text-right">Doanh thu</th><th className="px-3 text-right">Hoa hồng</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(detail.lines || []).length === 0 ? (
+                    <tr><td colSpan={4} className="py-6 text-center text-slate-400">Không có chuyến trong bảng kê.</td></tr>
+                  ) : detail.lines.map((line) => (
+                    <tr key={line.bookingId}>
+                      <td className="px-3 py-2 font-mono font-semibold">{line.bookingCode}</td>
+                      <td className="px-3">{formatBookingWhen(line.completedAt)}</td>
+                      <td className="px-3 text-right font-mono">{formatCurrency(line.revenue)}</td>
+                      <td className="px-3 text-right font-mono font-bold">{formatCurrency(line.commission)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setDetail(null)} className="h-9 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => !busy && setConfirming(null)}>

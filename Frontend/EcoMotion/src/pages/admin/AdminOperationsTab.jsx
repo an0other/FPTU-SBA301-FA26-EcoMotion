@@ -13,8 +13,18 @@ import {
 import BookingDetailModal from './modals/BookingDetailModal'
 import DisputeDetailModal from './modals/DisputeDetailModal'
 import PaymentDetailModal from './modals/PaymentDetailModal'
-import AdminModalShell from './modals/AdminModalShell'
 import AdminPopupModal from './modals/AdminPopupModal'
+
+const BOOKING_FILTER_LABELS = {
+  ALL: 'Tất cả',
+  AWAITING_DEPOSIT: 'Chờ cọc',
+  CONFIRMED: 'Đã xác nhận',
+  IN_PROGRESS: 'Đang chạy',
+  AWAITING_FINAL_PAYMENT: 'Chờ quyết toán',
+  COMPLETED: 'Hoàn tất',
+  CANCELLATION_REVIEW: 'Huỷ — chờ đối soát',
+  CANCELLED: 'Đã huỷ',
+}
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
@@ -60,6 +70,7 @@ export default function AdminOperationsTab({
   onNavigate,
 }) {
   const [subTab, setSubTab] = useState(initialSubTab)
+  const [refundIssueCount, setRefundIssueCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [message, setMessage] = useState(null)
@@ -78,8 +89,6 @@ export default function AdminOperationsTab({
   // SubTab 3: Payments & Refund
   const [payments, setPayments] = useState([])
   const [selectedPayment, setSelectedPayment] = useState(null)
-  const [showRefundModal, setShowRefundModal] = useState(false)
-  const [refundForm, setRefundForm] = useState({ bookingId: '', amount: '', reason: '' })
   const [popupModal, setPopupModal] = useState(null)
 
   useEffect(() => {
@@ -227,49 +236,8 @@ export default function AdminOperationsTab({
     }
   }
 
-  // Refund Submit
-  async function handleRefundSubmit(e) {
-    e.preventDefault()
-    const amountNum = parseFloat(refundForm.amount)
-    if (!refundForm.bookingId || isNaN(amountNum) || amountNum <= 0) {
-      setPopupModal({
-        mode: 'alert',
-        tone: 'warning',
-        title: 'Thông tin hoàn tiền chưa hợp lệ',
-        message: 'Vui lòng nhập Mã đơn hợp lệ và số tiền hoàn lớn hơn 0.',
-        confirmText: 'Đã hiểu',
-      })
-      return
-    }
-    if (!refundForm.reason.trim()) {
-      setPopupModal({
-        mode: 'alert',
-        tone: 'warning',
-        title: 'Thiếu lý do hoàn tiền',
-        message: 'Vui lòng nhập lý do hoàn tiền.',
-        confirmText: 'Đã hiểu',
-      })
-      return
-    }
-
-    setActionLoading(true)
-    try {
-      await adminService.refundBooking(refundForm.bookingId, amountNum, refundForm.reason.trim())
-      setMessage({ type: 'success', text: `Đã tạo yêu cầu hoàn ${formatVND(amountNum)} cho đơn #${refundForm.bookingId}. Trạng thái hoàn tiền cập nhật riêng và chưa có nghĩa là tiền đã về.` })
-      setShowRefundModal(false)
-      setRefundForm({ bookingId: '', amount: '', reason: '' })
-      loadData()
-      if (onStatsUpdate) onStatsUpdate()
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Lỗi khi thực hiện hoàn tiền' })
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
   return (
     <div className="space-y-6">
-      <AdminRefundReviewPanel />
       {/* Sub Navigation Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <div className="flex flex-wrap gap-2">
@@ -310,6 +278,18 @@ export default function AdminOperationsTab({
           >
             <IconWallet className="h-4 w-4" />
             <span>Lịch sử thanh toán</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubTab('refunds')}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
+              subTab === 'refunds'
+                ? 'bg-brand-600 text-white shadow-xs'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <IconWallet className="h-4 w-4" />
+            <span>Đối soát hoàn tiền{refundIssueCount ? ` (${refundIssueCount})` : ''}</span>
           </button>
         </div>
 
@@ -364,7 +344,7 @@ export default function AdminOperationsTab({
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-slate-500">Trạng thái:</span>
-              {['ALL', 'PENDING', 'ACCEPTED', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'DISPUTED'].map((st) => (
+              {['ALL', 'AWAITING_DEPOSIT', 'CONFIRMED', 'IN_PROGRESS', 'AWAITING_FINAL_PAYMENT', 'COMPLETED', 'CANCELLATION_REVIEW', 'CANCELLED'].map((st) => (
                 <button
                   key={st}
                   type="button"
@@ -375,7 +355,7 @@ export default function AdminOperationsTab({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {st === 'ALL' ? 'Tất cả' : st}
+                  {BOOKING_FILTER_LABELS[st] || st}
                 </button>
               ))}
             </div>
@@ -618,6 +598,10 @@ export default function AdminOperationsTab({
       )}
 
       {/* 3. PAYMENTS HISTORY TAB */}
+      <div className={subTab === 'refunds' ? '' : 'hidden'}>
+        <AdminRefundReviewPanel onCount={setRefundIssueCount} />
+      </div>
+
       {subTab === 'payments' && (
         <div className="space-y-4">
           <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
@@ -752,95 +736,6 @@ export default function AdminOperationsTab({
         onSelectProvider={(providerId) => navigateToProvider(providerId)}
         onSelectDriver={(driverId) => navigateToDriver(driverId)}
       />
-
-      {/* Mock Refund Modal */}
-      {showRefundModal && (
-        <AdminModalShell
-          maxWidth="max-w-md"
-          header={(
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Tạo giao dịch hoàn tiền (Mock Refund)
-                </h3>
-                <span className="text-xs text-slate-500">
-                  Mô phỏng hoàn tiền về ví/thẻ của khách thuê qua cổng thanh toán
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRefundModal(false)}
-                className="rounded-lg p-1 text-slate-400 hover:text-slate-600"
-              >
-                <IconX className="h-5 w-5" />
-              </button>
-            </div>
-          )}
-          footer={(
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowRefundModal(false)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                form="admin-mock-refund-form"
-                disabled={actionLoading}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                {actionLoading ? 'Đang thực hiện...' : 'Xác nhận hoàn tiền'}
-              </button>
-            </div>
-          )}
-        >
-          <form id="admin-mock-refund-form" onSubmit={handleRefundSubmit} noValidate className="space-y-3 text-xs">
-            <div>
-              <label className="mb-1 block font-bold text-slate-700">
-                Mã đơn hàng (Booking ID) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                placeholder="Ví dụ: 1"
-                value={refundForm.bookingId}
-                onChange={(e) => setRefundForm((prev) => ({ ...prev, bookingId: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block font-bold text-slate-700">
-                Số tiền hoàn (VND) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                placeholder="Ví dụ: 100000"
-                value={refundForm.amount}
-                onChange={(e) => setRefundForm((prev) => ({ ...prev, amount: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block font-bold text-slate-700">
-                Lý do hoàn tiền <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                rows="3"
-                required
-                placeholder="Ví dụ: Khách huỷ đơn trước hạn, Bồi hoàn phụ phí theo phán quyết dispute..."
-                value={refundForm.reason}
-                onChange={(e) => setRefundForm((prev) => ({ ...prev, reason: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 p-2.5 outline-none focus:border-rose-500"
-              />
-            </div>
-          </form>
-        </AdminModalShell>
-      )}
 
       {/* Custom Popup Modal for Alerts / Confirmations */}
       <AdminPopupModal

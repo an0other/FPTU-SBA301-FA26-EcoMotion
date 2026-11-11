@@ -16,7 +16,7 @@ import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.booking.service.DriverOptimizationService;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
-import com.fptufa26.ecomotion.dispute.service.DisputeService;
+import com.fptufa26.ecomotion.dispute.service.DisputeQueryService;
 import com.fptufa26.ecomotion.finance.config.VnpayConfig;
 import com.fptufa26.ecomotion.finance.dto.request.CreateVnpayPaymentUrlRequest;
 import com.fptufa26.ecomotion.finance.dto.response.RenterSettlementResponse;
@@ -80,7 +80,7 @@ public class VnpayServiceImpl implements VnpayService {
     private final BookingQueryService bookingQueryService;
     private final BookingNotificationService bookingNotificationService;
     private final PaymentRequestRepository paymentRequestRepository;
-    private final DisputeService disputeService;
+    private final DisputeQueryService disputeQueryService;
     private final UserService userService;
     private final VehicleService vehicleService;
     private final ScheduleService scheduleService;
@@ -207,7 +207,7 @@ public class VnpayServiceImpl implements VnpayService {
             }
 
             // Check active disputes (TC14)
-            if (disputeService.hasActiveDispute(booking.getId())) {
+            if (settlementBlockedByDispute(booking)) {
                 throw new InvalidPaymentOperationException("Không thể quyết toán khi đơn thuê đang có tranh chấp khiếu nại chưa giải quyết");
             }
 
@@ -387,7 +387,7 @@ public class VnpayServiceImpl implements VnpayService {
         BigDecimal finalPayable = netBalance.signum() > 0 ? netBalance.setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO.setScale(2);
         BigDecimal overpayment = netBalance.signum() < 0 ? netBalance.abs().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO.setScale(2);
 
-        boolean hasDispute = disputeService.hasActiveDispute(booking.getId());
+        boolean hasDispute = settlementBlockedByDispute(booking);
         boolean isSettled = booking.getStatus() == BookingStatus.COMPLETED
                 || transactions.stream().anyMatch(t -> t.getType() == PaymentType.SETTLEMENT && t.getStatus() == PaymentStatus.PAID);
         boolean eligibleForPayment = booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT && !isSettled && finalPayable.signum() > 0 && !hasDispute;
@@ -519,7 +519,10 @@ public class VnpayServiceImpl implements VnpayService {
                         isInitialPayment(transaction.getType()) ? PaymentRequestType.DEPOSIT : PaymentRequestType.FINAL_BALANCE)
                         .orElse(null);
         transaction.setPaymentRequest(linkedRequest);
-        if (booking.getCancelledAt() != null || disputeService.hasActiveDispute(booking.getId())
+        if (booking.getCancelledAt() != null || disputeQueryService.blocksPayment(booking.getId(),
+                    linkedRequest == null ? null : linkedRequest.getId(),
+                    linkedRequest != null ? linkedRequest.getPaymentType() == PaymentRequestType.FINAL_BALANCE
+                            : transaction.getType() == PaymentType.SETTLEMENT)
                 || !monthlyInstallment && linkedRequest != null && (linkedRequest.getStatus() != PaymentRequestStatus.PENDING
                     && linkedRequest.getStatus() != PaymentRequestStatus.REJECTED
                     || linkedRequest.getExpiresAt() != null && !linkedRequest.getExpiresAt().isAfter(clock.instant())
@@ -637,7 +640,7 @@ public class VnpayServiceImpl implements VnpayService {
             if (booking.getStatus() != BookingStatus.AWAITING_FINAL_PAYMENT
                     || booking.getActualEndAt() == null || booking.getProviderConfirmedAt() == null
                     || !booking.isEndAccepted()
-                    || disputeService.hasActiveDispute(booking.getId())
+                    || settlementBlockedByDispute(booking)
                     || transaction.getAmount().compareTo(calculateFinalPayable(booking)) != 0) {
                 return recordPaymentForReconciliation(transaction, "Settlement no longer eligible or dispute is active");
             }
@@ -926,7 +929,7 @@ public class VnpayServiceImpl implements VnpayService {
                 : isInitialPayment(transaction.getType())
                 ? Set.of(BookingStatus.ACCEPTED, BookingStatus.AWAITING_DEPOSIT).contains(booking.getStatus())
                     && (booking.getPickupTime() == null || !booking.getPickupTime().isBefore(clock.instant()))
-                : booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT && !disputeService.hasActiveDispute(booking.getId());
+                : booking.getStatus() == BookingStatus.AWAITING_FINAL_PAYMENT && !settlementBlockedByDispute(booking);
         boolean unsettledOrPaid = bookingQueryService.findTransactionsByBookingId(booking.getId()).stream()
                 .anyMatch(tx -> tx.getType() == transaction.getType()
                         && tx.getStatus() != PaymentStatus.FAILED
@@ -1082,5 +1085,12 @@ public class VnpayServiceImpl implements VnpayService {
         if (!booking.getRenter().getUser().getId().equals(currentUserId)) {
             throw new AccessDeniedException("Bạn không có quyền thanh toán cho đơn thuê này");
         }
+    }
+
+    /** Quyết toán chỉ bị chặn bởi khiếu nại liên quan tới số tiền quyết toán (phụ phí, giờ kết thúc, ghi sai khoản quyết toán). */
+    private boolean settlementBlockedByDispute(Booking booking) {
+        Long finalRequestId = paymentRequestRepository.findByBooking_IdAndPaymentType(booking.getId(), PaymentRequestType.FINAL_BALANCE)
+                .map(PaymentRequest::getId).orElse(null);
+        return disputeQueryService.blocksPayment(booking.getId(), finalRequestId, true);
     }
 }

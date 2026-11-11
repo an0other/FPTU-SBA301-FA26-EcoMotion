@@ -1093,8 +1093,9 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
         if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(clock.instant())) {
             return "Yêu cầu thanh toán đã hết hạn";
         }
-        if (disputeQueryService.hasActiveDispute(booking.getId())) {
-            return "Booking đang có tranh chấp chưa giải quyết";
+        if (disputeQueryService.blocksPayment(booking.getId(), request.getId(),
+                request.getPaymentType() == PaymentRequestType.FINAL_BALANCE)) {
+            return "Khoản thanh toán này đang bị khiếu nại, chờ admin phân xử";
         }
         if (request.getPaymentType() == PaymentRequestType.DEPOSIT) {
             if (booking.getStatus() != BookingStatus.AWAITING_DEPOSIT || booking.getCancelledAt() != null
@@ -1844,7 +1845,8 @@ public class PaymentRequestServiceImpl implements PaymentRequestService {
                 .filter(t -> t.getType() == PaymentType.REFUND && t.getDirection() == PaymentDirection.OUT
                         && t.getStatus() == PaymentStatus.PAID)
                 .filter(t -> t.getProcessingNote() == null || (!t.getProcessingNote().contains("thừa")
-                        && !t.getProcessingNote().contains("EXCESS") && !t.getProcessingNote().startsWith("LATE_IPN")))
+                        && !t.getProcessingNote().contains("EXCESS") && !t.getProcessingNote().startsWith("LATE_IPN")
+                        && !t.getProcessingNote().startsWith("COMPENSATION:")))
                 .map(PaymentTransaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
