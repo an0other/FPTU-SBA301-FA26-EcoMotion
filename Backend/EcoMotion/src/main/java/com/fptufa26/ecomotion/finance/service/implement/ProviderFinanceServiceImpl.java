@@ -455,11 +455,8 @@ public class ProviderFinanceServiceImpl implements ProviderFinanceService {
         for (Booking b : completedBookings) {
             BigDecimal base = b.getTotalAmount() != null ? b.getTotalAmount() : BigDecimal.ZERO;
             List<PaymentTransaction> txList = bookingPaymentLedgerService.listTransactions(b.getId());
-            BigDecimal confirmedRev = txList.stream()
-                    .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
-                    .filter(t -> t.getType() != PaymentType.SECURITY_DEPOSIT)
-                    .map(PaymentTransaction::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            // Cùng công thức với bảng kê hoa hồng tháng: tiền áp vào đơn − tiền đã hoàn, bỏ phần chuyển dư.
+            BigDecimal confirmedRev = CommissionServiceImpl.revenueOf(txList);
 
             BigDecimal commAmt = confirmedRev.multiply(rate).setScale(0, RoundingMode.HALF_UP);
             totalCommissionDue = totalCommissionDue.add(commAmt);

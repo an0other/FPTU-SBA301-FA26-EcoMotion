@@ -7,7 +7,6 @@ import com.fptufa26.ecomotion.schedule.enums.ScheduleType;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.entity.*;
 import com.fptufa26.ecomotion.vehicle.enums.*;
-import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.service.*;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
@@ -32,7 +31,7 @@ class RentalPricingServiceTest {
         when(deposit.resolve(eq(vehicle),any())).thenAnswer(inv ->
                 new VehicleDepositPolicyService.DepositQuote(BigDecimal.ZERO,BigDecimal.ZERO,BigDecimal.ZERO));
         var service=new RentalPricingServiceImpl(catalog,deposit,schedule,
-                Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), new BookingStartPolicy(Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), 3), mock(RentalPlanRepository.class));
+                Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), new BookingStartPolicy(Clock.fixed(start.minus(Duration.ofDays(1)),ZoneOffset.UTC), 3));
         when(schedule.occupiedWindows(anyLong(),any(),any())).thenReturn(List.of(
                 new OccupiedScheduleWindow(start.plus(Duration.ofHours(75)),start.plus(Duration.ofHours(100)),ScheduleType.BOOKED)));
         var quote=service.quote(new RentalQuoteRequest(1L,start,start.plus(Duration.ofHours(74))));

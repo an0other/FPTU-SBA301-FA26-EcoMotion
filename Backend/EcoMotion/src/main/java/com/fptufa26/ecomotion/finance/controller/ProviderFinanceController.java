@@ -45,6 +45,29 @@ public class ProviderFinanceController {
 
     private final ProviderFinanceService providerFinanceService;
     private final RefundService refundService;
+    private final com.fptufa26.ecomotion.finance.service.CommissionService commissionService;
+
+    @GetMapping("/commission-statements")
+    @Operation(summary = "Monthly commission: running period, issued statements and booking lock status")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.CommissionOverviewResponse> commissionOverview(
+            @AuthenticationPrincipal SecurityUser principal) {
+        return ApiResponse.success(commissionService.overview(principal.getUserId()));
+    }
+
+    @GetMapping("/commission-statements/{id}")
+    @Operation(summary = "Commission statement detail with its bookings")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.CommissionStatementResponse> commissionStatement(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id) {
+        return ApiResponse.success(commissionService.providerStatement(principal.getUserId(), id));
+    }
+
+    @PostMapping("/commission-statements/{id}/report-payment")
+    @Operation(summary = "Provider reports the commission bank transfer as sent")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.CommissionStatementResponse> reportCommissionPayment(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id,
+            @jakarta.validation.Valid @RequestBody(required = false) com.fptufa26.ecomotion.finance.dto.request.ReportCommissionPaymentRequest request) {
+        return ApiResponse.success(commissionService.reportPayment(principal.getUserId(), id, request));
+    }
 
     @PostMapping("/sandbox/payouts/{bookingId}")
     @PreAuthorize("hasRole('ADMIN')")

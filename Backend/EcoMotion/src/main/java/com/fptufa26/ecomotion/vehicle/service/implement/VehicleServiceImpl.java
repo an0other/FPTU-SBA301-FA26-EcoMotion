@@ -55,6 +55,7 @@ public class VehicleServiceImpl implements VehicleService {
     private final MapLocationService mapLocationService;
 
     private final VehicleDocumentRepository vehicleDocumentRepository;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.CommissionService> commissions;
 
     @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
@@ -76,7 +77,7 @@ public class VehicleServiceImpl implements VehicleService {
             throw new IllegalArgumentException("radiusKm must be 10 or 15");
         }
 
-        List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
+        List<Vehicle> vehicles = rentableVehicles();
         Map<Long, ProviderSummary> providers = findProviders(vehicles);
         return matchingCards(vehicles, providers, keyword, location, fuelType, planType, maxPrice, sort).stream()
                 .map(card -> {
@@ -100,10 +101,18 @@ public class VehicleServiceImpl implements VehicleService {
                 .toList();
     }
 
+    /** Xe đã duyệt, trừ xe của nhà xe đang bị khoá nhận đơn vì nợ hoa hồng quá hạn. */
+    private List<Vehicle> rentableVehicles() {
+        java.util.Set<Long> blocked = commissions.getObject().blockedProviderIds();
+        return vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED).stream()
+                .filter(v -> v.getProvider() == null || !blocked.contains(v.getProvider().getId()))
+                .toList();
+    }
+
     private List<VehicleCardResponse> matchingCards(String keyword, String location,
                                                      String fuelType, String planType,
                                                      BigDecimal maxPrice, VehicleSort sort) {
-        List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
+        List<Vehicle> vehicles = rentableVehicles();
         return matchingCards(vehicles, findProviders(vehicles), keyword, location, fuelType, planType,
                 maxPrice, sort);
     }

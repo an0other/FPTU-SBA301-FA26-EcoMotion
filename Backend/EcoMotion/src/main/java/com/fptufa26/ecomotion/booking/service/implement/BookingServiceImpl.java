@@ -164,6 +164,8 @@ public class BookingServiceImpl implements BookingService {
     private final CloudinaryService cloudinaryService;
     private final EvidenceImageStorage evidenceImageStorage;
     private final RefundEventService refundEventService;
+    // Lazy: CommissionService đọc sổ thanh toán của booking.
+    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.CommissionService> commissions;
     private final CancellationClosureService cancellationClosure;
 
     @Override
@@ -327,6 +329,9 @@ public class BookingServiceImpl implements BookingService {
         Renter renter = userService.requireRenterByUserId(userId);
         Vehicle vehicle = vehicleCatalogService.requireApprovedForUpdate(request.vehicleId());
         userService.assertRentalAllowed(userId, vehicle.getProvider().getUser().getId());
+        if (commissions.getObject().isBookingBlocked(vehicle.getProvider().getId())) {
+            throw new ConflictException("Nhà xe tạm ngưng nhận đơn mới. Vui lòng chọn xe khác.");
+        }
         boolean mixed = request.plannedEndAt() != null || request.pricingItems() != null;
         var selection = mixed ? rentalPricingService.validateSelection(request.vehicleId(), request.pickupTime(),
                 request.plannedEndAt(), request.pricingItems(), request.expectedRentalAmount()) : null;

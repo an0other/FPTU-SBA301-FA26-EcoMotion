@@ -268,6 +268,12 @@ public class RefundServiceImpl implements RefundService {
         if (transaction.getMethod() == PaymentMethod.VNPAY) {
             throw new ConflictException("Hoàn qua VNPay không dùng minh chứng chuyển khoản");
         }
+        // Không thể chuyển khoản hoàn khi khách chưa cho số tài khoản nhận tiền.
+        refundRequestRepository.findByPaymentTransaction_Id(transaction.getId())
+                .filter(refund -> refund.getRecipientAccountNumber() == null || refund.getRecipientAccountNumber().isBlank())
+                .ifPresent(refund -> {
+                    throw new ConflictException("Khách chưa cung cấp tài khoản nhận hoàn; chưa thể xác nhận đã chuyển tiền");
+                });
         RefundRequest refund = refundRequestRepository.findByPaymentTransaction_Id(transaction.getId()).orElse(null);
         requireRecipientAccount(refund);
         BigDecimal received = bookingPaymentLedgerService.listTransactions(transaction.getBooking().getId()).stream()

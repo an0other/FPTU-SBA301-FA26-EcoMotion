@@ -317,3 +317,10 @@ app.identity.processing-timeout=${IDENTITY_PROCESSING_TIMEOUT:10m}
 app.identity.acceptance-threshold=${IDENTITY_ACCEPTANCE_THRESHOLD:}
 app.provider.default-commission-rate=${PROVIDER_DEFAULT_COMMISSION_RATE:0.10}
 app.provider.default-deposit-ratio=${PROVIDER_DEFAULT_DEPOSIT_RATIO:0.30}
+
+# Hoa hồng tháng: tài khoản nhận tiền của nền tảng và số ngày ân hạn trước khi khoá nhận đơn
+app.commission.grace-days=${COMMISSION_GRACE_DAYS:3}
+app.platform.bank.code=${PLATFORM_BANK_CODE:VCB}
+app.platform.bank.name=${PLATFORM_BANK_NAME:Vietcombank}
+app.platform.bank.account=${PLATFORM_BANK_ACCOUNT:1029384756}
+app.platform.bank.holder=${PLATFORM_BANK_HOLDER:CONG TY ECOMOTION}

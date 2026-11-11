@@ -178,6 +178,8 @@ public class DemoDataCompletenessSeeder {
     private final VehicleService vehicleService;
     private final UserService userService;
     private final FileStorageService fileStorage;
+    private final com.fptufa26.ecomotion.finance.service.CommissionService commissionService;
+    private final com.fptufa26.ecomotion.finance.repository.CommissionStatementRepository commissionStatements;
 
     @Value("${app.images.root:../../images}")
     private String imagesRootSetting;
@@ -204,7 +206,51 @@ public class DemoDataCompletenessSeeder {
         }
         step("seed image URLs", this::repairSeedImageUrls);
         step("ratings", this::refreshRatings);
+        step("commission statements", this::seedCommissionStatements);
         log.info("Demo data completeness pass finished for {} seed bookings", codes.size());
+    }
+
+    // ------------------------------------------------------------------ commission
+
+    /**
+     * Bảng kê hoa hồng các tháng đã qua, lập theo thứ tự thời gian để mỗi chuyến vào đúng tháng hoàn tất.
+     * Trạng thái demo: các tháng trước tháng gần nhất đã nộp đủ; tháng gần nhất Depot A đã báo chuyển khoản
+     * (chờ admin xác nhận), Depot B quá hạn (đang bị khoá nhận đơn) để demo luồng khoá / mở khoá.
+     * Chỉ chỉnh bảng kê chưa từng được báo chuyển hay xác nhận, nên chạy lại không ghi đè thao tác thật.
+     */
+    private void seedCommissionStatements() {
+        java.time.ZoneId vn = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+        java.time.YearMonth lastMonth = java.time.YearMonth.now(vn).minusMonths(1);
+        Instant earliest = em.createQuery(
+                        "select min(coalesce(b.actualEndAt, b.updatedAt)) from Booking b where b.status = :s", Instant.class)
+                .setParameter("s", BookingStatus.COMPLETED).getSingleResult();
+        if (earliest == null) return;
+        for (java.time.YearMonth month = java.time.YearMonth.from(earliest.atZone(vn)); !month.isAfter(lastMonth); month = month.plusMonths(1)) {
+            commissionService.generate(month);
+        }
+        commissionService.markOverdue();
+        User admin = users.findAll().stream().filter(u -> u.getRole() == com.fptufa26.ecomotion.user.enums.Role.ADMIN).findFirst().orElse(null);
+        for (var statement : commissionStatements.findAllByOrderByPeriodMonthDescIdAsc()) {
+            if (statement.getReportedAt() != null || statement.getConfirmedAt() != null
+                    || statement.getStatus() == com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAID) continue;
+            boolean latest = statement.getPeriodMonth().equals(lastMonth.toString());
+            String provider = statement.getProvider().getDisplayName() == null ? "" : statement.getProvider().getDisplayName();
+            if (!latest) {
+                statement.setPaidAmount(statement.getCommissionAmount());
+                statement.setStatus(com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAID);
+                statement.setReportedAt(statement.getDueAt().minus(Duration.ofDays(2)));
+                statement.setPaymentReference("FT" + statement.getPeriodMonth().replace("-", "") + statement.getProvider().getId());
+                statement.setConfirmedAt(statement.getDueAt().minus(Duration.ofDays(1)));
+                statement.setConfirmedBy(admin);
+                statement.setAdminNote("Đã nhận đủ qua chuyển khoản");
+            } else if (provider.endsWith("A")) {
+                statement.setStatus(com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAYMENT_REPORTED);
+                statement.setReportedAt(statement.getDueAt().minus(Duration.ofHours(20)));
+                statement.setPaymentReference("FT26308123456");
+                statement.setReportedNote("Đã chuyển khoản hoa hồng tháng qua Vietcombank");
+            }
+            commissionStatements.save(statement);
+        }
     }
 
     // ------------------------------------------------------------------ infrastructure
