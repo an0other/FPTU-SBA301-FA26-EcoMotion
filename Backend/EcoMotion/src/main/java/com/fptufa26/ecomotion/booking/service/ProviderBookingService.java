@@ -69,6 +69,8 @@ public interface ProviderBookingService {
 
     List<AvailableDriverResponse> getAvailableDrivers(Long currentUserId, String bookingCode);
 
+    List<ProviderBookingResponse> getDriverBookings(Long currentUserId, Long driverId);
+
     byte[] exportBookingsCsv(Long currentUserId, String status);
 
     TripTrackingResponse getTripTracking(Long currentUserId, String bookingCodeOrId);

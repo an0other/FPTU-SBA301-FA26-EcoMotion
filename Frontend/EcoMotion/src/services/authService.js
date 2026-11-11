@@ -12,6 +12,11 @@ export const authService = {
     return data
   },
 
+  async changeTemporaryPassword(payload) {
+    const { data } = await apiClient.post('/auth/first-login/change-password', payload)
+    return data
+  },
+
   async login(email, password, rememberMe = false, captchaToken = '') {
     const { data } = await apiClient.post('/auth/login', { email, password, rememberMe, captchaToken })
     return data
