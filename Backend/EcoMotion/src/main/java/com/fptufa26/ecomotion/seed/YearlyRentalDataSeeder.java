@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.seed;
 import com.fptufa26.ecomotion.booking.entity.*;
 import com.fptufa26.ecomotion.booking.enums.*;
 import com.fptufa26.ecomotion.booking.policy.YearlyRentalRules;
+import com.fptufa26.ecomotion.booking.policy.BookingStartPolicy;
 import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
 import com.fptufa26.ecomotion.common.storage.service.DocumentStorageService;
 import com.fptufa26.ecomotion.finance.entity.PaymentRequest;
@@ -39,7 +40,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 @Component
-@Profile("dev")
+@Profile("dev & !prod")
 @RequiredArgsConstructor
 @Slf4j
 public class YearlyRentalDataSeeder {
@@ -47,6 +48,10 @@ public class YearlyRentalDataSeeder {
     private static final BigDecimal YEAR_PRICE = new BigDecimal("181000000");
     private static final BigDecimal DEPOSIT = new BigDecimal("50000000");
     private static final long INITIAL_KM = 10000L;
+    private static final long ANNUAL_KM = 24000L;
+    private static final BigDecimal EXCESS_KM_RATE = new BigDecimal("5000");
+    private static final int GRACE_DAYS = 1;
+    private static final BigDecimal LATE_DAILY_RATE = new BigDecimal("500000");
     private final UserRepository userRepository;
     private final RenterRepository renterRepository;
     private final VehicleRepository vehicleRepository;
@@ -56,6 +61,8 @@ public class YearlyRentalDataSeeder {
     private final PaymentRequestService payments;
     private final EntityManager entityManager;
     private final Clock clock;
+    private final BookingStartPolicy bookingStartPolicy;
+    private final com.fptufa26.ecomotion.schedule.service.ScheduleService schedules;
     @Value("${booking.yearly.rounding-unit:100000}")
     private BigDecimal roundingUnit;
     @Transactional
@@ -63,17 +70,32 @@ public class YearlyRentalDataSeeder {
         YearlyRentalRules.installments(YEAR_PRICE, roundingUnit);
         Vehicle template = vehicleRepository.findByLicensePlate("51A-11111").orElseThrow();
         LocalDate today = LocalDate.now(clock.withZone(VIETNAM_ZONE));
-        LocalDate activeStart = today.minusMonths(3).plusDays(3);
+        LocalDate activeStart = today.minusMonths(3).minusDays(2);
         demoVehicle(template, 1);
         demoVehicle(template, 9);
         Renter active = findRenter("renter.yearly.monthly@ecomotion.vn");
         Renter closing = findRenter("renter.yearly.happy-end@ecomotion.vn");
-        seedLicense(active, "B");
-        seedLicense(closing, "B");
-        seedBooking(active, template, 2, "MONTHLY", activeStart, 3);
-        seedBooking(closing, template, 10, "HAPPY-END", today.minusMonths(12), 12);
+        seedLicense(findRenter("renter.yearly.new@ecomotion.vn"), "B2");
+        seedLicense(active, "B2");
+        seedLicense(closing, "B2");
+        seedBooking(active, template, 2, "MONTHLY", activeStart, 3, true);
+        Booking closingBooking = seedBooking(closing, template, 10, "HAPPY-END", today.minusDays(3).minusMonths(12), 12, true);
+        if (closingBooking != null) {
+            LocalDate cancelStart = cancellationStart(today, closingBooking.getPlannedEndAt());
+            if (!cancelStart.atStartOfDay(VIETNAM_ZONE).toInstant().isAfter(bookingStartPolicy.window().latestPickupTime())) {
+                seedBooking(closing, template, 11, "CANCEL", cancelStart, 1, false);
+            } else {
+                log.warn("Yearly CANCEL fixture skipped: the preserved closing contract leaves no non-overlapping pickup within the booking window");
+            }
+        }
         entityManager.flush();
-        log.info("Yearly demo ready: new, monthly and happy-end renters share provider.a@ecomotion.vn. Continue reports and replacement on MONTHLY before requesting its final return. Existing progress is preserved.");
+        log.info("Yearly demo setup checked: 3 renters, provider.a and admin. NEW: create/receive then provider-failure ending. MONTHLY: next installment, incidents, replacement then early return. HAPPY-END: final return/refund. CANCEL: separate future booking under happy-end renter. Existing progress and dates are preserved; check skipped-fixture warnings before the demo.");
+    }
+
+    static LocalDate cancellationStart(LocalDate today, Instant closingEnd) {
+        LocalDate afterClosing = closingEnd.atZone(VIETNAM_ZONE).toLocalDate().plusDays(1);
+        LocalDate nextWeek = today.plusDays(7);
+        return afterClosing.isAfter(nextWeek) ? afterClosing : nextWeek;
     }
 
     private Renter findRenter(String email) {
@@ -121,15 +143,22 @@ public class YearlyRentalDataSeeder {
         return v;
     }
 
-    private void seedBooking(Renter renter, Vehicle template, int number, String scenario, LocalDate start, int paidMonths) {
+    private Booking seedBooking(Renter renter, Vehicle template, int number, String scenario, LocalDate start, int paidMonths, boolean received) {
         String code = "EM-Y2-" + scenario;
         Booking existing = entityManager.createQuery("select b from Booking b where b.bookingCode=:code", Booking.class)
                 .setParameter("code", code).getResultStream().findFirst().orElse(null);
-        if (existing != null) return;
+        if (existing != null) {
+            log.info("Preserved yearly demo {}: status={}, pickup={}, due={}", code, existing.getStatus(), existing.getPickupTime(), existing.getPlannedEndAt());
+            return existing;
+        }
         Vehicle v = demoVehicle(template, number);
         RentalPlan plan = entityManager.createQuery("select p from RentalPlan p where p.vehicle.id=:id and p.planType=:type", RentalPlan.class)
                 .setParameter("id", v.getId()).setParameter("type", PlanType.YEARLY).getSingleResult();
         Instant startedAt = start.atStartOfDay(VIETNAM_ZONE).toInstant();
+        if (!schedules.isRangeFree(v.getId(), startedAt, YearlyRentalRules.reservationEnd(YearlyRentalRules.contractEnd(startedAt)))) {
+            log.warn("Yearly fixture {} skipped: vehicle {} already has a conflicting reservation or custody", code, v.getLicensePlate());
+            return null;
+        }
         Instant createdAt = start.minusDays(7).atStartOfDay(VIETNAM_ZONE).toInstant();
         Booking b = new Booking();
         b.setBookingCode(code);
@@ -148,7 +177,7 @@ public class YearlyRentalDataSeeder {
         b.setUpdatedAt(createdAt);
         entityManager.persist(b);
         b.setContractUrl(documentStorageService.store("booking", renter.getUser().getId(),
-                code + "-" + java.util.UUID.randomUUID() + ".pdf", demoContract(code), "application/pdf"));
+                code + "-" + java.util.UUID.randomUUID() + ".pdf", demoContract(code, start), "application/pdf"));
 
         BookingPolicySnapshot snapshot = new BookingPolicySnapshot();
         snapshot.setBooking(b);
@@ -163,6 +192,15 @@ public class YearlyRentalDataSeeder {
         snapshot.setPickupFee(BigDecimal.ZERO);
         snapshot.setCreatedAt(createdAt);
         entityManager.persist(snapshot);
+
+        BookingPricingItem pricing = new BookingPricingItem();
+        pricing.setBooking(b);
+        pricing.setPlanId(plan.getId());
+        pricing.setPlanType(PlanType.YEARLY);
+        pricing.setSlotLengthMinutes(plan.getSlotLengthMinutes());
+        pricing.setUnitPrice(YEAR_PRICE);
+        pricing.setQuantity(1);
+        entityManager.persist(pricing);
 
         BookingCharge charge = new BookingCharge();
         charge.setBooking(b);
@@ -182,11 +220,11 @@ public class YearlyRentalDataSeeder {
         workflow.setContractTotal(YEAR_PRICE);
         workflow.setSecurityDeposit(DEPOSIT);
         workflow.setRoundingUnit(roundingUnit);
-        workflow.setAnnualKm(24000L);
-        workflow.setExcessKmRate(new BigDecimal("5000"));
-        workflow.setGraceDays(1);
-        workflow.setLateDailyRate(new BigDecimal("500000"));
-        workflow.setCurrentInitialKm(INITIAL_KM);
+        workflow.setAnnualKm(ANNUAL_KM);
+        workflow.setExcessKmRate(EXCESS_KM_RATE);
+        workflow.setGraceDays(GRACE_DAYS);
+        workflow.setLateDailyRate(LATE_DAILY_RATE);
+        if (received) workflow.setCurrentInitialKm(INITIAL_KM);
         entityManager.persist(workflow);
         entityManager.flush();
 
@@ -204,7 +242,7 @@ public class YearlyRentalDataSeeder {
             request.setExpiresAt(null);
             request.setConfirmedAt(paidAt);
             request.setConfirmedBy(v.getProvider().getUser());
-            String reference = "Y2-" + number + "-" + request.getInstallmentNumber();
+            String reference = "Y2-" + number + "-" + (request.isSecurityDeposit() ? "DEPOSIT" : request.getInstallmentNumber());
             PaymentTransaction tx = new PaymentTransaction();
             tx.setBooking(b);
             tx.setCharge(request.isSecurityDeposit() ? null : charge);
@@ -232,30 +270,32 @@ public class YearlyRentalDataSeeder {
         entityManager.flush();
         entityManager.createNativeQuery("update payment_request set created_at=:createdAt where booking_id=:id")
                 .setParameter("createdAt", createdAt).setParameter("id", b.getId()).executeUpdate();
-        b.setStatus(BookingStatus.IN_PROGRESS);
-        b.setActualStartAt(startedAt);
-        b.setRenterStartConfirmedAt(startedAt);
+        b.setStatus(received ? BookingStatus.IN_PROGRESS : BookingStatus.CONFIRMED);
+        b.setActualStartAt(received ? startedAt : null);
+        b.setRenterStartConfirmedAt(received ? startedAt : null);
         b.setProviderConfirmedAt(createdAt);
-        TripEvidence photo = new TripEvidence();
-        photo.setBooking(b);
-        photo.setUploadedBy(v.getProvider().getUser());
-        photo.setEvidenceType(TripEvidenceType.OTHER);
-        photo.setImageUrl(vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(v.getId()).stream()
-                .findFirst().map(VehicleImage::getImageUrl).orElseThrow());
-        photo.setNote("DEMO FIXTURE ONLY - initial handover; odometer 10000 km");
-        photo.setCreatedAt(startedAt);
-        photo.setRecordedAt(startedAt);
-        entityManager.persist(photo);
-        YearlyHandover handover = new YearlyHandover();
-        handover.setBookingId(b.getId());
-        handover.setStage("RECEIVED");
-        handover.setInitialKm(INITIAL_KM);
-        handover.setReceivedOn(start);
-        handover.setDispatchedAt(startedAt);
-        handover.setArrivedAt(startedAt);
-        handover.setEvidenceId(photo.getId());
-        handover.setEvidenceUrl(photo.getImageUrl());
-        entityManager.persist(handover);
+        if (received) {
+            TripEvidence photo = new TripEvidence();
+            photo.setBooking(b);
+            photo.setUploadedBy(v.getProvider().getUser());
+            photo.setEvidenceType(TripEvidenceType.OTHER);
+            photo.setImageUrl(vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(v.getId()).stream()
+                    .findFirst().map(VehicleImage::getImageUrl).orElseThrow());
+            photo.setNote("DEMO FIXTURE ONLY - initial handover; odometer 10000 km");
+            photo.setCreatedAt(startedAt);
+            photo.setRecordedAt(startedAt);
+            entityManager.persist(photo);
+            YearlyHandover handover = new YearlyHandover();
+            handover.setBookingId(b.getId());
+            handover.setStage("RECEIVED");
+            handover.setInitialKm(INITIAL_KM);
+            handover.setReceivedOn(start);
+            handover.setDispatchedAt(startedAt);
+            handover.setArrivedAt(startedAt);
+            handover.setEvidenceId(photo.getId());
+            handover.setEvidenceUrl(photo.getImageUrl());
+            entityManager.persist(handover);
+        }
         VehicleSchedule schedule = new VehicleSchedule();
         schedule.setVehicle(v);
         schedule.setBooking(b);
@@ -266,14 +306,46 @@ public class YearlyRentalDataSeeder {
         schedule.setCreatedAt(createdAt);
         schedule.setExtension(false);
         entityManager.persist(schedule);
-        log.info("Created yearly demo {}: renter={}, plate={}, start={}, due={}, paidMonths={}",
+        validateFixture(b, workflow, requests, paidMonths, received);
+        log.info("Created yearly demo {}: renter={}, plate={}, start={}, due={}, paidMonths={}, received={}",
                 code, renter.getUser().getEmail(), v.getLicensePlate(), start,
-                start.plusMonths(12), paidMonths);
+                start.plusMonths(12), paidMonths, received);
+        return b;
     }
 
-    private byte[] demoContract(String code) {
-        String text = "DEMO ONLY - NOT A SIGNED CONTRACT - " + code;
-        String stream = "BT /F1 14 Tf 40 760 Td (" + text + ") Tj ET";
+    private void validateFixture(Booking booking, YearlyWorkflow workflow, java.util.List<PaymentRequest> requests, int paidMonths, boolean received) {
+        var installments = requests.stream().filter(r -> !r.isSecurityDeposit()).toList();
+        BigDecimal total = installments.stream().map(PaymentRequest::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        long paid = installments.stream().filter(r -> r.getStatus() == PaymentRequestStatus.CONFIRMED).count();
+        boolean deposit = requests.stream().filter(PaymentRequest::isSecurityDeposit)
+                .anyMatch(r -> r.getAmount().compareTo(DEPOSIT) == 0 && r.getStatus() == PaymentRequestStatus.CONFIRMED);
+        if (requests.size() != 13 || installments.size() != 12 || total.compareTo(YEAR_PRICE) != 0 || paid != paidMonths || !deposit
+                || !workflow.isTermsAccepted() || received != (booking.getActualStartAt() != null)
+                || booking.getStatus() != (received ? BookingStatus.IN_PROGRESS : BookingStatus.CONFIRMED)) {
+            throw new IllegalStateException("Inconsistent yearly demo fixture: " + booking.getBookingCode());
+        }
+    }
+
+    private byte[] demoContract(String code, LocalDate start) {
+        var lines = new java.util.ArrayList<String>();
+        lines.add("DEMO ONLY - NOT A SIGNED CONTRACT - " + code);
+        lines.add("Total rent: " + YEAR_PRICE.toPlainString() + " VND for 12 calendar months");
+        lines.add("Security deposit: " + DEPOSIT.toPlainString() + " VND - separate from rent");
+        lines.add("Scheduled pickup: " + start + " | Original due date: " + start.plusMonths(12));
+        lines.add("Annual distance: " + ANNUAL_KM + " km | Excess distance: " + EXCESS_KM_RATE.toPlainString() + " VND/km");
+        lines.add("Late return: " + GRACE_DAYS + " grace day, then " + LATE_DAILY_RATE.toPlainString() + " VND/day");
+        lines.add("Voluntary early return: started months charged in full");
+        lines.add("Early fee: rounded average month, capped by remaining rent");
+        lines.add("Provider failure ending: refund incident month and prepaid future rent");
+        lines.add("Replacement: original price, deposit and due date remain unchanged");
+        lines.add("Historical receipts in this fixture are simulated - no real transfers");
+        var amounts = YearlyRentalRules.installments(YEAR_PRICE, roundingUnit);
+        for (int i = 0; i < amounts.size(); i++) {
+            lines.add("Month " + (i + 1) + " | " + start.plusMonths(i) + " | " + amounts.get(i).toPlainString() + " VND");
+        }
+        StringBuilder body = new StringBuilder("BT /F1 10 Tf 40 790 Td 18 TL\n");
+        for (String line : lines) body.append('(').append(line).append(") Tj T*\n");
+        String stream = body.append("ET").toString();
         String[] objects = {
             "<< /Type /Catalog /Pages 2 0 R >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -295,9 +367,15 @@ public class YearlyRentalDataSeeder {
     }
 
     private void seedLicense(Renter renter, String licenseClass) {
-        if (renter.getLicenseNo() != null) {
+        if (renter.getLicenseNo() != null && !renter.getLicenseNo().startsWith("SEED-YEARLY-")) {
             return;
         }
+
+        LocalDate today = LocalDate.now(clock.withZone(VIETNAM_ZONE));
+        if (licenseClass.equals(renter.getLicenseClass()) && renter.isLicenseVerified()
+                && renter.getLicenseDateOfBirth() != null && renter.getLicenseIssueDate() != null
+                && renter.getLicenseExpiry() != null && !renter.getLicenseExpiry().isBefore(today.plusYears(1))
+                && renter.getLicenseFrontImagePath() != null && renter.getLicenseBackImagePath() != null) return;
 
         String normalizedClass = licenseClass.toUpperCase();
         String filePrefix = "yearly-demo-license-" + renter.getUser().getId();
@@ -316,10 +394,10 @@ public class YearlyRentalDataSeeder {
 
         renter.setLicenseNo("SEED-YEARLY-" + renter.getUser().getId());
         renter.setLicenseFullName(renter.getUser().getFullName());
-        renter.setLicenseDateOfBirth(LocalDate.of(1992, 4, 12));
+        renter.setLicenseDateOfBirth(renter.getDateOfBirth() == null ? LocalDate.of(1992, 4, 12) : renter.getDateOfBirth());
         renter.setLicenseClass(normalizedClass);
-        renter.setLicenseIssueDate(LocalDate.of(2025, 2, 1));
-        renter.setLicenseExpiry(LocalDate.now(VIETNAM_ZONE).plusYears(5));
+        renter.setLicenseIssueDate(today.minusYears(2));
+        renter.setLicenseExpiry(today.plusYears(5));
         renter.setLicenseExpiryUnlimited(false);
         renter.setLicenseVerified(true);
         renter.setLicenseFrontImagePath(frontPath);

@@ -15,7 +15,6 @@ import com.fptufa26.ecomotion.booking.repository.BookingRepository;
 import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 import com.fptufa26.ecomotion.booking.service.RenterPaymentService;
 import com.fptufa26.ecomotion.common.response.PageResponse;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +29,7 @@ import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import java.math.BigDecimal;
 import java.util.List;
 import com.fptufa26.ecomotion.booking.enums.PaymentDirection;
+import com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository;
 
 @Service
 @Transactional(readOnly = true)
@@ -39,12 +39,12 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
     private final BookingRepository bookingRepository;
     private final BookingChargeRepository bookingChargeRepository;
     private final BookingPolicySnapshotRepository snapshotRepository;
-    private final com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository yearlyWorkflows;
+    private final YearlyWorkflowRepository yearlyWorkflows;
 
     @org.springframework.beans.factory.annotation.Autowired
     public RenterPaymentServiceImpl(PaymentTransactionRepository payments, BookingRepository bookings,
             BookingChargeRepository charges, BookingPolicySnapshotRepository snapshots,
-            com.fptufa26.ecomotion.booking.repository.YearlyWorkflowRepository yearlyWorkflows) {
+            YearlyWorkflowRepository yearlyWorkflows) {
         this.paymentTransactionRepository = payments;
         this.bookingRepository = bookings;
         this.bookingChargeRepository = charges;
@@ -183,6 +183,10 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 : null;
 
+        // B1: khoản giảm trừ do đổi xe; hợp đồng gốc (totalAmount) và cọc không bị đổi.
+        BigDecimal vehicleChangeDiscount = booking.vehicleChangeCredit();
+        if (!yearly && recordedCost != null) recordedCost = recordedCost.subtract(vehicleChangeDiscount).max(BigDecimal.ZERO);
+
         BigDecimal depositRequired = yearly
                 ? null
                 : charges.stream()
@@ -224,7 +228,9 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
             if (securityFlow) depositRequired = snapshot.getDepositAmount();
             if (state != null && java.util.Set.of("SETTLEMENT_ACCEPTED", "REFUND_TRANSFER_RECORDED", "REFUND_RECEIVED", "COMPLETED").contains(state.getStage())) {
                 recordedCost = state.getRentDue().add(state.getEarlyFee()).add(state.getLateFee())
-                        .add(state.getExcessKmFee()).add(state.getOtherCharges());
+                        .add(state.getExcessKmFee()).add(state.getOtherCharges())
+                        .subtract(state.getVehicleChangeDiscount());
+                vehicleChangeDiscount = state.getVehicleChangeDiscount();
                 allocatedPayments = allocatedPayments.add(state.getDepositDeduction()).subtract(refundedAmount).max(BigDecimal.ZERO);
             }
         }
@@ -274,6 +280,7 @@ public class RenterPaymentServiceImpl implements RenterPaymentService {
                 netPaidAmount,
                 remainingAmount,
                 creditAmount,
+                vehicleChangeDiscount,
                 provisional,
                 balanceNote);
     }

@@ -12,6 +12,7 @@ import com.fptufa26.ecomotion.booking.enums.PaymentType;
 import com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService;
 import com.fptufa26.ecomotion.booking.service.BookingService;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
+import com.fptufa26.ecomotion.finance.service.RefundMath;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
 import com.fptufa26.ecomotion.common.storage.service.FileStorageService;
@@ -43,6 +44,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.Optional;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
+import com.fptufa26.ecomotion.finance.repository.PaymentRequestRepository;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
+import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
+import com.fptufa26.ecomotion.booking.service.implement.TripEndConfirmationService;
 
 @Service
 @RequiredArgsConstructor
@@ -63,7 +70,7 @@ public class RefundServiceImpl implements RefundService {
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp", "application/pdf");
 
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    private final CancellationClosureService closure;
     private final RefundRequestRepository refundRequestRepository;
     private final BookingService bookingService;
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
@@ -71,8 +78,56 @@ public class RefundServiceImpl implements RefundService {
     private final FileStorageService fileStorageService;
     private final Clock clock;
     private final jakarta.persistence.EntityManager entityManager;
-    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+    private final BookingNotificationService bookingNotificationService;
     private final RefundEventService refundEventService;
+    private final org.springframework.beans.factory.ObjectProvider<TripEndConfirmationService> endConfirmations;
+    private final org.springframework.beans.factory.ObjectProvider<PaymentRequestRepository> paymentRequests;
+
+    private static final java.util.Set<BookingStatus> OFFSET_BLOCKED = java.util.Set.of(
+            BookingStatus.AWAITING_FINAL_PAYMENT, BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.CANCELLATION_REVIEW);
+
+    @Override
+    @Transactional
+    public RefundResponse offsetExcessRefund(Long currentUserId, Long refundRequestId) {
+        RefundRequest candidate = refundRequestRepository.findById(refundRequestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khoản hoàn #" + refundRequestId));
+        Booking booking = bookingPaymentLedgerService.requireBookingForUpdate(candidate.getBooking().getId());
+        if (!booking.getRenter().getUser().getId().equals(currentUserId)) {
+            throw new AccessDeniedException("Chỉ khách thuê của đơn mới được chọn cấn trừ");
+        }
+        RefundRequest refund = refundRequestRepository.findByIdForUpdate(refundRequestId).orElseThrow();
+        entityManager.refresh(refund, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        if (!RefundMath.excessEvent(refund.getSourceEventId())) {
+            throw new ConflictException("Chỉ khoản chuyển dư mới được cấn trừ vào quyết toán");
+        }
+        PaymentTransaction out = refund.getPaymentTransaction();
+        if (refund.getStatus() != RefundStatus.PROCESSING || out == null || out.getStatus() != PaymentStatus.PENDING) {
+            throw new ConflictException("Khoản hoàn đã được xử lý, không thể cấn trừ");
+        }
+        boolean finalIssued = paymentRequests.getObject().findByBooking_IdAndPaymentType(booking.getId(),
+                PaymentRequestType.FINAL_BALANCE).isPresent();
+        if (OFFSET_BLOCKED.contains(booking.getStatus()) || finalIssued) {
+            throw new ConflictException("Đơn đã đến bước quyết toán; khoản chuyển dư cần được nhà xe hoàn lại");
+        }
+        Instant now = clock.instant();
+        // Phần dư trở thành tiền đã trả cho đơn: tăng phần áp dụng của giao dịch gốc, huỷ lệnh hoàn.
+        PaymentTransaction source = refund.getSourcePaymentTransaction();
+        BigDecimal applied = source.getAppliedAmount() == null ? BigDecimal.ZERO : source.getAppliedAmount();
+        source.setAppliedAmount(applied.add(refund.getAmount()).min(source.getAmount()));
+        if (RefundMath.excess(source.getProcessingNote())) {
+            source.setProcessingNote("Khách chọn cấn trừ khoản chuyển dư vào quyết toán");
+        }
+        bookingPaymentLedgerService.saveTransaction(source);
+        out.setStatus(PaymentStatus.FAILED);
+        out.setProcessingNote(RefundMath.EXCESS_PREFIX + ": khách chọn cấn trừ vào quyết toán");
+        out.setUpdatedAt(now);
+        bookingPaymentLedgerService.saveTransaction(out);
+        refund.setStatus(RefundStatus.REJECTED);
+        refund.setRejectionReason("Khách chọn cấn trừ vào quyết toán");
+        refund.setUpdatedAt(now);
+        bookingNotificationService.changed(booking, "REFUND_UPDATED");
+        return toRefundResponse(refundRequestRepository.save(refund));
+    }
 
     @Override
     @Transactional
@@ -213,6 +268,8 @@ public class RefundServiceImpl implements RefundService {
         if (transaction.getMethod() == PaymentMethod.VNPAY) {
             throw new ConflictException("Hoàn qua VNPay không dùng minh chứng chuyển khoản");
         }
+        RefundRequest refund = refundRequestRepository.findByPaymentTransaction_Id(transaction.getId()).orElse(null);
+        requireRecipientAccount(refund);
         BigDecimal received = bookingPaymentLedgerService.listTransactions(transaction.getBooking().getId()).stream()
                 .filter(t -> t.getStatus() == PaymentStatus.PAID && t.getDirection() == PaymentDirection.IN)
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -246,16 +303,20 @@ public class RefundServiceImpl implements RefundService {
         Instant now = clock.instant();
         transaction.setReceiptUrl(storedPath);
         transaction.setGatewayRef(reference);
-        transaction.setProcessingNote(normalizedNote);
+        // Giữ tiền tố EXCESS (tiền khách chuyển dư) để khoản hoàn không bị tính như hoàn tiền thuê.
+        String previousNote = transaction.getProcessingNote();
+        transaction.setProcessingNote(RefundMath.excess(previousNote)
+                ? (RefundMath.EXCESS_PREFIX + (normalizedNote == null ? "" : ": " + normalizedNote))
+                : normalizedNote);
         transaction.setConfirmedBy(user);
         transaction.setVerificationMethod(user.getRole() == Role.ADMIN
-                ? com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.ADMIN_RECONCILED
-                : com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod.PROVIDER_CONFIRMED);
+                ? PaymentVerificationMethod.ADMIN_RECONCILED
+                : PaymentVerificationMethod.PROVIDER_CONFIRMED);
         transaction.setStatus(PaymentStatus.PAID);
         transaction.setPaidAt(now);
         bookingPaymentLedgerService.saveTransaction(transaction);
 
-        refundRequestRepository.findByPaymentTransaction_Id(transaction.getId()).ifPresent(refund -> {
+        if (refund != null) {
             refund.setStatus(RefundStatus.REFUNDED);
             if (refund.getReceiptStatus() == null) {
                 refund.setReceiptStatus("WAITING");
@@ -265,10 +326,11 @@ public class RefundServiceImpl implements RefundService {
             refund.setGatewayRefundRef(transaction.getGatewayRef());
             refund.setUpdatedAt(now);
             refundRequestRepository.save(refund);
-        });
+        }
 
         Booking booking = transaction.getBooking();
         closure.reconcile(booking.getId());
+        endConfirmations.getObject().completeIfReady(booking);
         bookingNotificationService.changed(transaction.getBooking(), "REFUND_UPDATED");
         return toProofResponse(transaction);
     }
@@ -337,6 +399,26 @@ public class RefundServiceImpl implements RefundService {
         if (transaction.getStatus() != PaymentStatus.PENDING) {
             throw new ConflictException("Yêu cầu hoàn tiền đã được xử lý");
         }
+    }
+
+    /**
+     * A manual bank transfer can only be confirmed once the renter has supplied a destination account.
+     * Legacy refund transactions without a linked request cannot be updated by the renter, so they keep
+     * the previous behaviour.
+     */
+    private void requireRecipientAccount(RefundRequest refund) {
+        if (refund == null) {
+            return;
+        }
+        if (isBlank(refund.getRecipientBankName()) || isBlank(refund.getRecipientAccountHolder())
+                || isBlank(refund.getRecipientAccountNumber())) {
+            throw new ConflictException(
+                    "Khách thuê chưa cung cấp tài khoản nhận hoàn. Yêu cầu khách cập nhật tài khoản nhận tiền trước khi xác nhận chuyển khoản hoàn.");
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private void validateProof(MultipartFile proof) {
@@ -412,7 +494,8 @@ public class RefundServiceImpl implements RefundService {
                 r.getReceiptConfirmedAt(), r.getReceiptConfirmedBy(), r.getReceiptReportedAt(), r.getReceiptAutoConfirmedAt(),
                 r.getPaymentTransaction() != null && r.getPaymentTransaction().getReceiptUrl() != null
                         && !r.getPaymentTransaction().getReceiptUrl().isBlank(),
-                r.getVersion()
+                r.getVersion(),
+                RefundMath.excessEvent(r.getSourceEventId())
         );
     }
 

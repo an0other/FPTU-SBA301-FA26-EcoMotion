@@ -47,6 +47,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/identity/constraints").permitAll()
                         .requestMatchers("/api/files/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/vehicles", "/api/vehicles/**").permitAll()
@@ -60,6 +61,8 @@ public class SecurityConfig {
                                 "/v1/payment/vnpay/ipn",
                                 "/payment/vnpay/ipn").permitAll()
                         .requestMatchers("/api/admin/**", "/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/provider/onboarding", "/api/provider/onboarding/**")
+                            .hasAnyAuthority("ROLE_PROVIDER", "ROLE_PROVIDER_ONBOARDING")
                         .requestMatchers("/api/provider/**", "/api/v1/provider/**").hasAnyRole("PROVIDER", "ADMIN")
                         .requestMatchers("/api/driver/**", "/api/v1/driver/**").hasRole("DRIVER")
                         .requestMatchers("/api/renter/**", "/api/v1/renter/**").hasRole("RENTER")

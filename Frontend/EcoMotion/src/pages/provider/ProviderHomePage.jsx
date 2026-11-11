@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { providerService } from '../../services/providerService'
 import ProviderHeader from '../../components/provider/ProviderHeader'
+import ProviderReadinessChecklist from '../../components/provider/ProviderReadinessChecklist'
 
 export default function ProviderHomePage() {
   const { user } = useAuth()
@@ -137,6 +138,7 @@ export default function ProviderHomePage() {
       />
       
       <main className="w-full">
+        <div className="mx-auto max-w-7xl px-6 pt-4 lg:px-12"><ProviderReadinessChecklist /></div>
         <div className="max-w-7xl mx-auto px-6 lg:px-12 py-8">
           <div className="flex flex-col w-full gap-8">
             

@@ -1,0 +1,94 @@
+{
+  "motionChallenge": {
+    "status": "PASS",
+    "expected": [
+      "CENTER",
+      "POSITIVE",
+      "NEGATIVE",
+      "CENTER"
+    ],
+    "completed": [
+      {
+        "pose": "CENTER",
+        "from": 0.0,
+        "to": 0.532
+      },
+      {
+        "pose": "POSITIVE",
+        "from": 1.53,
+        "to": 2.529
+      },
+      {
+        "pose": "NEGATIVE",
+        "from": 4.026,
+        "to": 5.024
+      },
+      {
+        "pose": "CENTER",
+        "from": 5.523,
+        "to": 6.521
+      }
+    ]
+  },
+  "faceMatching": {
+    "candidateFrames": 8,
+    "scoredFrames": 8,
+    "unusableFrames": 0,
+    "minimum": 0.5168184638023376,
+    "median": 0.5566833913326263,
+    "maximum": 0.5886614918708801,
+    "decision": "NOT_EVALUATED",
+    "frames": [
+      {
+        "frame": "frame_000000_t0.000.png",
+        "status": "SCORED",
+        "yaw": 0.666441801507354,
+        "similarity": 0.5882073640823364
+      },
+      {
+        "frame": "frame_000016_t0.532.png",
+        "status": "SCORED",
+        "yaw": 0.9207615094449078,
+        "similarity": 0.5639647245407104
+      },
+      {
+        "frame": "frame_000031_t1.031.png",
+        "status": "SCORED",
+        "yaw": 1.4984558731318656,
+        "similarity": 0.5886614918708801
+      },
+      {
+        "frame": "frame_000106_t3.527.png",
+        "status": "SCORED",
+        "yaw": -9.635160228859915,
+        "similarity": 0.5168184638023376
+      },
+      {
+        "frame": "frame_000166_t5.523.png",
+        "status": "SCORED",
+        "yaw": -6.016868972399976,
+        "similarity": 0.5880851745605469
+      },
+      {
+        "frame": "frame_000181_t6.022.png",
+        "status": "SCORED",
+        "yaw": 4.234937336090704,
+        "similarity": 0.5485923886299133
+      },
+      {
+        "frame": "frame_000196_t6.521.png",
+        "status": "SCORED",
+        "yaw": 3.573028624328931,
+        "similarity": 0.547857403755188
+      },
+      {
+        "frame": "frame_000211_t7.020.png",
+        "status": "SCORED",
+        "yaw": 3.5064734115970215,
+        "similarity": 0.5494020581245422
+      }
+    ]
+  },
+  "identityDecision": "NOT_EVALUATED",
+  "automaticApproval": false
+}

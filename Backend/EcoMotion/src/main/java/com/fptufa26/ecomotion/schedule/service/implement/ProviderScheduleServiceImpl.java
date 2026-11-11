@@ -25,7 +25,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import com.fptufa26.ecomotion.booking.service.AvailabilityPolicy;
-import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +35,7 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
             DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy").withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
 
     private final VehicleScheduleRepository vehicleScheduleRepository;
-    private final VehicleRepository vehicleRepository;
+    private final VehicleService vehicleService;
     private final VehicleCatalogService vehicleCatalogService;
     private final UserService userService;
 
@@ -129,7 +129,7 @@ public class ProviderScheduleServiceImpl implements ProviderScheduleService {
             throw new BadRequestException("Thời gian kết thúc phải lớn hơn thời gian bắt đầu");
         }
 
-        Vehicle vehicle = vehicleRepository.findByIdForUpdate(request.vehicleId())
+        Vehicle vehicle = vehicleService.findVehicleByIdForUpdate(request.vehicleId())
                 .orElseThrow(() -> new NotFoundException("Phương tiện không tồn tại hoặc không thuộc sở hữu của nhà xe"));
 
         if (!vehicle.getProvider().getId().equals(provider.getId())) {

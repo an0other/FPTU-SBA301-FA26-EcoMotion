@@ -334,10 +334,17 @@ export const MyBookingsList = ({
                       ) : null}
                     </div>
                     <p className="text-sm text-[#14221A]">
-                      <span className="text-[#14221A]/65">Tổng tiền thuê</span>
+                      <span className="text-[#14221A]/65">Tổng chi phí dự kiến</span>
                       <span className="ml-2 font-bold tabular-nums">
-                        {formatCurrency(booking.totalAmount)}
+                        {formatCurrency(booking.estimatedTotal ?? booking.totalAmount)}
                       </span>
+                      {booking.paidAmount > 0 ? (
+                        <span className="ml-1.5 text-xs font-semibold tabular-nums text-[#15803D]">
+                          ({booking.depositAmount != null && booking.paidAmount <= booking.depositAmount + 0.5
+                            ? `đã cọc ${formatCurrency(booking.paidAmount)}`
+                            : `đã trả ${formatCurrency(booking.paidAmount)}`})
+                        </span>
+                      ) : null}
                     </p>
                     {showDepositAmount ? (
                       <p className="text-sm text-[#14221A]">

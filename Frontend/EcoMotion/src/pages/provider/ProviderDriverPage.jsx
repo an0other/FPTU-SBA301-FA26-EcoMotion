@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
@@ -9,6 +10,33 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync'
 import { getErrorMessage } from '../../utils/errorMessage'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { isValidEmail, isValidVnPhone } from '../../utils/validation'
+
+// Nhà xe cần biết tài xế đang chạy chuyến nào và sắp chạy những chuyến nào trước khi phân công.
+function DriverTripSummary({ driver, compact = false }) {
+  const upcomingCount = Number(driver.upcomingTripCount || 0)
+  if (!driver.currentTripBookingCode && !driver.nextTripBookingCode) {
+    return <p className={`${compact ? 'mt-0.5 text-[11px]' : 'mt-1 text-xs'} text-slate-400`}>Chưa có chuyến được giao</p>
+  }
+  const linkCls = 'font-mono font-semibold text-emerald-700 underline-offset-2 hover:underline'
+  return (
+    <div className={`${compact ? 'mt-0.5 text-[11px]' : 'mt-1.5 text-xs'} space-y-0.5 text-slate-600`}>
+      {driver.currentTripBookingCode && (
+        <p>
+          <span className="font-semibold text-blue-700">Đang chạy:</span>{' '}
+          <Link to={`/provider/bookings/${encodeURIComponent(driver.currentTripBookingCode)}`} className={linkCls}>{driver.currentTripBookingCode}</Link>
+        </p>
+      )}
+      {driver.nextTripBookingCode && (
+        <p>
+          <span className="font-semibold text-slate-700">Sắp tới:</span>{' '}
+          <Link to={`/provider/bookings/${encodeURIComponent(driver.nextTripBookingCode)}`} className={linkCls}>{driver.nextTripBookingCode}</Link>
+          {driver.nextTripPickupTime ? ` · ${formatBookingWhen(driver.nextTripPickupTime)}` : ''}
+          {upcomingCount > 1 ? <span className="text-slate-500"> (+{upcomingCount - 1} chuyến khác)</span> : null}
+        </p>
+      )}
+    </div>
+  )
+}
 
 export default function ProviderDriverPage() {
   const [drivers, setDrivers] = useState([])
@@ -963,6 +991,11 @@ export default function ProviderDriverPage() {
                         <span className="text-[11px] text-rose-600 font-medium">Cần cập nhật lại</span>
                       </div>
                     )}
+                    {driver.status === 'APPROVED' && (driver.currentTripBookingCode || driver.nextTripBookingCode) && (
+                      <div className="mt-1.5 px-1">
+                        <DriverTripSummary driver={driver} compact />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 my-3 text-slate-600 text-xs">
@@ -1108,17 +1141,22 @@ export default function ProviderDriverPage() {
                             <p className="text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
                             <div className="font-bold text-slate-900 truncate">{driver.fullName}</div>
                             {driver.status === 'APPROVED' && (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                <DriverStatusBadge status={driver.operationalStatus} />
+                              <div className="mt-0.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <DriverStatusBadge status={driver.operationalStatus} />
+                                  {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenDriverTripsModal(driver)}
+                                      className="text-[11px] text-emerald-700 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
+                                    >
+                                      <span className="material-symbols-outlined text-[13px]">visibility</span>
+                                      Chi tiết chuyến
+                                    </button>
+                                  )}
+                                </div>
                                 {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenDriverTripsModal(driver)}
-                                    className="text-[11px] text-emerald-700 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
-                                  >
-                                    <span className="material-symbols-outlined text-[13px]">visibility</span>
-                                    Chi tiết chuyến
-                                  </button>
+                                  <DriverTripSummary driver={driver} compact />
                                 )}
                               </div>
                             )}

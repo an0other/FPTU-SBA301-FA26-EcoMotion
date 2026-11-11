@@ -1,0 +1,59 @@
+{
+  "candidateFrames": 8,
+  "scoredFrames": 8,
+  "unusableFrames": 0,
+  "minimum": 0.11599285900592804,
+  "median": 0.15454690903425217,
+  "maximum": 0.2107957899570465,
+  "decision": "NOT_EVALUATED",
+  "frames": [
+    {
+      "frame": "frame_000000_t0.000.png",
+      "status": "SCORED",
+      "yaw": 0.666441801507354,
+      "similarity": 0.14684884250164032
+    },
+    {
+      "frame": "frame_000016_t0.532.png",
+      "status": "SCORED",
+      "yaw": 0.9207615094449078,
+      "similarity": 0.156056210398674
+    },
+    {
+      "frame": "frame_000031_t1.031.png",
+      "status": "SCORED",
+      "yaw": 1.4984558731318656,
+      "similarity": 0.16819317638874054
+    },
+    {
+      "frame": "frame_000106_t3.527.png",
+      "status": "SCORED",
+      "yaw": -9.635160228859915,
+      "similarity": 0.1805552989244461
+    },
+    {
+      "frame": "frame_000166_t5.523.png",
+      "status": "SCORED",
+      "yaw": -6.016868972399976,
+      "similarity": 0.2107957899570465
+    },
+    {
+      "frame": "frame_000181_t6.022.png",
+      "status": "SCORED",
+      "yaw": 4.234937336090704,
+      "similarity": 0.11599285900592804
+    },
+    {
+      "frame": "frame_000196_t6.521.png",
+      "status": "SCORED",
+      "yaw": 3.573028624328931,
+      "similarity": 0.15077722072601318
+    },
+    {
+      "frame": "frame_000211_t7.020.png",
+      "status": "SCORED",
+      "yaw": 3.5064734115970215,
+      "similarity": 0.15303760766983032
+    }
+  ]
+}

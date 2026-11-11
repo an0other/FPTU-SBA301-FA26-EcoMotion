@@ -20,9 +20,12 @@ import { getOptimizedImageUrl } from '../utils/cloudinaryUtils'
 import YearlyWorkflowPanel from '../components/yearly-rental/YearlyWorkflowPanel'
 import OperationalRiskPanel from '../components/provider/OperationalRiskPanel'
 import BookingWorkflowSummary from '../components/booking/BookingWorkflowSummary'
+import TripEndConfirmationBanner from '../components/booking/TripEndConfirmationBanner'
+import ProviderPaymentStatusCard from '../components/provider/ProviderPaymentStatusCard'
 import { PickupDistanceProof } from '../components/booking/PickupLocationCard'
 import { paymentStatusLabel } from '../utils/bookingStatus'
-import { CHARGE_TYPE_LABELS, formatChargeQuantity, PAYMENT_TYPE_LABELS } from '../utils/paymentDisplay'
+import { estimatedGrandTotal } from '../utils/bookingFinancialSummary'
+import { CHARGE_TYPE_LABELS, formatChargeQuantity, PAYMENT_TYPE_LABELS, waivedChargeLabel } from '../utils/paymentDisplay'
 
 // Trạng thái giao dịch của BE (PaymentStatus) hiển thị bằng tiếng Việt.
 const TRANSACTION_STATUS_LABELS = {
@@ -55,6 +58,13 @@ const CHARGE_STATUS_BADGE = {
   ACCEPTED: { label: 'Đã xác nhận', cls: 'border-emerald-300 bg-emerald-50 text-emerald-800' },
   DISPUTED: { label: 'Đang khiếu nại', cls: 'border-red-300 bg-red-50 text-red-800' },
 }
+const WAIVED_BADGE_CLS = 'border-slate-300 bg-slate-100 text-slate-600'
+// Khoản admin đã miễn sau khiếu nại vẫn hiện để đối chiếu nhưng không tính vào số phải thu.
+const chargeBadge = (c) => (c.waived
+  ? { label: waivedChargeLabel(c.waivedSource), cls: WAIVED_BADGE_CLS }
+  : CHARGE_STATUS_BADGE[c.confirmationStatus])
+const collectibleChargeTotal = (charges = []) =>
+  charges.filter((c) => !c.waived).reduce((sum, c) => sum + Number(c.amount || 0), 0)
 
 // BE ghi mô tả phụ phí kiểu "4 × 1 giờ (150000.00đ)"; hiển thị số tiền theo định dạng VND.
 function formatChargeNote(text) {
@@ -237,6 +247,12 @@ export default function ProviderBookingDetailPage() {
       [TV5_REALTIME_EVENTS.PAYMENT_VERIFIED]: () => {
         setToast({ message: 'Thanh toán đã được máy chủ xác minh. Đang cập nhật đơn thuê.', type: 'success' })
       },
+      [TV5_REALTIME_EVENTS.PAYMENT_PROOF_SUBMITTED]: () => {
+        setToast({ message: 'Khách vừa báo đã chuyển khoản — kiểm tra sao kê và xác nhận.', type: 'info' })
+      },
+      [TV5_REALTIME_EVENTS.PAYMENT_ISSUE_REPORTED]: () => {
+        setToast({ message: 'Đã ghi nhận báo cáo sai lệch thanh toán.', type: 'warning' })
+      },
       [TV5_REALTIME_EVENTS.DRIVER_CONFIRMED]: () => {
         setToast({ message: 'Tài xế đã xác nhận tiếp nhận chuyến!', type: 'success' })
       },
@@ -254,6 +270,18 @@ export default function ProviderBookingDetailPage() {
       },
       [TV5_REALTIME_EVENTS.TRIP_COMPLETED]: () => {
         setToast({ message: 'Chuyến xe đã kết thúc an toàn.', type: 'success' })
+      },
+      [TV5_REALTIME_EVENTS.DISPUTE_OPENED]: () => {
+        setToast({ message: 'Khách vừa gửi khiếu nại. Quyết toán tạm dừng đến khi admin phân xử.', type: 'warning' })
+      },
+      [TV5_REALTIME_EVENTS.DISPUTE_UPDATED]: () => {
+        setToast({ message: 'Admin đã cập nhật kết quả khiếu nại. Xem mục "Khiếu nại và kết quả xử lý".', type: 'info' })
+      },
+      [TV5_REALTIME_EVENTS.CHARGES_CHANGED]: () => {
+        setToast({ message: 'Danh sách phụ phí vừa thay đổi.', type: 'info' })
+      },
+      [TV5_REALTIME_EVENTS.TRIP_END_CONFIRMATION_CHANGED]: () => {
+        setToast({ message: 'Trạng thái xác nhận giờ kết thúc của khách vừa thay đổi.', type: 'info' })
       },
     },
     onResync: () => Promise.all([refetch(), fetchIncidentsAndEvidence()]),
@@ -295,7 +323,9 @@ export default function ProviderBookingDetailPage() {
       setToast({
         message: result?.status === 'COMPLETED'
           ? 'Đã chốt quyết toán. Đơn thuê đã hoàn thành.'
-          : 'Đã chốt phụ phí và tạo yêu cầu thanh toán VNPAY/quyết toán.',
+          : result?.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && Number(result?.remainingAmount ?? result?.amount ?? 0) <= 0
+            ? 'Đã chốt quyết toán. Đơn sẽ tự hoàn tất khi khách xác nhận giờ kết thúc (hoặc sau 12 giờ).'
+            : 'Đã chốt phụ phí và tạo yêu cầu thanh toán VNPAY/quyết toán.',
         type: 'success',
       })
       refetch()
@@ -532,6 +562,10 @@ export default function ProviderBookingDetailPage() {
             provider
             onAction={handleProgressAction}
           />
+          <div className="mt-3"><TripEndConfirmationBanner workflow={workflow} readOnly /></div>
+          <div className="mt-3">
+            <ProviderPaymentStatusCard bookingCode={booking.bookingCode} refreshKey={`${workflow?.updatedAt}|${workflow?.confirmedPaid}|${booking.status}`} />
+          </div>
         </section>}
 
         {booking.planType === 'YEARLY' && <YearlyWorkflowPanel key={booking.bookingCode} role="provider" bookingCode={booking.bookingCode} bookingStatus={booking.status} onChanged={refetch} />}
@@ -643,10 +677,10 @@ export default function ProviderBookingDetailPage() {
                 <div className="mt-3 rounded-lg border border-brand-200 bg-slate-50 p-4 text-center">
                   <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Tổng chi phí</span>
                   <span className="text-2xl font-black font-mono text-brand-900 mt-1 block">
-                    {formatVnd(booking.totalAmount)}
+                    {formatVnd(estimatedGrandTotal({ totalAmount: booking.totalAmount, pickupFee: booking.pickupFee, charges: booking.charges }))}
                   </span>
                   <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán & quyết toán' : 'Bao gồm tiền thuê gốc & phụ phí'}
+                    {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán & quyết toán' : 'Tiền thuê, phí đón và phụ phí chưa miễn'}
                   </span>
                 </div>
               </div>
@@ -913,7 +947,7 @@ export default function ProviderBookingDetailPage() {
                   </h2>
                   <p className="text-xs text-slate-500">Các khoản phụ thu quá giờ, chờ đợi, bán kính ngoài</p>
                 </div>
-                {booking.planType !== 'YEARLY' && (booking.canAssignDriver || booking.canAutoAssignDriver) && (
+                {booking.planType !== 'YEARLY' && booking.status === 'AWAITING_EXTRA_CHARGE_CONFIRMATION' && (
                   <button
                     type="button"
                     onClick={() => setShowAddChargeModal(true)}
@@ -950,12 +984,12 @@ export default function ProviderBookingDetailPage() {
                           </td>
                           <td className="px-3.5 py-2.5 text-slate-600">{formatChargeQuantity(c)}</td>
                           <td className="px-3.5 py-2.5 text-right font-mono text-slate-600">{formatVnd(c.unitPrice)}</td>
-                          <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">{formatVnd(c.amount)}</td>
+                          <td className={`px-3.5 py-2.5 text-right font-mono font-bold ${c.waived ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{formatVnd(c.amount)}</td>
                           <td className="px-3.5 py-2.5">
-                            <span className={`mb-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${CHARGE_STATUS_BADGE[c.confirmationStatus]?.cls ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-                              {CHARGE_STATUS_BADGE[c.confirmationStatus]?.label ?? c.confirmationStatus ?? 'Không rõ'}
+                            <span className={`mb-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${chargeBadge(c)?.cls ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                              {chargeBadge(c)?.label ?? c.confirmationStatus ?? 'Không rõ'}
                             </span>
-                            {c.confirmationStatus === 'PENDING' && (
+                            {c.confirmationStatus === 'PENDING' && !c.waived && (
                               <button type="button" className="text-[11px] font-semibold text-slate-700 underline" onClick={async () => {
                                 await providerBookingService.withdrawCharge(booking.bookingCode, c.id)
                                 window.location.reload()
@@ -976,9 +1010,9 @@ export default function ProviderBookingDetailPage() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-slate-200 bg-slate-50">
-                        <td colSpan={3} className="px-3.5 py-2.5 text-right text-xs font-bold text-slate-700">Tổng các khoản trong bảng</td>
+                        <td colSpan={3} className="px-3.5 py-2.5 text-right text-xs font-bold text-slate-700">Tổng phải thu (không gồm khoản đã rút hoặc được miễn)</td>
                         <td className="px-3.5 py-2.5 text-right font-mono text-sm font-bold text-slate-900">
-                          {formatVnd(booking.charges.reduce((sum, c) => sum + Number(c.amount || 0), 0))}
+                          {formatVnd(collectibleChargeTotal(booking.charges))}
                         </td>
                         <td colSpan={2} />
                       </tr>
@@ -997,8 +1031,8 @@ export default function ProviderBookingDetailPage() {
                             <p className="mt-0.5 text-[11px] text-slate-500">{formatChargeNote(c.description)}</p>
                           )}
                         </div>
-                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${CHARGE_STATUS_BADGE[c.confirmationStatus]?.cls ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-                          {CHARGE_STATUS_BADGE[c.confirmationStatus]?.label ?? c.confirmationStatus ?? 'Không rõ'}
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${chargeBadge(c)?.cls ?? 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                          {chargeBadge(c)?.label ?? c.confirmationStatus ?? 'Không rõ'}
                         </span>
                       </div>
                       <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
@@ -1012,7 +1046,7 @@ export default function ProviderBookingDetailPage() {
                         </div>
                         <div>
                           <dt className="text-[10px] font-semibold uppercase text-slate-500">Thành tiền</dt>
-                          <dd className="mt-0.5 font-mono font-bold text-slate-900">{formatVnd(c.amount)}</dd>
+                          <dd className={`mt-0.5 font-mono font-bold ${c.waived ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{formatVnd(c.amount)}</dd>
                         </div>
                       </dl>
                       <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
@@ -1023,7 +1057,7 @@ export default function ProviderBookingDetailPage() {
                         ) : (
                           <span className="text-xs text-slate-400">Chưa có minh chứng</span>
                         )}
-                        {c.confirmationStatus === 'PENDING' && (
+                        {c.confirmationStatus === 'PENDING' && !c.waived && (
                           <button type="button" className="min-h-10 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700" onClick={async () => {
                             await providerBookingService.withdrawCharge(booking.bookingCode, c.id)
                             window.location.reload()
@@ -1033,9 +1067,9 @@ export default function ProviderBookingDetailPage() {
                     </div>
                   ))}
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                    <span className="text-xs font-bold text-slate-700">Tổng các khoản trong bảng</span>
+                    <span className="text-xs font-bold text-slate-700">Tổng phải thu (không gồm khoản đã rút hoặc được miễn)</span>
                     <span className="font-mono text-sm font-bold text-slate-900">
-                      {formatVnd(booking.charges.reduce((sum, c) => sum + Number(c.amount || 0), 0))}
+                      {formatVnd(collectibleChargeTotal(booking.charges))}
                     </span>
                   </div>
                 </div>

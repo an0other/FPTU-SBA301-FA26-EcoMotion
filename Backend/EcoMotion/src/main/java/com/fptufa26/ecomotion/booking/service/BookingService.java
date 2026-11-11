@@ -31,6 +31,7 @@ import java.util.Optional;
 import com.fptufa26.ecomotion.booking.dto.request.RentalQuoteRequest;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
 import org.springframework.web.multipart.MultipartFile;
+import com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse;
 
 public interface BookingService {
 
@@ -52,6 +53,9 @@ public interface BookingService {
 
     BookingDetailResponse detail(Long userId, String bookingCode);
 
+    /** Renter xác nhận giờ kết thúc do tài xế báo là đúng (đóng cửa sổ phản đối 12 giờ). */
+    BookingDetailResponse confirmTripEnd(Long userId, String bookingCode);
+
     TripTrackingResponse getTripTracking(Long userId, String bookingCode);
 
     BookingRequestDetailsResponse updateRequestDetails(
@@ -65,7 +69,7 @@ public interface BookingService {
 
     DisputeOpenedResponse openDispute(Long userId, String bookingCode, OpenDisputeRequest request);
 
-    com.fptufa26.ecomotion.booking.dto.response.BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId);
+    BookingChargeResponse acceptCharge(Long userId, String bookingCode, Long chargeId);
 
     String uploadDisputeEvidence(Long userId, String bookingCode, MultipartFile file);
 

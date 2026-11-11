@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import useRecaptcha from '../hooks/useRecaptcha'
 import { PASSWORD_MIN_LENGTH, isBlank, isValidEmail } from '../utils/validation'
-import { setPendingActivation } from '../utils/pendingActivation'
+import { setPendingActivation, clearPendingActivation } from '../utils/pendingActivation'
 import AuthLayout, { FieldError, INPUT_CLASS, LABEL_CLASS } from '../components/AuthLayout'
 import {
   IconArrowRight,
@@ -25,9 +25,9 @@ const ROLE_OPTIONS = [
   },
   {
     value: 'PROVIDER',
-    title: 'Tôi là chủ xe / Garage',
-    description: 'Đăng xe cho thuê và quản lý đội xe, tài xế của bạn.',
-    available: false,
+    title: 'Tôi là chủ xe cá nhân',
+    description: 'Hoàn thiện hồ sơ chủ xe, được xét duyệt trước khi cung cấp dịch vụ.',
+    available: true,
   },
 ]
 
@@ -124,8 +124,13 @@ export default function RegisterPage() {
         captchaToken,
       })
 
-      setPendingActivation({ token: data.activationToken, email: form.email.trim() })
-      navigate('/activate', { replace: true })
+      if (role === 'PROVIDER') {
+        clearPendingActivation()
+        navigate('/login', { replace: true, state: { email: form.email.trim(), notice: 'Đã tạo tài khoản Provider. Đăng nhập để xác minh danh tính và hoàn thiện hồ sơ.' } })
+      } else {
+        setPendingActivation({ token: data.activationToken, email: form.email.trim(), role })
+        navigate('/activate', { replace: true })
+      }
     } catch (err) {
       setError(err.message || 'Không tạo được tài khoản. Vui lòng thử lại.')
     } finally {

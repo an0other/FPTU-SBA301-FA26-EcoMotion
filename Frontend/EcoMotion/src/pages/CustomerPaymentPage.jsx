@@ -77,7 +77,7 @@ export default function CustomerPaymentPage() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [bookingIdentifier, navigate])
+  }, [bookingIdentifier])
 
   useEffect(() => {
     if (bookingIdentifier) {
@@ -210,8 +210,8 @@ export default function CustomerPaymentPage() {
       setCurrentTime(Date.now())
       setToast({
         message: selectedRequest.paymentType === 'FINAL_BALANCE'
-          ? 'Đã gửi biên lai quyết toán. Nhà xe sẽ đối soát và xác nhận hoàn tất đơn.'
-          : 'Đã gửi biên lai. Hệ thống gia hạn giữ chỗ; nhà xe sẽ đối soát và xác nhận cọc.',
+          ? 'Đã báo chuyển khoản quyết toán. Nhà xe sẽ đối soát và xác nhận.'
+          : 'Đã báo chuyển khoản. Hệ thống gia hạn giữ chỗ; nhà xe sẽ đối soát và xác nhận cọc.',
         type: 'success',
       })
     } catch (err) {
@@ -300,6 +300,8 @@ export default function CustomerPaymentPage() {
     ? { label: 'Chờ thanh toán kỳ tháng', bg: STATUS_BADGES.PENDING.bg }
     : yearlyUpfront && selectedRequest.status === 'PENDING'
       ? { label: 'Chờ thanh toán trả trước', bg: STATUS_BADGES.PENDING.bg }
+    : isFinalBalance && selectedRequest.status === 'PENDING'
+      ? { label: 'Chờ thanh toán quyết toán', bg: STATUS_BADGES.PENDING.bg }
     : STATUS_BADGES[selectedRequest.status]
     || { label: selectedRequest.status, bg: 'bg-slate-100 text-slate-700 border-slate-300' }
 
@@ -531,7 +533,7 @@ export default function CustomerPaymentPage() {
               <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-xs text-blue-950 flex items-start gap-3">
                 <Icon name="hourglass_top" className="text-xl text-blue-700 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="block font-bold">Đã gửi biên lai — chờ nhà xe xác nhận</strong>
+                  <strong className="block font-bold">Đã báo chuyển khoản — chờ nhà xe xác nhận</strong>
                   <p className="mt-0.5 text-blue-900">
                     {isFinalBalance
                       ? 'Nhà xe đang đối soát biên lai chuyển khoản quyết toán để xác nhận hoàn tất đơn thuê.'
@@ -546,12 +548,20 @@ export default function CustomerPaymentPage() {
                   <strong className="block font-bold">Sau khi chuyển khoản</strong>
                   <p className="mt-0.5 text-emerald-800">
                     {isFinalBalance
-                      ? 'Gửi ảnh biên lai bên dưới để chuyển sang bước nhà xe đối soát và xác nhận tất toán đơn thuê.'
-                      : 'Gửi ảnh biên lai bên dưới để gia hạn giữ chỗ và chuyển sang bước nhà xe đối soát. Chỉ bấm「Kiểm tra trạng thái」nếu nhà xe đã xác nhận trên hệ thống.'}
+                      ? 'Quét mã QR (đã có sẵn số tiền và nội dung), chuyển khoản rồi bấm「Tôi đã chuyển khoản」.'
+                      : 'Quét mã QR (đã có sẵn số tiền và nội dung), chuyển khoản rồi bấm「Tôi đã chuyển khoản」để giữ chỗ trong lúc nhà xe đối soát.'}
                   </p>
                 </div>
               </div>
             )}
+
+            {selectedRequest.status === 'PARTIALLY_PAID' && Number(selectedRequest.paidAmount) > 0 ? (
+              <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950">
+                <strong className="block text-sm">Đang chuyển phần còn thiếu</strong>
+                Nhà xe đã nhận {formatPaymentMoney(selectedRequest.paidAmount)} / {formatPaymentMoney(selectedRequest.amount)}.
+                Mã QR và số tiền phía trên là phần còn thiếu <strong>{formatPaymentMoney(selectedRequest.remainingAmount)}</strong>.
+              </div>
+            ) : null}
 
             {canSubmitProof && !awaitingProvider ? (
               <DepositProofForm

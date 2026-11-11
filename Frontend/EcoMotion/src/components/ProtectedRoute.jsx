@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { homeRouteForRole } from '../utils/roleHome'
 
-export default function ProtectedRoute({ allowedRoles }) {
+export default function ProtectedRoute({ allowedRoles, allowOnboarding = false }) {
   const { isAuthenticated, loading, user } = useAuth()
   const location = useLocation()
 
@@ -20,6 +20,10 @@ export default function ProtectedRoute({ allowedRoles }) {
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to={homeRouteForRole(user.role)} replace />
+  }
+
+  if (!allowOnboarding && user.role === 'PROVIDER' && (user.sessionScope !== 'FULL' || user.status !== 'ACTIVE')) {
+    return <Navigate to="/provider/onboarding" replace />
   }
 
   return <Outlet />

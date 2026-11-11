@@ -10,4 +10,6 @@ export const financialReviewService = {
   yearly: code => apiClient.get(annual(code) + '/review').then(value),
   settlement: (code, body) => apiClient.post(annual(code) + '/reviews/settlement', body).then(value),
   cancellation: (code, body) => apiClient.post(annual(code) + '/reviews/cancellation', body).then(value),
+  refundRuling: (code, body) => apiClient.post(annual(code) + '/reviews/refund', body).then(value),
+  incidentRuling: (code, body) => apiClient.post(annual(code) + '/reviews/incident', body).then(value),
 }

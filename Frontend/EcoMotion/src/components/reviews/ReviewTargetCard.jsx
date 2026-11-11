@@ -12,6 +12,7 @@ export default function ReviewTargetCard({
   error,
   onSave,
   onDelete,
+  onUploadImage,
 }) {
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -56,6 +57,16 @@ export default function ReviewTargetCard({
             <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">
               {review.comment || 'Bạn chưa để lại nhận xét.'}
             </p>
+
+            {review.mediaUrls?.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {review.mediaUrls.map((url, index) => (
+                  <a key={url} href={url} target="_blank" rel="noreferrer" aria-label={`Mở ảnh đánh giá ${index + 1}`}>
+                    <img src={url} alt={`Ảnh đánh giá ${index + 1}`} className="h-20 w-20 rounded-lg border border-slate-200 object-cover" />
+                  </a>
+                ))}
+              </div>
+            )}
 
             <p className="mt-3 text-xs text-slate-400">
               Đã tạo: {formatPaymentDate(review.createdAt)}
@@ -124,6 +135,8 @@ export default function ReviewTargetCard({
           </div>
         ) : canReview ? (
           <ReviewForm
+            target={target}
+            onUploadImage={onUploadImage}
             initialReview={review}
             busy={busy}
             error={error}

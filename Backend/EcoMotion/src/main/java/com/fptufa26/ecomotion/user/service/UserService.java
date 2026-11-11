@@ -27,6 +27,12 @@ public interface UserService {
 
     Optional<User> findById(Long userId);
 
+    boolean isProviderOperational(Long userId);
+
+    User lockForIdentityDecision(Long userId);
+
+    void applyVerifiedIdentity(Long userId, com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity identity);
+
     Map<Long, ProviderSummary> findProvidersByIds(Collection<Long> providerIds);
 
     boolean existsByEmail(String email);
@@ -36,6 +42,14 @@ public interface UserService {
     Long completeFirstLoginPasswordChange(String email, String rawPassword);
 
     boolean existsByPhone(String phone);
+
+    boolean canUsePhone(Long userId, String phone);
+
+    void attachLinkedIdentity(Long userId, Long identityId);
+
+    void markProviderIdentityReviewed(Long userId);
+
+    void assertRentalAllowed(Long renterUserId, Long providerUserId);
 
     User createUser(String email, String rawPassword, String fullName, String phone, Role role, UserStatus status);
 

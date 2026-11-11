@@ -15,11 +15,12 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
+import com.fptufa26.ecomotion.finance.service.CancellationClosureService;
 
 @Service
 @RequiredArgsConstructor
 public class RefundReceiptServiceImpl implements RefundReceiptService {
-    private final com.fptufa26.ecomotion.finance.service.CancellationClosureService closure;
+    private final CancellationClosureService closure;
     private final RefundRequestRepository refunds;
     private final BookingPaymentLedgerService ledger;
     private final BookingNotificationService notifications;

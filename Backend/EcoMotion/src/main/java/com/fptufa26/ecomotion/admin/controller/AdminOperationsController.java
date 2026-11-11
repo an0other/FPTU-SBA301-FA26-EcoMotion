@@ -40,6 +40,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import com.fptufa26.ecomotion.dispute.enums.DisputeCategory;
+import com.fptufa26.ecomotion.dispute.enums.DisputeResolutionDecision;
 
 @RestController
 @RequestMapping("/api/admin/operations")
@@ -90,7 +92,7 @@ public class AdminOperationsController {
             @AuthenticationPrincipal SecurityUser securityUser) {
         Long adminId = (securityUser != null) ? securityUser.getUserId() : null;
         Dispute resolved = disputeService.resolveDispute(
-                id, adminId, request.getStatus(), request.getDecision(), request.getResolution(), request.getRefundAwardTotal(), request.getTripEndAction());
+                id, adminId, request.getStatus(), request.getDecision(), request.getResolution(), request.getRefundAwardTotal(), request.getTripEndAction(), request.getCorrectedEndAt());
         return ResponseEntity.ok(ApiResponse.ok("Xử lý tranh chấp thành công", mapDisputeDto(resolved)));
     }
 
@@ -178,6 +180,21 @@ public class AdminOperationsController {
         Driver drv = (b != null) ? b.getDriver() : null;
         User drvUser = (drv != null) ? drv.getUser() : null;
 
+        DisputeResolutionDecision effectiveDecision = d.getDecision();
+        if (effectiveDecision == null
+                && d.getCategory() == DisputeCategory.CHARGE
+                && (d.getStatus() == DisputeStatus.RESOLVED || d.getStatus() == DisputeStatus.REJECTED)) {
+            if (c != null) {
+                effectiveDecision = c.isWaived()
+                        ? DisputeResolutionDecision.WAIVE_CHARGE
+                        : DisputeResolutionDecision.KEEP_CHARGE;
+            } else {
+                effectiveDecision = d.getStatus() == DisputeStatus.RESOLVED
+                        ? DisputeResolutionDecision.WAIVE_CHARGE
+                        : DisputeResolutionDecision.KEEP_CHARGE;
+            }
+        }
+
         return AdminDisputeDto.builder()
                 .id(d.getId())
                 .bookingId(b != null ? b.getId() : null)
@@ -185,6 +202,7 @@ public class AdminOperationsController {
                 .chargeId(c != null ? c.getId() : null)
                 .chargeDescription(c != null ? c.getDescription() : null)
                 .chargeAmount(c != null ? c.getAmount() : null)
+                .chargeWaived(c != null ? c.isWaived() : null)
                 .raisedById(raised != null ? raised.getId() : null)
                 .raisedByName(raised != null ? raised.getFullName() : null)
                 .raisedByEmail(raised != null ? raised.getEmail() : null)
@@ -202,10 +220,15 @@ public class AdminOperationsController {
                 .description(d.getDescription())
                 .evidenceUrls(d.getEvidenceUrlList())
                 .resolution(d.getResolution())
-                .decision(d.getDecision())
+                .decision(effectiveDecision)
                 .refundAwardTotal(d.getRefundAwardTotal())
                 .resolvedAt(d.getResolvedAt())
                 .tripEndAction(d.getTripEndAction())
+                .paymentRequestId(d.getPaymentRequestId())
+                .claimedAmount(d.getClaimedAmount())
+                .mismatchType(d.getMismatchType())
+                .recordedAmount(d.getPaymentRequestId() == null || b == null ? null
+                        : disputeService.recordedForPaymentRequest(b.getId(), d.getPaymentRequestId()))
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())
                 .build();

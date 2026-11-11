@@ -31,7 +31,7 @@ class PasswordResetOtpTest {
         user.setPasswordHash("old-hash");
         when(repository.findByEmailIgnoreCase("renter@example.com")).thenReturn(Optional.of(user));
         var encoder = new BCryptPasswordEncoder();
-        var users = new UserServiceImpl(repository, null, null, null, encoder, null);
+        var users = new UserServiceImpl(repository, null, null, null, encoder, null, new org.springframework.core.env.StandardEnvironment());
         var tokens = mock(RefreshTokenRepository.class);
         var service = new PasswordResetServiceImpl(users, otp, tokens);
         var registration = otp.send(new OtpSendRequest("renter@example.com", "renter@example.com", OtpPurpose.REGISTRATION, NotificationChannel.EMAIL));

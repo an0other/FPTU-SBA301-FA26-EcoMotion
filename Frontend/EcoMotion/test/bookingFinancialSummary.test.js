@@ -65,3 +65,40 @@ test('completed booking shows phụ phí, cọc, quyết toán and large complet
   assert.equal(lines.find((l) => l.key === 'depositPaid').amount, 330000)
   assert.equal(lines.find((l) => l.key === 'settlementPaid').amount, 845000)
 })
+
+test('không cộng phí đón hai lần khi đã có dòng charge OUT_OF_RADIUS (EM-2026-000043)', () => {
+  const charges = [
+    { chargeType: 'BASE_RENTAL', amount: 1460000, isWaived: false },
+    { chargeType: 'OUT_OF_RADIUS', amount: 120000, isWaived: false, label: 'Phí đón ngoài phạm vi' },
+  ]
+  const awaiting = computeBookingFinancialLines({
+    totalAmount: 1460000, pickupFee: 120000, depositAmount: 438000, confirmedPaid: 0,
+    remainingAmount: 1580000, status: 'AWAITING_DEPOSIT', paymentStatus: 'UNPAID', charges,
+  })
+  assert.equal(awaiting.find((l) => l.key === 'grand').amount, 1580000)
+  assert.equal(awaiting.some((l) => l.key === 'fee'), false)
+  assert.equal(awaiting.find((l) => l.key === 'afterDeposit').amount, 1142000)
+  assert.equal(awaiting.some((l) => l.key === 'remaining'), false, 'trang cọc không hiện khối quyết toán mâu thuẫn')
+
+  const paid = computeBookingFinancialLines({
+    totalAmount: 1460000, pickupFee: 120000, depositAmount: 438000, confirmedPaid: 438000,
+    remainingAmount: 1142000, status: 'CONFIRMED', paymentStatus: 'DEPOSIT_PAID', charges,
+  })
+  assert.equal(paid.find((l) => l.key === 'grand').amount, 1580000)
+  assert.equal(paid.find((l) => l.key === 'remaining').amount, 1142000)
+})
+
+test('estimatedGrandTotal: tổng gồm phí đón và phụ phí chưa miễn, nhận cả waived lẫn isWaived', async () => {
+  const { estimatedGrandTotal } = await import('../src/utils/bookingFinancialSummary.js')
+  // Trang "đã gửi": chưa có charge phí đón, dùng pickupFee
+  assert.equal(estimatedGrandTotal({ totalAmount: 1460000, pickupFee: 90000, charges: [] }), 1550000)
+  // Nhà xe: charge OUT_OF_RADIUS đã có, không cộng pickupFee lần nữa; khoản đã miễn (waived) bị loại
+  assert.equal(estimatedGrandTotal({
+    totalAmount: 1460000, pickupFee: 90000,
+    charges: [
+      { chargeType: 'BASE_RENTAL', amount: 1460000 },
+      { chargeType: 'OUT_OF_RADIUS', amount: 90000, waived: false },
+      { chargeType: 'OVERTIME', amount: 1320000, waived: true },
+    ],
+  }), 1550000)
+})

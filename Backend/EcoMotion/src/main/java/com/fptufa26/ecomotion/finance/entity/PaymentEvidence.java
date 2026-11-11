@@ -36,7 +36,7 @@ public class PaymentEvidence {
     @JoinColumn(name = "payment_request_id", nullable = false)
     private PaymentRequest paymentRequest;
 
-    @Column(name = "proof_image_url", nullable = false, length = 500)
+    @Column(name = "proof_image_url", length = 500)
     private String proofImageUrl;
 
     @Column(name = "transferred_amount", precision = 14, scale = 2)

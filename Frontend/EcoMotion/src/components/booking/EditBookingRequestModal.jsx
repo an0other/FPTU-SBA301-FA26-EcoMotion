@@ -12,6 +12,8 @@ function localDateTime(iso) {
 
 export function EditBookingRequestModal({ booking, onClose, onSave }) {
   const [pickupTime, setPickupTime] = useState(localDateTime(booking.pickupTime))
+  // Giờ nhận xe phải sau hiện tại ít nhất 3 giờ (khớp backend).
+  const [minPickupTime] = useState(() => localDateTime(new Date(Date.now() + 3 * 3600000).toISOString()))
   const [pickup, setPickup] = useState({ address: booking.pickupAddress, latitude: booking.pickupLatitude, longitude: booking.pickupLongitude })
   const [passengerCount, setPassengerCount] = useState(booking.passengerCount)
   const [driverNote, setDriverNote] = useState(booking.driverNote ?? '')
@@ -89,7 +91,7 @@ export function EditBookingRequestModal({ booking, onClose, onSave }) {
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-4">
       <form onSubmit={submit} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl space-y-4">
         <div className="flex items-center justify-between"><h2 className="text-lg font-bold">Chỉnh sửa yêu cầu đặt xe</h2><button type="button" onClick={onClose}>✕</button></div>
-        <label className="block text-sm font-semibold">Thời gian nhận xe<input required type="datetime-local" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} className="mt-1 w-full rounded-xl border p-2.5 font-normal" /></label>
+        <label className="block text-sm font-semibold">Thời gian nhận xe<input required type="datetime-local" min={minPickupTime} value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} className="mt-1 w-full rounded-xl border p-2.5 font-normal" /></label>
         <div className={`rounded-xl border px-3 py-2 text-sm ${conflicts || availabilityError ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
           {checkingAvailability
             ? 'Đang kiểm tra lịch xe...'

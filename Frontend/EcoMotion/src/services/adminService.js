@@ -2,10 +2,12 @@ import apiClient from './apiClient'
 
 export const adminService = {
   // A01 — Dashboard Stats
-  async getDashboardStats({ year, month } = {}) {
+  async getDashboardStats({ year, month, fromDate, toDate } = {}) {
     const params = {}
     if (year != null) params.year = year
     if (month != null) params.month = month
+    if (fromDate) params.fromDate = fromDate
+    if (toDate) params.toDate = toDate
     const { data } = await apiClient.get('/admin/dashboard/stats', { params })
     return data?.data ?? null
   },
@@ -101,8 +103,8 @@ export const adminService = {
     return data?.data ?? []
   },
 
-  async resolveDispute(id, status, decision, resolution, refundAwardTotal, tripEndAction) {
-    const { data } = await apiClient.patch(`/admin/operations/disputes/${id}/resolve`, { status, decision, resolution, refundAwardTotal, tripEndAction })
+  async resolveDispute(id, status, decision, resolution, refundAwardTotal, tripEndAction, correctedEndAt) {
+    const { data } = await apiClient.patch(`/admin/operations/disputes/${id}/resolve`, { status, decision, resolution, refundAwardTotal, tripEndAction, correctedEndAt })
     return data?.data ?? null
   },
 

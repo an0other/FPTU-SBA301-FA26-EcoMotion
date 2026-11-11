@@ -50,6 +50,7 @@ public class BookingContractServiceImpl implements BookingContractService {
     private final BookingNotificationService bookingNotificationService;
     private final Clock clock;
     private final long maxBytes;
+    private final com.fptufa26.ecomotion.user.service.UserService userService;
 
     public BookingContractServiceImpl(
             BookingRepository bookingRepository,
@@ -59,7 +60,8 @@ public class BookingContractServiceImpl implements BookingContractService {
             ScheduleService scheduleService,
             BookingNotificationService bookingNotificationService,
             Clock clock,
-            @Value("${app.upload.max-file-size-bytes:8388608}") long maxBytes) {
+            @Value("${app.upload.max-file-size-bytes:8388608}") long maxBytes,
+            com.fptufa26.ecomotion.user.service.UserService userService) {
         this.bookingRepository = bookingRepository;
         this.snapshotRepository = snapshotRepository;
         this.documentStorageService = documentStorageService;
@@ -68,6 +70,7 @@ public class BookingContractServiceImpl implements BookingContractService {
         this.bookingNotificationService = bookingNotificationService;
         this.clock = clock;
         this.maxBytes = maxBytes;
+        this.userService = userService;
     }
 
     @Override
@@ -126,6 +129,7 @@ public class BookingContractServiceImpl implements BookingContractService {
                         "Không tìm thấy đơn thuê: " + bookingCode));
 
         validateYearlyBooking(booking);
+        userService.assertRentalAllowed(userId, booking.getVehicle().getProvider().getUser().getId());
 
         if (booking.getStatus() != BookingStatus.ACCEPTED) {
             throw new BookingContractNotAllowedException(

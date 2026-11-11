@@ -80,6 +80,8 @@ apiClient.interceptors.response.use(
 
     const friendly = new Error(toVietnameseError(error))
     friendly.status = error.response?.status
+    friendly.errorCode = error.response?.data?.errorCode
+    friendly.traceId = error.response?.data?.traceId
     friendly.original = error
 
     return Promise.reject(friendly)

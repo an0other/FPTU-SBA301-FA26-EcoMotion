@@ -8,6 +8,8 @@ import com.fptufa26.ecomotion.finance.enums.PaymentVerificationMethod;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.fptufa26.ecomotion.finance.enums.PaymentRequestType;
+import com.fptufa26.ecomotion.user.enums.Role;
 
 public record ProviderTransactionResponse(
         Long id,
@@ -27,6 +29,11 @@ public record ProviderTransactionResponse(
         String receiptUrl,
         String processingNote,
         Instant paidAt,
-        Instant createdAt
+        Instant createdAt,
+        /** Yêu cầu thanh toán mà giao dịch thuộc về (để khách đối chiếu "nhà xe xác nhận đã nhận"). */
+        Long paymentRequestId,
+        PaymentRequestType paymentRequestType,
+        /** Vai trò người xác nhận (PROVIDER/ADMIN) — null với giao dịch cổng thanh toán. */
+        Role confirmedByRole
 ) {
 }

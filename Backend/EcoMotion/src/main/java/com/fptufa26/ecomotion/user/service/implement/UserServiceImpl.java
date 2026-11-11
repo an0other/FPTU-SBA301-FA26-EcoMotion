@@ -2,7 +2,6 @@ package com.fptufa26.ecomotion.user.service.implement;
 
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
 import com.fptufa26.ecomotion.common.exception.ResourceNotFoundException;
-import com.fptufa26.ecomotion.common.security.CustomUserDetailsService;
 import com.fptufa26.ecomotion.finance.enums.SupportedBank;
 import com.fptufa26.ecomotion.user.dto.ProviderSummary;
 import com.fptufa26.ecomotion.user.entity.Driver;
@@ -50,6 +49,171 @@ public class UserServiceImpl implements UserService {
     private final DriverRepository driverRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
+    private final org.springframework.core.env.Environment environment;
+
+    private boolean identityAvailableInCurrentProfile(com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity identity) {
+        return identity.getVerificationMethod() != com.fptufa26.ecomotion.verification.identity.enums.IdentityVerificationMethod.DEMO_SEED
+                || environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev & !prod"));
+    }
+
+    @Override
+    public boolean canUsePhone(Long userId, String phone) {
+        var owner = userId == null ? null : userRepository.findById(userId).orElse(null);
+        return userRepository.findByPhone(phone).stream().allMatch(other -> userId != null && (other.getId().equals(userId)
+                || owner != null && owner.getIdentity() != null && other.getIdentity() != null
+                && owner.getIdentity().getId().equals(other.getIdentity().getId()) && owner.getRole() != other.getRole()
+                && java.util.Set.of(Role.RENTER, Role.PROVIDER).contains(owner.getRole())
+                && java.util.Set.of(Role.RENTER, Role.PROVIDER).contains(other.getRole())));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void attachLinkedIdentity(Long userId, Long identityId) {
+        User user = loadUser(userId);
+        var identity = entityManager.find(com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity.class, identityId);
+        if (user.getStatus() != UserStatus.PENDING || user.getIdentity() != null || identity == null
+                || identity.getVerificationMethod() == com.fptufa26.ecomotion.verification.identity.enums.IdentityVerificationMethod.DEMO_SEED
+                || identity.getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED
+                || userRepository.existsByIdentity_IdAndRole(identityId, user.getRole())) {
+            throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                    org.springframework.http.HttpStatus.CONFLICT, "IDENTITY_LINK_NOT_ALLOWED", "Identity cannot be linked");
+        }
+        user.setIdentity(identity);
+        user.setFullName(identity.getFullName());
+        user.setEkycStatus(user.getRole() == Role.PROVIDER ? EkycStatus.PENDING : EkycStatus.VERIFIED);
+        finishLinkedRenter(user);
+        userRepository.saveAndFlush(user);
+    }
+
+    private void finishLinkedRenter(User user) {
+        if (user.getRole() != Role.RENTER || user.getStatus() != UserStatus.PENDING
+                || user.getIdentity() == null || user.getPhoneVerifiedAt() == null) return;
+        if (user.getIdentity().getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED) {
+            throw new IllegalStateException("Identity is not verified");
+        }
+        var renter = loadOrCreateRenter(user);
+        renter.setCccdNo(user.getIdentity().getCccdNo());
+        renter.setDateOfBirth(user.getIdentity().getDateOfBirth());
+        renter.setGender(user.getIdentity().getGender());
+        String address = user.getIdentity().getAddress();
+        renter.setAddress(address == null || address.length() <= 255 ? address : address.substring(0, 255));
+        renterRepository.save(renter);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEkycStatus(EkycStatus.VERIFIED);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void markProviderIdentityReviewed(Long userId) {
+        User user = lockForIdentityDecision(userId);
+        if (user.getRole() != Role.PROVIDER || user.getStatus() != UserStatus.PENDING || user.getIdentity() == null
+                || user.getPhoneVerifiedAt() == null
+                || user.getIdentity().getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED) {
+            throw new IllegalStateException("Provider identity review cannot be applied");
+        }
+        user.setIdentityReviewedAt(java.time.Instant.now());
+        user.setEkycStatus(EkycStatus.VERIFIED);
+        userRepository.saveAndFlush(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void assertRentalAllowed(Long renterUserId, Long providerUserId) {
+        var renter = loadUser(renterUserId);
+        var provider = loadUser(providerUserId);
+        if (renter.getRole() != Role.RENTER || provider.getRole() != Role.PROVIDER
+                || !renter.isActive() || !isProviderOperational(providerUserId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Account is not eligible for rental");
+        }
+        if (renter.getIdentity() == null || provider.getIdentity() == null
+                || renter.getIdentity().getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED
+                || provider.getIdentity().getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED) {
+            throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                    org.springframework.http.HttpStatus.CONFLICT, "RENTAL_IDENTITY_REQUIRED", "Verified identities are required");
+        }
+        if (!identityAvailableInCurrentProfile(renter.getIdentity()) || !identityAvailableInCurrentProfile(provider.getIdentity())) {
+            throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                    org.springframework.http.HttpStatus.CONFLICT, "RENTAL_SEED_ACCOUNT_UNAVAILABLE", "Seed accounts are only available in development");
+        }
+        if (identityExpired(renter.getIdentity()) || identityExpired(provider.getIdentity())) {
+            throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                    org.springframework.http.HttpStatus.CONFLICT, "RENTAL_IDENTITY_EXPIRED", "Identity documents must be valid");
+        }
+        if (renter.getIdentity().getId().equals(provider.getIdentity().getId())) {
+            throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                    org.springframework.http.HttpStatus.CONFLICT, "SELF_RENTAL_NOT_ALLOWED", "You cannot rent your own vehicle");
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isProviderOperational(Long userId) {
+        var user = userRepository.findById(userId).orElse(null);
+        if (user == null || user.getRole() != Role.PROVIDER || !user.isActive() || user.getIdentity() == null
+                || user.getIdentity().getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED
+                || identityExpired(user.getIdentity()) || !identityAvailableInCurrentProfile(user.getIdentity())) return false;
+        var application = entityManager.find(com.fptufa26.ecomotion.user.entity.ProviderApplication.class, userId);
+        return application != null && application.getStatus() == com.fptufa26.ecomotion.user.enums.ProviderApplicationStatus.APPROVED
+                && providerRepository.findByUser_Id(userId).map(provider -> provider.getStatus() == ProviderStatus.APPROVED).orElse(false);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public User lockForIdentityDecision(Long userId) {
+        User user = entityManager.find(User.class, userId, LockModeType.PESSIMISTIC_WRITE);
+        if (user == null) {
+            throw new NotFoundException("User not found");
+        }
+        entityManager.refresh(user, LockModeType.PESSIMISTIC_WRITE);
+        return user;
+    }
+
+    private boolean identityExpired(com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity identity) {
+        return identity.getDocumentExpiry() != null
+                && identity.getDocumentExpiry().isBefore(java.time.LocalDate.now(java.time.ZoneOffset.UTC));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void applyVerifiedIdentity(Long userId, com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity identity) {
+        User user = lockForIdentityDecision(userId);
+        if (user.getIdentity() != null) {
+            throw identityConflict("IDENTITY_ACCOUNT_ALREADY_LINKED", "Tài khoản đã có danh tính. Vui lòng tải lại hồ sơ trước khi duyệt.");
+        }
+        if (identity == null || identity.getId() == null
+                || identity.getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED) {
+            throw identityConflict("IDENTITY_VERIFIED_RECORD_REQUIRED", "Bản ghi danh tính chưa sẵn sàng. Vui lòng tải lại hồ sơ và thử lại.");
+        }
+        if (user.getStatus() != UserStatus.PENDING && user.getStatus() != UserStatus.ACTIVE) {
+            throw identityConflict("IDENTITY_ACCOUNT_STATUS_INVALID", "Tài khoản đang bị khóa hoặc không còn đủ điều kiện nhận danh tính.");
+        }
+        if (user.getRole() != Role.RENTER && user.getRole() != Role.PROVIDER) {
+            throw identityConflict("IDENTITY_ACCOUNT_ROLE_INVALID", "Vai trò tài khoản không được phép nhận danh tính.");
+        }
+        if (user.getPhone() == null || user.getPhone().isBlank() || user.getPhoneVerifiedAt() == null) {
+            throw identityConflict("IDENTITY_PHONE_VERIFICATION_REQUIRED", "Tài khoản chưa hoàn tất xác nhận số điện thoại. Người đăng ký cần xác nhận OTP trước khi Admin duyệt danh tính.");
+        }
+        user.setIdentity(identity);
+        if (user.getRole() == Role.PROVIDER) user.setIdentityReviewedAt(java.time.Instant.now());
+        user.setFullName(identity.getFullName());
+        user.setEkycStatus(EkycStatus.VERIFIED);
+        if (user.getRole() == Role.RENTER) {
+            Renter renter = loadOrCreateRenter(user);
+            renter.setCccdNo(identity.getCccdNo());
+            renter.setDateOfBirth(identity.getDateOfBirth());
+            renter.setGender(identity.getGender());
+            String address = identity.getAddress();
+            renter.setAddress(address == null || address.length() <= 255 ? address : address.substring(0, 255));
+            renterRepository.save(renter);
+            user.setStatus(UserStatus.ACTIVE);
+        }
+        userRepository.saveAndFlush(user);
+    }
+
+    private com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException identityConflict(String code, String message) {
+        return new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                org.springframework.http.HttpStatus.CONFLICT, code, message);
+    }
 
     @Override
     public Long resetPassword(String email, String rawPassword) {
@@ -182,6 +346,8 @@ public class UserServiceImpl implements UserService {
         user.setRole(role);
         user.setStatus(UserStatus.PENDING);
         user.setEkycStatus(EkycStatus.UNVERIFIED);
+        user.setEmailVerifiedAt(java.time.Instant.now());
+        user.setTermsAcceptedAt(java.time.Instant.now());
         return userRepository.save(user);
     }
 
@@ -190,12 +356,17 @@ public class UserServiceImpl implements UserService {
         if (phone == null || phone.isBlank()) {
             throw new IllegalArgumentException("Phone is required");
         }
-        User user = loadUser(userId);
+        User user = lockForIdentityDecision(userId);
+        if (user.getStatus() != UserStatus.PENDING && user.getStatus() != UserStatus.ACTIVE) {
+            throw new org.springframework.security.access.AccessDeniedException("Account cannot verify a phone number");
+        }
         String normalizedPhone = phone.trim();
-        if (userRepository.existsByPhone(normalizedPhone)) {
+        if (!canUsePhone(userId, normalizedPhone)) {
             throw new IllegalArgumentException("Phone already exists: " + normalizedPhone);
         }
         user.setPhone(normalizedPhone);
+        user.setPhoneVerifiedAt(java.time.Instant.now());
+        finishLinkedRenter(user);
         return userRepository.save(user);
     }
 
@@ -464,6 +635,15 @@ public class UserServiceImpl implements UserService {
     public User updateUserStatus(Long userId, UserStatus status) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại: " + userId));
+        if (user.getRole() == Role.PROVIDER && status == UserStatus.ACTIVE) {
+            var provider = providerRepository.findByUser_Id(userId).orElse(null);
+            var application = entityManager.find(com.fptufa26.ecomotion.user.entity.ProviderApplication.class, userId);
+            if (provider == null || provider.getStatus() != ProviderStatus.APPROVED || user.getIdentity() == null
+                    || user.getIdentity().getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED
+                    || application == null || application.getStatus() != com.fptufa26.ecomotion.user.enums.ProviderApplicationStatus.APPROVED) {
+                throw new IllegalArgumentException("Provider onboarding approval is required");
+            }
+        }
         user.setStatus(status);
         return userRepository.save(user);
     }
@@ -472,6 +652,19 @@ public class UserServiceImpl implements UserService {
     public User updateEkycStatus(Long userId, EkycStatus status) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại: " + userId));
+        if (status == EkycStatus.VERIFIED) {
+            Renter renter = renterRepository.findByUser_Id(userId).orElse(null);
+            if (renter == null
+                    || isBlank(renter.getCccdNo())
+                    || renter.getDateOfBirth() == null
+                    || isBlank(renter.getGender())
+                    || isBlank(renter.getAddress())
+                    || isBlank(renter.getCccdImageUrl())
+                    || isBlank(renter.getPortraitUrl())) {
+                throw new IllegalArgumentException(
+                        "Không thể xác nhận eKYC hợp lệ: Hồ sơ đang thiếu thông tin định danh bắt buộc (Số CCCD, ngày sinh, giới tính, địa chỉ) hoặc thiếu ảnh chụp CCCD/chân dung đối chiếu.");
+            }
+        }
         user.setEkycStatus(status);
         return userRepository.save(user);
     }
@@ -489,6 +682,15 @@ public class UserServiceImpl implements UserService {
     public Provider updateProviderStatus(Long providerId, ProviderStatus status) {
         Provider provider = providerRepository.findById(providerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Nhà cung cấp không tồn tại: " + providerId));
+        if (status == ProviderStatus.APPROVED && provider.getStatus() != ProviderStatus.APPROVED) {
+            var application = entityManager.find(com.fptufa26.ecomotion.user.entity.ProviderApplication.class, provider.getUser().getId());
+            if (provider.getStatus() != ProviderStatus.LOCKED || application == null
+                    || application.getStatus() != com.fptufa26.ecomotion.user.enums.ProviderApplicationStatus.APPROVED
+                    || provider.getUser().getIdentity() == null
+                    || provider.getUser().getIdentity().getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED) {
+                throw new IllegalArgumentException("Use provider application review to approve onboarding");
+            }
+        }
         provider.setStatus(status);
         if (status == ProviderStatus.APPROVED && provider.getUser() != null) {
             User user = provider.getUser();
@@ -558,7 +760,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public long countPendingEkyc() {
-        return userRepository.countByEkycStatus(EkycStatus.PENDING);
+        return userRepository.countByRoleAndEkycStatus(Role.RENTER, EkycStatus.PENDING);
     }
 
     @Override

@@ -32,10 +32,16 @@ public class JwtService {
     }
 
     public String generateAccessToken(User user) {
+        return generateAccessToken(user, user.getRole() == Role.PROVIDER && !user.isActive() ? "ONBOARDING" : "FULL");
+    }
+
+    public String generateAccessToken(User user, String scope) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(String.valueOf(user.getUserId()))
                 .claim("role", user.getRole().name())
+                .claim("purpose", "ACCESS")
+                .claim("scope", scope)
                 .issuer(issuer)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(accessTokenTtl)))
@@ -59,8 +65,8 @@ public class JwtService {
 
     public boolean isTokenValid(String token) {
         try {
-            parseClaims(token);
-            return true;
+            var claims = parseClaims(token);
+            return "ACCESS".equals(claims.get("purpose", String.class));
         } catch (JwtException | IllegalArgumentException ex) {
             return false;
         }

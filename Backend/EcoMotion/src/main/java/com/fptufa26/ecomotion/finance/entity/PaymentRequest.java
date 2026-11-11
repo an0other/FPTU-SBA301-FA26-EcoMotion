@@ -110,6 +110,10 @@ public class PaymentRequest {
     @Column(name = "confirmed_at")
     private Instant confirmedAt;
 
+    /** Khách xác nhận số tiền nhà xe ghi nhận là đúng; xoá khi nhà xe ghi nhận thêm. */
+    @Column(name = "renter_acknowledged_at")
+    private Instant renterAcknowledgedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "confirmed_by_id")
     private User confirmedBy;

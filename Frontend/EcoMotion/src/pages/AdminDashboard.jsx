@@ -6,6 +6,7 @@ import AdminOverviewTab from './admin/AdminOverviewTab'
 import AdminUsersTab from './admin/AdminUsersTab'
 import AdminVehiclesTab from './admin/AdminVehiclesTab'
 import AdminOperationsTab from './admin/AdminOperationsTab'
+import AdminIdentityTab from './admin/AdminIdentityTab'
 import {
   IconZap,
   IconUsers,
@@ -33,7 +34,8 @@ export default function AdminDashboard() {
   const [tabOptions, setTabOptions] = useState({})
   const [stats, setStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
-  const [selectedMonthKey, setSelectedMonthKey] = useState('ALL') // 'ALL' | 'YYYY-MM'
+  const [selectedMonthKey, setSelectedMonthKey] = useState('ALL') // 'ALL' | 'YYYY-MM' | 'CUSTOM'
+  const [customDateRange, setCustomDateRange] = useState({ fromDate: '', toDate: '' })
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
   const profileDropdownRef = useRef(null)
 
@@ -51,17 +53,23 @@ export default function AdminDashboard() {
     }
   }, [profileDropdownOpen])
 
-  const loadStats = useCallback(async (monthKey = 'ALL') => {
+  const loadStats = useCallback(async (monthKey = 'ALL', dateRange = null) => {
     setLoadingStats(true)
     try {
       let year = null
       let month = null
-      if (monthKey && monthKey !== 'ALL') {
+      let fromDate = null
+      let toDate = null
+
+      if (monthKey === 'CUSTOM') {
+        fromDate = dateRange?.fromDate || null
+        toDate = dateRange?.toDate || fromDate || null
+      } else if (monthKey && monthKey !== 'ALL') {
         const [y, m] = monthKey.split('-')
         year = parseInt(y, 10)
         month = parseInt(m, 10)
       }
-      const data = await adminService.getDashboardStats({ year, month })
+      const data = await adminService.getDashboardStats({ year, month, fromDate, toDate })
       setStats(data)
     } catch (err) {
       console.error('Failed to load admin stats:', err)
@@ -78,9 +86,19 @@ export default function AdminDashboard() {
     return () => { cancelled = true }
   }, [loadStats])
 
-  function handleMonthChange(newMonthKey) {
+  function handleMonthChange(newMonthKey, nextCustomRange = null) {
     setSelectedMonthKey(newMonthKey)
-    loadStats(newMonthKey)
+    if (newMonthKey === 'CUSTOM') {
+      const rangeToUse = nextCustomRange || customDateRange
+      if (nextCustomRange) {
+        setCustomDateRange(nextCustomRange)
+      }
+      if (rangeToUse?.fromDate || rangeToUse?.toDate) {
+        loadStats('CUSTOM', rangeToUse)
+      }
+    } else {
+      loadStats(newMonthKey)
+    }
   }
 
   async function handleLogout() {
@@ -210,6 +228,7 @@ export default function AdminDashboard() {
         {/* Tab Selection Bar */}
         <div className="border-t border-slate-100 bg-slate-50/50">
           <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6">
+            <button type="button" onClick={() => handleNavigate('identity')} className={`whitespace-nowrap border-b-2 px-4 py-3 text-xs font-bold ${activeTab === 'identity' ? 'border-brand-600 bg-white text-brand-700' : 'border-transparent text-slate-600'}`}>Xác minh & Provider mới</button>
             <button
               type="button"
               onClick={() => handleNavigate('overview')}
@@ -220,7 +239,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconShield className="h-4 w-4" />
-              <span>A01 — Tổng quan (Overview)</span>
+              <span>Tổng quan (Overview)</span>
             </button>
 
             <button
@@ -233,7 +252,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconUsers className="h-4 w-4" />
-              <span>A02 — Người dùng &amp; Hồ sơ</span>
+              <span>Người dùng &amp; Hồ sơ</span>
               {pendingUsersCount > 0 && (
                 <span className="rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] font-extrabold text-white">
                   {pendingUsersCount}
@@ -251,7 +270,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconCar className="h-4 w-4" />
-              <span>A03 — Duyệt xe mở bán</span>
+              <span>Duyệt xe mở bán</span>
               {pendingVehiclesCount > 0 && (
                 <span className="rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] font-extrabold text-white">
                   {pendingVehiclesCount}
@@ -269,7 +288,7 @@ export default function AdminDashboard() {
               }`}
             >
               <IconClock className="h-4 w-4" />
-              <span>A04 — Vận hành &amp; Hoàn tiền</span>
+              <span>Vận hành &amp; Hoàn tiền</span>
               {openDisputesCount > 0 && (
                 <span className="rounded-full bg-rose-500 px-1.5 py-0.2 text-[10px] font-extrabold text-white">
                   {openDisputesCount}
@@ -282,13 +301,14 @@ export default function AdminDashboard() {
 
       {/* Main Body Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        {activeTab === 'identity' && <AdminIdentityTab />}
         {activeTab === 'overview' && (
           <AdminOverviewTab
             stats={stats}
             loading={loadingStats}
             selectedMonthKey={selectedMonthKey}
+            customDateRange={customDateRange}
             onMonthChange={handleMonthChange}
-            onRefresh={() => loadStats(selectedMonthKey)}
             onNavigate={handleNavigate}
           />
         )}
@@ -297,7 +317,7 @@ export default function AdminDashboard() {
           <AdminUsersTab
             initialSubTab={tabOptions.subTab || 'users'}
             initialFilter={tabOptions}
-            onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onStatsUpdate={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}
@@ -306,7 +326,7 @@ export default function AdminDashboard() {
           <AdminVehiclesTab
             initialStatus={tabOptions.status || 'ALL'}
             initialFilter={tabOptions}
-            onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onStatsUpdate={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}
@@ -315,7 +335,7 @@ export default function AdminDashboard() {
           <AdminOperationsTab
             initialSubTab={tabOptions.subTab || 'bookings'}
             initialFilter={tabOptions}
-            onStatsUpdate={() => loadStats(selectedMonthKey)}
+            onStatsUpdate={() => loadStats(selectedMonthKey, customDateRange)}
             onNavigate={handleNavigate}
           />
         )}

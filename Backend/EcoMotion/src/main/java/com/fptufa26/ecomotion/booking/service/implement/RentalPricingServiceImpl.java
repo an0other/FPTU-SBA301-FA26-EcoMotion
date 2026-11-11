@@ -22,12 +22,12 @@ import java.util.*;
 
 @Service @RequiredArgsConstructor @Transactional(readOnly = true)
 public class RentalPricingServiceImpl implements RentalPricingService {
-    private final RentalPlanRepository planRepository;
     private final VehicleCatalogService vehicleCatalogService;
     private final VehicleDepositPolicyService depositPolicy;
     private final ScheduleService scheduleService;
     private final Clock clock;
     private final BookingStartPolicy bookingStartPolicy;
+    private final RentalPlanRepository planRepository;
 
     public static int validateHours(Instant start, Instant end) {
         if (start == null || end == null || !start.equals(start.truncatedTo(ChronoUnit.HOURS))
@@ -38,7 +38,7 @@ public class RentalPricingServiceImpl implements RentalPricingService {
     }
 
     private List<RentalPlan> plans(Long vehicleId) {
-        return planRepository.findByVehicle_IdAndStatusOrderByIdAsc(vehicleId, PlanStatus.ACTIVE).stream()
+        return vehicleCatalogService.findActivePlans(vehicleId).stream()
                 .filter(p -> p.getPlanType() != PlanType.YEARLY)
                 .filter(p -> p.getSlotLengthMinutes() != null && p.getSlotLengthMinutes() >= 60
                         && p.getSlotLengthMinutes() % 60 == 0 && p.getSlotPrice() != null
@@ -129,5 +129,21 @@ public class RentalPricingServiceImpl implements RentalPricingService {
         if (minutes != hours * 60L || amount.compareTo(expected) != 0)
             throw new ConflictException("Giá hoặc thời lượng đã thay đổi, vui lòng lấy báo giá mới");
         return option(vehicleCatalogService.requireApproved(vehicleId), start, hours, amount, items);
+    }
+
+    // B1: yearlyPlanPrice - giá gói năm của xe thay thế, dùng tính chênh lệch giá khi đổi xe.
+    @Override public BigDecimal yearlyPlanPrice(Long vehicleId) {
+        return planRepository.findByVehicle_IdAndPlanType(vehicleId, PlanType.YEARLY)
+                .filter(p -> p.getStatus() == PlanStatus.ACTIVE && p.getSlotPrice() != null)
+                .map(RentalPlan::getSlotPrice)
+                .orElseThrow(() -> new ConflictException("Xe thay thế chưa có gói năm để tính chênh lệch giá thuê"));
+    }
+
+    @Override public BigDecimal rentalAmountFor(Long vehicleId, Instant start, Instant end) {
+        int hours = Math.toIntExact(Duration.between(start, end).toHours());
+        return RentalPriceOptimizer.optimize(plans(vehicleId), hours).stream()
+                .filter(c -> c.hours() == hours).map(RentalPriceOptimizer.Combination::amount)
+                .min(Comparator.naturalOrder())
+                .orElseThrow(() -> new ConflictException("Xe thay thế chưa có gói giá phù hợp để tính chênh lệch giá thuê"));
     }
 }

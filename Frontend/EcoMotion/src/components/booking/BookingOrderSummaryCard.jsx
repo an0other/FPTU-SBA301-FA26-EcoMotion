@@ -85,6 +85,8 @@ export function BookingOrderSummaryCard({
   pickupFee,
   charges,
   showStatusBadges = true,
+  // Khi trang đã có bảng "Khoản phí" bóc tách chi tiết: chỉ giữ dòng tổng, tránh lặp lại từng khoản.
+  totalOnly = false,
   className = '',
 }) {
   const statusMeta = bookingStatusMeta(status)
@@ -99,7 +101,7 @@ export function BookingOrderSummaryCard({
     paymentStatus,
     charges,
   })
-  const costLines = financialLines.filter((line) => line.section === 'cost')
+  const costLines = financialLines.filter((line) => line.section === 'cost' && (!totalOnly || line.key === 'grand'))
   const paymentLines = financialLines.filter((line) => line.section === 'payment')
   const settlementLine = paymentLines.find((line) => SETTLEMENT_LINE_KEYS.has(line.key))
   const completeLine = paymentLines.find((line) => line.key === 'paymentComplete')
@@ -140,6 +142,7 @@ export function BookingOrderSummaryCard({
       {costLines.length > 0 ? (
         <div className="mt-4 space-y-2.5 rounded-xl bg-[#F7F8F6] p-3.5">
           <p className="text-[10px] font-bold uppercase tracking-wider text-[#6D7A72]">Chi phí dự kiến</p>
+          {totalOnly ? <p className="text-[11px] text-[#6D7A72]">Chi tiết từng khoản xem ở bảng “Khoản phí”.</p> : null}
           {costLines.map((line) => (
             <SummaryRow
               key={line.key}

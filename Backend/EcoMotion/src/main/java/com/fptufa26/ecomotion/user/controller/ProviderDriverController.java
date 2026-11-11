@@ -35,6 +35,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import com.fptufa26.ecomotion.common.response.PageResponse;
 import java.util.List;
 import java.util.Map;
+import com.fptufa26.ecomotion.user.enums.DriverOperationalStatus;
 
 @RestController
 @RequestMapping("/api/provider/drivers")
@@ -62,7 +63,7 @@ public class ProviderDriverController {
             @AuthenticationPrincipal SecurityUser principal,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) DriverStatus status,
-            @RequestParam(required = false) com.fptufa26.ecomotion.user.enums.DriverOperationalStatus operationalStatus,
+            @RequestParam(required = false) DriverOperationalStatus operationalStatus,
             @RequestParam(required = false) String sort
     ) {
         return ApiResponse.success(providerDriverService.getDrivers(principal.getUserId(), search, status, operationalStatus, sort));
@@ -73,7 +74,7 @@ public class ProviderDriverController {
             @AuthenticationPrincipal SecurityUser principal,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) DriverStatus status,
-            @RequestParam(required = false) com.fptufa26.ecomotion.user.enums.DriverOperationalStatus operationalStatus,
+            @RequestParam(required = false) DriverOperationalStatus operationalStatus,
             @RequestParam(defaultValue = "updated_desc") String sort,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate updatedFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate updatedTo,

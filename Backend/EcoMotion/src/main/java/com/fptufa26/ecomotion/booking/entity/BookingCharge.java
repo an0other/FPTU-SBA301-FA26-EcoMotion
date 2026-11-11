@@ -69,6 +69,10 @@ public class BookingCharge {
     @Column(name = "is_waived", nullable = false)
     private boolean waived;
 
+    /** PROVIDER_WITHDRAWN | ADMIN_DISPUTE | SYSTEM — để hiển thị đúng ai đã miễn khoản phí. */
+    @Column(name = "waived_source", length = 30)
+    private String waivedSource;
+
     @Column(name = "evidence_url", length = 500)
     private String evidenceUrl;
 

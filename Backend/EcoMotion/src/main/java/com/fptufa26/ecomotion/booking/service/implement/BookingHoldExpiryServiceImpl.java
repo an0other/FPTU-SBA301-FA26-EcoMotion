@@ -19,6 +19,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
+import com.fptufa26.ecomotion.booking.enums.PaymentMethod;
+import com.fptufa26.ecomotion.booking.enums.PaymentStatus;
+import com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -27,8 +31,8 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
     private final BookingRepository bookingRepository;
     private final ScheduleService scheduleService;
     private final PaymentRequestService paymentRequestService;
-    private final com.fptufa26.ecomotion.booking.repository.PaymentTransactionRepository transactions;
-    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService notifications;
+    private final PaymentTransactionRepository transactions;
+    private final BookingNotificationService notifications;
 
     /** How long a PENDING VNPAY payment may hold the deposit open before the hold expires. */
     @org.springframework.beans.factory.annotation.Value("${app.vnpay.pending-grace:PT30M}")
@@ -65,8 +69,8 @@ public class BookingHoldExpiryServiceImpl implements BookingHoldExpiryService {
             }
             Instant pendingCutoff = now.minus(vnpayPendingGrace);
             if (transactions.findByBooking_Id(bookingId).stream().anyMatch(t ->
-                    t.getMethod() == com.fptufa26.ecomotion.booking.enums.PaymentMethod.VNPAY
-                            && t.getStatus() == com.fptufa26.ecomotion.booking.enums.PaymentStatus.PENDING
+                    t.getMethod() == PaymentMethod.VNPAY
+                            && t.getStatus() == PaymentStatus.PENDING
                             && t.getCreatedAt() != null && t.getCreatedAt().isAfter(pendingCutoff))) continue;
             if (!paymentRequestService.expireDepositWithoutProof(bookingId)) {
                 continue;

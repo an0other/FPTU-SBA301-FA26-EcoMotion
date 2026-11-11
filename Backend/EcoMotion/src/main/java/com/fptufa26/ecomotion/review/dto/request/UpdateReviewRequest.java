@@ -12,6 +12,12 @@ public record UpdateReviewRequest(
         Integer rating,
 
         @Size(max = 1000)
-        String comment
+        String comment,
+        @Size(max = 5)
+        java.util.List<String> mediaUrls
 ) {
+    public UpdateReviewRequest(Integer rating, String comment) {
+        this(rating, comment, null);
+    }
+
 }

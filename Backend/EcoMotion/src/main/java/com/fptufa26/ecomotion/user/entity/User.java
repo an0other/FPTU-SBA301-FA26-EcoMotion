@@ -4,14 +4,19 @@ import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.enums.Role;
 import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.common.crypto.EncryptedStringConverter;
+import com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -19,6 +24,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Check;
 import org.hibernate.annotations.ColumnDefault;
 import java.time.Instant;
 import java.util.Locale;
@@ -28,9 +34,11 @@ import java.util.Locale;
         name = "users",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_users_email", columnNames = "email"),
-                @UniqueConstraint(name = "uk_users_phone", columnNames = "phone")
+                @UniqueConstraint(name = "uk_users_phone_role", columnNames = {"phone", "role"}),
+                @UniqueConstraint(name = "uk_users_identity_role", columnNames = {"identity_id", "role"})
         }
 )
+@Check(name = "ck_users_identity_role", constraints = "identity_id is null or role in ('RENTER', 'PROVIDER')")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -60,6 +68,10 @@ public class User {
     @Column(nullable = false, length = 20)
     private Role role;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "identity_id", foreignKey = @ForeignKey(name = "fk_users_identity"))
+    private PersonIdentity identity;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserStatus status = UserStatus.PENDING;
@@ -71,6 +83,18 @@ public class User {
     @ColumnDefault("false")
     @Column(name = "must_change_password", nullable = false)
     private boolean mustChangePassword = false;
+
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
+
+    @Column(name = "phone_verified_at")
+    private Instant phoneVerifiedAt;
+
+    @Column(name = "identity_reviewed_at")
+    private Instant identityReviewedAt;
+
+    @Column(name = "terms_accepted_at")
+    private Instant termsAcceptedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

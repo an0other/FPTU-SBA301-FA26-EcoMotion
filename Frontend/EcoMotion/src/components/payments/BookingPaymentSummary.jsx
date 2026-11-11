@@ -93,6 +93,16 @@ export default function BookingPaymentSummary({ summary, planType }) {
         </div>
       )}
 
+      {Number(summary.vehicleChangeDiscount) > 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="font-semibold text-emerald-900">Giảm trừ do đổi sang xe có giá thấp hơn</span>
+            <strong className="text-emerald-900">-{formatPaymentMoney(summary.vehicleChangeDiscount)}</strong>
+          </div>
+          <p className="mt-1 text-xs text-emerald-800">Đã trừ vào tổng chi phí ở trên. Giá trị hợp đồng và tiền cọc ban đầu không thay đổi; khoản này không tự động hoàn tiền.</p>
+        </div>
+      )}
+
       {hasRefund && (
         <dl className="grid gap-3 rounded-lg bg-slate-50 p-4 text-sm sm:grid-cols-2">
           <div>

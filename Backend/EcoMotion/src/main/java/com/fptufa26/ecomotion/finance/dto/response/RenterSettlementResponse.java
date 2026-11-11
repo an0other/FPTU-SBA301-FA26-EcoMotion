@@ -10,6 +10,8 @@ public record RenterSettlementResponse(
         String bookingCode,
         BookingStatus status,
         BigDecimal baseRental,
+        // B1: khoản giảm trừ do đổi sang xe rẻ hơn, hiển thị trên hóa đơn cuối.
+        BigDecimal vehicleChangeDiscount,
         List<BookingChargeLineResponse> charges,
         BigDecimal totalCharges,
         BigDecimal depositPaid,

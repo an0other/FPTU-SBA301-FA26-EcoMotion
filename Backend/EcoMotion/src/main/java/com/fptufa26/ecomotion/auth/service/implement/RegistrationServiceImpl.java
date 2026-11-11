@@ -71,7 +71,7 @@ public class RegistrationServiceImpl implements RegistrationService {
                 tokenService.verifyRegistration(request.registrationToken());
         String email = principal.email();
 
-        if (request.role() != Role.RENTER) {
+        if (request.role() != Role.RENTER && request.role() != Role.PROVIDER) {
             throw new UnsupportedRoleException();
         }
         if (!Boolean.TRUE.equals(request.agreeTerms())) {
@@ -85,7 +85,9 @@ public class RegistrationServiceImpl implements RegistrationService {
         }
 
         User user = userService.createPendingUser(email, request.password(), request.role());
-        userService.createRenterProfile(user);
+        if (request.role() == Role.RENTER) {
+            userService.createRenterProfile(user);
+        }
 
         String activationToken = tokenService.issueActivation(user.getUserId(), email, request.role());
         return new RegisterResponse(

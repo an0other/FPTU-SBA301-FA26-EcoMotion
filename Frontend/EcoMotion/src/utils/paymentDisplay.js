@@ -109,7 +109,8 @@ export function formatChargeDescription(charge, planType) {
   return description || 'Khoản phí theo đơn thuê.'
 }
 
-export const DEPOSIT_AWAITING_PROVIDER_STATUSES = ['PROOF_SUBMITTED', 'PARTIALLY_PAID', 'REVIEW_REQUIRED']
+// PARTIALLY_PAID không thuộc nhóm này: nhà xe đã ghi nhận một phần, tới lượt khách chuyển phần còn thiếu.
+export const DEPOSIT_AWAITING_PROVIDER_STATUSES = ['PROOF_SUBMITTED', 'REVIEW_REQUIRED']
 
 export function isDepositAwaitingProvider(status) {
   return DEPOSIT_AWAITING_PROVIDER_STATUSES.includes(status)
@@ -153,4 +154,14 @@ export function holdProgress(ms, durationMs = HOLD_DURATION_MS) {
   if (ms == null) return 0
   if (ms <= 0) return 0
   return Math.min(100, Math.max(0, (ms / durationMs) * 100))
+}
+
+/** Nhãn khoản phí đã miễn theo người thực hiện (nhà xe rút ≠ admin miễn qua khiếu nại). */
+export function waivedChargeLabel(source) {
+  switch (source) {
+    case 'PROVIDER_WITHDRAWN': return 'Nhà xe đã rút'
+    case 'ADMIN_DISPUTE': return 'Admin miễn (khiếu nại)'
+    case 'SYSTEM': return 'Không tính'
+    default: return 'Đã miễn'
+  }
 }

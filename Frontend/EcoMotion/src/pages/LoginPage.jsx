@@ -13,7 +13,7 @@ export default function LoginPage() {
   const location = useLocation()
   const recaptcha = useRecaptcha()
 
-  const [form, setForm] = useState({ email: '', password: '', rememberMe: false })
+  const [form, setForm] = useState({ email: location.state?.email || '', password: '', rememberMe: false })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -47,7 +47,7 @@ export default function LoginPage() {
       const redirectTo = from
         ? `${from.pathname ?? ''}${from.search ?? ''}${from.hash ?? ''}`
         : ''
-      navigate(redirectTo || homeRouteForRole(user.role), { replace: true })
+      navigate(user.role === 'PROVIDER' && user.sessionScope !== 'FULL' ? '/provider/onboarding' : redirectTo || homeRouteForRole(user.role), { replace: true })
     } catch (err) {
       const raw = err?.original?.response?.data?.message || ''
       if (err?.status === 403 && /password change required/i.test(raw)) {

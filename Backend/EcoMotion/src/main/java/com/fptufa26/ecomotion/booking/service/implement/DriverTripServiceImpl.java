@@ -71,6 +71,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import com.fptufa26.ecomotion.booking.dto.response.RentalQuoteResponse;
+import com.fptufa26.ecomotion.booking.service.BookingNotificationService;
 
 @Service
 @RequiredArgsConstructor
@@ -102,7 +103,7 @@ public class DriverTripServiceImpl implements DriverTripService {
     private final NotificationStreamService notificationStreamService;
     private final TripEndConfirmationService endConfirmations;
     private final Clock clock;
-    private final com.fptufa26.ecomotion.booking.service.BookingNotificationService bookingNotificationService;
+    private final BookingNotificationService bookingNotificationService;
 
     @Override
     public PageResponse<DriverTripResponse> listDriverTrips(
@@ -155,6 +156,22 @@ public class DriverTripServiceImpl implements DriverTripService {
 
         int offset = page * size;
         return new PageResponse<>(items, pageResult.getTotalElements(), offset, size, pageResult.hasNext());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Long> countDriverTripsByView(Long currentUserId) {
+        Driver driver = resolveDriver(currentUserId);
+        LocalDate today = LocalDate.now(clock.withZone(ClockConfig.VIETNAM_ZONE));
+        Instant startOfToday = today.atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant();
+        Instant startOfTomorrow = today.plusDays(1).atStartOfDay(ClockConfig.VIETNAM_ZONE).toInstant();
+        Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        for (TripView view : TripView.values()) {
+            Specification<Booking> spec = BookingSpecification.forDriverSchedule(
+                    driver.getId(), view, null, null, null, startOfToday, startOfTomorrow);
+            counts.put(view.name(), bookingRepository.count(spec));
+        }
+        return counts;
     }
 
     @Override
@@ -299,6 +316,7 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.getActualStartAt() != null || booking.getStatus() == BookingStatus.IN_PROGRESS) {
             throw new InvalidTripTransitionException("Chuyến đi đã bắt đầu, không thể báo đến lại");
         }
+        requireNoOtherActiveTrip(driver, booking);
 
         Instant now = clock.instant();
         booking.setActualArrivedAt(now);
@@ -343,6 +361,7 @@ public class DriverTripServiceImpl implements DriverTripService {
         if (booking.isDriverReplacementRequired()) {
             throw new InvalidTripTransitionException("Chuyến đi đang chờ nhà cung cấp phân công tài xế thay thế");
         }
+        requireNoOtherActiveTrip(driver, booking);
         if (booking.getDriverConfirmedAt() == null && booking.getStatus() != BookingStatus.DRIVER_CONFIRMED && booking.getStatus() != BookingStatus.DRIVER_ARRIVED) {
             throw new InvalidTripTransitionException("Tài xế phải xác nhận nhận chuyến trước khi bắt đầu");
         }
@@ -695,6 +714,22 @@ public class DriverTripServiceImpl implements DriverTripService {
         Driver driver = resolveDriver(currentUserId);
         Booking booking = resolveDriverBooking(driver, tripIdOrCode);
         return tripEvidenceRepository.findByBooking_IdOrderByRecordedAtAsc(booking.getId());
+    }
+
+
+    private static final java.util.Set<BookingStatus> DRIVER_BUSY_STATUSES = java.util.EnumSet.of(
+            BookingStatus.DRIVER_ARRIVED,
+            BookingStatus.AWAITING_START_CONFIRMATION,
+            BookingStatus.IN_PROGRESS);
+
+    /** Một tài xế chỉ thực hiện một chuyến tại một thời điểm: phải kết thúc chuyến đang chạy trước. */
+    private void requireNoOtherActiveTrip(Driver driver, Booking booking) {
+        List<String> others = bookingRepository.findOtherActiveDriverBookingCodes(
+                driver.getId(), booking.getId(), DRIVER_BUSY_STATUSES);
+        if (!others.isEmpty()) {
+            throw new TripConflictException("Bạn đang thực hiện chuyến " + others.get(0)
+                    + ". Hãy kết thúc chuyến đó trước khi đón khách chuyến mới.");
+        }
     }
 
     public static String deriveExecutionStatus(Booking booking) {

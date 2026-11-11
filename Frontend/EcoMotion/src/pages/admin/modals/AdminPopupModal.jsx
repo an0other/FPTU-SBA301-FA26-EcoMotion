@@ -6,6 +6,7 @@ import {
   IconLock,
   IconShield,
 } from '../../../components/icons/Icons'
+import AdminModalShell from './AdminModalShell'
 
 const TONE_CONFIG = {
   danger: {
@@ -80,34 +81,27 @@ export default function AdminPopupModal({
   const defaultConfirmLabel = mode === 'confirm' ? 'Xác nhận' : 'Đã hiểu'
 
   return (
-    <div
-      className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
-      onClick={() => {
+    <AdminModalShell
+      maxWidth="max-w-md"
+      zIndex="z-70"
+      role="dialog"
+      ariaModal="true"
+      ariaLabel={title || 'Thông báo hệ thống'}
+      onBackdropClick={() => {
         if (!loading) onClose?.()
       }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title || 'Thông báo hệ thống'}
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl transition-all"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3.5">
+      bodyClassName="px-6 py-4"
+      header={(
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
             <span
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${config.iconBg}`}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${config.iconBg}`}
             >
               <ToneIcon className="h-5 w-5" />
             </span>
-            <div className="pt-0.5">
-              <h3 className="text-base font-bold text-slate-900">
-                {title || (mode === 'confirm' ? 'Xác nhận thao tác' : 'Thông báo')}
-              </h3>
-              <div className="mt-1.5 text-xs leading-relaxed text-slate-600">
-                {message}
-              </div>
-            </div>
+            <h3 className="text-base font-bold text-slate-900">
+              {title || (mode === 'confirm' ? 'Xác nhận thao tác' : 'Thông báo')}
+            </h3>
           </div>
 
           <button
@@ -119,8 +113,9 @@ export default function AdminPopupModal({
             <IconX className="h-4 w-4" />
           </button>
         </div>
-
-        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-slate-100 pt-4">
+      )}
+      footer={(
+        <div className="flex items-center justify-end gap-2.5">
           {mode === 'confirm' && (
             <button
               type="button"
@@ -147,8 +142,11 @@ export default function AdminPopupModal({
             {loading ? 'Đang xử lý...' : confirmText || defaultConfirmLabel}
           </button>
         </div>
+      )}
+    >
+      <div className="text-xs leading-relaxed text-slate-600">
+        {message}
       </div>
-    </div>
+    </AdminModalShell>
   )
 }
-

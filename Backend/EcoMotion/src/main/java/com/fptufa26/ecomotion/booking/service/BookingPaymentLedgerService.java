@@ -52,6 +52,8 @@ public interface BookingPaymentLedgerService {
 
     Optional<PaymentTransaction> findTransactionById(Long transactionId);
 
+    Optional<PaymentTransaction> findTransactionByManualConfirmationId(String confirmationId);
+
     Optional<PaymentTransaction> findTransactionByReference(String reference);
 
     Optional<PaymentTransaction> findTransactionByIdForUpdate(Long transactionId);

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
 import ReviewTargetCard from '../components/reviews/ReviewTargetCard'
 import { useBookingReviews } from '../hooks/useBookingReviews'
@@ -8,6 +8,8 @@ import { BOOKING_STATUS_LABELS } from '../utils/paymentDisplay'
 
 export default function BookingReviewsPage() {
   const { bookingCode } = useParams()
+  const navigate = useNavigate()
+  const detailPath = `/renter/bookings/${encodeURIComponent(bookingCode)}`
   const { data, loading, error, reload } = useBookingReviews(bookingCode)
 
   const operationInFlight = useRef(false)
@@ -38,7 +40,7 @@ export default function BookingReviewsPage() {
     } catch (error) {
       setActionError({
         target,
-        message: error.message || 'Không lưu được đánh giá.',
+        message: error?.response?.data?.message || error.message || 'Không lưu được đánh giá.',
       })
     } finally {
       operationInFlight.current = false
@@ -81,18 +83,31 @@ export default function BookingReviewsPage() {
             Trang chủ
           </Link>
           <span aria-hidden="true" className="text-slate-300">/</span>
+          <Link to={detailPath} className="text-slate-500 hover:text-brand-700">
+            Đơn {bookingCode}
+          </Link>
+          <span aria-hidden="true" className="text-slate-300">/</span>
           <span aria-current="page" className="font-semibold text-slate-800">
             Đánh giá đơn thuê
           </span>
         </nav>
 
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Đánh giá trải nghiệm
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Đơn thuê <span className="font-semibold">{bookingCode}</span>
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              Đánh giá trải nghiệm
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Đơn thuê <span className="font-semibold">{bookingCode}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(detailPath)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <span aria-hidden="true">←</span> Về chi tiết đơn
+          </button>
         </div>
 
         {message && (
@@ -161,6 +176,7 @@ export default function BookingReviewsPage() {
                     error={actionError?.target === target ? actionError.message : ''}
                     onSave={handleSave}
                     onDelete={handleDelete}
+                    onUploadImage={(file) => reviewService.uploadImage(bookingCode, file)}
                   />
                 )
               })}

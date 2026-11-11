@@ -250,6 +250,8 @@ class Tv5FinancialSafetyIntegrationTest {
         var approve = new ReviewRefundRequest("APPROVE", null);
         long firstTx = refunds.reviewRefundRequest(providerId, first, approve).paymentTransactionId();
         long secondTx = refunds.reviewRefundRequest(providerId, second, approve).paymentTransactionId();
+        renterBookings.updateRefundAccount(renterId, bookings.findById(bookingId).orElseThrow().getBookingCode(),
+                new com.fptufa26.ecomotion.finance.dto.request.RefundAccountRequest("Vietcombank", "NGUYEN VAN TEST", "0123456789"));
         tx.executeWithoutResult(s -> em.find(Booking.class, bookingId).setStatus(BookingStatus.CANCELLATION_REVIEW));
         var proof = new MockMultipartFile("file", "refund.png", "image/png", new byte[]{(byte)0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a});
         String reference = "BANK-" + UUID.randomUUID();
@@ -379,6 +381,9 @@ class Tv5FinancialSafetyIntegrationTest {
             bus.setBrand("Test"); bus.setModel("Bus"); bus.setManufactureYear(2026); bus.setSeatCount(45);
             bus.setTransmission(Transmission.MANUAL); bus.setColor("White"); bus.setFuelType(FuelType.DIESEL);
             bus.setMaintenanceBufferMinutes(0); bus.setStatus(VehicleStatus.APPROVED); em.persist(bus);
+            var busPlan = new com.fptufa26.ecomotion.vehicle.entity.RentalPlan(); busPlan.setVehicle(bus);
+            busPlan.setPlanType(com.fptufa26.ecomotion.vehicle.enums.PlanType.HOURLY); busPlan.setSlotLengthMinutes(60);
+            busPlan.setSlotPrice(new java.math.BigDecimal("100000")); em.persist(busPlan);
             schedule.book(b.getVehicle(), b, b.getPickupTime(), b.getPickupTime().plusSeconds(3600));
             return new long[]{d.getId(), bus.getId(), b.getVehicle().getId(), b.getVehicle().getProvider().getId()};
         });
@@ -388,7 +393,7 @@ class Tv5FinancialSafetyIntegrationTest {
                 OperationalResolutionType.CHANGE_VEHICLE, ids[1], null, "Vehicle replacement"));
         String proposalId = workflow.getWorkflow(renterId, code).proposal().id();
         assertThatThrownBy(() -> workflow.respondToProposal(renterId, code, proposalId,
-                new com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest("ACCEPT", "Agreed")))
+                new com.fptufa26.ecomotion.booking.dto.request.RespondOperationalProposalRequest("ACCEPT", "Agreed", true)))
                 .isInstanceOf(com.fptufa26.ecomotion.common.exception.ConflictException.class);
         assertThat(workflow.getWorkflow(renterId, code).proposal().status()).isEqualTo("PENDING");
         assertThat(tx.<Long>execute(status -> em.find(Booking.class, bookingId).getVehicle().getId())).isEqualTo(ids[2]);

@@ -92,6 +92,16 @@ public class Dispute {
     @Column(name="trip_end_action", length=40)
     private String tripEndAction;
 
+    /** Khiếu nại sai lệch thanh toán: yêu cầu thanh toán bị khiếu nại, số khách khai đã chuyển, loại sai lệch. */
+    @Column(name = "payment_request_id")
+    private Long paymentRequestId;
+
+    @Column(name = "claimed_amount", precision = 14, scale = 2)
+    private BigDecimal claimedAmount;
+
+    @Column(name = "mismatch_type", length = 30)
+    private String mismatchType;
+
     @ManyToMany
     @JoinTable(name = "dispute_refund_link", joinColumns = @JoinColumn(name = "dispute_id"),
             inverseJoinColumns = @JoinColumn(name = "refund_request_id"))

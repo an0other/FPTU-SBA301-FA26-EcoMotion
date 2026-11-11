@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
     const data = await authService.login(email, password, rememberMe, captchaToken)
     setAccessToken(data.accessToken)
     setTokenState(data.accessToken)
-    let resolvedUser = data.user
+    let resolvedUser = { ...data.user, sessionScope: data.sessionScope }
     try {
       const me = await authService.fetchMe()
       if (me) resolvedUser = me
@@ -68,6 +68,18 @@ export function AuthProvider({ children }) {
   }, [])
 
   const register = useCallback((payload) => authService.register(payload), [])
+
+  const refreshUser = useCallback(async () => {
+    const me = await authService.fetchMe()
+    setUser(me)
+    return me
+  }, [])
+
+  const refreshSession = useCallback(async () => {
+    await authService.refresh()
+    setTokenState(getAccessToken())
+    return refreshUser()
+  }, [refreshUser])
 
   const sendRegisterOtp = useCallback((email) => authService.sendRegisterOtp(email), [])
 
@@ -107,6 +119,8 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(user),
       login,
       logout,
+      refreshUser,
+      refreshSession,
       register,
       sendRegisterOtp,
       verifyRegisterOtp,
@@ -124,6 +138,8 @@ export function AuthProvider({ children }) {
       loading,
       login,
       logout,
+      refreshUser,
+      refreshSession,
       register,
       sendRegisterOtp,
       verifyRegisterOtp,

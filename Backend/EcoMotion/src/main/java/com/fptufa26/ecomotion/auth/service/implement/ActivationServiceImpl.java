@@ -44,7 +44,7 @@ public class ActivationServiceImpl implements ActivationService {
         requirePending(user);
         String phone = request.phone().trim();
 
-        if (!phone.equals(user.getPhone()) && userService.existsByPhone(phone)) {
+        if (!userService.canUsePhone(user.getId(), phone)) {
             throw new PhoneAlreadyExistsException();
         }
 
@@ -54,7 +54,7 @@ public class ActivationServiceImpl implements ActivationService {
                 OtpPurpose.PHONE_VERIFICATION,
                 NotificationChannel.SMS));
         return new SendPhoneOtpResponse(
-                true, challenge.code(), challenge.expiresInSeconds(), challenge.resendCooldownSeconds());
+                true, exposeOtpInResponse ? challenge.code() : null, challenge.expiresInSeconds(), challenge.resendCooldownSeconds());
     }
 
     @Override
@@ -74,7 +74,7 @@ public class ActivationServiceImpl implements ActivationService {
     public ActivationStatusResponse status(String activationToken) {
         User user = resolve(activationToken);
         Renter renter = userService.findRenterProfile(user.getUserId()).orElse(null);
-        boolean phoneVerified = !isBlank(user.getPhone());
+        boolean phoneVerified = user.getPhoneVerifiedAt() != null && !isBlank(user.getPhone());
         boolean cccdScanned = renter != null && !isBlank(renter.getCccdNo());
         return new ActivationStatusResponse(
                 user.getEmail(),
@@ -132,12 +132,15 @@ public class ActivationServiceImpl implements ActivationService {
         if (user.getStatus() == UserStatus.ACTIVE) {
             throw new AccountAlreadyActiveException();
         }
+        if (user.getStatus() != UserStatus.PENDING) throw new ActivationTokenInvalidException();
     }
 
     private User resolve(String activationToken) {
         TokenService.ActivationPrincipal principal = tokenService.verifyActivation(activationToken);
-        return userService.findById(principal.userId())
-                .orElseThrow(ActivationTokenInvalidException::new);
+        User user = userService.findById(principal.userId()).orElseThrow(ActivationTokenInvalidException::new);
+        if (user.getRole() != principal.role() || !user.getEmail().equals(principal.email())
+                || user.getStatus() == UserStatus.LOCKED) throw new ActivationTokenInvalidException();
+        return user;
     }
 
     private boolean isBlank(String value) {

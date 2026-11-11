@@ -13,12 +13,16 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptufa26.ecomotion.vehicle.enums.PlanType;
+import com.fptufa26.ecomotion.finance.service.RefundEventService;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class BookingPaymentStateServiceImpl implements BookingPaymentStateService {
     private final BookingPaymentLedgerService ledger;
+    // Lazy: RefundEventService phụ thuộc ngược vào ledger của booking.
+    private final org.springframework.beans.factory.ObjectProvider<RefundEventService> refundEvents;
 
     @Override
     public State evaluate(Booking booking, List<PaymentTransaction> transactions) {
@@ -29,13 +33,15 @@ public class BookingPaymentStateServiceImpl implements BookingPaymentStateServic
         BigDecimal extras = ledger.listCharges(booking.getId()).stream()
                 .filter(c -> !c.isWaived() && c.getChargeType() != ChargeType.BASE_RENTAL && c.getChargeType() != ChargeType.DEPOSIT)
                 .map(BookingCharge::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal obligation = booking.getTotalAmount().add(extras);
+        // B1: trừ khoản giảm trừ do đổi sang xe rẻ hơn (Booking.vehicleChangeCredit) khỏi nghĩa vụ; xe đắt hơn thì bằng 0, không thu thêm.
+        BigDecimal obligation = booking.getTotalAmount().subtract(booking.vehicleChangeCredit()).max(BigDecimal.ZERO).add(extras);
         boolean closed = Set.of(BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.CANCELLATION_REVIEW).contains(booking.getStatus());
         BigDecimal remaining = closed ? BigDecimal.ZERO : obligation.subtract(paid.subtract(refunded)).max(BigDecimal.ZERO);
         boolean reconcile = transactions.stream().anyMatch(t -> t.getProcessingNote() != null
                 && t.getProcessingNote().startsWith("RECONCILIATION_REQUIRED")
                 || t.getDirection() == PaymentDirection.IN && t.getStatus() == PaymentStatus.PAID
-                    && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED && !applied(t));
+                    && t.getVerificationMethod() != PaymentVerificationMethod.MOCK_SIMULATED && !applied(t)
+                    && !refundEvents.getObject().isSourceReserved(t.getId()));
         BigDecimal deposit = transactions.stream().filter(this::applied)
                 .filter(t -> t.getType() == PaymentType.DEPOSIT_PAY || t.getType() == PaymentType.UPFRONT_PAY)
                 .map(this::allocated).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -43,7 +49,7 @@ public class BookingPaymentStateServiceImpl implements BookingPaymentStateServic
         BigDecimal requiredDeposit = snapshot == null ? null : snapshot.getDepositAmount();
         if (requiredDeposit == null && snapshot != null && snapshot.getDepositRatio() != null)
             requiredDeposit = booking.getTotalAmount().multiply(snapshot.getDepositRatio());
-        if (snapshot != null && snapshot.getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY)
+        if (snapshot != null && snapshot.getPlanType() == PlanType.YEARLY)
             requiredDeposit = snapshot.getUpfrontAmount();
         boolean depositPaid = requiredDeposit != null && requiredDeposit.signum() > 0 && deposit.compareTo(requiredDeposit) >= 0;
         boolean settlementPaid = transactions.stream().filter(this::applied).anyMatch(t -> t.getType() == PaymentType.SETTLEMENT);

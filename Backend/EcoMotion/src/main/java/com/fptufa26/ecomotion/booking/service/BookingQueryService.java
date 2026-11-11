@@ -12,10 +12,12 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget;
 
 public interface BookingQueryService {
 
-    List<com.fptufa26.ecomotion.booking.dto.response.PaymentReconciliationTarget> pendingGatewayPayments(int limit);
+    List<PaymentReconciliationTarget> pendingGatewayPayments(int limit);
 
     Optional<Booking> findBookingById(Long id);
 
@@ -74,9 +76,9 @@ public interface BookingQueryService {
 
     BookingPolicySnapshot savePolicySnapshot(BookingPolicySnapshot snapshot);
 
-    boolean existsByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status);
+    boolean existsByDriverIdAndStatus(Long driverId, BookingStatus status);
 
-    Optional<Booking> findFirstByDriverIdAndStatus(Long driverId, com.fptufa26.ecomotion.booking.enums.BookingStatus status);
+    Optional<Booking> findFirstByDriverIdAndStatus(Long driverId, BookingStatus status);
 
-    List<Booking> findUpcomingDriverBookings(Long driverId, java.util.Collection<com.fptufa26.ecomotion.booking.enums.BookingStatus> statuses, java.time.Instant now);
+    List<Booking> findUpcomingDriverBookings(Long driverId, java.util.Collection<BookingStatus> statuses, java.time.Instant now);
 }

@@ -6,7 +6,7 @@ export function financialReviewNote(entry) {
 }
 
 export function financialReviewLabel(outcome) {
-  return ({ HOLD: 'Tiếp tục đối soát', TRANSFER_VERIFIED: 'Đã xác minh chuyển tiền', FAILED_VERIFIED: 'Đã xác minh không chuyển hoặc thu hồi tiền', WRONG_RECIPIENT: 'Đang xử lý chuyển nhầm', DISPUTE: 'Người thuê yêu cầu xem xét', PROVIDER_REPLY: 'Nhà xe phản hồi', SETTLEMENT_RULING: 'Đã phân xử quyết toán', CANCELLATION_RULING: 'Đã phân xử hủy hợp đồng' })[outcome] || 'Cập nhật hồ sơ'
+  return ({ REFUND_HOLD: 'Tiếp tục đối soát tiền hoàn năm', REFUND_FAILED_VERIFIED: 'Cho chuyển lại phần hoàn còn thiếu', REFUND_PARTIAL_RECEIVED: 'Đã xác minh nhận một phần tiền hoàn', REFUND_CONFIRMED_RECEIVED: 'Đã xác minh nhận đủ tiền hoàn', INCIDENT_HOLD: 'Tiếp tục xem xét report', INCIDENT_RULING: 'Admin đã phân xử report', INCIDENT_TRANSFER_VERIFIED: 'Admin xác minh đã nhận hoàn ứng', INCIDENT_FAILED_TRANSFER: 'Admin cho thực hiện lại hoàn ứng', REFUND_DISPUTE: 'Người thuê báo thiếu tiền hoàn', INCIDENT_DISPUTE: 'Người thuê yêu cầu xem xét report', HOLD: 'Tiếp tục đối soát', TRANSFER_VERIFIED: 'Đã xác minh chuyển tiền', FAILED_VERIFIED: 'Đã xác minh không chuyển hoặc thu hồi tiền', WRONG_RECIPIENT: 'Đang xử lý chuyển nhầm', DISPUTE: 'Người thuê yêu cầu xem xét', PROVIDER_REPLY: 'Nhà xe phản hồi', SETTLEMENT_RULING: 'Đã phân xử quyết toán', CANCELLATION_RULING: 'Đã phân xử hủy hợp đồng' })[outcome] || 'Cập nhật hồ sơ'
 }
 
 export function reconciliationPayload(refund, form, requestId) {

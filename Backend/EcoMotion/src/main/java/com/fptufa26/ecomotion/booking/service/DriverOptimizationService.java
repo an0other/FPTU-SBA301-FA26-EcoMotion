@@ -5,6 +5,9 @@ import com.fptufa26.ecomotion.booking.dto.response.DriverCandidateResponse;
 import com.fptufa26.ecomotion.user.entity.Driver;
 
 import java.util.List;
+import com.fptufa26.ecomotion.booking.enums.AssignmentMode;
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.entity.DriverAssignment;
 
 public interface DriverOptimizationService {
 
@@ -28,16 +31,16 @@ public interface DriverOptimizationService {
      * và đã kiểm tra quyền sở hữu, eligibility, availability, buffer. Hàm này chỉ ghi trạng thái,
      * lịch sử DriverAssignment, đồng bộ trạng thái Driver và gửi thông báo sau commit.
      */
-    com.fptufa26.ecomotion.booking.entity.Booking commitAssignment(
-            com.fptufa26.ecomotion.booking.entity.Booking booking,
+    Booking commitAssignment(
+            Booking booking,
             Driver driver,
-            com.fptufa26.ecomotion.booking.enums.AssignmentMode mode,
+            AssignmentMode mode,
             java.time.Instant now);
 
     void recallActiveAssignments(Long bookingId);
 
-    com.fptufa26.ecomotion.booking.entity.DriverAssignment requireCurrentAssignment(
-            com.fptufa26.ecomotion.booking.entity.Booking booking, Long driverId);
+    DriverAssignment requireCurrentAssignment(
+            Booking booking, Long driverId);
 
     void processPendingAssignmentTimeouts();
 

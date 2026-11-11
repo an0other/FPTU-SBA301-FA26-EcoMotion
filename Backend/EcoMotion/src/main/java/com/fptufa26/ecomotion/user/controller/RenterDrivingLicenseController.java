@@ -4,7 +4,6 @@ import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import com.fptufa26.ecomotion.user.dto.request.UpdateDrivingLicenseRequest;
 import com.fptufa26.ecomotion.user.dto.response.DrivingLicenseClassOptionResponse;
-import com.fptufa26.ecomotion.user.dto.response.DrivingLicenseImage;
 import com.fptufa26.ecomotion.user.dto.response.DrivingLicenseResponse;
 import com.fptufa26.ecomotion.user.service.RenterDrivingLicenseService;
 import io.swagger.v3.oas.annotations.Operation;

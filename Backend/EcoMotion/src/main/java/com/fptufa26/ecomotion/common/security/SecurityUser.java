@@ -12,10 +12,25 @@ import java.util.List;
 public class SecurityUser implements UserDetails {
 
     private final User user;
+    private boolean fullAccess = true;
 
     public SecurityUser(User user) {
         this.user = user;
+        if (user.getRole() == Role.PROVIDER && !user.isActive()) {
+            fullAccess = false;
+        }
     }
+
+    public SecurityUser(User user, boolean fullAccess) {
+        this(user);
+        this.fullAccess = this.fullAccess && fullAccess;
+    }
+
+    public void restrictToOnboarding() { fullAccess = false; }
+
+    public String getSessionScope() { return fullAccess ? "FULL" : "ONBOARDING"; }
+
+    public boolean isRestrictedProvider() { return user.getRole() == Role.PROVIDER && !fullAccess; }
 
     public User getUser() {
         return user;
@@ -31,7 +46,8 @@ public class SecurityUser implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+        return List.of(new SimpleGrantedAuthority(isRestrictedProvider()
+                ? "ROLE_PROVIDER_ONBOARDING" : "ROLE_" + user.getRole().name()));
     }
 
     @Override
@@ -61,6 +77,7 @@ public class SecurityUser implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return user.isActive();
+        return user.isActive() || (user.getRole() == Role.PROVIDER
+                && user.getStatus() == UserStatus.PENDING && user.getEmailVerifiedAt() != null);
     }
 }

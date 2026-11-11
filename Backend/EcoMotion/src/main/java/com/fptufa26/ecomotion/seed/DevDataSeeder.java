@@ -54,11 +54,16 @@ import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleDocumentRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleImageRepository;
 import com.fptufa26.ecomotion.vehicle.repository.VehicleRepository;
+import com.fptufa26.ecomotion.user.dto.request.ProviderApplicationRequest;
+import com.fptufa26.ecomotion.user.entity.ProviderApplication;
+import com.fptufa26.ecomotion.user.enums.ProviderApplicationStatus;
+import com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity;
+import com.fptufa26.ecomotion.verification.identity.enums.IdentityVerificationMethod;
+import com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -75,8 +80,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Component
-@Profile("dev")
-@ConditionalOnProperty(name = "app.demo-seed.enabled", havingValue = "true", matchIfMissing = true)
+@Profile("dev & !prod")
 @RequiredArgsConstructor
 public class DevDataSeeder implements ApplicationRunner {
     public static final String RENTER_EMAIL = "renter01@ecomotion.vn";
@@ -140,6 +144,12 @@ public class DevDataSeeder implements ApplicationRunner {
     private final ScheduleService scheduleService;
     private final YearlyRentalDataSeeder yearlyRentalDataSeeder;
     private final ProviderBankAccountRepository providerBankAccountRepository;
+    private static final String SEED_IDENTITY_POLICY = "DEMO-SEED-V1-NOT-REAL-VERIFICATION";
+    private final com.fptufa26.ecomotion.verification.identity.repository.PersonIdentityRepository personIdentityRepository;
+    private final com.fptufa26.ecomotion.verification.identity.service.IdentityFingerprintService identityFingerprintService;
+    private final com.fptufa26.ecomotion.user.repository.ProviderApplicationRepository providerApplicationRepository;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
+    private final java.time.Clock clock;
 
     private record PlanPrices(String hourly, String daily, String monthly) {
     }
@@ -187,6 +197,11 @@ public class DevDataSeeder implements ApplicationRunner {
         seedRenterProfile(userRepository.findById(108L).orElseThrow());
         seedRenterProfile(userRepository.findById(109L).orElseThrow());
         seedRenterProfile(userRepository.findById(110L).orElseThrow());
+
+        List.of(1L, 5L, 101L, 102L, 103L, 104L, 105L, 106L, 107L, 108L, 109L, 110L)
+                .forEach(id -> seedAccountIdentity(id, Role.RENTER));
+        List.of(PROVIDER_A_USER_ID, PROVIDER_B_USER_ID).forEach(id -> seedAccountIdentity(id, Role.PROVIDER));
+        userRepository.flush();
 
         Driver driverNam = seedDriver(driverUser1, providerA, "7901230001", "B2");
         Driver driverCuong = seedDriver(driverUser2, providerA, "7901230002", "D");
@@ -403,6 +418,37 @@ public class DevDataSeeder implements ApplicationRunner {
     private void seedPastMonthsBookings(Driver driverNam, Driver driverCuong, Driver driverKiet) {
         ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
 
+        // --- Thang 01/2026 - 07/2026 (Historical months for 10+ periods in Admin Overview) ---
+        String[][] earlyMonths = {
+                {"BK-JAN-01", "1", "10", "101", "1", "DAILY", "1100000.00", "San bay Tan Son Nhat"},
+                {"BK-JAN-02", "1", "22", "102", "3", "DAILY", "3200000.00", "Vung Tau - Bai Sau"},
+                {"BK-FEB-01", "2", "8", "103", "4", "DAILY", "1400000.00", "InterContinental Saigon, Q.1"},
+                {"BK-FEB-02", "2", "19", "104", "1", "DAILY", "2200000.00", "Mui Ne, Phan Thiet"},
+                {"BK-MAR-01", "3", "6", "105", "2", "HOURLY", "600000.00", "Vincom Center Landmark 81"},
+                {"BK-MAR-02", "3", "18", "106", "3", "DAILY", "3200000.00", "Ho Tram Resort, Xuyen Moc"},
+                {"BK-APR-01", "4", "9", "101", "4", "DAILY", "2800000.00", "Diamond Island, TP. Thu Duc"},
+                {"BK-APR-02", "4", "24", "102", "1", "DAILY", "1100000.00", "Aeon Mall Tan Phu"},
+                {"BK-MAY-01", "5", "7", "103", "3", "DAILY", "3200000.00", "Cao toc Long Thanh - Dau Giay"},
+                {"BK-MAY-02", "5", "21", "104", "4", "DAILY", "1400000.00", "Sheraton Saigon, 88 Dong Khoi"},
+                {"BK-JUN-01", "6", "11", "105", "1", "DAILY", "2200000.00", "San bay Tan Son Nhat - Ga Quoc te"},
+                {"BK-JUN-02", "6", "25", "106", "3", "DAILY", "3200000.00", "Phan Thiet - Doi Cat Bay"},
+                {"BK-JUL-01", "7", "8", "107", "4", "DAILY", "2800000.00", "Khu du lich Dai Nam"},
+                {"BK-JUL-02", "7", "19", "5", "3", "DAILY", "3200000.00", "Vung Tau Marina"}
+        };
+        for (String[] row : earlyMonths) {
+            int monthVal = Integer.parseInt(row[1]);
+            int dayVal = Integer.parseInt(row[2]);
+            Long renterUserId = Long.parseLong(row[3]);
+            Long vehicleId = Long.parseLong(row[4]);
+            PlanType pType = PlanType.valueOf(row[5]);
+            Instant startAt = ZonedDateTime.of(2026, monthVal, dayVal, 9, 0, 0, 0, zone).toInstant();
+            Instant endAt = pType == PlanType.HOURLY
+                    ? startAt.plus(4, ChronoUnit.HOURS)
+                    : startAt.plus(1, ChronoUnit.DAYS);
+            seedBooking(row[0], renterUserId, vehicleId, pType, driverCuong, BookingStatus.COMPLETED,
+                    row[7], startAt, 3, row[6], startAt, endAt, null, null, null);
+        }
+
         // --- Thang 08/2026 (7 completed bookings) ---
         Instant aug05 = ZonedDateTime.of(2026, 8, 5, 8, 0, 0, 0, zone).toInstant();
         seedBooking("BK-AUG-01", 101L, 1L, PlanType.DAILY, driverCuong, BookingStatus.COMPLETED,
@@ -610,10 +656,11 @@ public class DevDataSeeder implements ApplicationRunner {
         User renterEkyc = seedUser(8L, "renter.pending@ecomotion.vn", "0901000040", "Lê Hoàng Long", Role.RENTER);
         renterEkyc.setEkycStatus(EkycStatus.PENDING);
         userRepository.save(renterEkyc);
-        if (renterRepository.findByUser_Id(renterEkyc.getId()).isEmpty()) {
+        Renter existingPendingRenter = renterRepository.findByUser_Id(renterEkyc.getId()).orElse(null);
+        if (existingPendingRenter == null) {
             Renter renter = new Renter();
             renter.setUser(renterEkyc);
-            renter.setCccdNo(cipher.encrypt("079095012345"));
+            renter.setCccdNo("079095012345");
             renter.setDateOfBirth(LocalDate.of(1995, 8, 20));
             renter.setGender("Nam");
             renter.setAddress("Số 10 Ba Tháng Hai, Quận 10, TP. Hồ Chí Minh");
@@ -621,6 +668,9 @@ public class DevDataSeeder implements ApplicationRunner {
             renter.setCccdImageBackUrl("https://images.unsplash.com/photo-1544717305-2782549b5136?w=400");
             renter.setPortraitUrl("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400");
             renterRepository.save(renter);
+        } else if (existingPendingRenter.getCccdNo() == null || !existingPendingRenter.getCccdNo().matches("\\d{9,12}")) {
+            existingPendingRenter.setCccdNo("079095012345");
+            renterRepository.save(existingPendingRenter);
         }
 
         if (vehicleRepository.findById(9L).isEmpty()) {
@@ -778,6 +828,66 @@ public class DevDataSeeder implements ApplicationRunner {
                 .createNativeQuery("ALTER TABLE " + table + " ALTER COLUMN id RESTART WITH "
                         + (maxId.longValue() + 1L))
                 .executeUpdate();
+    }
+
+    private void seedAccountIdentity(Long userId, Role role) {
+        User user = userRepository.findById(userId).orElseThrow();
+        if (user.getRole() != role || !user.isActive() || user.getEkycStatus() != EkycStatus.VERIFIED) return;
+        if (user.getIdentity() != null && user.getIdentity().getVerificationMethod() != IdentityVerificationMethod.DEMO_SEED) return;
+        Provider provider = role == Role.PROVIDER ? providerRepository.findByUser_Id(userId).orElseThrow() : null;
+        if (provider != null && provider.getStatus() != ProviderStatus.APPROVED) return;
+        Renter renter = role == Role.RENTER ? renterRepository.findByUser_Id(userId).orElseThrow() : null;
+        PersonIdentity identity = user.getIdentity();
+        if (identity == null) {
+            String number = "990000" + String.format(java.util.Locale.ROOT, "%06d", userId);
+            String fingerprint = identityFingerprintService.fingerprint(number);
+            identity = personIdentityRepository.findByCccdFingerprint(fingerprint).orElseGet(() -> {
+                var created = new PersonIdentity();
+                created.setCccdNo(number);
+                created.setCccdFingerprint(fingerprint);
+                created.setFingerprintKeyVersion(identityFingerprintService.keyVersion());
+                created.setFullName(user.getFullName());
+                created.setDateOfBirth(renter != null && renter.getDateOfBirth() != null
+                        ? renter.getDateOfBirth() : LocalDate.of(1992, 4, 12));
+                created.setAddress("DEMO ONLY - NOT VERIFIED ADDRESS");
+                created.setDocumentExpiry(LocalDate.now(clock).plusYears(10));
+                created.setStatus(PersonIdentityStatus.VERIFIED);
+                created.setVerificationMethod(IdentityVerificationMethod.DEMO_SEED);
+                created.setPolicyVersion(SEED_IDENTITY_POLICY);
+                created.setVerifiedAt(clock.instant());
+                return personIdentityRepository.saveAndFlush(created);
+            });
+            if (identity.getVerificationMethod() != IdentityVerificationMethod.DEMO_SEED) {
+                throw new IllegalStateException("Demo identity number conflicts with a non-demo identity");
+            }
+            user.setIdentity(identity);
+        }
+        if (user.getEmailVerifiedAt() == null) user.setEmailVerifiedAt(clock.instant());
+        if (user.getPhoneVerifiedAt() == null) user.setPhoneVerifiedAt(clock.instant());
+        if (user.getTermsAcceptedAt() == null) user.setTermsAcceptedAt(clock.instant());
+        if (renter != null) {
+            if (renter.getCccdNo() == null) renter.setCccdNo(identity.getCccdNo());
+            if (renter.getDateOfBirth() == null) renter.setDateOfBirth(identity.getDateOfBirth());
+            renterRepository.save(renter);
+        } else {
+            if (user.getIdentityReviewedAt() == null) user.setIdentityReviewedAt(clock.instant());
+            if (!providerApplicationRepository.existsById(userId)) {
+                var application = new ProviderApplication();
+                application.setUserId(userId);
+                application.setStatus(ProviderApplicationStatus.APPROVED);
+                application.setSubmittedIdentityId(identity.getId());
+                application.setSubmittedAt(clock.instant());
+                application.setReviewedAt(clock.instant());
+                application.setReviewedBy(3L);
+                application.setReasonCode("DEMO_SEED");
+                application.setProfileJson(objectMapper.writeValueAsString(new ProviderApplicationRequest(0L,
+                        provider.getDisplayName(), provider.getHotline(), provider.getDepotAddress(),
+                        provider.getDepotLatitude(), provider.getDepotLongitude(), provider.getBankCode(),
+                        provider.getBankAccountNo(), provider.getBankAccountHolder())));
+                providerApplicationRepository.saveAndFlush(application);
+            }
+        }
+        userRepository.save(user);
     }
 
     private User seedUser(long id, String email, String phone, String fullName, Role role) {
@@ -993,12 +1103,12 @@ public class DevDataSeeder implements ApplicationRunner {
         plan.setStatus(PlanStatus.ACTIVE);
         if (planType != PlanType.YEARLY) {
             plan.setAllowedOvertimeMinutes(30);
-            plan.setOvertimeSurchargeRatio(new BigDecimal("1.2000"));
+            plan.setOvertimeSurchargeRatio(new BigDecimal("0.2000"));
             plan.setFreeRadiusKm(10);
             plan.setOutOfRadiusRate(new BigDecimal("10000.00"));
             plan.setWaitingFreeMinutes(15);
             plan.setWaitingRate(new BigDecimal("5000.00"));
-            plan.setWeekendSurchargeRatio(new BigDecimal("1.1000"));
+            plan.setWeekendSurchargeRatio(new BigDecimal("0.1000"));
             if (hourly) {
                 plan.setHourlyToDailyThresholdMinutes(1260);
             }

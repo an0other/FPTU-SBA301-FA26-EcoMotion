@@ -12,13 +12,14 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class BookingNotificationServiceImpl implements BookingNotificationService {
     private final ExternalNotificationDispatcherService dispatcher;
-    private final com.fptufa26.ecomotion.notification.internal.service.NotificationStreamService stream;
+    private final NotificationStreamService stream;
 
     @Override
     public void bookingPlaced(Booking booking, BigDecimal depositAmount) {

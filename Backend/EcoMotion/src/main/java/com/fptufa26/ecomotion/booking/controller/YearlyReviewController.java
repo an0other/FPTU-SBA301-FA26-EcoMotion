@@ -16,6 +16,30 @@ import org.springframework.web.bind.annotation.*;
 public class YearlyReviewController {
     private final YearlyWorkflowService yearly;
     private final TripEvidenceService evidence;
+    @PostMapping("/api/renter/yearly-bookings/{code}/refund/review")
+    @PreAuthorize("hasRole('RENTER')")
+    public ApiResponse<YearlyWorkflowService.View> refundComplaint(@AuthenticationPrincipal SecurityUser user, @PathVariable String code,
+            @Valid @RequestBody RefundComplaint request) {
+        return ApiResponse.success(yearly.disputeRefund(user.getUserId(), code, request));
+    }
+    @PostMapping("/api/renter/yearly-bookings/{code}/incidents/{incidentId}/review")
+    @PreAuthorize("hasRole('RENTER')")
+    public ApiResponse<YearlyWorkflowService.View> incidentComplaint(@AuthenticationPrincipal SecurityUser user, @PathVariable String code,
+            @PathVariable Long incidentId, @Valid @RequestBody Complaint request) {
+        return ApiResponse.success(yearly.escalateIncident(user.getUserId(), code, incidentId, request));
+    }
+    @PostMapping("/api/admin/yearly-bookings/{code}/reviews/refund")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<YearlyWorkflowService.View> refundRuling(@AuthenticationPrincipal SecurityUser user, @PathVariable String code,
+            @Valid @RequestBody RefundRuling request) {
+        return ApiResponse.success(yearly.adjudicateRefund(user.getUserId(), code, request));
+    }
+    @PostMapping("/api/admin/yearly-bookings/{code}/reviews/incident")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<YearlyWorkflowService.View> incidentRuling(@AuthenticationPrincipal SecurityUser user, @PathVariable String code,
+            @Valid @RequestBody IncidentRuling request) {
+        return ApiResponse.success(yearly.adjudicateIncident(user.getUserId(), code, request));
+    }
     @PostMapping("/api/renter/yearly-bookings/{code}/reviews")
     @PreAuthorize("hasRole('RENTER')")
     public ApiResponse<YearlyWorkflowService.View> complain(@AuthenticationPrincipal SecurityUser user, @PathVariable String code,

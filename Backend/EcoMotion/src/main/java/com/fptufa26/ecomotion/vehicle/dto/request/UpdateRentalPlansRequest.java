@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.vehicle.dto.request;
 import com.fptufa26.ecomotion.vehicle.enums.PlanStatus;
 import com.fptufa26.ecomotion.vehicle.enums.PlanType;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
@@ -18,6 +19,7 @@ public record UpdateRentalPlansRequest(
         Integer allowedOvertimeMinutes,
 
         @DecimalMin(value = "0.0", message = "Tỉ lệ phụ thu quá giờ phải >= 0")
+        @DecimalMax(value = "1.0", message = "Tỉ lệ phụ thu quá giờ là phần trăm cộng thêm, tối đa 1.0 (100%)")
         BigDecimal overtimeSurchargeRatio,
 
         @Min(value = 0, message = "Bán kính đón miễn phí phải >= 0")
@@ -33,6 +35,7 @@ public record UpdateRentalPlansRequest(
         BigDecimal waitingRate,
 
         @DecimalMin(value = "0.0", message = "Tỉ lệ phụ thu cuối tuần phải >= 0")
+        @DecimalMax(value = "1.0", message = "Tỉ lệ phụ thu cuối tuần là phần trăm cộng thêm, tối đa 1.0 (100%)")
         BigDecimal weekendSurchargeRatio,
 
         Boolean confirmUnusualPriceChange

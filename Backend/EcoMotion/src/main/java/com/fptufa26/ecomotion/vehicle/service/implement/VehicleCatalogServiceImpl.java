@@ -76,6 +76,11 @@ public class VehicleCatalogServiceImpl implements VehicleCatalogService {
         return images.isEmpty() ? null : images.getFirst().getImageUrl();
     }
 
+    @Override
+    public List<RentalPlan> findActivePlans(Long vehicleId) {
+        return rentalPlanRepository.findByVehicle_IdAndStatusOrderByIdAsc(vehicleId, PlanStatus.ACTIVE);
+    }
+
     private BookableVehicleResponse toResponse(Vehicle vehicle) {
         List<VehicleImage> images = vehicleImageRepository.findByVehicle_IdOrderByDisplayOrderAsc(vehicle.getId());
         String imageUrl = images.isEmpty() ? null : images.getFirst().getImageUrl();
