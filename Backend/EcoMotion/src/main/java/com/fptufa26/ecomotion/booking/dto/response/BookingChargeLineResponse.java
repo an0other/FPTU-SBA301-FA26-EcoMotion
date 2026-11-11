@@ -17,7 +17,6 @@ public record BookingChargeLineResponse(
         BigDecimal effectiveAmount,
         ChargeConfirmationStatus confirmationStatus,
         String evidenceUrl,
-        /** Ai miễn khoản này: PROVIDER_WITHDRAWN (nhà xe rút), ADMIN_DISPUTE (admin phân xử), SYSTEM. */
         String waivedSource
 ) {
     public BookingChargeLineResponse(Long chargeId, ChargeType chargeType, String description, Integer quantity,

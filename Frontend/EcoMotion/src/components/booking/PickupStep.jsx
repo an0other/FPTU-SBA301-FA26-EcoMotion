@@ -53,7 +53,6 @@ export const PickupStep = ({
         </p>
       </div>
 
-      {/* Pickup location */}
       <section className="space-y-3 rounded-2xl border border-[#E6EBE8] bg-white p-4 shadow-xs sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-[#14221A]">
@@ -110,7 +109,6 @@ export const PickupStep = ({
         )}
       </section>
 
-      {/* Trip info */}
       <section className="space-y-5 rounded-2xl border border-[#E6EBE8] bg-white p-4 shadow-xs sm:p-6">
         <h2 className="text-sm font-semibold text-[#14221A]">
           {selfDrive ? 'Thông tin người đi cùng' : 'Thông tin chuyến đi'}
@@ -173,7 +171,6 @@ export const PickupStep = ({
         </div>
       </section>
 
-      {/* Navigation */}
       <div className="flex items-center justify-between gap-4 pt-1">
         <button
           onClick={onBack}

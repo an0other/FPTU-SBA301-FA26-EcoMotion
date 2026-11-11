@@ -24,7 +24,6 @@ class ReviewContentPolicyTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            // Bỏ dấu sẽ thành lon/cac/buoi/deo/du — phải KHÔNG bị chặn.
             "Xe lớn, rộng rãi, các buổi đi đều đúng giờ",
             "Tài xế đeo khẩu trang, chuyến du lịch rất vui",
             "Dù trời mưa nhưng tài xế vẫn đến sớm, dự định sẽ thuê lại",

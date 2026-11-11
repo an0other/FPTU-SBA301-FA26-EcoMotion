@@ -3,6 +3,7 @@ import { canReviewRefund, refundReviewPayload } from '../utils/tv5Contracts'
 import { RefundProofModal } from '../components/payments/RefundProofModal'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { displayRefundReason } from '../utils/paymentReceipts'
+import ProviderCommissionPanel from '../components/finance/ProviderCommissionPanel'
 import { useSearchParams } from 'react-router-dom'
 import ProviderLayout from '../components/provider/ProviderLayout'
 import Toast from '../components/Toast'
@@ -71,7 +72,6 @@ const REQUEST_STATUS_CONFIG = {
   VOIDED: { label: 'Đã hủy yêu cầu', bg: 'bg-slate-100 text-slate-600 border-slate-300', dot: 'bg-slate-400' },
 }
 
-/** Khách đã gửi biên lai / đang đối soát — mới hiện Xác nhận & T.chối BL (không khi mới chờ thanh toán). */
 function canProviderReviewPaymentProof(pr, hasProof, remaining) {
   if (pr.vnpayVerifying) return false
   if (['EXPIRED', 'VOIDED', 'CONFIRMED', 'REJECTED'].includes(pr.status)) return false
@@ -81,7 +81,6 @@ function canProviderReviewPaymentProof(pr, hasProof, remaining) {
   return false
 }
 
-/** Cọc qua VietQR/VNPAY: không báo lệch thủ công trên bảng (chỉ xác nhận/từ chối biên lai khi đã có chứng từ). */
 function canProviderReportIssue(pr, hasProof, remaining) {
   if (pr.paymentType === 'DEPOSIT') return false
   return canProviderReviewPaymentProof(pr, hasProof, remaining)
@@ -306,8 +305,6 @@ const REFUND_STATUS_CONFIG = {
   PENDING_RECONCILIATION: { label: 'Chờ đối soát', bg: 'bg-purple-50 text-purple-800 border-purple-200' },
 }
 
-// Ghi nhận tiền về theo sao kê chỉ dành cho ngoại lệ (yêu cầu không còn nhận thanh toán bình thường).
-// Yêu cầu đang chờ (PENDING/PROOF_SUBMITTED) dùng nút Xác nhận; đã xác nhận đủ thì không cần đối soát.
 const BANK_EXCEPTION_STATUSES = new Set(['EXPIRED', 'REJECTED', 'VOIDED', 'REVIEW_REQUIRED', 'PARTIALLY_PAID'])
 
 const ISSUE_TYPES = [
@@ -328,9 +325,8 @@ function ReceivedAmountHint({ request, received }) {
 }
 
 export default function ProviderFinancePage() {
-  // Deep-link từ chi tiết đơn: /provider/finance?tab=incoming&booking=EM-...
   const [searchParams, setSearchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'transactions') // transactions | incoming | refunds | bankAccounts | payout
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'transactions')
   const bookingFilter = searchParams.get('booking') || ''
   const clearBookingFilter = () => {
     const next = new URLSearchParams(searchParams)
@@ -409,7 +405,6 @@ export default function ProviderFinancePage() {
   const [declineTripModalData, setDeclineTripModalData] = useState(null)
   const [declineTripReason, setDeclineTripReason] = useState('Không còn xe trống cho khung giờ này.')
   const [isDecliningTrip, setIsDecliningTrip] = useState(false)
-
 
   // Fetch summary and bank accounts
   const financeSequence = useRef(0)
@@ -605,7 +600,6 @@ export default function ProviderFinancePage() {
     setConfirmNoteInput('')
   }
 
-  // Deep-link "Xác nhận ngay" từ chi tiết đơn: ?confirm=<id> mở thẳng modal xác nhận khi dữ liệu đã tải.
   const confirmParam = searchParams.get('confirm')
   useEffect(() => {
     if (!confirmParam) return
@@ -933,6 +927,19 @@ export default function ProviderFinancePage() {
           >
             <Icon name="account_balance" className="text-[16px]" />
             <span>Tài khoản thụ hưởng ({bankAccounts.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('commission')}
+            className={`py-3 px-4 text-xs font-bold whitespace-nowrap shrink-0 transition-all border-b-2 flex items-center gap-1.5 ${
+              activeTab === 'commission'
+                ? 'border-brand-700 text-brand-800'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Icon name="percent" className="text-[16px]" />
+            <span>Hoa hồng</span>
           </button>
 
           <button
@@ -1364,8 +1371,7 @@ export default function ProviderFinancePage() {
                   <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
                     <th className="px-4 py-3">Mã hoàn tiền</th>
                     <th className="px-4 py-3">Mã đơn thuê</th>
-                    <th className="px-4 py-3">Tên chủ tài khoản</th>
-                    <th className="px-4 py-3">Ngân hàng / Số tài khoản</th>
+                    <th className="px-4 py-3">Tài khoản nhận hoàn</th>
                     <th className="px-4 py-3 text-right">Số tiền hoàn</th>
                     <th className="px-4 py-3">Lý do hoàn tiền</th>
                     <th className="px-4 py-3">Trạng thái</th>
@@ -1385,7 +1391,7 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : refunds.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400">
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Icon name="assignment_return" className="text-3xl text-slate-300" />
                           <span>Chưa có yêu cầu hoàn tiền nào được ghi nhận</span>
@@ -1394,8 +1400,12 @@ export default function ProviderFinancePage() {
                     </tr>
                   ) : (
                     refunds.map((ref) => {
-                      const badge = REFUND_STATUS_CONFIG[ref.status] || { label: ref.status, bg: 'bg-slate-100 text-slate-700' }
+                      const offsetByRenter = ref.excess && ref.status === 'REJECTED' && /cấn trừ/i.test(ref.rejectionReason || '')
+                      const badge = offsetByRenter
+                        ? { label: 'Đã cấn trừ vào quyết toán', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' }
+                        : REFUND_STATUS_CONFIG[ref.status] || { label: ref.status, bg: 'bg-slate-100 text-slate-700' }
                       const canReview = canReviewRefund(ref.status)
+                      const missingAccount = ref.refundMethod !== 'VNPAY' && !ref.recipientAccountNumber
 
                       return (
                         <tr key={ref.id} className="hover:bg-slate-50/80">
@@ -1405,17 +1415,37 @@ export default function ProviderFinancePage() {
                           <td className="px-4 py-3 font-mono font-semibold text-brand-800">
                             {ref.bookingCode || '—'}
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-800">{ref.recipientAccountHolder || 'Chưa cung cấp'}</td>
                           <td className="px-4 py-3 text-slate-700">
-                            <span className="block">{ref.recipientBankName || 'Chưa cung cấp ngân hàng'}</span>
-                            <span className="mt-1 block font-mono tabular-nums">{ref.recipientAccountNumber || 'Chưa cung cấp số tài khoản'}</span>
+                            {ref.refundMethod === 'VNPAY' ? (
+                              <span className="text-[11px] text-slate-500">Hoàn về phương thức VNPAY gốc</span>
+                            ) : missingAccount ? (
+                              <div className="space-y-1">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                  <Icon name="schedule" className="text-[13px]" /> Khách chưa cung cấp tài khoản
+                                </span>
+                                <p className="text-[10px] text-slate-500">Khách được nhắc nhập tài khoản ở chi tiết đơn.</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <p className="font-semibold text-slate-800">{ref.recipientAccountHolder}</p>
+                                <p className="text-[11px] text-slate-500">{ref.recipientBankName}</p>
+                                <p className="flex items-center gap-1 font-mono tabular-nums">
+                                  {ref.recipientAccountNumber}
+                                  <button type="button" title="Sao chép số tài khoản" aria-label="Sao chép số tài khoản"
+                                    onClick={() => navigator.clipboard?.writeText(ref.recipientAccountNumber).then(() => setToast({ message: 'Đã sao chép số tài khoản', type: 'success' })).catch(() => {})}
+                                    className="rounded p-0.5 text-slate-400 hover:text-slate-700">
+                                    <Icon name="content_copy" className="text-[14px]" />
+                                  </button>
+                                </p>
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-bold text-purple-900">
                             {formatVnd(ref.amount)}
                           </td>
-                          <td className="px-4 py-3 text-slate-700 max-w-[280px] truncate" title={displayRefundReason(ref.reason)}>
-                            {ref.excess && <span className="mr-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">Khách chuyển dư · bắt buộc hoàn</span>}
-                            {displayRefundReason(ref.reason)}
+                          <td className="px-4 py-3 text-slate-700 max-w-[280px]" title={displayRefundReason(ref.reason)}>
+                            {ref.excess && <span className="mb-1 inline-block rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">Khách chuyển dư · bắt buộc hoàn</span>}
+                            <p className="line-clamp-2">{displayRefundReason(ref.reason)}</p>
                           </td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${badge.bg}`}>
@@ -1447,6 +1477,11 @@ export default function ProviderFinancePage() {
                               >
                                 Xem xét duyệt
                               </button>
+                            ) : ref.status === 'PROCESSING' && missingAccount ? (
+                              <span title="Nhà xe chỉ chuyển hoàn được sau khi khách nhập số tài khoản nhận tiền"
+                                className="inline-flex h-8 cursor-not-allowed items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-[11px] font-semibold text-slate-400">
+                                Chờ khách cung cấp số tài khoản
+                              </span>
                             ) : ref.status === 'PROCESSING' && ref.refundMethod !== 'VNPAY' && ref.paymentTransactionId ? (
                               <button
                                 type="button"
@@ -1549,6 +1584,10 @@ export default function ProviderFinancePage() {
               )}
             </div>
           </div>
+        )}
+
+        {activeTab === 'commission' && (
+          <ProviderCommissionPanel onToast={(message, type = 'success') => setToast({ message, type })} />
         )}
 
         {activeTab === 'payout' && (

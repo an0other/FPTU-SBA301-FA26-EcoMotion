@@ -301,7 +301,7 @@ class PaymentIntegrityIntegrationTest {
         user.setEmail(UUID.randomUUID() + "@payment-integrity.test");
         user.setPasswordHash("fixture-only"); user.setFullName("Payment test");
         user.setRole(role); user.setStatus(UserStatus.ACTIVE); em.persist(user);
-        return user;
+        return com.fptufa26.ecomotion.support.IdentityTestFixtures.verify(em, user);
     }
 
     @BeforeEach
@@ -530,7 +530,6 @@ class PaymentIntegrityIntegrationTest {
         assertThat(acknowledged.renterAcknowledgedAt()).isNotNull();
         assertThatThrownBy(() -> payments.acknowledgeReceipt(requestId, providerId)).isInstanceOf(AccessDeniedException.class);
 
-        // Nhà xe ghi nhận thêm tiền: khách phải đối chiếu lại.
         confirm("10000", "PARTIAL-REST-" + requestId);
         assertThat(requests.findById(requestId).orElseThrow().getRenterAcknowledgedAt()).isNull();
         assertThat(bookingService.detail(renterId, code).canPay()).isFalse();
@@ -553,7 +552,6 @@ class PaymentIntegrityIntegrationTest {
         });
         assertThat(refundEvents.hasOpenExcessRefunds(bookingId)).isTrue();
 
-        // Khách chọn cấn trừ: lệnh hoàn bị huỷ, phần dư thành tiền đã trả cho đơn.
         var offset = refundService.offsetExcessRefund(renterId, excess.get(0).getId());
         assertThat(offset.status()).isEqualTo(com.fptufa26.ecomotion.finance.enums.RefundStatus.REJECTED);
         assertThat(offset.excess()).isTrue();
@@ -890,14 +888,14 @@ class PaymentIntegrityIntegrationTest {
             case FAILED -> "FAILED";
         };
         String token = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, renterId)));
-        mvc.perform(get("/api/v1/payments/receipt").param("reference", reference).param("amount", "999999")
+        mvc.perform(get("/api/payments/receipt").param("reference", reference).param("amount", "999999")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value(result))
                 .andExpect(jsonPath("$.data.amount").value(30000)).andExpect(jsonPath("$.data.transactionCode").value(reference));
         String outsiderToken = tx.execute(s -> jwt.generateAccessToken(em.find(User.class, outsiderId)));
-        mvc.perform(get("/api/v1/payments/receipt").param("reference", reference)
+        mvc.perform(get("/api/payments/receipt").param("reference", reference)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + outsiderToken)).andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/payments/receipt").param("reference", reference)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/payments/receipt").param("reference", reference)).andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -19,12 +19,6 @@ import com.fptufa26.ecomotion.dispute.service.DisputeQueryService;
 import com.fptufa26.ecomotion.finance.service.PaymentRequestService;
 import com.fptufa26.ecomotion.finance.service.RefundEventService;
 
-/**
- * Cửa sổ xác nhận giờ kết thúc 12 giờ, KHÔNG chặn luồng vận hành.
- * Tài xế kết thúc: đơn sang bước phụ phí ngay; đồng thời mở lịch sử WAITING hạn 12 giờ cho Renter.
- * Renter bấm "Đúng" / thanh toán số dư / hết hạn: CONFIRMED. Renter bấm "Không đúng": khiếu nại
- * TRIP_NOT_CONFIRMED, lịch sử PAUSED đến khi admin phân xử. Đơn chỉ Hoàn tất khi mốc kết thúc đã chốt.
- */
 @Service @RequiredArgsConstructor
 public class TripEndConfirmationService {
     public static final Duration OBJECTION_WINDOW = Duration.ofHours(12);
@@ -35,17 +29,15 @@ public class TripEndConfirmationService {
     private final TripEndConfirmationRepository histories;
     private final BookingPaymentLedgerService ledger;
     private final BookingNotificationService notifications;
-    // Lazy: dịch vụ khiếu nại phụ thuộc ngược vào service này.
     private final org.springframework.beans.factory.ObjectProvider<DisputeQueryService> disputeQueries;
     private final Clock clock;
-    // ObjectProvider (lazy) để tránh vòng phụ thuộc PaymentRequestService -> DisputeService -> service này.
     private final org.springframework.beans.factory.ObjectProvider<PaymentRequestService> paymentRequests;
     private final jakarta.persistence.EntityManager entityManager;
     private final org.springframework.beans.factory.ObjectProvider<RefundEventService> refundEvents;
 
     @Transactional(readOnly=true)
     public List<TripEndHistoryResponse> history(Long bookingId) {
-        return histories.findByBooking_IdOrderByIdDesc(bookingId).stream().map(h -> new TripEndHistoryResponse(h.getId(),h.getReportedBy(),h.getReportedAt(),h.getDeadline(),h.getState(),h.getConfirmationMethod(),h.getConfirmedAt(),h.getConfirmedBy(),h.getDisputeId(),h.getAdminId(),h.getAdminNote(),h.getAdminActionAt(),h.getAdminAction())).toList();
+        return histories.findByBooking_IdOrderByIdDesc(bookingId).stream().map(h -> new TripEndHistoryResponse(h.getId(),h.getReportedBy(),h.getReportedAt(),h.getDeadline(),h.getState(),h.getConfirmationMethod(),h.getConfirmedAt(),h.getConfirmedBy(),h.getDisputeId(),h.getAdminId(),h.getAdminNote(),h.getAdminActionAt(),h.getAdminAction(),h.getCorrectedEndAt())).toList();
     }
 
     @Transactional
@@ -59,7 +51,6 @@ public class TripEndConfirmationService {
         histories.save(h);
     }
 
-    /** Tài xế kết thúc chuyến: mở cửa sổ 12 giờ để Renter xác nhận hoặc phản đối giờ kết thúc. */
     @Transactional
     public void driverEnded(Booking booking, Long driverUserId) {
         var h = new TripEndConfirmation();
@@ -71,7 +62,6 @@ public class TripEndConfirmationService {
         histories.save(h);
     }
 
-    /** Mốc kết thúc đã chốt (không còn cửa sổ WAITING/PAUSED). Đơn cũ không có lịch sử coi như đã chốt. */
     @Transactional(readOnly = true)
     public boolean isEndSettled(Long bookingId) {
         return histories.findFirstByBooking_IdOrderByIdDesc(bookingId)
@@ -79,7 +69,6 @@ public class TripEndConfirmationService {
                 .orElse(true);
     }
 
-    /** Renter còn trong hạn phản đối giờ kết thúc. */
     @Transactional(readOnly = true)
     public boolean canObject(Booking booking) {
         if (booking.getStatus() == BookingStatus.COMPLETED || booking.getStatus() == BookingStatus.CANCELLED) return false;
@@ -88,7 +77,6 @@ public class TripEndConfirmationService {
                 .isPresent();
     }
 
-    /** Renter bấm "Đúng giờ kết thúc". */
     @Transactional
     public void renterConfirm(Booking booking, Long renterUserId) {
         var h = histories.findFirstByBooking_IdOrderByIdDesc(booking.getId())
@@ -105,7 +93,6 @@ public class TripEndConfirmationService {
         completeIfReady(booking);
     }
 
-    /** Renter thanh toán số dư quyết toán = đồng ý với giờ kết thúc. Gọi trước khi chuyển COMPLETED. */
     @Transactional
     public void confirmedByPayment(Booking booking, Long renterUserId) {
         histories.findFirstByBooking_IdOrderByIdDesc(booking.getId())
@@ -117,25 +104,25 @@ public class TripEndConfirmationService {
                 });
     }
 
-    /** Admin phân xử xong khiếu nại giờ kết thúc mà không mở lại/tiếp tục chuyến: chốt mốc hiện tại. */
     @Transactional
     public void adminSettled(Booking booking, Long disputeId, Long adminId, String note) {
+        adminSettled(booking, disputeId, adminId, note, null);
+    }
+
+    @Transactional
+    public void adminSettled(Booking booking, Long disputeId, Long adminId, String note, Instant correctedEndAt) {
         histories.findFirstByBooking_IdOrderByIdDesc(booking.getId())
                 .filter(h -> OPEN_STATES.contains(h.getState()))
                 .ifPresent(h -> {
                     h.setState("CONFIRMED"); h.setConfirmationMethod("ADMIN"); h.setConfirmedAt(clock.instant());
                     h.setConfirmedBy(adminId); h.setAdminId(adminId); h.setAdminActionAt(clock.instant());
-                    h.setAdminNote(note); h.setDisputeId(disputeId);
+                    h.setAdminNote(note); h.setDisputeId(disputeId); h.setCorrectedEndAt(correctedEndAt);
                     histories.save(h);
                 });
         notifications.changed(booking, "TRIP_END_CONFIRMATION_CHANGED");
         completeIfReady(booking);
     }
 
-    /**
-     * Nhà xe đã chốt quyết toán (hoặc số dư về 0) trong khi cửa sổ còn mở thì đơn chờ. Khi mốc kết thúc
-     * được chốt, hoàn tất đơn nếu không còn tiền phải trả và không có khiếu nại.
-     */
     @Transactional
     public void completeIfReady(Booking booking) {
         if (booking.getSettlementRequestedAt() == null || !SETTLEMENT_STATUSES.contains(booking.getStatus())) return;
@@ -144,7 +131,6 @@ public class TripEndConfirmationService {
                 .anyMatch(d -> d.getStatus() == DisputeStatus.OPEN || d.getStatus() == DisputeStatus.IN_REVIEW);
         if (activeDispute) return;
         if (paymentRequests.getObject().calculateRemainingAmount(booking.getId()).signum() > 0) return;
-        // Khách chuyển dư: chờ nhà xe hoàn xong mới hoàn tất đơn.
         if (refundEvents.getObject().hasOpenExcessRefunds(booking.getId())) return;
         booking.setStatus(BookingStatus.COMPLETED);
         ledger.saveBooking(booking);
@@ -212,7 +198,6 @@ public class TripEndConfirmationService {
             if(blocked) {h.setState("PAUSED"); continue;}
             h.setState("CONFIRMED"); h.setConfirmationMethod("AUTO"); h.setConfirmedAt(clock.instant());
             if(booking.getStatus()==BookingStatus.AWAITING_END_CONFIRMATION) {
-                // Dữ liệu cũ của luồng chặn: chuyển sang bước phụ phí khi hết hạn.
                 booking.setEndConfirmationMethod("AUTO"); booking.setActualEndAt(h.getReportedAt()); booking.setStatus(BookingStatus.AWAITING_EXTRA_CHARGE_CONFIRMATION);
             }
             ledger.saveBooking(booking); notifications.changed(booking,"TRIP_END_CONFIRMATION_CHANGED");

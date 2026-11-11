@@ -25,7 +25,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** Cửa sổ 12 giờ xác nhận giờ kết thúc: không chặn luồng, nhưng chặn Hoàn tất khi mốc chưa chốt. */
 class TripEndObjectionWindowTest {
 
     private static final Instant ENDED = Instant.parse("2026-11-09T12:25:00Z");

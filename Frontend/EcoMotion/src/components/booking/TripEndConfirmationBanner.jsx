@@ -2,10 +2,6 @@ import { useEffect, useState } from 'react'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { END_CONFIRMATION_METHOD_LABELS, formatCountdown, tripEndWindow } from '../../utils/tripEndWindow'
 
-/**
- * Renter: "Tài xế kết thúc lúc X — Đúng / Không đúng" trong 12 giờ.
- * Provider (readOnly): chỉ hiện trạng thái khách đã chốt giờ kết thúc hay chưa.
- */
 export default function TripEndConfirmationBanner({ workflow, readOnly = false, onConfirm, onObject }) {
   const [now, setNow] = useState(() => Date.now())
   const [submitting, setSubmitting] = useState(false)
@@ -26,6 +22,7 @@ export default function TripEndConfirmationBanner({ workflow, readOnly = false, 
       <div role="status" className="rounded-[16px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
         Giờ kết thúc chuyến đã chốt: <strong>{reported}</strong>
         {view.confirmationMethod ? <span className="text-emerald-800"> · {END_CONFIRMATION_METHOD_LABELS[view.confirmationMethod] || view.confirmationMethod}</span> : null}
+        {view.corrected ? <span className="text-emerald-800"> · chốt theo giờ khách (tài xế báo {formatBookingWhen(view.driverReportedAt)})</span> : null}
       </div>
     )
   }

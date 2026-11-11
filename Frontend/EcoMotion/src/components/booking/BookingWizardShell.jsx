@@ -18,7 +18,6 @@ export function BookingWizardShell({
 }) {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-4 sm:px-6 lg:px-8">
-      {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs text-[#64748B] sm:text-sm">
         <Link to="/" className="transition-colors hover:text-brand-700">Trang chủ</Link>
         <svg className="h-3 w-3 text-[#64748B]/50" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -33,7 +32,6 @@ export function BookingWizardShell({
         <span className="font-medium text-[#14221A]">Gửi yêu cầu đặt xe</span>
       </nav>
 
-      {/* Vehicle summary header */}
       <section className="overflow-hidden rounded-xl border border-[#E6EBE8] bg-white shadow-xs">
         <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex min-w-0 items-center gap-4">
@@ -77,10 +75,8 @@ export function BookingWizardShell({
         </div>
       </section>
 
-      {/* Stepper */}
       <BookingStepper current={currentStep} onStepSelect={onStepSelect} />
 
-      {/* Step content */}
       <div className={contentWidth === 'form' ? 'mx-auto w-full max-w-3xl' : 'w-full'}>
         {children}
       </div>

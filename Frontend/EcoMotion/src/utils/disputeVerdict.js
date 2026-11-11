@@ -1,6 +1,5 @@
 import { formatCurrency } from './formatCurrency.js'
 
-/** Phán quyết admin chọn cho từng loại khiếu nại (thay vì chọn trạng thái kỹ thuật). */
 export const TRIP_END_VERDICTS = [
   { value: 'ACCEPT_RENTER_TIME', label: 'Chấp nhận khiếu nại — chốt giờ kết thúc theo khách', hint: 'Nhập giờ kết thúc đúng; hệ thống tự tính lại phí quá giờ (chỉ giảm, phần đã thu dư sẽ được hoàn).' },
   { value: 'KEEP_DRIVER_TIME', label: 'Bác khiếu nại — giữ giờ tài xế báo', hint: 'Giờ kết thúc được chốt ngay, đơn tiếp tục quyết toán.' },
@@ -35,10 +34,6 @@ export function defaultVerdict(category) {
   return verdictOptions(category)[0].value
 }
 
-/**
- * Chuyển phán quyết trên form thành tham số API. Trả { error } nếu thiếu dữ liệu bắt buộc.
- * "Khác" luôn là IN_REVIEW kèm ghi chú: khiếu nại chưa đóng, chưa đổi tiền hay giờ.
- */
 export function buildDisputeResolution(category, form) {
   const resolution = (form.resolution || '').trim()
   if (!resolution) return { error: 'Vui lòng nhập nội dung phán quyết / phương án xử lý.' }
@@ -65,12 +60,15 @@ export function buildDisputeResolution(category, form) {
   }
   if (verdict === 'OTHER') return { status: 'IN_REVIEW', resolution }
   const status = verdict === 'REJECTED' ? 'REJECTED' : 'RESOLVED'
-  const withAmount = status === 'RESOLVED' && (category === 'DEPOSIT_REFUND' || category === 'PAYMENT_MISMATCH') && amount != null
+  const compensable = category === 'SERVICE_QUALITY' || category === 'OTHER'
+  const withAmount = status === 'RESOLVED' && (category === 'DEPOSIT_REFUND' || category === 'PAYMENT_MISMATCH' || compensable) && amount != null
   if (status === 'RESOLVED' && category === 'DEPOSIT_REFUND' && amount == null) return { error: 'Nhập tổng tiền cọc khách được hoàn.' }
+  if (status === 'RESOLVED' && category === 'PAYMENT_MISMATCH' && (amount == null || amount <= 0))
+    return { error: 'Nhập tổng số tiền khách thực chuyển theo sao kê. Nếu chỉ ghi kết luận, hãy chọn Bác bỏ hoặc Khác.' }
+  if (withAmount && compensable && amount <= 0) return { error: 'Khoản bồi hoàn phải lớn hơn 0 (để trống nếu không bồi hoàn).' }
   return { status, resolution, ...(withAmount ? { refundAwardTotal: amount } : {}) }
 }
 
-/** Nhãn kết luận cuối cùng hiển thị ở danh sách và chi tiết khiếu nại. */
 export function disputeVerdictLabel(dispute) {
   if (!dispute || !['RESOLVED', 'REJECTED'].includes(dispute.status)) return null
   if (dispute.category === 'TRIP_NOT_CONFIRMED') {
@@ -87,6 +85,8 @@ export function disputeVerdictLabel(dispute) {
     if (dispute.decision === 'WAIVE_CHARGE' || (!dispute.decision && dispute.status === 'RESOLVED')) return 'Đã chốt: miễn phụ phí'
     return 'Đã chốt: giữ phụ phí'
   }
+  if ((dispute.category === 'SERVICE_QUALITY' || dispute.category === 'OTHER') && dispute.status === 'RESOLVED' && dispute.refundAwardTotal != null)
+    return `Đã chốt: bồi hoàn ${formatCurrency(dispute.refundAwardTotal)}`
   if (dispute.category === 'PAYMENT_MISMATCH' && dispute.status === 'RESOLVED' && dispute.refundAwardTotal != null)
     return `Đã chốt: khách thực chuyển ${formatCurrency(dispute.refundAwardTotal)}`
   return dispute.status === 'RESOLVED' ? 'Đã chốt: chấp thuận' : 'Đã chốt: bác khiếu nại'

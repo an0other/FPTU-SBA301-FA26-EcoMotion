@@ -15,7 +15,6 @@ public interface RefundService {
 
     RefundResponse createRefundRequest(Long currentUserId, CreateRefundRequest request);
 
-    /** Khách chọn cấn trừ khoản chuyển dư vào quyết toán thay vì nhận hoàn. */
     RefundResponse offsetExcessRefund(Long currentUserId, Long refundRequestId);
 
     RefundResponse reviewRefundRequest(Long currentUserId, Long refundRequestId, ReviewRefundRequest request);

@@ -7,26 +7,13 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/**
- * Chặn nhận xét có từ ngữ thô tục/xúc phạm trước khi lưu.
- *
- * <p>So khớp GIỮ NGUYÊN DẤU tiếng Việt: bỏ dấu sẽ chặn nhầm từ bình thường ("lớn"→"lon", "các"→"cac",
- * "buổi"→"buoi", "đeo"→"deo", "du lịch"). Chỉ thêm biến thể không dấu khi không thể mang nghĩa khác
- * ("vcl", "dcm", "dit me"). So khớp theo nguyên từ/cụm từ; ký tự lặp từ 3 lần trở lên được rút gọn
- * ("đụuuu" → "đụ") và vài ký tự lách luật được quy đổi (0→o, @→a, $→s).
- */
 public final class ReviewContentPolicy {
 
-    /** Từ đơn — khớp nguyên từ (đã chữ thường, NFC). */
     private static final Set<String> BANNED_WORDS = Set.of(
-            // tiếng Việt có dấu
             "đụ", "địt", "lồn", "cặc", "buồi", "đéo", "đĩ", "đcm", "đkm", "đm", "đmm", "đếch",
-            // viết tắt / không dấu không có nghĩa khác
             "dcm", "dkm", "dmm", "đjt", "djt", "cc", "vcl", "vkl", "vcc", "clgt", "cmn", "ditme", "dume", "duma",
-            // tiếng Anh
             "fuck", "fucking", "fucker", "shit", "bitch", "bastard", "asshole", "pussy", "motherfucker");
 
-    /** Cụm từ — khớp theo ranh giới từ. */
     private static final List<String> BANNED_PHRASES = List.of(
             "địt mẹ", "đụ má", "đụ mẹ", "đù má", "vãi lồn", "vãi cứt", "ăn cứt", "óc chó", "thằng chó",
             "con chó này", "đồ chó", "con đĩ", "đồ ngu", "thằng ngu", "con ngu", "mẹ mày", "cha mày",
@@ -37,7 +24,6 @@ public final class ReviewContentPolicy {
     private ReviewContentPolicy() {
     }
 
-    /** Trả về các từ/cụm vi phạm (rỗng nếu hợp lệ). */
     public static List<String> violations(String text) {
         List<String> found = new ArrayList<>();
         if (text == null || text.isBlank()) return found;
@@ -64,10 +50,6 @@ public final class ReviewContentPolicy {
         return collapseLongRuns(spaced);
     }
 
-    /**
-     * Rút gọn chuỗi từ 3 ký tự trở lên có cùng chữ cái gốc ("đụuuu" → "đụ", "ngggu" → "ngu"),
-     * giữ ký tự đầu (có thể mang dấu). Cặp 2 ký tự như "ưu", "cc" được giữ nguyên.
-     */
     private static String collapseLongRuns(String text) {
         StringBuilder out = new StringBuilder(text.length());
         int i = 0;

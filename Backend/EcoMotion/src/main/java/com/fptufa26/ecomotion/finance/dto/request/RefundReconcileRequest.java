@@ -7,5 +7,5 @@ public record RefundReconcileRequest(
         @NotNull @Min(0) Long version,
         @NotBlank @Pattern(regexp = "HOLD|TRANSFER_VERIFIED|FAILED_VERIFIED|WRONG_RECIPIENT") String outcome,
         @NotBlank @Size(max = 1000) String note,
-        @NotBlank @Size(max = 500) String evidenceReference,
-        @NotBlank @Size(max = 100) String transactionReference) {}
+        @Size(max = 500) String evidenceReference,
+        @Size(max = 100) String transactionReference) {}

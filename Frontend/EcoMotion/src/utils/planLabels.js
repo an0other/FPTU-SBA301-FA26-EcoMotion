@@ -27,10 +27,6 @@ export function planLabel(planType) {
   return PLAN_LABELS[planType] ?? PLAN_LABELS.DAILY
 }
 
-/**
- * Convert slotLengthMinutes to a human-readable Vietnamese string.
- * Examples: 60 → "1 giờ", 240 → "4 giờ", 1440 → "1 ngày", 43200 → "30 ngày"
- */
 export function slotDurationLabel(minutes) {
   const m = Number(minutes)
   if (!Number.isFinite(m) || m <= 0) return null

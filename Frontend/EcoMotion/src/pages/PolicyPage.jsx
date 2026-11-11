@@ -3,7 +3,6 @@
 export const PolicyPage = ({ onBookNow }) => {
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Title */}
       <div className="text-center space-y-2 max-w-2xl mx-auto">
         <span className="inline-block px-3 py-1 rounded-full bg-[#E8F6EE] text-[#15803D] text-xs font-semibold uppercase tracking-wider">
           Chính sách minh bạch
@@ -16,7 +15,6 @@ export const PolicyPage = ({ onBookNow }) => {
         </p>
       </div>
 
-      {/* Grid of Policies */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-[16px] border border-[#E6EBE8] shadow-xs space-y-3">
           <div className="w-10 h-10 rounded-full bg-[#E8F6EE] text-[#15803D] flex items-center justify-center">
@@ -49,7 +47,6 @@ export const PolicyPage = ({ onBookNow }) => {
         </div>
       </div>
 
-      {/* CTA Box */}
       <div className="bg-[#15803D] text-white p-8 rounded-[20px] shadow-md flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="space-y-1 text-center sm:text-left">
           <h2 className="text-xl font-bold">Sẵn sàng trải nghiệm di chuyển xanh?</h2>

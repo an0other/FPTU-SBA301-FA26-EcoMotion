@@ -54,7 +54,6 @@ public record BookingDetailResponse(
         BigDecimal outOfRadiusRate,
         Integer chargeableKm,
         BigDecimal pickupFee,
-        /** Lý do chi tiết khi nhà xe hủy chuyến (operational resolution). */
         String cancelDetailNote
 ) {
 }

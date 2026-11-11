@@ -33,3 +33,18 @@ test('waived charge label tells who waived it', () => {
   assert.equal(waivedChargeLabel('PROVIDER_WITHDRAWN'), 'Nhà xe đã rút')
   assert.equal(waivedChargeLabel('ADMIN_DISPUTE'), 'Admin miễn (khiếu nại)')
 })
+
+test('payment mismatch approval requires the verified amount', () => {
+  assert.ok(buildDisputeResolution('PAYMENT_MISMATCH', { verdict: 'RESOLVED', resolution: 'Sao kê', refundAwardTotal: '' }).error)
+  const ok = buildDisputeResolution('PAYMENT_MISMATCH', { verdict: 'RESOLVED', resolution: 'Sao kê', refundAwardTotal: '1260000' })
+  assert.equal(ok.refundAwardTotal, 1260000)
+  assert.equal(buildDisputeResolution('PAYMENT_MISMATCH', { verdict: 'REJECTED', resolution: 'Không thấy' }).status, 'REJECTED')
+})
+
+test('service complaints may carry an optional compensation', () => {
+  const none = buildDisputeResolution('SERVICE_QUALITY', { verdict: 'RESOLVED', resolution: 'Xe bẩn', refundAwardTotal: '' })
+  assert.equal(none.refundAwardTotal, undefined)
+  const comp = buildDisputeResolution('OTHER', { verdict: 'RESOLVED', resolution: 'Đến trễ', refundAwardTotal: '100000' })
+  assert.equal(comp.refundAwardTotal, 100000)
+  assert.equal(disputeVerdictLabel({ category: 'SERVICE_QUALITY', status: 'RESOLVED', refundAwardTotal: 100000 }).startsWith('Đã chốt: bồi hoàn'), true)
+})

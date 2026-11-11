@@ -72,6 +72,7 @@ public class DisputeServiceImpl implements DisputeService {
     private final BookingPaymentLedgerService bookingPaymentLedgerService;
     private final PaymentRequestService paymentRequestService;
     private final RefundEventService refundEventService;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.CancellationClosureService> cancellationClosure;
 
     @Override
     @Transactional
@@ -170,6 +171,8 @@ public class DisputeServiceImpl implements DisputeService {
         return resolveDispute(disputeId, adminUserId, status, decision, resolution, refundAwardTotal, tripEndAction, null);
     }
 
+    public static final String COMPENSATION_NOTE_PREFIX = "COMPENSATION:";
+
     private static final java.util.Set<String> VERDICT_ACTIONS = java.util.Set.of("ACCEPT_RENTER_TIME", "KEEP_DRIVER_TIME");
 
     @Override
@@ -208,15 +211,26 @@ public class DisputeServiceImpl implements DisputeService {
         boolean deposit = dispute.getCategory() == DisputeCategory.DEPOSIT_REFUND;
         boolean mismatch = dispute.getCategory() == DisputeCategory.PAYMENT_MISMATCH;
         boolean partial = charge && decision == DisputeResolutionDecision.PARTIAL_WAIVE;
+        boolean compensable = dispute.getCategory() == DisputeCategory.SERVICE_QUALITY || dispute.getCategory() == DisputeCategory.OTHER;
         boolean chargeDecisionValid = status == DisputeStatus.RESOLVED
                 ? decision == DisputeResolutionDecision.WAIVE_CHARGE || partial
                 : decision == DisputeResolutionDecision.KEEP_CHARGE;
         if (status == DisputeStatus.IN_REVIEW && (decision != null || refundAwardTotal != null)
                 || status != DisputeStatus.IN_REVIEW && charge && !chargeDecisionValid
                 || !charge && decision != null
-                || !((deposit || mismatch || partial) && status == DisputeStatus.RESOLVED) && refundAwardTotal != null
+                || !((deposit || mismatch || partial || compensable) && status == DisputeStatus.RESOLVED) && refundAwardTotal != null
                 || partial && refundAwardTotal == null)
             throw new ConflictException("Phán quyết, trạng thái và số tiền không phù hợp với loại khiếu nại");
+        if (mismatch && status == DisputeStatus.RESOLVED && refundAwardTotal == null)
+            throw new ConflictException("Chấp thuận khiếu nại ghi sai tiền cần nhập tổng số tiền khách thực chuyển theo sao kê");
+        if (compensable && refundAwardTotal != null) {
+            if (refundAwardTotal.signum() <= 0)
+                throw new ConflictException("Khoản bồi hoàn phải lớn hơn 0");
+            if (booking.getStatus() != BookingStatus.COMPLETED)
+                throw new ConflictException("Bồi hoàn chỉ áp dụng cho đơn đã hoàn tất; đơn chưa quyết toán hãy xử lý qua phụ phí");
+            if (refundAwardTotal.compareTo(refundEventService.remainingReceived(booking.getId())) > 0)
+                throw new ConflictException("Khoản bồi hoàn vượt số tiền khách đã thanh toán còn lại");
+        }
         dispute.setStatus(status);
         dispute.setResolution(note);
         dispute.setHandledBy(admin);
@@ -234,17 +248,20 @@ public class DisputeServiceImpl implements DisputeService {
             bookingPaymentLedgerService.saveBooking(booking);
         }
         if (mismatch && status == DisputeStatus.RESOLVED && refundAwardTotal != null) {
-            // refundAwardTotal = tổng số khách thực chuyển cho yêu cầu này (admin đã đối chiếu sao kê).
             if (dispute.getPaymentRequestId() == null)
                 throw new ConflictException("Khiếu nại không gắn với yêu cầu thanh toán");
             dispute.getRelatedRefunds().addAll(paymentRequestService.applyMismatchResolution(
                     dispute.getPaymentRequestId(), refundAwardTotal, admin, dispute.getId()));
         }
+        if (compensable && status == DisputeStatus.RESOLVED && refundAwardTotal != null) {
+            dispute.getRelatedRefunds().addAll(refundEventService.reserve(booking.getId(), "DISPUTE_COMP:" + dispute.getId(),
+                    refundAwardTotal, COMPENSATION_NOTE_PREFIX + " Bồi hoàn theo phán quyết khiếu nại #" + dispute.getId(), admin));
+        }
         if ("ACCEPT_RENTER_TIME".equals(tripEndAction)) {
             if (status != DisputeStatus.RESOLVED) throw new ConflictException("Chốt theo giờ khách là chấp thuận khiếu nại (RESOLVED)");
             acceptRenterEndTime(booking, dispute, correctedEndAt, admin);
             endConfirmations.adminSettled(booking, disputeId, adminUserId,
-                    note + " · Chốt theo giờ khách: " + correctedEndAt);
+                    note + " · Chốt theo giờ khách: " + correctedEndAt, correctedEndAt);
             dispute.setTripEndAction(tripEndAction);
         } else if ("KEEP_DRIVER_TIME".equals(tripEndAction)) {
             endConfirmations.adminSettled(booking, disputeId, adminUserId, note + " · Giữ giờ tài xế báo");
@@ -256,14 +273,11 @@ public class DisputeServiceImpl implements DisputeService {
             endConfirmations.adminSettled(booking, disputeId, adminUserId, note);
         }
         if (status != DisputeStatus.IN_REVIEW) refreshFinalPayment(booking);
+        if (status != DisputeStatus.IN_REVIEW) cancellationClosure.getObject().reconcile(booking.getId());
         notifications.changed(booking, "DISPUTE_UPDATED");
         return dispute;
     }
 
-    /**
-     * Phán quyết "theo giờ khách": chốt giờ kết thúc admin xác minh và tính lại phí quá giờ. Chỉ giảm, không tăng
-     * phụ phí (khách khiếu nại không thể bị tính thêm); phần đã thu dư được tạo khoản hoàn.
-     */
     private void acceptRenterEndTime(Booking booking, Dispute dispute, java.time.Instant correctedEndAt, User admin) {
         if (correctedEndAt == null) throw new ConflictException("Cần nhập giờ kết thúc đúng theo xác minh");
         java.time.Instant reported = booking.getActualEndAt() != null ? booking.getActualEndAt() : booking.getDriverEndConfirmedAt();
@@ -308,7 +322,6 @@ public class DisputeServiceImpl implements DisputeService {
         if (changed) reserveOverCollected(booking, "TRIP_END:" + dispute.getId(), "Hoàn phần phí quá giờ đã thu sau khi chốt lại giờ kết thúc", dispute, admin);
     }
 
-    /** Admin giảm một phần phụ phí bị khiếu nại. */
     private void partiallyWaiveCharge(Dispute dispute, BigDecimal reduction) {
         BookingCharge charge = Optional.ofNullable(dispute.getCharge())
                 .orElseThrow(() -> new ConflictException("Tranh chấp không liên kết với phụ phí"));
@@ -321,7 +334,6 @@ public class DisputeServiceImpl implements DisputeService {
         reserveOverCollected(dispute.getBooking(), "PARTIAL:" + charge.getId(), "Hoàn phần phụ phí đã thu sau khi admin giảm", dispute, dispute.getRaisedBy());
     }
 
-    /** Nếu khách đã trả nhiều hơn nghĩa vụ mới, tạo khoản hoàn phần chênh. */
     private void reserveOverCollected(Booking booking, String eventId, String reason, Dispute dispute, User actor) {
         BigDecimal obligation = booking.getTotalAmount() == null ? BigDecimal.ZERO : booking.getTotalAmount();
         obligation = obligation.add(bookingPaymentLedgerService.listCharges(booking.getId()).stream()

@@ -9,11 +9,6 @@ import java.io.IOException;
 import java.util.Locale;
 import java.util.UUID;
 
-/**
- * Lưu ảnh bằng chứng (khiếu nại, phụ phí) qua {@link FileStorageService} — cùng kho với ảnh chuyến đi
- * và biên lai — thay vì gọi Cloudinary đồng bộ trong request (lỗi mạng/timeout làm upload trả 502).
- * Trả về URL tương đối {@code /api/files/<key>} mà FileDownloadController phục vụ được.
- */
 @Service
 @RequiredArgsConstructor
 public class EvidenceImageStorage {
@@ -56,7 +51,6 @@ public class EvidenceImageStorage {
         try {
             fileStorageService.delete(key);
         } catch (RuntimeException ignored) {
-            // Dọn dẹp best-effort sau rollback; file mồ côi không ảnh hưởng nghiệp vụ.
         }
     }
 

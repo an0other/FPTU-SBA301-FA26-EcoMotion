@@ -36,7 +36,6 @@ public record RefundResponse(
         Instant receiptAutoConfirmedAt,
         boolean proofAvailable,
         Long version,
-        /** Khoản khách chuyển dư (nhà xe bắt buộc hoàn, hoặc khách chọn cấn trừ). */
         boolean excess
 ) {
 }

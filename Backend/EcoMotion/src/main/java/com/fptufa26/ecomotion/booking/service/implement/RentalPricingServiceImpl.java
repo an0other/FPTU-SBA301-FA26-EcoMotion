@@ -10,7 +10,6 @@ import com.fptufa26.ecomotion.common.exception.*;
 import com.fptufa26.ecomotion.schedule.service.ScheduleService;
 import com.fptufa26.ecomotion.vehicle.entity.*;
 import com.fptufa26.ecomotion.vehicle.enums.*;
-import com.fptufa26.ecomotion.vehicle.repository.RentalPlanRepository;
 import com.fptufa26.ecomotion.vehicle.service.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,7 +26,6 @@ public class RentalPricingServiceImpl implements RentalPricingService {
     private final ScheduleService scheduleService;
     private final Clock clock;
     private final BookingStartPolicy bookingStartPolicy;
-    private final RentalPlanRepository planRepository;
 
     public static int validateHours(Instant start, Instant end) {
         if (start == null || end == null || !start.equals(start.truncatedTo(ChronoUnit.HOURS))
@@ -133,9 +131,10 @@ public class RentalPricingServiceImpl implements RentalPricingService {
 
     // B1: yearlyPlanPrice - giá gói năm của xe thay thế, dùng tính chênh lệch giá khi đổi xe.
     @Override public BigDecimal yearlyPlanPrice(Long vehicleId) {
-        return planRepository.findByVehicle_IdAndPlanType(vehicleId, PlanType.YEARLY)
-                .filter(p -> p.getStatus() == PlanStatus.ACTIVE && p.getSlotPrice() != null)
+        return vehicleCatalogService.findActivePlans(vehicleId).stream()
+                .filter(p -> p.getPlanType() == PlanType.YEARLY && p.getSlotPrice() != null)
                 .map(RentalPlan::getSlotPrice)
+                .findFirst()
                 .orElseThrow(() -> new ConflictException("Xe thay thế chưa có gói năm để tính chênh lệch giá thuê"));
     }
 

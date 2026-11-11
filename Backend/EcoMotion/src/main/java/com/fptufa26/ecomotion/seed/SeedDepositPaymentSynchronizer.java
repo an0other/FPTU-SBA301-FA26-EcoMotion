@@ -61,8 +61,6 @@ public class SeedDepositPaymentSynchronizer {
         BigDecimal paid = sources.stream().map(t -> RefundMath.appliedPortion(t.getAmount(), t.getAppliedAmount(), t.getProcessingNote()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal expected = snapshot.getDepositAmount();
-        // The original R12 snapshot stored price and ratio, but no computed deposit.
-        // Only derive it for the evidenced single-slot booking, never from today's plan.
         if (expected == null && snapshot.getSlotPrice() != null && snapshot.getDepositRatio() != null
                 && snapshot.getSlotPrice().compareTo(b.getTotalAmount()) == 0) {
             expected = RefundMath.money(snapshot.getSlotPrice().multiply(snapshot.getDepositRatio()));
@@ -78,7 +76,6 @@ public class SeedDepositPaymentSynchronizer {
             throw new IllegalArgumentException("transaction already linked elsewhere");
         ProviderBankAccount bank = banks.findByProvider_IdAndStatus(b.getVehicle().getProvider().getId(), BankAccountStatus.ACTIVE)
                 .orElseThrow(() -> new IllegalArgumentException("bank account missing"));
-        // A historical snapshot takes precedence; do not invent a different receiving account.
         if (sources.stream().anyMatch(t -> t.getBankAccountNoSnapshot() != null
                 && (!t.getBankAccountNoSnapshot().equals(bank.getAccountNumber())
                     || t.getBankCodeSnapshot() != null && !t.getBankCodeSnapshot().equals(bank.getBankCode()))))
@@ -111,7 +108,6 @@ public class SeedDepositPaymentSynchronizer {
         }
         for (PaymentTransaction source : plan.sources()) {
             if (source.getPaymentRequest() == null) source.setPaymentRequest(request);
-            // inspectDeposit already ruled out late/unapplied receipts and matched the policy snapshot.
             if (source.getAppliedAmount() == null || source.getAppliedAmount().signum() == 0)
                 source.setAppliedAmount(source.getAmount());
         }

@@ -16,7 +16,6 @@ import java.util.List;
 import com.fptufa26.ecomotion.user.service.UserService;
 import com.fptufa26.ecomotion.vehicle.service.VehicleService;
 
-/** Đọc đánh giá công khai theo xe / tài xế (không lộ thông tin cá nhân người đánh giá). */
 @Service
 @RequiredArgsConstructor
 public class PublicReviewService {
@@ -74,7 +73,6 @@ public class PublicReviewService {
         return new PublicReviewsResponse(target, id, name, image, average, reviews.size(), Arrays.asList(counts), items);
     }
 
-    /** "Nguyễn Văn An" → "Nguyễn V. A." ; tên một chữ giữ chữ cái đầu. */
     static String maskName(String fullName) {
         if (fullName == null || fullName.isBlank()) return "Khách thuê";
         String[] parts = fullName.trim().split("\s+");

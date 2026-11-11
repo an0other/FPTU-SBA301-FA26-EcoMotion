@@ -610,34 +610,13 @@ function DisputeDetailForm({
                   </strong>
                 </p>
 
-                {dispute.category === 'TRIP_NOT_CONFIRMED' && !dispute.tripEndAction && (
-                  <form onSubmit={handleSubmit} className="space-y-2 border-t border-emerald-200 pt-2.5">
-                    <label className="block">
-                      Hành động sau xác minh
-                      <select
-                        required
-                        value={form.tripEndAction}
-                        onChange={(e) => setForm((prev) => ({ ...prev, tripEndAction: e.target.value }))}
-                        className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2"
-                      >
-                        <option value="">Chọn hành động</option>
-                        <option value="RESUME_TRIP">Tiếp tục chuyến</option>
-                        <option value="REOPEN_CONFIRMATION">Mở lại thời hạn xác nhận 12 giờ</option>
-                      </select>
-                    </label>
-                    {error && <p role="alert" className="text-red-700">{error}</p>}
-                    <button
-                      disabled={actionLoading}
-                      className="rounded-lg bg-emerald-800 px-4 py-2 font-semibold text-white"
-                    >
-                      Áp dụng hành động với chuyến
-                    </button>
-                  </form>
-                )}
-
                 {dispute.refundAwardTotal != null && (
                   <p className="text-sm font-semibold text-slate-900">
-                    Tổng mức hoàn theo phán quyết: {formatVND(dispute.refundAwardTotal)}
+                    {dispute.category === 'PAYMENT_MISMATCH'
+                      ? 'Tổng số khách thực chuyển (đã đối chiếu): '
+                      : dispute.category === 'CHARGE' ? 'Số tiền phụ phí được giảm: '
+                      : dispute.category === 'DEPOSIT_REFUND' ? 'Tổng tiền cọc được hoàn: ' : 'Khoản bồi hoàn cho khách: '}
+                    {formatVND(dispute.refundAwardTotal)}
                   </p>
                 )}
               </div>
@@ -655,7 +634,6 @@ function DisputeDetailForm({
 
               {error && <p role="alert" className="text-xs font-semibold text-red-700">{error}</p>}
 
-              {/* Phán quyết theo loại khiếu nại */}
               <fieldset className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
                 <legend className="px-1 font-bold text-slate-700">Phán quyết</legend>
                 {verdictOptions(dispute.category).map((option) => (
@@ -753,6 +731,7 @@ function DisputeDetailForm({
                   <span>Tổng số khách thực chuyển cho khoản này (đ) — đã đối chiếu sao kê</span>
                   <input
                     type="number"
+                    required
                     min="1"
                     step="1"
                     value={form.refundAwardTotal}
@@ -761,7 +740,24 @@ function DisputeDetailForm({
                     className="block min-h-10 w-full rounded-lg border border-slate-300 px-3"
                   />
                   <span className="block text-[11px] font-normal text-slate-600">
-                    Hệ thống ghi nhận phần chênh lệch so với số nhà xe đã ghi: phần còn thiếu được áp vào, phần dư thành khoản nhà xe bắt buộc hoàn cho khách. Để trống nếu chỉ ghi kết luận.
+                    Hệ thống ghi nhận phần chênh lệch so với số nhà xe đã ghi: phần còn thiếu được áp vào, phần dư thành khoản nhà xe bắt buộc hoàn cho khách. Bắt buộc nhập — nếu chỉ ghi kết luận, hãy chọn Bác bỏ hoặc Khác.
+                  </span>
+                </label>
+              )}
+
+              {['SERVICE_QUALITY', 'OTHER'].includes(dispute.category) && form.verdict === 'RESOLVED' && (
+                <label className="block space-y-1 font-semibold text-slate-800">
+                  <span>Bồi hoàn cho khách (đ) — tuỳ chọn</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.refundAwardTotal}
+                    onChange={(e) => setForm((prev) => ({ ...prev, refundAwardTotal: e.target.value }))}
+                    className="block min-h-10 w-full rounded-lg border border-slate-300 px-3"
+                  />
+                  <span className="block text-[11px] font-normal text-slate-600">
+                    Có số tiền: hệ thống tạo khoản hoàn mà nhà xe phải chuyển cho khách (không vượt số khách đã trả; chỉ áp dụng đơn đã hoàn tất). Để trống: chỉ ghi nhận kết luận, không phát sinh tiền.
                   </span>
                 </label>
               )}

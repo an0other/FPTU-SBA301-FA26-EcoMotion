@@ -21,7 +21,6 @@ import com.fptufa26.ecomotion.finance.service.RefundEventService;
 @Transactional(readOnly = true)
 public class BookingPaymentStateServiceImpl implements BookingPaymentStateService {
     private final BookingPaymentLedgerService ledger;
-    // Lazy: RefundEventService phụ thuộc ngược vào ledger của booking.
     private final org.springframework.beans.factory.ObjectProvider<RefundEventService> refundEvents;
 
     @Override

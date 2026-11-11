@@ -12,7 +12,6 @@ function localDateTime(iso) {
 
 export function EditBookingRequestModal({ booking, onClose, onSave }) {
   const [pickupTime, setPickupTime] = useState(localDateTime(booking.pickupTime))
-  // Giờ nhận xe phải sau hiện tại ít nhất 3 giờ (khớp backend).
   const [minPickupTime] = useState(() => localDateTime(new Date(Date.now() + 3 * 3600000).toISOString()))
   const [pickup, setPickup] = useState({ address: booking.pickupAddress, latitude: booking.pickupLatitude, longitude: booking.pickupLongitude })
   const [passengerCount, setPassengerCount] = useState(booking.passengerCount)

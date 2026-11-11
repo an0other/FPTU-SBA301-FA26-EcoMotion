@@ -1,6 +1,5 @@
 import { parseVietnamDateTime } from './bookingDateTime.js'
 
-/** Thời lượng thuê tối thiểu (giờ tròn) — khớp gói giờ / luồng báo giá. */
 export const MIN_RENTAL_DURATION_HOURS = 4
 
 export function rentalDurationLabel(hours) {
@@ -33,10 +32,8 @@ export function rentalTimeError(start, end) {
   return ''
 }
 
-/** Đặt trước giờ nhận xe tối thiểu (giờ) — khớp MINIMUM_BOOKING_LEAD_TIME ở backend. */
 export const MIN_BOOKING_LEAD_HOURS = 3
 
-/** Ngày/giờ nhận xe sớm nhất được chọn: bây giờ + 3 giờ, làm tròn lên giờ chẵn (giờ Việt Nam). */
 export function rentalStartTimeConstraints(now = Date.now()) {
   const earliest = new Date(Math.ceil((now + MIN_BOOKING_LEAD_HOURS * 3600000) / 3600000) * 3600000)
   const minInput = rentalTimeInput(earliest.toISOString())

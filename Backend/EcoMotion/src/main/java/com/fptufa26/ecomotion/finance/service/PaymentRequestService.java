@@ -32,7 +32,6 @@ public interface PaymentRequestService {
     void recordYearlyRefund(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long renterUserId);
     void recordYearlyRefundByAdmin(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long adminId);
 
-
     boolean yearlyInitialPaymentsComplete(Long bookingId);
 
     void rebaseYearlyInstallments(Long bookingId, java.time.LocalDate start);
@@ -42,7 +41,6 @@ public interface PaymentRequestService {
     record YearlyPaymentItem(Long id, String purpose, int installmentNumber,
             java.time.LocalDate periodStart, java.time.LocalDate periodEnd,
             BigDecimal amount, BigDecimal paidAmount, String status, String transferReference, java.time.LocalDate dueOn, boolean overdue, BigDecimal remainingAmount) {}
-
 
     Optional<PaymentRequest> findByBookingIdAndPaymentType(Long bookingId, PaymentRequestType paymentType);
 
@@ -77,7 +75,6 @@ public interface PaymentRequestService {
 
     PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, int offset, int limit);
 
-    /** Lọc theo mã đơn (deep-link từ chi tiết đơn sang trang tài chính); bookingCode rỗng = như bản không lọc. */
     default PageResponse<PaymentRequestResponse> listProviderPaymentRequests(Long currentUserId, String status, String bookingCode, int offset, int limit) {
         return listProviderPaymentRequests(currentUserId, status, offset, limit);
     }
@@ -99,16 +96,10 @@ public interface PaymentRequestService {
 
     Optional<PaymentRequest> findPaymentRequest(Long bookingId, PaymentRequestType type);
 
-    /** Đóng yêu cầu cọc khi nhà xe hủy chuyến trước khi ghi nhận tiền. */
     void voidUnpaidDepositIfProviderWithdraws(Long bookingId);
 
-    /**
-     * Admin chấp nhận khiếu nại sai lệch: ghi nhận phần tiền khách đã chuyển mà nhà xe chưa ghi nhận
-     * (verifiedTotal − đã ghi nhận). Phần còn thiếu của yêu cầu được áp vào, phần dư thành khoản phải hoàn.
-     */
     java.util.List<RefundRequest> applyMismatchResolution(
             Long paymentRequestId, java.math.BigDecimal verifiedTotal, User admin, Long disputeId);
 
-    /** Khách xác nhận số tiền nhà xe ghi nhận cho yêu cầu này là đúng. */
     PaymentRequestResponse acknowledgeReceipt(Long paymentRequestId, Long currentUserId);
 }

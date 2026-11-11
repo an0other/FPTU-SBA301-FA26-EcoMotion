@@ -23,4 +23,5 @@ public class TripEndConfirmation {
     private Instant adminActionAt;
     private String adminAction;
     @Column(length=1000) private String adminNote;
+    private Instant correctedEndAt;
 }

@@ -6,6 +6,7 @@ import AdminOverviewTab from './admin/AdminOverviewTab'
 import AdminUsersTab from './admin/AdminUsersTab'
 import AdminVehiclesTab from './admin/AdminVehiclesTab'
 import AdminOperationsTab from './admin/AdminOperationsTab'
+import AdminCommissionTab from './admin/AdminCommissionTab'
 import AdminIdentityTab from './admin/AdminIdentityTab'
 import {
   IconZap,
@@ -295,6 +296,18 @@ export default function AdminDashboard() {
                 </span>
               )}
             </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigate('commission')}
+              className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === 'commission'
+                  ? 'border-brand-600 text-brand-700 bg-white shadow-xs'
+                  : 'border-transparent text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>A05 — Hoa hồng nhà xe</span>
+            </button>
           </div>
         </div>
       </header>
@@ -330,6 +343,8 @@ export default function AdminDashboard() {
             onNavigate={handleNavigate}
           />
         )}
+
+        {activeTab === 'commission' && <AdminCommissionTab />}
 
         {activeTab === 'operations' && (
           <AdminOperationsTab

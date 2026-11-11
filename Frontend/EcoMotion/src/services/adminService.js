@@ -113,8 +113,4 @@ export const adminService = {
     return data?.data ?? []
   },
 
-  async refundBooking(bookingId, amount, reason) {
-    const { data } = await apiClient.post('/admin/operations/refund', { bookingId, amount, reason })
-    return data?.data ?? null
-  },
 }

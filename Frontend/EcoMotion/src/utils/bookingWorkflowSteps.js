@@ -73,7 +73,6 @@ export function getActiveFinancialMetrics(workflow) {
   const remaining = Number(workflow.remainingAmount || 0)
   const isClosed = isTerminalBooking(workflow.bookingStatus)
 
-  // Full refund after cancel: one amount line instead of duplicate "đã thu" + "đang hoàn" badges.
   if (isClosed && pendingRefund > 0 && refunded === 0 && paid > 0 && pendingRefund >= paid) {
     return [{
       id: 'pendingRefundAmount',

@@ -59,11 +59,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * End-to-end completed booking for demo QA (not UI hardcoding).
- * Renter: {@link DevDataSeeder#RENTER_EMAIL} — booking {@value #BOOKING_CODE}.
- * Open: /renter/bookings/{@value #BOOKING_CODE}
- */
 @Slf4j
 @Component
 @Profile("dev")
