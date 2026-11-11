@@ -124,7 +124,7 @@ class VnpayDepositSynchronizationIntegrationTest {
         user.setEmail(UUID.randomUUID() + "@payment-integrity.test");
         user.setPasswordHash("fixture-only"); user.setFullName("Payment test");
         user.setRole(role); user.setStatus(UserStatus.ACTIVE); em.persist(user);
-        return user;
+        return com.fptufa26.ecomotion.support.IdentityTestFixtures.verify(em, user);
     }
 
     @BeforeEach
