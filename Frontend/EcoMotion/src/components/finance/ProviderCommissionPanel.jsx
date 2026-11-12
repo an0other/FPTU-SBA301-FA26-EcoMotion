@@ -64,7 +64,7 @@ export default function ProviderCommissionPanel({ onToast }) {
 
   const openPay = (statement) => {
     setPaying(statement)
-    setAmount(String(Math.round(Number(statement.remainingAmount))))
+    setAmount('')
     setReference(''); setNote(''); setFile(null); setPreview(null)
   }
 
@@ -83,11 +83,10 @@ export default function ProviderCommissionPanel({ onToast }) {
   const reportPaid = async (event) => {
     event.preventDefault()
     if (busy || !paying) return
-    if (!Number(amount)) { onToast?.('Nhập số tiền bạn đã chuyển', 'error'); return }
     setBusy(true)
     try {
       await commissionService.reportPayment(paying.id, {
-        amount: Number(amount), paymentReference: reference.trim() || undefined, note: note.trim() || undefined, file,
+        amount: Number(amount) || undefined, paymentReference: reference.trim() || undefined, note: note.trim() || undefined, file,
       })
       onToast?.('Đã báo chuyển khoản hoa hồng. Admin sẽ đối chiếu và xác nhận.', 'success')
       setPaying(null); setReference(''); setNote(''); setFile(null)
@@ -249,7 +248,8 @@ export default function ProviderCommissionPanel({ onToast }) {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block text-xs font-semibold text-slate-700">Số tiền bạn đã chuyển
                       <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                        className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 font-semibold" />
+                        placeholder={`Để trống = ${formatCurrency(paying.remainingAmount)}`}
+                        className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 font-semibold placeholder:font-normal" />
                     </label>
                     <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng
                       <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="FT24..."

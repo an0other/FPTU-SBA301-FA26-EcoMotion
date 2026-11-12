@@ -75,6 +75,25 @@ export default function AdminCommissionTab() {
     } finally { setBusy(false) }
   }
 
+  // Luôn lấy bảng kê mới nhất từ server: nhà xe có thể vừa báo chuyển sau khi bảng được tải.
+  const openConfirm = async (row) => {
+    try {
+      const fresh = await commissionService.adminDetail(row.id)
+      if (fresh.status === 'PAID') {
+        setMessage({ type: 'success', text: `${fresh.providerName} — ${periodLabel(fresh.periodMonth)} đã được xác nhận nộp đủ.` })
+        await load()
+        return
+      }
+      const latest = (fresh.payments || []).find((p) => p.status === 'REPORTED')
+      setConfirming(fresh)
+      setAmount(String(Math.round(Number(latest?.declaredAmount ?? fresh.remainingAmount))))
+      setNote('')
+      if (fresh.status !== row.status) await load()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Không tải được bảng kê' })
+    }
+  }
+
   const openDetail = async (row) => {
     try {
       setDetail(await commissionService.adminDetail(row.id))
@@ -106,6 +125,7 @@ export default function AdminCommissionTab() {
             <input type="month" value={generateMonth} onChange={(e) => setGenerateMonth(e.target.value)} className="mt-1 block h-9 rounded-lg border border-slate-300 px-2 text-xs" />
           </label>
           <button type="button" disabled={busy} onClick={generate} className="h-9 rounded-lg bg-brand-700 px-3 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50">Lập bảng kê ngay</button>
+          <button type="button" disabled={loading} onClick={load} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Làm mới</button>
         </div>
       </div>
 
@@ -178,10 +198,7 @@ export default function AdminCommissionTab() {
                         {r.status === 'PAYMENT_REPORTED' && (
                           <button type="button" disabled={busy} onClick={() => reject(r)} className="rounded-lg border border-rose-200 px-2.5 py-1 font-semibold text-rose-700 hover:bg-rose-50">Chưa thấy tiền</button>
                         )}
-                        <button type="button" onClick={() => {
-                          const latest = (r.payments || []).find((p) => p.status === 'REPORTED')
-                          setConfirming(r); setAmount(String(Math.round(Number(latest?.declaredAmount ?? r.remainingAmount)))); setNote('')
-                        }}
+                        <button type="button" disabled={busy} onClick={() => openConfirm(r)}
                           className="rounded-lg bg-emerald-700 px-2.5 py-1 font-bold text-white hover:bg-emerald-800">Xác nhận đã nhận</button>
                       </>
                     )}
@@ -195,7 +212,7 @@ export default function AdminCommissionTab() {
       </div>
 
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setDetail(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => { setDetail(null); load() }}>
           <div role="dialog" aria-modal="true" aria-label="Chi tiết bảng kê hoa hồng" onClick={(e) => e.stopPropagation()}
             className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-3">
@@ -238,7 +255,7 @@ export default function AdminCommissionTab() {
               </table>
             </div>
             <div className="flex justify-end">
-              <button type="button" onClick={() => setDetail(null)} className="h-9 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Đóng</button>
+              <button type="button" onClick={() => { setDetail(null); load() }} className="h-9 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Đóng</button>
             </div>
           </div>
         </div>
