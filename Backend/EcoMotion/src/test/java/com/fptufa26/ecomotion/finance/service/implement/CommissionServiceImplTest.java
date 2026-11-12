@@ -53,6 +53,8 @@ class CommissionServiceImplTest {
     private final BookingPaymentLedgerService ledger = mock(BookingPaymentLedgerService.class);
     private final UserService users = mock(UserService.class);
     private final DisputeQueryService disputes = mock(DisputeQueryService.class);
+    private final com.fptufa26.ecomotion.finance.repository.CommissionPaymentRepository payments =
+            mock(com.fptufa26.ecomotion.finance.repository.CommissionPaymentRepository.class);
     private final List<CommissionStatement> saved = new ArrayList<>();
     private CommissionServiceImpl service;
     private Provider provider;
@@ -60,7 +62,9 @@ class CommissionServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new CommissionServiceImpl(statements, lines, ledger, users, disputes,
-                mock(NotificationStreamService.class), Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(NotificationStreamService.class), Clock.fixed(NOW, ZoneOffset.UTC), payments,
+                mock(com.fptufa26.ecomotion.common.storage.service.FileStorageService.class));
+        when(statements.findByProvider_IdOrderByPeriodMonthDesc(7L)).thenAnswer(inv -> List.copyOf(saved));
         ReflectionTestUtils.setField(service, "graceDays", 3);
         ReflectionTestUtils.setField(service, "bankCode", "VCB");
         ReflectionTestUtils.setField(service, "bankAccount", "1029384756");
@@ -184,5 +188,48 @@ class CommissionServiceImplTest {
         when(statements.findProvidersOverdueBefore(anyCollection(), eq(NOW.minusSeconds(3 * 86400L)))).thenReturn(List.of(7L));
         assertThat(service.isBookingBlocked(7L)).isTrue();
         assertThat(service.isBookingBlocked(8L)).isFalse();
+    }
+
+    private CommissionStatement statement(long id, String month, String commission, CommissionStatementStatus status) {
+        CommissionStatement st = new CommissionStatement();
+        st.setId(id);
+        st.setProvider(provider);
+        st.setPeriodMonth(month);
+        st.setDueAt(Instant.parse("2026-11-05T10:00:00Z"));
+        st.setCommissionAmount(new BigDecimal(commission));
+        st.setStatus(status);
+        saved.add(st);
+        when(statements.findById(id)).thenReturn(Optional.of(st));
+        return st;
+    }
+
+    private User admin() {
+        User admin = new User(); admin.setId(1L); admin.setRole(Role.ADMIN);
+        when(users.findById(1L)).thenReturn(Optional.of(admin));
+        return admin;
+    }
+
+    @Test
+    void underpaymentIsShownAsPartialNotJustOverdue() {
+        admin();
+        statement(5L, "2026-10", "800000", CommissionStatementStatus.OVERDUE);
+        var partial = service.confirmPayment(1L, 5L, new ConfirmCommissionPaymentRequest(new BigDecimal("500000"), null));
+        assertThat(partial.paymentState()).isEqualTo("PARTIAL");
+        assertThat(partial.remainingAmount()).isEqualByComparingTo("300000");
+        assertThat(partial.payments()).hasSize(1);
+        assertThat(partial.payments().getFirst().confirmedAmount()).isEqualByComparingTo("500000");
+    }
+
+    @Test
+    void overpaymentIsCreditedToTheNextOpenStatement() {
+        admin();
+        CommissionStatement september = statement(5L, "2026-09", "800000", CommissionStatementStatus.OVERDUE);
+        CommissionStatement october = statement(6L, "2026-10", "300000", CommissionStatementStatus.ISSUED);
+        var paid = service.confirmPayment(1L, 5L, new ConfirmCommissionPaymentRequest(new BigDecimal("1000000"), null));
+        assertThat(paid.paymentState()).isEqualTo("OVERPAID");
+        assertThat(paid.overpaidAmount()).isEqualByComparingTo("200000");
+        assertThat(october.credit()).as("200k dư của tháng 9 trừ vào tháng 10").isEqualByComparingTo("200000");
+        assertThat(october.remainingAmount()).isEqualByComparingTo("100000");
+        assertThat(CommissionServiceImpl.availableCredit(List.of(september, october))).isZero();
     }
 }

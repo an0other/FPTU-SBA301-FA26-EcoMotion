@@ -95,6 +95,13 @@ public class CommissionStatement {
     @Column(name = "admin_note", length = 500)
     private String adminNote;
 
+    @Column(name = "credit_applied", precision = 14, scale = 2)
+    private BigDecimal creditApplied;
+
+    @OneToMany(mappedBy = "statement", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("reportedAt DESC")
+    private List<CommissionPayment> payments = new ArrayList<>();
+
     @OneToMany(mappedBy = "statement", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("completedAt ASC")
     private List<CommissionStatementLine> lines = new ArrayList<>();
@@ -116,7 +123,15 @@ public class CommissionStatement {
         updatedAt = Instant.now();
     }
 
+    public BigDecimal credit() {
+        return creditApplied == null ? BigDecimal.ZERO : creditApplied;
+    }
+
     public BigDecimal remainingAmount() {
-        return commissionAmount.subtract(paidAmount).max(BigDecimal.ZERO);
+        return commissionAmount.subtract(credit()).subtract(paidAmount).max(BigDecimal.ZERO);
+    }
+
+    public BigDecimal overpaidAmount() {
+        return paidAmount.add(credit()).subtract(commissionAmount).max(BigDecimal.ZERO);
     }
 }

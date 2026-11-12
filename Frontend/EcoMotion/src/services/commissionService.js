@@ -11,9 +11,24 @@ export const commissionService = {
     return data?.data
   },
 
-  async reportPayment(id, payload = {}) {
-    const { data } = await apiClient.post(`/provider/finance/commission-statements/${id}/report-payment`, payload)
+  async reportPayment(id, { amount, paymentReference, note, file } = {}) {
+    const form = new FormData()
+    if (amount) form.append('amount', amount)
+    if (paymentReference) form.append('paymentReference', paymentReference)
+    if (note) form.append('note', note)
+    if (file) form.append('file', file)
+    const { data } = await apiClient.post(`/provider/finance/commission-statements/${id}/report-payment`, form)
     return data?.data
+  },
+
+  async providerProof(id, paymentId) {
+    const { data } = await apiClient.get(`/provider/finance/commission-statements/${id}/payments/${paymentId}/proof`, { responseType: 'blob' })
+    return data
+  },
+
+  async adminProof(id, paymentId) {
+    const { data } = await apiClient.get(`/admin/commission-statements/${id}/payments/${paymentId}/proof`, { responseType: 'blob' })
+    return data
   },
 
   async adminList({ month, status } = {}) {

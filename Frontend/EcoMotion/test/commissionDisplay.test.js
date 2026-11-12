@@ -15,3 +15,16 @@ test('due text counts down and reports overdue days', () => {
   assert.equal(dueText({ status: 'OVERDUE', dueAt: '2026-10-05T10:00:00Z', overdueDays: 27 }, now), 'Quá hạn 27 ngày')
   assert.equal(dueText({ status: 'PAID', dueAt: '2026-10-05T10:00:00Z' }, now), '')
 })
+
+test('commission alert separates real overdue days from the grace period', async () => {
+  const { commissionAlert } = await import('../src/utils/commissionDisplay.js')
+  const statement = { periodMonth: '2026-10', status: 'OVERDUE', remainingAmount: 800000, overdueDays: 6, dueAt: '2026-11-05T10:00:00Z' }
+  const blocked = commissionAlert({ statements: [statement], bookingBlocked: true, outstandingAmount: 800000, graceDays: 3 })
+  assert.equal(blocked.tone, 'blocked')
+  assert.match(blocked.text, /quá hạn 6 ngày \(quá 3 ngày ân hạn/)
+  const early = commissionAlert({ statements: [{ ...statement, overdueDays: 1 }], bookingBlocked: false, outstandingAmount: 800000, graceDays: 3 })
+  assert.equal(early.tone, 'overdue')
+  assert.match(early.text, /Còn 2 ngày nữa/)
+  assert.equal(commissionAlert({ statements: [{ ...statement, status: 'PAYMENT_REPORTED' }], bookingBlocked: false }).tone, 'reported')
+  assert.equal(commissionAlert({ statements: [{ ...statement, status: 'PAID', remainingAmount: 0 }], bookingBlocked: false }), null)
+})

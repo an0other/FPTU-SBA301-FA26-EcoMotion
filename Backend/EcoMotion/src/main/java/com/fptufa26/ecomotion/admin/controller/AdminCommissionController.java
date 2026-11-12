@@ -46,6 +46,16 @@ public class AdminCommissionController {
         return ApiResponse.success(commissionService.adminStatement(id));
     }
 
+    @GetMapping("/{id}/payments/{paymentId}/proof")
+    @Operation(summary = "View the receipt image of one commission payment")
+    public org.springframework.http.ResponseEntity<byte[]> proof(@PathVariable Long id, @PathVariable Long paymentId) {
+        var file = commissionService.adminProof(id, paymentId);
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(file.contentType()))
+                .cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(file.content());
+    }
+
     @PostMapping("/{id}/confirm")
     @Operation(summary = "Confirm the commission amount actually received")
     public ApiResponse<CommissionStatementResponse> confirm(@AuthenticationPrincipal SecurityUser principal,

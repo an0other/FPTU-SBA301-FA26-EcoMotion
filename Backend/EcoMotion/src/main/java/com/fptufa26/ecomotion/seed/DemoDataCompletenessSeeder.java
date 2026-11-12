@@ -195,6 +195,7 @@ public class DemoDataCompletenessSeeder {
         step("commission demo trips (Depot B)", this::seedDepotBCommissionTrips);
         step("commission statements", this::seedCommissionStatements);
         step("commission demo states", this::seedCommissionDemoStates);
+        step("commission payment records", this::backfillCommissionPayments);
         log.info("Demo data completeness pass finished for {} seed bookings", codes.size());
     }
 
@@ -242,6 +243,37 @@ public class DemoDataCompletenessSeeder {
             markSeedReported(statement);
             commissionStatements.save(statement);
             log.info("Commission demo: {} {} -> PAYMENT_REPORTED", statement.getProvider().getDisplayName(), lastMonth);
+        }
+    }
+
+    /** Bảng kê đã báo chuyển / đã thu từ trước khi có lịch sử từng lần nộp: tạo bản ghi lần nộp tương ứng. */
+    private void backfillCommissionPayments() {
+        for (var statement : commissionStatements.findAllByOrderByPeriodMonthDescIdAsc()) {
+            if (statement.getReportedAt() == null || !statement.getPayments().isEmpty()) continue;
+            var payment = new com.fptufa26.ecomotion.finance.entity.CommissionPayment();
+            payment.setStatement(statement);
+            payment.setPaymentReference(statement.getPaymentReference());
+            payment.setNote(statement.getReportedNote());
+            payment.setReportedAt(statement.getReportedAt());
+            if (statement.getStatus() == com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAYMENT_REPORTED) {
+                payment.setDeclaredAmount(statement.remainingAmount());
+                payment.setProofPath(fileStorage.store("commission-proof", statement.getProvider().getUser().getId(),
+                        "hoa-hong-" + statement.getPeriodMonth() + ".svg", DemoAssetFactory.transferReceiptSvg("Vietcombank",
+                                "CONG TY ECOMOTION", "1029384756", statement.remainingAmount(),
+                                "HH-" + statement.getProvider().getId() + "-" + statement.getPeriodMonth().replace("-", ""),
+                                statement.getReportedAt(), statement.getPaymentReference()), "image/svg+xml"));
+                payment.setProofContentType("image/svg+xml");
+            } else if (statement.getStatus() == com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAID) {
+                payment.setDeclaredAmount(statement.getPaidAmount());
+                payment.setStatus(com.fptufa26.ecomotion.finance.entity.CommissionPayment.CONFIRMED);
+                payment.setConfirmedAmount(statement.getPaidAmount());
+                payment.setDecidedAt(statement.getConfirmedAt());
+                payment.setDecidedBy(statement.getConfirmedBy());
+            } else {
+                continue;
+            }
+            statement.getPayments().add(payment);
+            commissionStatements.save(statement);
         }
     }
 

@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { commissionService } from '../../services/commissionService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
-import { canPayCommission, commissionStatus, dueText, periodLabel } from '../../utils/commissionDisplay'
+import { canPayCommission, commissionAlert, commissionPaymentState, dueText, periodLabel } from '../../utils/commissionDisplay'
+import CommissionPaymentHistory from './CommissionPaymentHistory'
 
-function StatusChip({ status }) {
-  const meta = commissionStatus(status)
+function StatusChip({ statement }) {
+  const meta = commissionPaymentState(statement, formatCurrency)
   return <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${meta.cls}`}>{meta.label}</span>
 }
 
@@ -36,6 +37,10 @@ export default function ProviderCommissionPanel({ onToast }) {
   const [paying, setPaying] = useState(null)
   const [detail, setDetail] = useState(null)
   const [reference, setReference] = useState('')
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
   const [busy, setBusy] = useState(false)
   const [showCurrentLines, setShowCurrentLines] = useState(false)
 
@@ -57,14 +62,37 @@ export default function ProviderCommissionPanel({ onToast }) {
     try { setDetail(await commissionService.providerStatement(statement.id)) } catch (err) { onToast?.(err.message, 'error') }
   }
 
+  const openPay = (statement) => {
+    setPaying(statement)
+    setAmount(String(Math.round(Number(statement.remainingAmount))))
+    setReference(''); setNote(''); setFile(null); setPreview(null)
+  }
+
+  const pickFile = (event) => {
+    const next = event.target.files?.[0] || null
+    if (next && (!['image/jpeg', 'image/png', 'image/webp'].includes(next.type) || next.size > 5 * 1024 * 1024)) {
+      onToast?.('Ảnh biên lai phải là JPG, PNG hoặc WebP, tối đa 5 MB', 'error')
+      event.target.value = ''
+      return
+    }
+    if (preview) URL.revokeObjectURL(preview)
+    setFile(next)
+    setPreview(next ? URL.createObjectURL(next) : null)
+  }
+
   const reportPaid = async (event) => {
     event.preventDefault()
     if (busy || !paying) return
+    if (!Number(amount)) { onToast?.('Nhập số tiền bạn đã chuyển', 'error'); return }
     setBusy(true)
     try {
-      await commissionService.reportPayment(paying.id, { paymentReference: reference.trim() || undefined })
+      await commissionService.reportPayment(paying.id, {
+        amount: Number(amount), paymentReference: reference.trim() || undefined, note: note.trim() || undefined, file,
+      })
       onToast?.('Đã báo chuyển khoản hoa hồng. Admin sẽ đối chiếu và xác nhận.', 'success')
-      setPaying(null); setReference('')
+      setPaying(null); setReference(''); setNote(''); setFile(null)
+      if (preview) URL.revokeObjectURL(preview)
+      setPreview(null)
       await load()
     } catch (err) {
       onToast?.(err.message || 'Chưa gửi được', 'error')
@@ -74,13 +102,20 @@ export default function ProviderCommissionPanel({ onToast }) {
   if (error) return <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>
   if (!data) return <p className="p-6 text-sm text-slate-500">Đang tải hoa hồng...</p>
   const current = data.currentPeriod
+  const notice = commissionAlert(data, formatCurrency, formatBookingWhen)
+  const alertCls = {
+    blocked: 'border-rose-300 bg-rose-50 text-rose-900',
+    overdue: 'border-amber-300 bg-amber-50 text-amber-900',
+    due: 'border-sky-200 bg-sky-50 text-sky-900',
+    reported: 'border-slate-200 bg-slate-50 text-slate-800',
+  }
 
   return (
     <div className="space-y-4">
-      {data.bookingBlocked && (
-        <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
-          <strong className="block">Đang tạm ngưng nhận đơn mới</strong>
-          Có bảng kê hoa hồng quá hạn hơn {data.graceDays} ngày. Xe của bạn tạm ẩn với khách. Nộp hoa hồng và bấm「Tôi đã chuyển khoản」để mở lại trong lúc admin đối soát — nếu admin không thấy tiền, khoá lại ngay. Đơn đang chạy không bị ảnh hưởng.
+      {notice && (
+        <div role={notice.tone === 'blocked' ? 'alert' : 'status'} className={`rounded-xl border p-4 text-sm ${alertCls[notice.tone]}`}>
+          <strong className="block">{notice.title}</strong>
+          {notice.text}{notice.tone === 'blocked' ? ' Đơn đang chạy không bị ảnh hưởng.' : ''}
         </div>
       )}
 
@@ -109,6 +144,11 @@ export default function ProviderCommissionPanel({ onToast }) {
           <p className={`mt-1 text-2xl font-extrabold tabular-nums ${Number(data.outstandingAmount) > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
             {formatCurrency(data.outstandingAmount)}
           </p>
+          {Number(data.creditBalance) > 0 && (
+            <p className="mt-2 rounded-lg bg-teal-50 px-2 py-1.5 text-xs font-semibold text-teal-800">
+              Số dư nộp thừa {formatCurrency(data.creditBalance)} — tự trừ vào bảng kê kỳ sau.
+            </p>
+          )}
           <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
             Hoa hồng tính trên tiền thực nhận của chuyến hoàn tất (đã trừ tiền hoàn, không tính phần khách chuyển dư). Đơn đang khiếu nại được dời sang kỳ sau.
           </p>
@@ -136,12 +176,12 @@ export default function ProviderCommissionPanel({ onToast }) {
                     <td className="px-4 text-right font-mono font-bold">{formatCurrency(s.commissionAmount)}</td>
                     <td className="px-4 text-right font-mono">{formatCurrency(s.paidAmount)}</td>
                     <td className="px-4 text-slate-600">{formatBookingWhen(s.dueAt)}<span className={`block text-[11px] ${s.overdueDays > 0 ? 'font-semibold text-rose-700' : 'text-slate-500'}`}>{dueText(s)}</span></td>
-                    <td className="px-4"><StatusChip status={s.status} /></td>
+                    <td className="px-4"><StatusChip statement={s} /></td>
                     <td className="px-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button type="button" onClick={() => openDetail(s)} className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-50">Chi tiết</button>
                         {canPayCommission(s) && (
-                          <button type="button" onClick={() => setPaying(s)} className="rounded-lg bg-brand-700 px-2.5 py-1 font-bold text-white hover:bg-brand-800">Nộp hoa hồng</button>
+                          <button type="button" onClick={() => openPay(s)} className="rounded-lg bg-brand-700 px-2.5 py-1 font-bold text-white hover:bg-brand-800">Nộp hoa hồng</button>
                         )}
                       </div>
                     </td>
@@ -160,14 +200,31 @@ export default function ProviderCommissionPanel({ onToast }) {
             <h3 className="text-base font-bold text-slate-900">Nộp hoa hồng {periodLabel(paying.periodMonth)}</h3>
             {paying.qrCodeUrl && <img src={paying.qrCodeUrl} alt="Mã VietQR nộp hoa hồng" className="mx-auto h-56 w-56 rounded-lg border border-slate-200 object-contain" />}
             <dl className="space-y-1.5 rounded-xl bg-slate-50 p-3 text-xs">
-              <div className="flex justify-between"><dt className="text-slate-500">Số tiền</dt><dd className="font-mono font-bold">{formatCurrency(paying.remainingAmount)}</dd></div>
+              <div className="flex justify-between"><dt className="text-slate-500">Còn phải nộp</dt><dd className="font-mono font-bold">{formatCurrency(paying.remainingAmount)}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Ngân hàng</dt><dd>{data.platformBank.bankName}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Số tài khoản</dt><dd className="font-mono">{data.platformBank.accountNumber}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Chủ tài khoản</dt><dd>{data.platformBank.accountHolder}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Nội dung</dt><dd className="font-mono font-bold">{paying.transferContent}</dd></div>
             </dl>
+            <label className="block text-xs font-semibold text-slate-700">Số tiền bạn đã chuyển
+              <input required inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 font-semibold" />
+            </label>
+            {Number(amount) > 0 && Number(amount) < Number(paying.remainingAmount) && (
+              <p className="text-[11px] text-amber-700">Chuyển thiếu {formatCurrency(Number(paying.remainingAmount) - Number(amount))}: bảng kê sẽ còn nợ phần chênh.</p>
+            )}
+            {Number(amount) > Number(paying.remainingAmount) && (
+              <p className="text-[11px] text-teal-700">Chuyển dư {formatCurrency(Number(amount) - Number(paying.remainingAmount))}: phần dư được trừ vào bảng kê kỳ sau.</p>
+            )}
             <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng (tuỳ chọn)
               <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="FT24..." className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3" />
+            </label>
+            <label className="block text-xs font-semibold text-slate-700">Ảnh biên lai chuyển khoản (tuỳ chọn)
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickFile} className="mt-1 block w-full text-xs" />
+            </label>
+            {preview && <img src={preview} alt="Ảnh biên lai đã chọn" className="max-h-40 rounded-lg border border-slate-200 object-contain" />}
+            <label className="block text-xs font-semibold text-slate-700">Ghi chú (tuỳ chọn)
+              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3" />
             </label>
             <div className="flex justify-end gap-2">
               <button type="button" disabled={busy} onClick={() => setPaying(null)} className="h-10 rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700">Đóng</button>
@@ -185,9 +242,17 @@ export default function ProviderCommissionPanel({ onToast }) {
                 <h3 className="text-base font-bold text-slate-900">Bảng kê {periodLabel(detail.periodMonth)}</h3>
                 <p className="text-xs text-slate-500">{detail.bookingCount} chuyến · doanh thu {formatCurrency(detail.grossRevenue)} · hoa hồng {formatCurrency(detail.commissionAmount)}</p>
               </div>
-              <StatusChip status={detail.status} />
+              <StatusChip statement={detail} />
             </div>
+            <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+              {[['Hoa hồng', detail.commissionAmount], ['Đã nộp', detail.paidAmount], ['Cấn trừ', detail.creditApplied], ['Còn phải nộp', detail.remainingAmount]].map(([label, value]) => (
+                <div key={label} className="rounded-lg bg-slate-50 p-2"><dt className="text-slate-500">{label}</dt><dd className="font-mono font-bold text-slate-900">{formatCurrency(value)}</dd></div>
+              ))}
+            </dl>
             {detail.adminNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-700">Ghi chú admin: {detail.adminNote}</p>}
+            <h4 className="text-xs font-bold uppercase text-slate-500">Các lần nộp</h4>
+            <CommissionPaymentHistory payments={detail.payments} loadProof={(paymentId) => commissionService.providerProof(detail.id, paymentId)} />
+            <h4 className="text-xs font-bold uppercase text-slate-500">Các chuyến trong kỳ</h4>
             <Lines lines={detail.lines} />
             <div className="text-right"><button type="button" onClick={() => setDetail(null)} className="h-9 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Đóng</button></div>
           </div>
