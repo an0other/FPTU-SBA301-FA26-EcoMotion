@@ -30,8 +30,18 @@ public record CommissionStatementResponse(
         String adminNote,
         String transferContent,
         String qrCodeUrl,
-        List<Line> lines
+        List<Line> lines,
+        BigDecimal creditApplied,
+        BigDecimal overpaidAmount,
+        String paymentState,
+        List<Payment> payments
 ) {
+    public record Payment(Long id, BigDecimal declaredAmount, String paymentReference, String note, boolean hasProof,
+                          Instant reportedAt, String status, BigDecimal confirmedAmount, Instant decidedAt, String adminNote,
+                          String disputeStatus, BigDecimal claimedAmount, String disputeNote, Instant disputedAt,
+                          Instant disputeResolvedAt, String disputeResolution, boolean hasDisputeProof) {
+    }
+
     public record Line(Long bookingId, String bookingCode, Instant completedAt, BigDecimal revenue, BigDecimal commission) {
     }
 }

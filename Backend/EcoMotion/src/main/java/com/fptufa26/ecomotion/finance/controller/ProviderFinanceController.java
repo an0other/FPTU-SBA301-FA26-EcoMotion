@@ -61,12 +61,46 @@ public class ProviderFinanceController {
         return ApiResponse.success(commissionService.providerStatement(principal.getUserId(), id));
     }
 
-    @PostMapping("/commission-statements/{id}/report-payment")
-    @Operation(summary = "Provider reports the commission bank transfer as sent")
+    @PostMapping(value = "/commission-statements/{id}/report-payment", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Provider reports a commission transfer with amount, bank reference and optional receipt image")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.CommissionStatementResponse> reportCommissionPaymentMultipart(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id,
+            @RequestParam(required = false) java.math.BigDecimal amount,
+            @RequestParam(required = false) String paymentReference,
+            @RequestParam(required = false) String note,
+            @RequestParam(required = false) org.springframework.web.multipart.MultipartFile file) {
+        return ApiResponse.success(commissionService.reportPayment(principal.getUserId(), id,
+                new com.fptufa26.ecomotion.finance.dto.request.ReportCommissionPaymentRequest(amount, paymentReference, note), file));
+    }
+
+    @PostMapping(value = "/commission-statements/{id}/payments/{paymentId}/dispute", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Provider disputes the amount admin confirmed, with an evidence image")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.CommissionStatementResponse> disputeCommissionPayment(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id, @PathVariable Long paymentId,
+            @RequestParam(required = false) java.math.BigDecimal claimedAmount,
+            @RequestParam(required = false) String note,
+            @RequestParam(required = false) org.springframework.web.multipart.MultipartFile file) {
+        return ApiResponse.success(commissionService.disputePayment(principal.getUserId(), id, paymentId, claimedAmount, note, file));
+    }
+
+    @GetMapping("/commission-statements/{id}/payments/{paymentId}/proof")
+    @Operation(summary = "View the receipt image of one commission payment")
+    public org.springframework.http.ResponseEntity<byte[]> commissionPaymentProof(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id, @PathVariable Long paymentId,
+            @RequestParam(defaultValue = "false") boolean dispute) {
+        var file = commissionService.providerProof(principal.getUserId(), id, paymentId, dispute);
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(file.contentType()))
+                .cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(file.content());
+    }
+
+    @PostMapping(value = "/commission-statements/{id}/report-payment", consumes = org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Provider reports the commission bank transfer as sent (JSON, no image)")
     public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.CommissionStatementResponse> reportCommissionPayment(
             @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id,
             @jakarta.validation.Valid @RequestBody(required = false) com.fptufa26.ecomotion.finance.dto.request.ReportCommissionPaymentRequest request) {
-        return ApiResponse.success(commissionService.reportPayment(principal.getUserId(), id, request));
+        return ApiResponse.success(commissionService.reportPayment(principal.getUserId(), id, request, null));
     }
 
     @PostMapping("/sandbox/payouts/{bookingId}")

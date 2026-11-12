@@ -14,9 +14,11 @@ import com.fptufa26.ecomotion.finance.dto.request.ConfirmCommissionPaymentReques
 import com.fptufa26.ecomotion.finance.dto.request.ReportCommissionPaymentRequest;
 import com.fptufa26.ecomotion.finance.dto.response.CommissionOverviewResponse;
 import com.fptufa26.ecomotion.finance.dto.response.CommissionStatementResponse;
+import com.fptufa26.ecomotion.finance.entity.CommissionPayment;
 import com.fptufa26.ecomotion.finance.entity.CommissionStatement;
 import com.fptufa26.ecomotion.finance.entity.CommissionStatementLine;
 import com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus;
+import com.fptufa26.ecomotion.finance.repository.CommissionPaymentRepository;
 import com.fptufa26.ecomotion.finance.repository.CommissionStatementLineRepository;
 import com.fptufa26.ecomotion.finance.repository.CommissionStatementRepository;
 import com.fptufa26.ecomotion.finance.service.CommissionService;
@@ -66,6 +68,8 @@ public class CommissionServiceImpl implements CommissionService {
     private final DisputeQueryService disputeQueries;
     private final NotificationStreamService notifications;
     private final Clock clock;
+    private final CommissionPaymentRepository payments;
+    private final com.fptufa26.ecomotion.common.storage.service.FileStorageService fileStorage;
 
     @Value("${app.commission.grace-days:3}") private int graceDays;
     @Value("${app.platform.bank.code:VCB}") private String bankCode;
@@ -87,14 +91,16 @@ public class CommissionServiceImpl implements CommissionService {
                 dueAt(current), revenue, rate, commission, BigDecimal.ZERO, commission, pending.size(), null, 0, false,
                 null, null, null, null, null, null, null,
                 pending.stream().map(e -> new CommissionStatementResponse.Line(e.booking().getId(),
-                        e.booking().getBookingCode(), e.completedAt(), e.revenue(), commissionOf(e.revenue(), rate))).toList());
+                        e.booking().getBookingCode(), e.completedAt(), e.revenue(), commissionOf(e.revenue(), rate))).toList(),
+                BigDecimal.ZERO, BigDecimal.ZERO, null, List.of());
         List<CommissionStatementResponse> issued = statements.findByProvider_IdOrderByPeriodMonthDesc(provider.getId())
                 .stream().map(s -> toResponse(s, false)).toList();
         BigDecimal outstanding = issued.stream()
                 .filter(s -> s.status() != CommissionStatementStatus.PAID)
                 .map(CommissionStatementResponse::remainingAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new CommissionOverviewResponse(currentPeriod, issued, isBookingBlocked(provider.getId()), outstanding,
-                new CommissionOverviewResponse.PlatformBank(bankCode, bankName, bankAccount, bankHolder), graceDays);
+                new CommissionOverviewResponse.PlatformBank(bankCode, bankName, bankAccount, bankHolder), graceDays,
+                availableCredit(statements.findByProvider_IdOrderByPeriodMonthDesc(provider.getId())));
     }
 
     @Override
@@ -105,15 +111,31 @@ public class CommissionServiceImpl implements CommissionService {
 
     @Override
     @Transactional
-    public CommissionStatementResponse reportPayment(Long providerUserId, Long statementId, ReportCommissionPaymentRequest request) {
+    public CommissionStatementResponse reportPayment(Long providerUserId, Long statementId, ReportCommissionPaymentRequest request,
+                                                     org.springframework.web.multipart.MultipartFile proof) {
         CommissionStatement statement = requireOwned(providerUserId, statementId);
         if (!UNPAID.contains(statement.getStatus()) || statement.remainingAmount().signum() <= 0) {
             throw new ConflictException("Bảng kê này không còn khoản hoa hồng cần nộp");
         }
+        Instant now = clock.instant();
+        BigDecimal declared = request == null || request.amount() == null ? statement.remainingAmount()
+                : request.amount().setScale(2, RoundingMode.HALF_UP);
+        CommissionPayment payment = new CommissionPayment();
+        payment.setStatement(statement);
+        payment.setDeclaredAmount(declared);
+        payment.setPaymentReference(blankToNull(request == null ? null : request.paymentReference()));
+        payment.setNote(blankToNull(request == null ? null : request.note()));
+        payment.setReportedAt(now);
+        if (proof != null && !proof.isEmpty()) {
+            String[] stored = storeProof(providerUserId, proof);
+            payment.setProofPath(stored[0]);
+            payment.setProofContentType(stored[1]);
+        }
+        statement.getPayments().add(payment);
         statement.setStatus(CommissionStatementStatus.PAYMENT_REPORTED);
-        statement.setReportedAt(clock.instant());
-        statement.setPaymentReference(blankToNull(request == null ? null : request.paymentReference()));
-        statement.setReportedNote(blankToNull(request == null ? null : request.note()));
+        statement.setReportedAt(now);
+        statement.setPaymentReference(payment.getPaymentReference());
+        statement.setReportedNote(payment.getNote());
         statements.save(statement);
         notifyProvider(statement, "COMMISSION_PAYMENT_REPORTED");
         return toResponse(statement, true);
@@ -146,8 +168,29 @@ public class CommissionServiceImpl implements CommissionService {
             throw new ConflictException("Bảng kê đã được xác nhận nộp đủ");
         }
         BigDecimal received = request.receivedAmount().setScale(2, RoundingMode.HALF_UP);
+        Instant now = clock.instant();
+        CommissionPayment reported = payments.findFirstByStatement_IdAndStatusOrderByReportedAtDesc(statementId, CommissionPayment.REPORTED)
+                .orElse(null);
+        if (reported != null && reported.getDeclaredAmount() != null && received.compareTo(reported.getDeclaredAmount()) < 0
+                && blankToNull(request.note()) == null) {
+            throw new ConflictException("Số thực nhận ít hơn số nhà xe khai đã chuyển: cần ghi lý do (ví dụ sao kê chỉ ghi nhận bao nhiêu)");
+        }
+        CommissionPayment payment = java.util.Optional.ofNullable(reported)
+                .orElseGet(() -> {
+                    CommissionPayment direct = new CommissionPayment();
+                    direct.setStatement(statement);
+                    direct.setReportedAt(now);
+                    direct.setNote("Admin ghi nhận trực tiếp theo sao kê");
+                    statement.getPayments().add(direct);
+                    return direct;
+                });
+        payment.setStatus(CommissionPayment.CONFIRMED);
+        payment.setConfirmedAmount(received);
+        payment.setDecidedAt(now);
+        payment.setDecidedBy(admin);
+        payment.setAdminNote(blankToNull(request.note()));
         statement.setPaidAmount(statement.getPaidAmount().add(received));
-        statement.setConfirmedAt(clock.instant());
+        statement.setConfirmedAt(now);
         statement.setConfirmedBy(admin);
         statement.setAdminNote(blankToNull(request.note()));
         if (statement.remainingAmount().signum() <= 0) {
@@ -157,6 +200,8 @@ public class CommissionServiceImpl implements CommissionService {
                     ? CommissionStatementStatus.OVERDUE : CommissionStatementStatus.ISSUED);
         }
         statements.save(statement);
+        // Phần nộp dư được cấn trừ ngay vào bảng kê còn nợ khác (nếu có), phần còn lại chờ kỳ sau.
+        applyCredit(statement.getProvider().getId());
         notifyProvider(statement, "COMMISSION_CONFIRMED");
         return toResponse(statement, true);
     }
@@ -171,6 +216,11 @@ public class CommissionServiceImpl implements CommissionService {
         statement.setStatus(statement.getDueAt().isBefore(clock.instant())
                 ? CommissionStatementStatus.OVERDUE : CommissionStatementStatus.ISSUED);
         statement.setAdminNote(blankToNull(note));
+        payments.findFirstByStatement_IdAndStatusOrderByReportedAtDesc(statementId, CommissionPayment.REPORTED).ifPresent(p -> {
+            p.setStatus(CommissionPayment.REJECTED);
+            p.setDecidedAt(clock.instant());
+            p.setAdminNote(blankToNull(note));
+        });
         statements.save(statement);
         notifyProvider(statement, "COMMISSION_REPORT_REJECTED");
         return toResponse(statement, true);
@@ -217,6 +267,7 @@ public class CommissionServiceImpl implements CommissionService {
                     : statement.getDueAt().isBefore(clock.instant()) ? CommissionStatementStatus.OVERDUE
                     : CommissionStatementStatus.ISSUED);
             statements.save(statement);
+            applyCredit(provider.getId());
             notifyProvider(statement, "COMMISSION_ISSUED");
             created++;
         }
@@ -318,6 +369,10 @@ public class CommissionServiceImpl implements CommissionService {
     private CommissionStatementResponse toResponse(CommissionStatement s, boolean withLines) {
         Instant now = clock.instant();
         boolean unpaid = UNPAID.contains(s.getStatus());
+        String state = s.getStatus() == CommissionStatementStatus.PAID
+                ? (s.overpaidAmount().signum() > 0 ? "OVERPAID" : "PAID")
+                : s.getStatus() == CommissionStatementStatus.PAYMENT_REPORTED ? "REPORTED"
+                : s.getPaidAmount().signum() > 0 || s.credit().signum() > 0 ? "PARTIAL" : "UNPAID";
         long overdueDays = unpaid && s.getDueAt().isBefore(now) ? Duration.between(s.getDueAt(), now).toDays() : 0;
         boolean blocking = unpaid && s.getDueAt().plus(Duration.ofDays(graceDays)).isBefore(now);
         String content = "HH-" + s.getProvider().getId() + "-" + s.getPeriodMonth().replace("-", "");
@@ -329,7 +384,151 @@ public class CommissionServiceImpl implements CommissionService {
                 s.getAdminNote(), content, qrUrl(s.remainingAmount(), content),
                 withLines ? s.getLines().stream().map(l -> new CommissionStatementResponse.Line(
                         l.getBooking().getId(), l.getBooking().getBookingCode(), l.getCompletedAt(),
-                        l.getRevenue(), l.getCommission())).toList() : List.of());
+                        l.getRevenue(), l.getCommission())).toList() : List.of(),
+                s.credit(), s.overpaidAmount(), state,
+                s.getPayments().stream().map(p -> new CommissionStatementResponse.Payment(p.getId(), p.getDeclaredAmount(),
+                        p.getPaymentReference(), p.getNote(), p.getProofPath() != null, p.getReportedAt(), p.getStatus(),
+                        p.getConfirmedAmount(), p.getDecidedAt(), p.getAdminNote(), p.getDisputeStatus(), p.getClaimedAmount(),
+                        p.getDisputeNote(), p.getDisputedAt(), p.getDisputeResolvedAt(), p.getDisputeResolution(),
+                        p.getDisputeProofPath() != null)).toList());
+    }
+
+    // ------------------------------------------------------------------ nộp dư / biên lai
+
+    private static final Set<String> PROOF_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    private static final long MAX_PROOF_BYTES = 5L * 1024 * 1024;
+
+    /** Tiền nộp dư chưa dùng = tổng phần dư của các bảng kê − tổng đã cấn trừ vào bảng kê khác. */
+    static BigDecimal availableCredit(List<CommissionStatement> providerStatements) {
+        BigDecimal surplus = providerStatements.stream().map(CommissionStatement::overpaidAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal used = providerStatements.stream().map(CommissionStatement::credit).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return surplus.subtract(used).max(BigDecimal.ZERO);
+    }
+
+    /** Cấn trừ phần nộp dư vào các bảng kê còn nợ của nhà xe, kỳ cũ trước. */
+    private void applyCredit(Long providerId) {
+        List<CommissionStatement> mine = new ArrayList<>(statements.findByProvider_IdOrderByPeriodMonthDesc(providerId));
+        mine.sort(Comparator.comparing(CommissionStatement::getPeriodMonth));
+        BigDecimal available = availableCredit(mine);
+        for (CommissionStatement s : mine) {
+            if (available.signum() <= 0) break;
+            if (!UNPAID.contains(s.getStatus()) || s.remainingAmount().signum() <= 0) continue;
+            BigDecimal take = available.min(s.remainingAmount());
+            s.setCreditApplied(s.credit().add(take));
+            available = available.subtract(take);
+            if (s.remainingAmount().signum() <= 0) {
+                s.setStatus(CommissionStatementStatus.PAID);
+                s.setConfirmedAt(clock.instant());
+                s.setAdminNote("Cấn trừ từ phần nộp dư kỳ trước");
+            }
+            statements.save(s);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse providerProof(Long providerUserId, Long statementId, Long paymentId, boolean dispute) {
+        return proofOf(requireOwned(providerUserId, statementId), paymentId, dispute);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse adminProof(Long statementId, Long paymentId, boolean dispute) {
+        return proofOf(require(statementId), paymentId, dispute);
+    }
+
+    /** Lưu ảnh minh chứng (JPG/PNG/WebP ≤ 5 MB) vào kho riêng tư; trả về [đường dẫn, content type]. */
+    private String[] storeProof(Long userId, org.springframework.web.multipart.MultipartFile proof) {
+        String type = proof.getContentType();
+        if (!PROOF_TYPES.contains(type) || proof.getSize() > MAX_PROOF_BYTES) {
+            throw new ConflictException("Ảnh minh chứng phải là JPG, PNG hoặc WebP, tối đa 5 MB");
+        }
+        try {
+            return new String[]{fileStorage.store("commission-proof", userId, proof.getOriginalFilename(), proof.getBytes(), type), type};
+        } catch (java.io.IOException ex) {
+            throw new ConflictException("Không đọc được ảnh minh chứng");
+        }
+    }
+
+    @Override
+    @Transactional
+    public CommissionStatementResponse disputePayment(Long providerUserId, Long statementId, Long paymentId, BigDecimal claimedAmount, String note,
+                                                      org.springframework.web.multipart.MultipartFile proof) {
+        CommissionStatement statement = requireOwned(providerUserId, statementId);
+        CommissionPayment payment = paymentOf(statement, paymentId);
+        if (!CommissionPayment.CONFIRMED.equals(payment.getStatus()) || payment.getConfirmedAmount() == null) {
+            throw new ConflictException("Chỉ báo sai được lần nộp admin đã xác nhận");
+        }
+        if (CommissionPayment.DISPUTE_OPEN.equals(payment.getDisputeStatus())) {
+            throw new ConflictException("Lần nộp này đang được admin xem xét");
+        }
+        if (claimedAmount == null || claimedAmount.compareTo(payment.getConfirmedAmount()) <= 0) {
+            throw new ConflictException("Số tiền bạn đã chuyển phải lớn hơn số admin đã xác nhận");
+        }
+        if (blankToNull(note) == null) {
+            throw new ConflictException("Cần mô tả lý do (ví dụ sao kê bên bạn ghi đã chuyển bao nhiêu)");
+        }
+        if (proof == null || proof.isEmpty()) {
+            throw new ConflictException("Cần đính kèm ảnh biên lai / sao kê chứng minh số tiền đã chuyển");
+        }
+        String[] stored = storeProof(providerUserId, proof);
+        payment.setDisputeProofPath(stored[0]);
+        payment.setDisputeProofContentType(stored[1]);
+        payment.setDisputeStatus(CommissionPayment.DISPUTE_OPEN);
+        payment.setClaimedAmount(claimedAmount.setScale(2, RoundingMode.HALF_UP));
+        payment.setDisputeNote(note.trim());
+        payment.setDisputedAt(clock.instant());
+        payment.setDisputeResolvedAt(null);
+        payment.setDisputeResolution(null);
+        statements.save(statement);
+        notifyProvider(statement, "COMMISSION_PAYMENT_DISPUTED");
+        return toResponse(statement, true);
+    }
+
+    @Override
+    @Transactional
+    public CommissionStatementResponse resolvePaymentDispute(Long adminUserId, Long statementId, Long paymentId, boolean accept, String note) {
+        User admin = userService.findById(adminUserId)
+                .filter(u -> u.getRole() == com.fptufa26.ecomotion.user.enums.Role.ADMIN)
+                .orElseThrow(() -> new AccessDeniedException("Chỉ quản trị viên được xử lý"));
+        CommissionStatement statement = require(statementId);
+        CommissionPayment payment = paymentOf(statement, paymentId);
+        if (!CommissionPayment.DISPUTE_OPEN.equals(payment.getDisputeStatus())) {
+            throw new ConflictException("Lần nộp này không có khiếu nại đang mở");
+        }
+        if (!accept && blankToNull(note) == null) {
+            throw new ConflictException("Giữ nguyên số đã xác nhận cần ghi lý do để nhà xe đối chiếu");
+        }
+        Instant now = clock.instant();
+        if (accept) {
+            BigDecimal diff = payment.getClaimedAmount().subtract(payment.getConfirmedAmount());
+            payment.setConfirmedAmount(payment.getClaimedAmount());
+            statement.setPaidAmount(statement.getPaidAmount().add(diff));
+            if (statement.remainingAmount().signum() <= 0) statement.setStatus(CommissionStatementStatus.PAID);
+        }
+        payment.setDisputeStatus(accept ? CommissionPayment.DISPUTE_ACCEPTED : CommissionPayment.DISPUTE_REJECTED);
+        payment.setDisputeResolvedAt(now);
+        payment.setDisputeResolution(blankToNull(note));
+        payment.setDecidedBy(admin);
+        statements.save(statement);
+        if (accept) applyCredit(statement.getProvider().getId());
+        notifyProvider(statement, "COMMISSION_PAYMENT_DISPUTE_RESOLVED");
+        return toResponse(statement, true);
+    }
+
+    private static CommissionPayment paymentOf(CommissionStatement statement, Long paymentId) {
+        return statement.getPayments().stream().filter(p -> p.getId().equals(paymentId)).findFirst()
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy lần nộp #" + paymentId));
+    }
+
+    private com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse proofOf(CommissionStatement statement, Long paymentId, boolean dispute) {
+        CommissionPayment payment = paymentOf(statement, paymentId);
+        String path = dispute ? payment.getDisputeProofPath() : payment.getProofPath();
+        if (path == null) throw new NotFoundException("Không có ảnh minh chứng cho lần nộp này");
+        String stored = dispute ? payment.getDisputeProofContentType() : payment.getProofContentType();
+        String type = stored == null ? "image/jpeg" : stored;
+        return new com.fptufa26.ecomotion.finance.dto.response.PaymentEvidenceFileResponse(
+                fileStorage.read(path), type, (dispute ? "minh-chung-bao-sai-" : "bien-lai-hoa-hong-") + paymentId);
     }
 
     private String qrUrl(BigDecimal amount, String content) {

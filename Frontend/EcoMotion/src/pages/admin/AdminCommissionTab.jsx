@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { commissionService } from '../../services/commissionService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
-import { COMMISSION_STATUS, commissionStatus, periodLabel } from '../../utils/commissionDisplay'
+import { COMMISSION_STATUS, commissionPaymentState, periodLabel } from '../../utils/commissionDisplay'
+import CommissionPaymentHistory from '../../components/finance/CommissionPaymentHistory'
 
 function lastMonthKey() {
   const now = new Date()
@@ -74,6 +75,25 @@ export default function AdminCommissionTab() {
     } finally { setBusy(false) }
   }
 
+  // Luôn lấy bảng kê mới nhất từ server: nhà xe có thể vừa báo chuyển sau khi bảng được tải.
+  const openConfirm = async (row) => {
+    try {
+      const fresh = await commissionService.adminDetail(row.id)
+      if (fresh.status === 'PAID') {
+        setMessage({ type: 'success', text: `${fresh.providerName} — ${periodLabel(fresh.periodMonth)} đã được xác nhận nộp đủ.` })
+        await load()
+        return
+      }
+      const latest = (fresh.payments || []).find((p) => p.status === 'REPORTED')
+      setConfirming(fresh)
+      setAmount(String(Math.round(Number(latest?.declaredAmount ?? fresh.remainingAmount))))
+      setNote('')
+      if (fresh.status !== row.status) await load()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Không tải được bảng kê' })
+    }
+  }
+
   const openDetail = async (row) => {
     try {
       setDetail(await commissionService.adminDetail(row.id))
@@ -105,6 +125,7 @@ export default function AdminCommissionTab() {
             <input type="month" value={generateMonth} onChange={(e) => setGenerateMonth(e.target.value)} className="mt-1 block h-9 rounded-lg border border-slate-300 px-2 text-xs" />
           </label>
           <button type="button" disabled={busy} onClick={generate} className="h-9 rounded-lg bg-brand-700 px-3 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50">Lập bảng kê ngay</button>
+          <button type="button" disabled={loading} onClick={load} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Làm mới</button>
         </div>
       </div>
 
@@ -145,7 +166,7 @@ export default function AdminCommissionTab() {
             ) : rows.length === 0 ? (
               <tr><td colSpan={8} className="py-10 text-center text-slate-400">Chưa có bảng kê phù hợp.</td></tr>
             ) : rows.map((r) => {
-              const meta = commissionStatus(r.status)
+              const meta = commissionPaymentState(r, formatCurrency)
               return (
                 <tr key={r.id} className={r.blocking ? 'bg-rose-50/60' : ''}>
                   <td className="px-4 py-3 font-semibold text-slate-800">{r.providerName}<span className="block text-[11px] font-normal text-slate-500">{r.bookingCount} chuyến · {Math.round(Number(r.commissionRate) * 100)}%</span></td>
@@ -156,9 +177,18 @@ export default function AdminCommissionTab() {
                   <td className="px-4 text-slate-600">{formatBookingWhen(r.dueAt)}{r.overdueDays > 0 && <span className="block font-semibold text-rose-700">Quá hạn {r.overdueDays} ngày{r.blocking ? ' · đang khoá nhận đơn' : ''}</span>}</td>
                   <td className="px-4">
                     <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${meta.cls}`}>{meta.label}</span>
-                    {r.status === 'PAYMENT_REPORTED' && (
-                      <span className="mt-1 block text-[11px] text-slate-500">Báo lúc {formatBookingWhen(r.reportedAt)}{r.paymentReference ? ` · Mã GD ${r.paymentReference}` : ''}</span>
+                    {(r.payments || []).some((p) => p.disputeStatus === 'OPEN') && (
+                      <span className="mt-1 inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-800">Nhà xe báo sai số tiền</span>
                     )}
+                    {r.status === 'PAYMENT_REPORTED' && (() => {
+                      const latest = (r.payments || []).find((p) => p.status === 'REPORTED')
+                      return (
+                        <span className="mt-1 block text-[11px] text-slate-500">
+                          Khai đã chuyển {formatCurrency(latest?.declaredAmount)} · {formatBookingWhen(r.reportedAt)}
+                          {r.paymentReference ? ` · Mã GD ${r.paymentReference}` : ''}{latest?.hasProof ? ' · có ảnh biên lai' : ''}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 text-right">
                     <div className="flex justify-end gap-2">
@@ -168,7 +198,7 @@ export default function AdminCommissionTab() {
                         {r.status === 'PAYMENT_REPORTED' && (
                           <button type="button" disabled={busy} onClick={() => reject(r)} className="rounded-lg border border-rose-200 px-2.5 py-1 font-semibold text-rose-700 hover:bg-rose-50">Chưa thấy tiền</button>
                         )}
-                        <button type="button" onClick={() => { setConfirming(r); setAmount(String(Math.round(Number(r.remainingAmount)))); setNote('') }}
+                        <button type="button" disabled={busy} onClick={() => openConfirm(r)}
                           className="rounded-lg bg-emerald-700 px-2.5 py-1 font-bold text-white hover:bg-emerald-800">Xác nhận đã nhận</button>
                       </>
                     )}
@@ -182,7 +212,7 @@ export default function AdminCommissionTab() {
       </div>
 
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setDetail(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => { setDetail(null); load() }}>
           <div role="dialog" aria-modal="true" aria-label="Chi tiết bảng kê hoa hồng" onClick={(e) => e.stopPropagation()}
             className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-3">
@@ -190,19 +220,21 @@ export default function AdminCommissionTab() {
                 <h3 className="text-base font-bold text-slate-900">{detail.providerName} — {periodLabel(detail.periodMonth)}</h3>
                 <p className="text-xs text-slate-500">Hạn nộp {formatBookingWhen(detail.dueAt)} · tỷ lệ {Math.round(Number(detail.commissionRate) * 100)}% · nội dung CK <span className="font-mono font-bold">{detail.transferContent}</span></p>
               </div>
-              <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${commissionStatus(detail.status).cls}`}>{commissionStatus(detail.status).label}</span>
+              <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${commissionPaymentState(detail, formatCurrency).cls}`}>{commissionPaymentState(detail, formatCurrency).label}</span>
             </div>
             <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-              {[['Doanh thu', detail.grossRevenue], ['Hoa hồng', detail.commissionAmount], ['Đã nhận', detail.paidAmount], ['Còn phải nộp', detail.remainingAmount]].map(([label, value]) => (
+              {[['Hoa hồng', detail.commissionAmount], ['Đã nhận', detail.paidAmount], [Number(detail.overpaidAmount) > 0 ? 'Nộp dư' : 'Cấn trừ', Number(detail.overpaidAmount) > 0 ? detail.overpaidAmount : detail.creditApplied], ['Còn phải nộp', detail.remainingAmount]].map(([label, value]) => (
                 <div key={label} className="rounded-lg bg-slate-50 p-3"><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-mono text-sm font-bold text-slate-900">{formatCurrency(value)}</dd></div>
               ))}
             </dl>
-            {(detail.reportedAt || detail.confirmedAt) && (
-              <div className="space-y-1 rounded-lg border border-slate-200 p-3 text-xs text-slate-700">
-                {detail.reportedAt && <p>Nhà xe báo đã chuyển lúc <strong>{formatBookingWhen(detail.reportedAt)}</strong>{detail.paymentReference ? <> · Mã GD <span className="font-mono">{detail.paymentReference}</span></> : null}{detail.reportedNote ? <> · “{detail.reportedNote}”</> : null}</p>}
-                {detail.confirmedAt && <p>Admin xác nhận lúc <strong>{formatBookingWhen(detail.confirmedAt)}</strong>{detail.adminNote ? <> · {detail.adminNote}</> : null}</p>}
-              </div>
-            )}
+            <h4 className="text-xs font-bold uppercase text-slate-500">Các lần nộp</h4>
+            <CommissionPaymentHistory payments={detail.payments} loadProof={(paymentId, dispute) => commissionService.adminProof(detail.id, paymentId, dispute)} expandLatest
+              onResolve={async (paymentId, accept, reason) => {
+                setDetail(await commissionService.resolvePaymentDispute(detail.id, paymentId, accept, reason))
+                setMessage({ type: 'success', text: accept ? 'Đã chấp nhận số tiền nhà xe khai.' : 'Đã giữ nguyên số đã xác nhận và gửi lý do cho nhà xe.' })
+                await load()
+              }} />
+            <h4 className="text-xs font-bold uppercase text-slate-500">Các chuyến trong kỳ</h4>
             <div className="overflow-x-auto rounded-lg border border-slate-200">
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
@@ -223,7 +255,7 @@ export default function AdminCommissionTab() {
               </table>
             </div>
             <div className="flex justify-end">
-              <button type="button" onClick={() => setDetail(null)} className="h-9 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Đóng</button>
+              <button type="button" onClick={() => { setDetail(null); load() }} className="h-9 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Đóng</button>
             </div>
           </div>
         </div>
@@ -232,18 +264,37 @@ export default function AdminCommissionTab() {
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => !busy && setConfirming(null)}>
           <form role="dialog" aria-modal="true" aria-label="Xác nhận đã nhận hoa hồng" onClick={(e) => e.stopPropagation()} onSubmit={submitConfirm}
-            className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+            className="max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-base font-bold text-slate-900">Xác nhận hoa hồng — {confirming.providerName}</h3>
             <p className="text-xs text-slate-600">{periodLabel(confirming.periodMonth)} · còn phải nộp {formatCurrency(confirming.remainingAmount)} · nội dung CK <span className="font-mono font-bold">{confirming.transferContent}</span></p>
+            {(confirming.payments || []).some((p) => p.status === 'REPORTED') ? (
+              <CommissionPaymentHistory payments={(confirming.payments || []).filter((p) => p.status === 'REPORTED').slice(0, 1)}
+                loadProof={(paymentId) => commissionService.adminProof(confirming.id, paymentId)} expandLatest />
+            ) : (
+              <p className="rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">Nhà xe chưa báo chuyển. Chỉ xác nhận khi đã thấy tiền trong sao kê.</p>
+            )}
             <label className="block text-xs font-semibold text-slate-700">Số tiền thực nhận theo sao kê
               <input required inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold" />
             </label>
             {Number(amount) > 0 && Number(amount) < Number(confirming.remainingAmount) && (
-              <p className="text-[11px] text-amber-700">Nhận thiếu {formatCurrency(Number(confirming.remainingAmount) - Number(amount))}: bảng kê vẫn còn nợ phần chênh.</p>
+              <p className="text-[11px] text-amber-700">Nhận thiếu {formatCurrency(Number(confirming.remainingAmount) - Number(amount))}: bảng kê chuyển sang "Nộp thiếu" và vẫn còn nợ phần chênh.</p>
             )}
-            <label className="block text-xs font-semibold text-slate-700">Ghi chú (tuỳ chọn)
-              <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
-            </label>
+            {Number(amount) > Number(confirming.remainingAmount) && (
+              <p className="text-[11px] text-teal-700">Nhận dư {formatCurrency(Number(amount) - Number(confirming.remainingAmount))}: bảng kê "Nộp dư", phần dư tự trừ vào bảng kê kỳ sau của nhà xe.</p>
+            )}
+            {(() => {
+              const declared = Number((confirming.payments || []).find((p) => p.status === 'REPORTED')?.declaredAmount || 0)
+              const less = declared > 0 && Number(amount) > 0 && Number(amount) < declared
+              return (
+                <label className="block text-xs font-semibold text-slate-700">
+                  {less ? 'Lý do ghi nhận ít hơn số nhà xe khai (bắt buộc)' : 'Ghi chú (tuỳ chọn)'}
+                  {less && <span className="mt-0.5 block font-normal text-rose-700">Nhà xe khai {formatCurrency(declared)}, bạn ghi nhận {formatCurrency(Number(amount))}. Nhà xe sẽ thấy lý do và có thể báo sai số tiền.</span>}
+                  <textarea rows={2} required={less} value={note} onChange={(e) => setNote(e.target.value)}
+                    placeholder={less ? 'Ví dụ: sao kê ngày 12/11 chỉ có giao dịch 300.000 với nội dung HH-2-202610' : ''}
+                    className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                </label>
+              )
+            })()}
             <div className="flex justify-end gap-2">
               <button type="button" disabled={busy} onClick={() => setConfirming(null)} className="h-10 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Huỷ</button>
               <button type="submit" disabled={busy || !Number(amount)} className="h-10 rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white disabled:opacity-50">{busy ? 'Đang lưu...' : 'Xác nhận'}</button>

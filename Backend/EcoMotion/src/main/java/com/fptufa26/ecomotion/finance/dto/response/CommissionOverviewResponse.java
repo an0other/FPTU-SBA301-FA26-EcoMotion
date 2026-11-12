@@ -9,7 +9,8 @@ public record CommissionOverviewResponse(
         boolean bookingBlocked,
         BigDecimal outstandingAmount,
         PlatformBank platformBank,
-        int graceDays
+        int graceDays,
+        BigDecimal creditBalance
 ) {
     public record PlatformBank(String bankCode, String bankName, String accountNumber, String accountHolder) {
     }

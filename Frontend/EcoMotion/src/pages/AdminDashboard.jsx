@@ -306,7 +306,7 @@ export default function AdminDashboard() {
                   : 'border-transparent text-slate-600 hover:text-slate-900'
               }`}
             >
-              <span>A05 — Hoa hồng nhà xe</span>
+              <span>Hoa hồng nhà xe</span>
             </button>
           </div>
         </div>
