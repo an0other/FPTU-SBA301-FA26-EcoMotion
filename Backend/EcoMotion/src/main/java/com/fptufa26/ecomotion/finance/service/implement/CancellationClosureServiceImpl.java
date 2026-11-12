@@ -41,8 +41,6 @@ public class CancellationClosureServiceImpl implements CancellationClosureServic
                 ledger.saveTransaction(source);
             }
         }
-        // A statement-verified receipt exception is resolved only when every linked cash receipt was
-        // explicitly returned in full. Do not clear other review types, pending gateway attempts or proofs.
         for (var request : requests.findByBooking_IdOrderByCreatedAtDesc(bookingId)) {
             if (request.getStatus() != PaymentRequestStatus.REVIEW_REQUIRED) continue;
             var linked = transactions.stream().filter(t -> t.getPaymentRequest() != null

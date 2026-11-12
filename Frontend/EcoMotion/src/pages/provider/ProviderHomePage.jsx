@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { providerService } from '../../services/providerService'
+import { commissionService } from '../../services/commissionService'
+import { commissionAlert } from '../../utils/commissionDisplay'
+import { formatCurrency } from '../../utils/formatCurrency'
+import { formatBookingWhen } from '../../utils/bookingDateTime'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import ProviderReadinessChecklist from '../../components/provider/ProviderReadinessChecklist'
 
@@ -31,6 +35,13 @@ export default function ProviderHomePage() {
     })
   }, [fetchSummary])
 
+  const [commission, setCommission] = useState(null)
+  useEffect(() => {
+    let live = true
+    commissionService.providerOverview().then((data) => { if (live) setCommission(data) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
   const providerName = summary?.providerName || user?.fullName || (loading ? '...' : 'Nhà xe đối tác')
   const depotAddress = summary?.depotAddress || (loading ? 'Đang tải...' : 'Chưa cập nhật')
   const hotline = summary?.hotline || (loading ? '...' : 'Chưa cập nhật')
@@ -46,6 +57,29 @@ export default function ProviderHomePage() {
   const rejectedCount = Math.max(0, totalVehicles - pendingCount - approvedCount - hiddenCount)
 
   const notices = []
+
+  const commissionNotice = commissionAlert(commission, formatCurrency, formatBookingWhen)
+  if (commissionNotice) {
+    const tone = {
+      blocked: ['bg-rose-50 border-rose-300', 'text-rose-700', 'text-rose-800', 'text-rose-700', 'block'],
+      overdue: ['bg-amber-50 border-amber-200', 'text-amber-700', 'text-amber-800', 'text-amber-700', 'schedule'],
+      due: ['bg-sky-50 border-sky-200', 'text-sky-700', 'text-sky-900', 'text-sky-700', 'percent'],
+      reported: ['bg-slate-50 border-slate-200', 'text-slate-700', 'text-[#0b1c30]', 'text-slate-600', 'hourglass_top'],
+    }[commissionNotice.tone]
+    notices.push({
+      id: 'commission',
+      icon: tone[4],
+      boxClass: tone[0],
+      iconColor: tone[1],
+      titleColor: tone[2],
+      descColor: tone[3],
+      linkColor: tone[2],
+      title: commissionNotice.title,
+      description: commissionNotice.text,
+      linkTo: '/provider/finance?tab=commission',
+      actionText: commissionNotice.tone === 'reported' ? 'Xem hoa hồng' : 'Nộp hoa hồng',
+    })
+  }
 
   if (!loading && !error && summary) {
   if (rejectedCount > 0) {

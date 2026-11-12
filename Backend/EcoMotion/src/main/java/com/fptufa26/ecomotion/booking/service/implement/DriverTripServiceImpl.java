@@ -716,13 +716,11 @@ public class DriverTripServiceImpl implements DriverTripService {
         return tripEvidenceRepository.findByBooking_IdOrderByRecordedAtAsc(booking.getId());
     }
 
-
     private static final java.util.Set<BookingStatus> DRIVER_BUSY_STATUSES = java.util.EnumSet.of(
             BookingStatus.DRIVER_ARRIVED,
             BookingStatus.AWAITING_START_CONFIRMATION,
             BookingStatus.IN_PROGRESS);
 
-    /** Một tài xế chỉ thực hiện một chuyến tại một thời điểm: phải kết thúc chuyến đang chạy trước. */
     private void requireNoOtherActiveTrip(Driver driver, Booking booking) {
         List<String> others = bookingRepository.findOtherActiveDriverBookingCodes(
                 driver.getId(), booking.getId(), DRIVER_BUSY_STATUSES);

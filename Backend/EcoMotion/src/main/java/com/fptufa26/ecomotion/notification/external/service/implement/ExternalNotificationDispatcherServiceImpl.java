@@ -1,7 +1,9 @@
 package com.fptufa26.ecomotion.notification.external.service.implement;
 
+import com.fptufa26.ecomotion.notification.external.dto.request.AccountCredentialNotificationRequest;
 import com.fptufa26.ecomotion.notification.external.dto.request.OtpNotificationRequest;
 import com.fptufa26.ecomotion.notification.external.dto.request.BookingNotificationRequest;
+import com.fptufa26.ecomotion.notification.external.service.AccountExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.service.BookingExternalNotificationService;
 import com.fptufa26.ecomotion.notification.external.dto.response.NotificationResult;
 import com.fptufa26.ecomotion.notification.external.enums.NotificationChannel;
@@ -67,6 +69,17 @@ public class ExternalNotificationDispatcherServiceImpl implements ExternalNotifi
     @Override
     public NotificationResult sendDepositPaid(BookingNotificationRequest request) {
         return sendBooking(request, true);
+    }
+
+    @Override
+    public NotificationResult sendDriverCredentials(AccountCredentialNotificationRequest request) {
+        if (request == null) {
+            return new NotificationResult(false, "Account notification request is required");
+        }
+        ExternalNotificationService service = services.get(NotificationChannel.EMAIL);
+        return service instanceof AccountExternalNotificationService accountService
+                ? accountService.sendDriverCredentials(request)
+                : unsupported(NotificationChannel.EMAIL);
     }
 
     private NotificationResult sendBooking(BookingNotificationRequest request, boolean depositPaid) {

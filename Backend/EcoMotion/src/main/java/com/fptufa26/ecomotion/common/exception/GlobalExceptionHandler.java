@@ -3,6 +3,7 @@ package com.fptufa26.ecomotion.common.exception;
 import com.fptufa26.ecomotion.auth.exception.AccountAlreadyActiveException;
 import com.fptufa26.ecomotion.auth.exception.AccountInactiveException;
 import com.fptufa26.ecomotion.auth.exception.AccountPendingException;
+import com.fptufa26.ecomotion.auth.exception.PasswordChangeRequiredException;
 import com.fptufa26.ecomotion.auth.exception.ActivationTokenInvalidException;
 import com.fptufa26.ecomotion.auth.exception.CaptchaInvalidException;
 import com.fptufa26.ecomotion.auth.exception.DuplicateEmailException;
@@ -96,7 +97,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
             AccountInactiveException.class,
             AccountPendingException.class,
-            BookingAccessDeniedException.class
+            BookingAccessDeniedException.class,
+            PasswordChangeRequiredException.class
     })
     public ResponseEntity<ErrorResponse> handleForbidden(
             Exception ex,

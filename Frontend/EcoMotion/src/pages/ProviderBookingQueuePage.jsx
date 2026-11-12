@@ -226,7 +226,6 @@ export default function ProviderBookingQueuePage() {
     limit: pageSize,
   })
 
-  // Đơn có yêu cầu thanh toán khách đã báo chuyển khoản, chờ nhà xe xác nhận.
   const awaitingPaymentCount = summary?.paymentAwaitingConfirmation || 0
   const [awaitingPaymentCodes, setAwaitingPaymentCodes] = useState(() => new Set())
   useEffect(() => {

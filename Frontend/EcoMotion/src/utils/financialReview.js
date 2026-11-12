@@ -15,11 +15,10 @@ export function financialReviewLabel(outcome) {
 export function reconciliationPayload(refund, form, requestId) {
   if (!refund || !Number.isInteger(refund.version) || refund.version < 0) throw new Error('Cần tải lại phiên bản khoản hoàn.')
   if (!refundOutcomes.includes(form.outcome)) throw new Error('Kết quả đối soát không hợp lệ.')
-  for (const key of ['note', 'evidenceReference', 'transactionReference']) {
-    if (typeof form[key] !== 'string' || !form[key].trim()) throw new Error('Cần kết luận và bằng chứng đối soát.')
-  }
+  if (typeof form.note !== 'string' || !form.note.trim()) throw new Error('Cần nhập kết luận đối soát.')
   if (!requestId) throw new Error('Thiếu mã yêu cầu.')
-  return { version: refund.version, requestId, outcome: form.outcome, note: form.note.trim(), evidenceReference: form.evidenceReference.trim(), transactionReference: form.transactionReference.trim() }
+  const optional = value => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
+  return { version: refund.version, requestId, outcome: form.outcome, note: form.note.trim(), evidenceReference: optional(form.evidenceReference), transactionReference: optional(form.transactionReference) }
 }
 
 export function yearlyRulingPayload(dispute, workflow, form, requestId) {

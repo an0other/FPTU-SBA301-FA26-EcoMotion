@@ -17,14 +17,12 @@ public class PublicReviewController {
 
     private final PublicReviewService publicReviews;
 
-    /** Công khai cùng nhóm GET /api/vehicles/** — khách chưa đăng nhập vẫn xem được khi chọn xe. */
     @GetMapping("/api/vehicles/{vehicleId}/reviews")
     @Operation(summary = "Public reviews of a vehicle")
     public ApiResponse<PublicReviewsResponse> vehicleReviews(@PathVariable Long vehicleId) {
         return ApiResponse.success(publicReviews.forVehicle(vehicleId));
     }
 
-    /** Cần đăng nhập (mọi vai trò). */
     @GetMapping("/api/reviews/drivers/{driverId}")
     @Operation(summary = "Reviews of a driver")
     public ApiResponse<PublicReviewsResponse> driverReviews(@PathVariable Long driverId) {

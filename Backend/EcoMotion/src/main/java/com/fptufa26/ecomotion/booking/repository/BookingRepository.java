@@ -96,7 +96,6 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
     @Query("SELECT b FROM Booking b WHERE b.bookingCode = :bookingCode AND b.renter.user.id = :userId")
     Optional<Booking> findByBookingCodeAndRenterUserIdForUpdate(
             @Param("bookingCode") String bookingCode, @Param("userId") Long userId);
-    // Existing renter and booking-code queries.
     long countByBookingCodeStartingWith(String prefix);
 
     @EntityGraph(attributePaths = {
@@ -114,7 +113,6 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
 
     List<Booking> findByVehicle_IdAndStatusIn(Long vehicleId, Collection<BookingStatus> statuses);
 
-    // Provider booking queue and ownership-scoped lookups.
     List<Booking> findByVehicle_Provider_IdOrderByCreatedAtDesc(Long providerId);
 
     List<Booking> findByVehicle_Provider_IdAndStatusOrderByCreatedAtDesc(Long providerId, BookingStatus status);
@@ -262,7 +260,6 @@ public interface BookingRepository extends JpaRepository<Booking, Long>, JpaSpec
             @Param("end") Instant end
     );
 
-    /** Mã các chuyến khác mà tài xế đang thực hiện dở (đã đến điểm đón / đang chạy, chưa kết thúc). */
     @Query("SELECT b.bookingCode FROM Booking b WHERE b.driver.id = :driverId AND b.id <> :excludeBookingId " +
             "AND b.actualEndAt IS NULL AND b.status IN :statuses ORDER BY b.pickupTime ASC")
     List<String> findOtherActiveDriverBookingCodes(

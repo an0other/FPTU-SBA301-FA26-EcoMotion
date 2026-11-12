@@ -152,6 +152,7 @@ CREATE TABLE users (
     identity_id     bigint,
     status          varchar(20)  NOT NULL DEFAULT 'PENDING',
     ekyc_status     varchar(20)  NOT NULL DEFAULT 'UNVERIFIED',
+    must_change_password boolean NOT NULL DEFAULT false,
     email_verified_at timestamptz,
     phone_verified_at timestamptz,
     terms_accepted_at timestamptz,

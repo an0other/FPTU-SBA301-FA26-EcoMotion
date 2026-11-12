@@ -19,10 +19,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** "Nguy cơ xe về trễ" chỉ báo khi chuyến trước thực sự lấn vào giờ nhận, kèm giờ sẵn sàng và số phút trễ. */
 class VehicleLatenessRiskTest {
 
-    private static final Instant PICKUP = Instant.parse("2026-11-13T01:00:00Z"); // 08:00 giờ VN
+    private static final Instant PICKUP = Instant.parse("2026-11-13T01:00:00Z");
 
     private final BookingRepository repo = mock(BookingRepository.class);
 
@@ -59,7 +58,6 @@ class VehicleLatenessRiskTest {
     void previousTripEndingInsideBufferReportsDelayAndDetails() {
         Vehicle v = vehicle();
         Booking current = booking(43L, "EM-2026-000043", v, PICKUP, PICKUP.plusSeconds(26 * 3600), BookingStatus.CONFIRMED);
-        // Trả 07:30 + 60 phút chuẩn bị = sẵn sàng 08:30 → trễ 30 phút so với giờ nhận 08:00.
         Booking previous = booking(9L, "DF-2026-9003", v, PICKUP.minusSeconds(86400),
                 PICKUP.minusSeconds(1800), BookingStatus.IN_PROGRESS);
         when(repo.findByVehicle_IdAndStatusIn(eq(11L), any())).thenReturn(List.of(previous));
@@ -79,7 +77,6 @@ class VehicleLatenessRiskTest {
                 PICKUP.minusSeconds(4 * 3600), BookingStatus.IN_PROGRESS);
         when(repo.findByVehicle_IdAndStatusIn(eq(11L), any())).thenReturn(List.of(previous));
 
-        // Đã 07:30, chuyến trước quá hạn từ 04:00 → sẵn sàng sớm nhất 08:30.
         var risk = service(PICKUP.minusSeconds(1800)).assess(current);
         assertThat(risk.atRisk()).isTrue();
         assertThat(risk.estimatedDelayMinutes()).isEqualTo(30L);

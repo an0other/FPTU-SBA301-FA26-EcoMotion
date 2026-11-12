@@ -85,8 +85,6 @@ public class NotificationStreamServiceImpl implements NotificationStreamService 
                 emitter.send(SseEmitter.event().name(eventType).data(jsonPayload));
             } catch (IOException | RuntimeException ex) {
                 removeEmitter(userId, emitter);
-                // The container owns error completion. Completing an errored AsyncContext
-                // again can throw after the booking transaction has already committed.
                 log.debug("Removed failed SSE connection for user {}", userId, ex);
             }
         }

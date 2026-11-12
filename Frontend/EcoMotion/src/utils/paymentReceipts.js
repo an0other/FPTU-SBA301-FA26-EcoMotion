@@ -5,17 +5,12 @@ const REQUEST_LABELS = {
   ADJUSTMENT: 'Điều chỉnh',
 }
 
-/** Trạng thái đơn mà khách không còn cấn trừ khoản chuyển dư được (đã tới quyết toán hoặc đã đóng). */
 const OFFSET_BLOCKED = new Set(['AWAITING_FINAL_PAYMENT', 'COMPLETED', 'CANCELLED', 'CANCELLATION_REVIEW'])
 
 export function requestLabel(type) {
   return REQUEST_LABELS[type] || 'Thanh toán'
 }
 
-/**
- * Gộp giao dịch tiền vào đã xác nhận theo từng yêu cầu thanh toán thành "biên nhận" cho khách:
- * nhà xe (hoặc admin/cổng) đã ghi nhận bao nhiêu, lúc nào. Khách so số này với app ngân hàng.
- */
 export function buildPaymentReceipts(transactions = []) {
   const groups = new Map()
   transactions
@@ -39,7 +34,6 @@ export function buildPaymentReceipts(transactions = []) {
   return [...groups.values()].sort((a, b) => String(a.lastPaidAt).localeCompare(String(b.lastPaidAt)))
 }
 
-/** Khoản khách chuyển dư: nhà xe phải hoàn, hoặc khách cấn trừ khi chưa tới quyết toán. */
 export function excessRefundViews(refunds = [], bookingStatus) {
   return refunds
     .filter((refund) => refund.excess)
@@ -64,7 +58,6 @@ export function excessRefundViews(refunds = [], bookingStatus) {
     .filter((view) => view.pending || view.refunded || view.offsetDone)
 }
 
-/** Trạng thái thanh toán diễn đạt theo việc nhà xe cần làm. */
 export function providerPaymentState(request) {
   switch (request.status) {
     case 'PROOF_SUBMITTED':
@@ -88,7 +81,6 @@ export function providerPaymentState(request) {
   }
 }
 
-/** Lý do hoàn hiển thị cho người dùng: bỏ tiền tố kỹ thuật EXCESS (dùng để đối soát). */
 export function displayRefundReason(reason) {
   return String(reason || '').replace(/^EXCESS:\s*/, '')
 }

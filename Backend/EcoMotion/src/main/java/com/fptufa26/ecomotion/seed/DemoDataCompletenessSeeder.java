@@ -96,22 +96,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-/**
- * Bổ sung tại chỗ dữ liệu demo cho các đơn seed đã có sẵn trong DB (DevDataSeeder bỏ qua đơn đã tồn tại nên
- * dữ liệu cũ không bao giờ được bổ sung): ảnh offline, lưu vết thanh toán theo ledger, lưu vết chuyến, đánh giá
- * và vài khiếu nại đã phân xử.
- *
- * <p>Chạy sau toàn bộ ApplicationRunner (sự kiện {@link ApplicationReadyEvent}). Mỗi bước chạy trong transaction
- * riêng và chỉ tạo dữ liệu còn thiếu, nên khởi động lại nhiều lần không sinh bản ghi trùng; một đơn lỗi chỉ bị bỏ qua
- * và ghi log, không làm hỏng lần khởi động.</p>
- *
- * <p>Phạm vi: đơn có mã {@code BK-}, {@code EM-2026-9}, {@code EM-SEED-}, {@code EM-2026-DEMO-}. Không đụng đơn
- * {@code EM-2026-0000xx} (người dùng tự tạo khi test), đơn thuê năm {@code EM-Y2-} (nằm trên xe 12/13 thuộc nhóm xe
- * 10–15 người dùng tự test và đã có lưu vết riêng theo mô hình thuê năm), cũng như dữ liệu tiền của
- * {@code EM-2026-9003} và {@code BK-1X8C44} (đã được thao tác tay trên giao diện).</p>
- *
- * <p>Chỉ chạy trên CSDL thật (không chạy với H2 của bộ test).</p>
- */
 @Slf4j
 @Component
 @Profile("dev")
@@ -121,23 +105,25 @@ import java.util.regex.Pattern;
 public class DemoDataCompletenessSeeder {
 
     private static final Pattern TARGET_CODE = Pattern.compile("^(BK-|EM-2026-9|EM-SEED-|EM-2026-DEMO-).*");
-    /** Đơn đã được người dùng thao tác tiền/giờ trực tiếp — chỉ bổ sung lưu vết không ảnh hưởng số liệu. */
     private static final Set<String> MONEY_FROZEN = Set.of("EM-2026-9003", "BK-1X8C44");
     private static final Set<Long> PROTECTED_VEHICLES = Set.of(10L, 11L, 12L, 13L, 14L, 15L);
 
     private static final String REFUND_BOOKING = "BK-5L3M91";
+    private static final Map<String, String> REFUND_DEMOS = Map.of(
+            "BK-RF-01", "AWAIT_ACCOUNT",
+            "BK-RF-02", "AWAIT_PROVIDER",
+            "BK-RF-03", "AWAIT_RENTER",
+            "BK-RF-04", "REPORTED_NOT_RECEIVED");
     private static final String DISPUTE_PARTIAL = "BK-AUG-03";
     private static final String DISPUTE_RENTER_TIME = "BK-SEP-03";
     private static final String DISPUTE_MISMATCH = "BK-SEP-06";
     private static final BigDecimal MISMATCH_GAP = new BigDecimal("50000.00");
-    /** Phụ phí đã được khách chấp nhận: mã đơn → loại phí. */
     private static final Map<String, ChargeType> ACCEPTED_SURCHARGES = Map.of(
             "BK-6H8U08", ChargeType.OVERTIME,
             "BK-JUL-01", ChargeType.OVERTIME,
             "BK-6J9V09", ChargeType.PARKING,
             "BK-SEP-05", ChargeType.PARKING,
             "BK-JUN-02", ChargeType.PARKING);
-    /** Tài xế bổ sung cho đơn đã chạy nhưng thiếu tài xế. */
     private static final Map<String, String> MISSING_DRIVERS = Map.of(
             "BK-6F6S06", "driver.kiet@ecomotion.vn",
             "BK-6K0W10", "driver.nam@ecomotion.vn");
@@ -178,6 +164,8 @@ public class DemoDataCompletenessSeeder {
     private final VehicleService vehicleService;
     private final UserService userService;
     private final FileStorageService fileStorage;
+    private final com.fptufa26.ecomotion.finance.service.CommissionService commissionService;
+    private final com.fptufa26.ecomotion.finance.repository.CommissionStatementRepository commissionStatements;
 
     @Value("${app.images.root:../../images}")
     private String imagesRootSetting;
@@ -204,10 +192,182 @@ public class DemoDataCompletenessSeeder {
         }
         step("seed image URLs", this::repairSeedImageUrls);
         step("ratings", this::refreshRatings);
+        step("commission demo trips (Depot B)", this::seedDepotBCommissionTrips);
+        step("commission statements", this::seedCommissionStatements);
+        step("commission demo states", this::seedCommissionDemoStates);
+        step("commission payment records", this::backfillCommissionPayments);
         log.info("Demo data completeness pass finished for {} seed bookings", codes.size());
     }
 
-    // ------------------------------------------------------------------ infrastructure
+    private static final String COMMISSION_DEMO_MARKER = "FT26310987654";
+    private static final String DEPOT_B_TRIP_PREFIX = "EM-COM-B";
+
+    private void seedCommissionStatements() {
+        java.time.ZoneId vn = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+        java.time.YearMonth lastMonth = java.time.YearMonth.now(vn).minusMonths(1);
+        Instant earliest = em.createQuery(
+                        "select min(coalesce(b.actualEndAt, b.updatedAt)) from Booking b where b.status = :s", Instant.class)
+                .setParameter("s", BookingStatus.COMPLETED).getSingleResult();
+        if (earliest == null) return;
+        java.util.Set<Long> providersWithHistory = new java.util.HashSet<>();
+        commissionStatements.findAllByOrderByPeriodMonthDescIdAsc().forEach(st -> providersWithHistory.add(st.getProvider().getId()));
+        for (java.time.YearMonth month = java.time.YearMonth.from(earliest.atZone(vn)); !month.isAfter(lastMonth); month = month.plusMonths(1)) {
+            commissionService.generate(month);
+        }
+        commissionService.markOverdue();
+        User admin = firstAdmin();
+        for (var statement : commissionStatements.findAllByOrderByPeriodMonthDescIdAsc()) {
+            if (providersWithHistory.contains(statement.getProvider().getId())) continue;
+            if (statement.getReportedAt() != null || statement.getConfirmedAt() != null
+                    || statement.getStatus() == com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAID) continue;
+            boolean latest = statement.getPeriodMonth().equals(lastMonth.toString());
+            if (!latest) {
+                markSeedPaid(statement, admin);
+            } else if (isDepotA(statement.getProvider())) {
+                markSeedReported(statement);
+            }
+            commissionStatements.save(statement);
+        }
+    }
+
+    private void seedCommissionDemoStates() {
+        var all = commissionStatements.findAllByOrderByPeriodMonthDescIdAsc();
+        if (all.stream().anyMatch(st -> COMMISSION_DEMO_MARKER.equals(st.getPaymentReference()))) return;
+        String lastMonth = java.time.YearMonth.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).minusMonths(1).toString();
+        for (var statement : all) {
+            if (!statement.getPeriodMonth().equals(lastMonth) || !isDepotA(statement.getProvider())) continue;
+            statement.setPaidAmount(BigDecimal.ZERO);
+            statement.setConfirmedAt(null);
+            statement.setConfirmedBy(null);
+            statement.setAdminNote(null);
+            markSeedReported(statement);
+            commissionStatements.save(statement);
+            log.info("Commission demo: {} {} -> PAYMENT_REPORTED", statement.getProvider().getDisplayName(), lastMonth);
+        }
+    }
+
+    /** Bảng kê đã báo chuyển / đã thu từ trước khi có lịch sử từng lần nộp: tạo bản ghi lần nộp tương ứng. */
+    private void backfillCommissionPayments() {
+        for (var statement : commissionStatements.findAllByOrderByPeriodMonthDescIdAsc()) {
+            if (statement.getReportedAt() == null || !statement.getPayments().isEmpty()) continue;
+            var payment = new com.fptufa26.ecomotion.finance.entity.CommissionPayment();
+            payment.setStatement(statement);
+            payment.setPaymentReference(statement.getPaymentReference());
+            payment.setNote(statement.getReportedNote());
+            payment.setReportedAt(statement.getReportedAt());
+            if (statement.getStatus() == com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAYMENT_REPORTED) {
+                payment.setDeclaredAmount(statement.remainingAmount());
+                payment.setProofPath(fileStorage.store("commission-proof", statement.getProvider().getUser().getId(),
+                        "hoa-hong-" + statement.getPeriodMonth() + ".svg", DemoAssetFactory.transferReceiptSvg("Vietcombank",
+                                "CONG TY ECOMOTION", "1029384756", statement.remainingAmount(),
+                                "HH-" + statement.getProvider().getId() + "-" + statement.getPeriodMonth().replace("-", ""),
+                                statement.getReportedAt(), statement.getPaymentReference()), "image/svg+xml"));
+                payment.setProofContentType("image/svg+xml");
+            } else if (statement.getStatus() == com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAID) {
+                payment.setDeclaredAmount(statement.getPaidAmount());
+                payment.setStatus(com.fptufa26.ecomotion.finance.entity.CommissionPayment.CONFIRMED);
+                payment.setConfirmedAmount(statement.getPaidAmount());
+                payment.setDecidedAt(statement.getConfirmedAt());
+                payment.setDecidedBy(statement.getConfirmedBy());
+            } else {
+                continue;
+            }
+            statement.getPayments().add(payment);
+            commissionStatements.save(statement);
+        }
+    }
+
+    private void markSeedPaid(com.fptufa26.ecomotion.finance.entity.CommissionStatement statement, User admin) {
+        statement.setPaidAmount(statement.getCommissionAmount());
+        statement.setStatus(com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAID);
+        statement.setReportedAt(statement.getDueAt().minus(Duration.ofDays(2)));
+        statement.setPaymentReference("FT" + statement.getPeriodMonth().replace("-", "") + statement.getProvider().getId());
+        statement.setConfirmedAt(statement.getDueAt().minus(Duration.ofDays(1)));
+        statement.setConfirmedBy(admin);
+        statement.setAdminNote("Đã nhận đủ qua chuyển khoản");
+    }
+
+    private void markSeedReported(com.fptufa26.ecomotion.finance.entity.CommissionStatement statement) {
+        statement.setStatus(com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus.PAYMENT_REPORTED);
+        statement.setReportedAt(statement.getDueAt().minus(Duration.ofHours(20)));
+        statement.setPaymentReference(COMMISSION_DEMO_MARKER);
+        statement.setReportedNote("Đã chuyển khoản hoa hồng tháng " + statement.getPeriodMonth() + " qua Vietcombank");
+    }
+
+    private static boolean isDepotA(com.fptufa26.ecomotion.user.entity.Provider provider) {
+        String name = provider.getDisplayName() == null ? "" : provider.getDisplayName();
+        return name.endsWith("A");
+    }
+
+    private User firstAdmin() {
+        return users.findAll().stream().filter(u -> u.getRole() == com.fptufa26.ecomotion.user.enums.Role.ADMIN).findFirst().orElse(null);
+    }
+
+    private void seedDepotBCommissionTrips() {
+        if (!em.createQuery("select b.id from Booking b where b.bookingCode like :p", Long.class)
+                .setParameter("p", DEPOT_B_TRIP_PREFIX + "%").setMaxResults(1).getResultList().isEmpty()) return;
+        var providers = em.createQuery("select p from Provider p where lower(p.user.email) = :e",
+                com.fptufa26.ecomotion.user.entity.Provider.class).setParameter("e", "provider.b@ecomotion.vn").getResultList();
+        if (providers.isEmpty()) return;
+        var provider = providers.get(0);
+        var plans = em.createQuery("select rp from RentalPlan rp where rp.vehicle.provider.id = :pid and rp.planType = :t order by rp.vehicle.id",
+                RentalPlan.class).setParameter("pid", provider.getId()).setParameter("t", PlanType.DAILY).getResultList();
+        var renters = em.createQuery("select r from Renter r where lower(r.user.email) <> :demo order by r.id",
+                com.fptufa26.ecomotion.user.entity.Renter.class).setParameter("demo", DevDataSeeder.RENTER_EMAIL).setMaxResults(1).getResultList();
+        if (plans.isEmpty() || renters.isEmpty()) return;
+        java.time.ZoneId vn = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+        java.time.YearMonth lastMonth = java.time.YearMonth.now(vn).minusMonths(1);
+        int[] days = {8, 15, 22};
+        for (int i = 0; i < days.length; i++) {
+            RentalPlan plan = plans.get(i % plans.size());
+            Instant start = lastMonth.atDay(days[i]).atTime(8, 0).atZone(vn).toInstant();
+            Integer slot = plan.getSlotLengthMinutes();
+            Instant end = start.plus(Duration.ofMinutes(slot == null ? 1440 : slot));
+            BigDecimal total = plan.getSlotPrice();
+            BigDecimal deposit = total.multiply(new BigDecimal("0.30")).setScale(2, java.math.RoundingMode.HALF_UP);
+            Booking booking = new Booking();
+            booking.setBookingCode(DEPOT_B_TRIP_PREFIX + (i + 1));
+            booking.setRenter(renters.get(0));
+            booking.setVehicle(plan.getVehicle());
+            booking.setPlan(plan);
+            booking.setStatus(BookingStatus.COMPLETED);
+            booking.setPickupAddress(provider.getDepotAddress() == null ? "Depot B" : provider.getDepotAddress());
+            booking.setPickupTime(start);
+            booking.setPlannedEndAt(end);
+            booking.setActualStartAt(start);
+            booking.setActualEndAt(end);
+            booking.setDriverEndConfirmedAt(end);
+            booking.setRenterEndConfirmedAt(end.plus(Duration.ofMinutes(10)));
+            booking.setProviderConfirmedAt(end.plus(Duration.ofMinutes(40)));
+            booking.setEndConfirmationMethod("RENTER");
+            booking.setPassengerCount(2);
+            booking.setTotalAmount(total);
+            booking.setCreatedAt(start.minus(Duration.ofDays(3)));
+            booking.setUpdatedAt(end.plus(Duration.ofHours(1)));
+            em.persist(booking);
+            em.persist(seedPaidIn(booking, PaymentType.DEPOSIT_PAY, deposit, start.minus(Duration.ofDays(2)), provider.getUser()));
+            em.persist(seedPaidIn(booking, PaymentType.SETTLEMENT, total.subtract(deposit), end.plus(Duration.ofMinutes(30)), provider.getUser()));
+        }
+        em.flush();
+        log.info("Commission demo: seeded {} completed trips for Depot B in {}", days.length, lastMonth);
+    }
+
+    private static PaymentTransaction seedPaidIn(Booking booking, PaymentType type, BigDecimal amount, Instant paidAt, User confirmedBy) {
+        PaymentTransaction tx = new PaymentTransaction();
+        tx.setBooking(booking);
+        tx.setType(type);
+        tx.setAmount(amount);
+        tx.setAppliedAmount(amount);
+        tx.setDirection(PaymentDirection.IN);
+        tx.setMethod(PaymentMethod.BANK_TRANSFER);
+        tx.setStatus(PaymentStatus.PAID);
+        tx.setPaidAt(paidAt);
+        tx.setCreatedAt(paidAt);
+        tx.setUpdatedAt(paidAt);
+        tx.setVerificationMethod(PaymentVerificationMethod.PROVIDER_CONFIRMED);
+        tx.setConfirmedBy(confirmedBy);
+        return tx;
+    }
 
     private void step(String name, Runnable work) {
         try {
@@ -236,7 +396,6 @@ public class DemoDataCompletenessSeeder {
         return resolved;
     }
 
-    /** Ghi file vào thư mục images (phục vụ ở /images/**) nếu chưa có; trả về URL công khai. */
     private String writeImage(String relative, java.util.function.Supplier<byte[]> content) {
         Path target = imagesRoot.resolve(relative).normalize();
         if (!target.startsWith(imagesRoot)) throw new IllegalArgumentException("Invalid image path " + relative);
@@ -250,8 +409,6 @@ public class DemoDataCompletenessSeeder {
         }
         return "/images/" + relative.replace('\\', '/');
     }
-
-    // ------------------------------------------------------------------ 1. offline images & documents
 
     private void completeAvatars() {
         List<User> seedUsers = em.createQuery(
@@ -345,7 +502,6 @@ public class DemoDataCompletenessSeeder {
         return DemoAssetFactory.documentPdf(title, lines);
     }
 
-    /** Các URL /seed/... cũ không tồn tại ở đâu cả: thay bằng ảnh thật của xe hoặc biên nhận sinh offline. */
     private void repairSeedImageUrls() {
         List<TripEvidence> evidence = em.createQuery(
                 "select e from TripEvidence e join fetch e.booking b where e.imageUrl like '/seed/%'", TripEvidence.class)
@@ -383,8 +539,6 @@ public class DemoDataCompletenessSeeder {
         return photos.get(Math.floorMod(index, photos.size()));
     }
 
-    // ------------------------------------------------------------------ 2–5. per booking
-
     private void completeBooking(String code, int completedIndex) {
         Booking booking = bookings.findByBookingCode(code).orElseThrow();
         if (PROTECTED_VEHICLES.contains(booking.getVehicle().getId())) return;
@@ -395,6 +549,11 @@ public class DemoDataCompletenessSeeder {
         if (!moneyFrozen && snapshot != null) normalizePlannedTimes(booking, snapshot);
         Timeline t = new Timeline(booking, Math.max(completedIndex, 0));
 
+        if (REFUND_DEMOS.containsKey(code)) {
+            if (snapshot != null && (status == BookingStatus.CANCELLED || status == BookingStatus.CANCELLATION_REVIEW))
+                completeRefundDemo(booking, snapshot, t, REFUND_DEMOS.get(code));
+            return;
+        }
         if (status == BookingStatus.CANCELLED) {
             if (REFUND_BOOKING.equals(code) && snapshot != null) completeCancelledRefund(booking, snapshot, t);
             return;
@@ -428,7 +587,6 @@ public class DemoDataCompletenessSeeder {
         }
     }
 
-    /** Mốc thời gian dẫn xuất từ giờ đón/kết thúc của đơn, cố định để các lần chạy cho cùng kết quả. */
     private static final class Timeline {
         final Instant created;
         final Instant depositPaid;
@@ -481,7 +639,6 @@ public class DemoDataCompletenessSeeder {
         static final long HOURS = 12;
     }
 
-    /** Đơn nhiều ngày/giờ: giờ kết thúc dự kiến phải khớp số slot đã tính tiền. */
     private void normalizePlannedTimes(Booking b, BookingPolicySnapshot s) {
         if (s.getSlotPrice() == null || s.getSlotPrice().signum() <= 0 || s.getSlotLengthMinutes() == null
                 || b.getTotalAmount() == null || b.getPickupTime() == null) return;
@@ -497,8 +654,6 @@ public class DemoDataCompletenessSeeder {
             b.setActualEndAt(b.getPlannedEndAt());
         }
     }
-
-    // ------------------------------------------------------------------ payments
 
     private ProviderBankAccount bank(Booking b) {
         return banks.findByProvider_IdAndStatus(b.getVehicle().getProvider().getId(), BankAccountStatus.ACTIVE)
@@ -516,7 +671,7 @@ public class DemoDataCompletenessSeeder {
         List<PaymentTransaction> deposits = paidIn(b, PaymentType.DEPOSIT_PAY);
         if (deposits.isEmpty() && b.getStatus() == BookingStatus.COMPLETED && !paidIn(b, PaymentType.SETTLEMENT).isEmpty()
                 && s.getDepositAmount() == null) {
-            return; // đơn đã thu một lần trọn gói từ trước — không thêm cọc để tránh thu trùng
+            return;
         }
         if (s.getDepositAmount() == null) {
             BigDecimal amount = deposits.isEmpty()
@@ -673,7 +828,6 @@ public class DemoDataCompletenessSeeder {
         return charge;
     }
 
-    /** Đơn huỷ sau khi đã cọc: hoàn 100% cọc qua chuyển khoản, khách đã xác nhận đã nhận tiền. */
     private void completeCancelledRefund(Booking b, BookingPolicySnapshot s, Timeline t) {
         if (!refunds.findByBooking_IdOrderByCreatedAtDesc(b.getId()).isEmpty()) return;
         Instant cancelledAt = b.getCancelledAt() != null ? b.getCancelledAt() : b.getPickupTime().minus(6, ChronoUnit.HOURS);
@@ -742,7 +896,171 @@ public class DemoDataCompletenessSeeder {
         refunds.save(refund);
     }
 
-    // ------------------------------------------------------------------ trip trail
+    private void completeRefundDemo(Booking b, BookingPolicySnapshot s, Timeline t, String state) {
+        List<RefundRequest> existing = refunds.findByBooking_IdOrderByCreatedAtDesc(b.getId());
+        if (!existing.isEmpty()) {
+            for (RefundRequest refund : existing) {
+                PaymentTransaction out = refund.getPaymentTransaction();
+                if (out != null && out.getReceiptUrl() != null && out.getReceiptUrl().endsWith(".svg")) {
+                    out.setReceiptUrl(storeRefundReceipt(b.getVehicle().getProvider().getUser(), b.getBookingCode(),
+                            refund.getRecipientBankName(), refund.getRecipientAccountHolder(), refund.getRecipientAccountNumber(),
+                            refund.getAmount(), out.getPaidAt() != null ? out.getPaidAt() : Instant.now(), out.getGatewayRef()));
+                    transactions.save(out);
+                }
+            }
+            if (("AWAIT_ACCOUNT".equals(state) || "AWAIT_PROVIDER".equals(state))) {
+                for (RefundRequest refund : existing) {
+                    boolean untouched = refund.getStatus() == RefundStatus.PROCESSING;
+                    if (untouched && refund.getCreatedAt().isBefore(Instant.now().minus(24, ChronoUnit.HOURS))) {
+                        em.createNativeQuery("update refund_request set created_at = ?1, updated_at = ?1 where id = ?2")
+                                .setParameter(1, Instant.now().minus(3, ChronoUnit.HOURS))
+                                .setParameter(2, refund.getId())
+                                .executeUpdate();
+                    }
+                }
+            }
+            return;
+        }
+        Instant cancelledAt = b.getCancelledAt() != null ? b.getCancelledAt() : b.getPickupTime().minus(30, ChronoUnit.HOURS);
+        Instant paidAt = cancelledAt.minus(6, ChronoUnit.HOURS);
+        if (s.getDepositAmount() == null) {
+            s.setDepositAmount(depositPolicy.resolve(b.getVehicle(), b.getTotalAmount()).amount());
+        }
+        List<PaymentTransaction> deposits = paidIn(b, PaymentType.DEPOSIT_PAY);
+        PaymentTransaction source;
+        if (deposits.isEmpty()) {
+            BookingCharge depositCharge = charges.save(charge(b, ChargeType.DEPOSIT, null, b.getTotalAmount(), s.getDepositRatio(),
+                    s.getDepositAmount(), paidAt, "Cọc giữ chỗ (VietQR)", ChargeConfirmationStatus.ACCEPTED));
+            source = transactions.save(inbound(b, depositCharge, PaymentType.DEPOSIT_PAY, s.getDepositAmount(), paidAt,
+                    "SEED-" + b.getBookingCode() + "-DEP"));
+            em.flush();
+        } else {
+            source = deposits.get(0);
+        }
+        depositPayments.synchronize(b);
+
+        User renterUser = b.getRenter().getUser();
+        User providerUser = b.getVehicle().getProvider().getUser();
+        Instant now = Instant.now();
+        boolean transferred = "AWAIT_RENTER".equals(state) || "REPORTED_NOT_RECEIVED".equals(state);
+        Instant refundedAt = "AWAIT_RENTER".equals(state) ? now.minus(2, ChronoUnit.HOURS) : now.minus(30, ChronoUnit.HOURS);
+        String reason = "Hoàn 100% tiền cọc: khách huỷ trước giờ đón hơn 24 giờ theo chính sách huỷ";
+        String bankName = "Techcombank";
+        String holder = DemoAssetFactory.stripDiacritics(renterUser.getFullName()).toUpperCase();
+        String account = "19036" + String.format("%07d", renterUser.getId() * 7919 % 10_000_000);
+
+        PaymentTransaction out = new PaymentTransaction();
+        out.setBooking(b);
+        out.setType(PaymentType.REFUND);
+        out.setDirection(PaymentDirection.OUT);
+        out.setMethod(PaymentMethod.BANK_TRANSFER);
+        out.setAmount(source.getAmount());
+        out.setAppliedAmount(BigDecimal.ZERO);
+        out.setProcessingNote(reason);
+        out.setCreatedAt(cancelledAt);
+        out.setUpdatedAt(transferred ? refundedAt : cancelledAt);
+        if (transferred) {
+            String reference = "FT" + (26_100_000_000L + b.getId() * 7_777L);
+            out.setStatus(PaymentStatus.PAID);
+            out.setPaidAt(refundedAt);
+            out.setGatewayRef(reference);
+            out.setVerificationMethod(PaymentVerificationMethod.PROVIDER_CONFIRMED);
+            out.setConfirmedBy(providerUser);
+            out.setReceiptUrl(storeRefundReceipt(providerUser, b.getBookingCode(), bankName, holder, account,
+                    source.getAmount(), refundedAt, reference));
+        } else {
+            out.setStatus(PaymentStatus.PENDING);
+        }
+        out = transactions.save(out);
+
+        RefundRequest refund = new RefundRequest();
+        refund.setBooking(b);
+        refund.setPaymentTransaction(out);
+        refund.setSourcePaymentTransaction(source);
+        refund.setAmount(RefundMath.money(source.getAmount()));
+        refund.setReason(reason);
+        refund.setSourceEventId(RefundMath.partId("CANCEL:" + b.getId(), source.getId()));
+        if (!"AWAIT_ACCOUNT".equals(state)) {
+            refund.setRecipientBankName(bankName);
+            refund.setRecipientAccountHolder(holder);
+            refund.setRecipientAccountNumber(account);
+        }
+        refund.setRequestedBy(renterUser);
+        refund.setCreatedAt(transferred ? cancelledAt : now.minus(3, ChronoUnit.HOURS));
+        if (transferred) {
+            refund.setStatus(RefundStatus.REFUNDED);
+            refund.setApprovedBy(providerUser);
+            refund.setRefundTransactionNo(out.getGatewayRef());
+            refund.setGatewayRefundRef(out.getGatewayRef());
+            refund.setReceiptWaitingAt(refundedAt);
+            refund.setReceiptDeadline(refundedAt.plus(72, ChronoUnit.HOURS));
+            if ("REPORTED_NOT_RECEIVED".equals(state)) {
+                refund.setReceiptStatus("REPORTED_NOT_RECEIVED");
+                refund.setReceiptReportedAt(refundedAt.plus(20, ChronoUnit.HOURS));
+            } else {
+                refund.setReceiptStatus("WAITING");
+            }
+            refund.setUpdatedAt(transferred ? refundedAt : cancelledAt);
+        } else {
+            refund.setStatus(RefundStatus.PROCESSING);
+            refund.setUpdatedAt(refund.getCreatedAt());
+        }
+        refunds.save(refund);
+        b.setStatus("AWAIT_RENTER".equals(state) ? BookingStatus.CANCELLED : BookingStatus.CANCELLATION_REVIEW);
+        bookings.save(b);
+    }
+
+    private String storeRefundReceipt(User provider, String bookingCode, String bankName, String holder, String account,
+                                      BigDecimal amount, Instant at, String reference) {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(420, 640, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = image.createGraphics();
+        try {
+            g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new java.awt.Color(0xF1F5F9));
+            g.fillRect(0, 0, 420, 640);
+            g.setColor(new java.awt.Color(0x047857));
+            g.fillRect(0, 0, 420, 190);
+            g.setColor(java.awt.Color.WHITE);
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 22));
+            g.drawString("Chuyen khoan thanh cong", 40, 80);
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 34));
+            g.drawString(DemoAssetFactory.money(amount) + " VND", 40, 140);
+            g.setColor(java.awt.Color.WHITE);
+            g.fillRoundRect(24, 220, 372, 380, 18, 18);
+            String[][] rows = {
+                    {"Ngan hang nhan", nz(bankName)},
+                    {"Chu tai khoan", nz(holder)},
+                    {"So tai khoan", nz(account)},
+                    {"Noi dung", "HOAN COC " + bookingCode},
+                    {"Thoi gian", java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")
+                            .withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).format(at)},
+                    {"Ma giao dich", nz(reference)},
+            };
+            int y = 262;
+            for (String[] row : rows) {
+                g.setColor(new java.awt.Color(0x64748B));
+                g.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 14));
+                g.drawString(row[0], 44, y);
+                g.setColor(new java.awt.Color(0x0F172A));
+                g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 16));
+                g.drawString(row[1], 44, y + 22);
+                y += 58;
+            }
+        } finally {
+            g.dispose();
+        }
+        try (java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream()) {
+            javax.imageio.ImageIO.write(image, "png", bytes);
+            return fileStorage.store("refund-proof", provider.getId(), "refund-" + bookingCode + ".png", bytes.toByteArray(), "image/png");
+        } catch (IOException ex) {
+            throw new IllegalStateException("Cannot render refund receipt", ex);
+        }
+    }
+
+    private static String nz(String value) {
+        return value == null ? "" : DemoAssetFactory.stripDiacritics(value);
+    }
 
     private void assignMissingDriver(Booking b) {
         if (b.getDriver() != null) return;
@@ -846,8 +1164,6 @@ public class DemoDataCompletenessSeeder {
         endConfirmations.save(history);
     }
 
-    // ------------------------------------------------------------------ disputes
-
     private User admin() {
         return users.findByEmailIgnoreCase("admin01@ecomotion.vn").orElseThrow();
     }
@@ -856,7 +1172,6 @@ public class DemoDataCompletenessSeeder {
         return disputes.findByBooking_Id(b.getId()).stream().anyMatch(d -> d.getCategory() == category);
     }
 
-    /** Khách khiếu nại phí quá giờ; admin đối chiếu GPS và giảm một phần (PARTIAL_WAIVE). */
     private void ensurePartialWaiveDispute(Booking b, BookingPolicySnapshot s) {
         if (hasDispute(b, DisputeCategory.CHARGE) || !paidIn(b, PaymentType.SETTLEMENT).isEmpty()) return;
         int grace = s == null || s.getAllowedOvertimeMinutes() == null ? 30 : s.getAllowedOvertimeMinutes();
@@ -872,13 +1187,12 @@ public class DemoDataCompletenessSeeder {
                 "Tôi chỉ trả xe trễ khoảng 1 tiếng do kẹt xe trên cao tốc Phan Thiết – Dầu Giây, không phải 2 tiếng rưỡi như tài xế ghi.",
                 List.of()).disputeId();
         em.flush();
-        em.clear(); // resolveDispute refresh() cần dispute được nạp lại từ DB
+        em.clear();
         disputeService.resolveDispute(id, admin().getId(), DisputeStatus.RESOLVED, DisputeResolutionDecision.PARTIAL_WAIVE,
                 "Đối chiếu GPS: xe về bãi trễ khoảng 1 giờ 20 phút. Giảm 1 giờ quá giờ, giữ lại 1 giờ.", unit);
         backdateDispute(id, reportedEnd.plus(40, ChronoUnit.MINUTES), reportedEnd.plus(26, ChronoUnit.HOURS));
     }
 
-    /** Khách phản đối giờ kết thúc tài xế báo; admin chốt theo giờ khách (ACCEPT_RENTER_TIME + correctedEndAt). */
     private void ensureRenterTimeDispute(Booking b, BookingPolicySnapshot s) {
         if (hasDispute(b, DisputeCategory.TRIP_NOT_CONFIRMED) || !paidIn(b, PaymentType.SETTLEMENT).isEmpty()) return;
         if (endConfirmations.findFirstByBooking_IdOrderByIdDesc(b.getId()).isPresent()) return;
@@ -907,7 +1221,7 @@ public class DemoDataCompletenessSeeder {
                 "Tôi đã trả xe tại bãi lúc khoảng 10 phút sau giờ hẹn, tài xế bấm kết thúc chuyến muộn hơn gần 1 tiếng rưỡi.",
                 List.of()).disputeId();
         em.flush();
-        em.clear(); // resolveDispute refresh() cần dispute được nạp lại từ DB
+        em.clear();
         disputeService.resolveDispute(id, admin().getId(), DisputeStatus.RESOLVED, null,
                 "Camera bãi xe và GPS xác nhận xe về lúc 10 phút sau giờ hẹn; chốt giờ kết thúc theo khách, miễn phí quá giờ.",
                 null, "ACCEPT_RENTER_TIME", renterSays);
@@ -922,7 +1236,6 @@ public class DemoDataCompletenessSeeder {
         backdateDispute(id, reportedAt.plus(35, ChronoUnit.MINUTES), settledAt);
     }
 
-    /** Nhà xe ghi thiếu 50.000 đ tiền quyết toán; admin đối chiếu sao kê và ghi bù (PAYMENT_MISMATCH). */
     private void ensureMismatchDispute(Booking b, Timeline t) {
         if (hasDispute(b, DisputeCategory.PAYMENT_MISMATCH)) return;
         PaymentRequest request = paymentRequests.findByBooking_IdAndPaymentType(b.getId(), PaymentRequestType.FINAL_BALANCE)
@@ -969,8 +1282,6 @@ public class DemoDataCompletenessSeeder {
                 .setParameter(1, resolvedAt).setParameter(2, disputeId).setParameter(3, resolvedAt).executeUpdate();
     }
 
-    // ------------------------------------------------------------------ reviews
-
     private static final String[] VEHICLE_5 = {
             "Xe sạch sẽ, thơm tho, điều hoà mát lạnh. Cả nhà đi rất thoải mái.",
             "Xe mới, chạy êm, cách âm tốt. Sẽ thuê lại lần sau.",
@@ -999,7 +1310,7 @@ public class DemoDataCompletenessSeeder {
     private static final int[] DRIVER_RATINGS = {5, 5, 4, 5, 5, 3, 5, 4, 5, 4, 5, 5};
 
     private void ensureReviews(Booking b, Timeline t, int index) {
-        if (index < 0 || index % 5 == 1 || index % 5 == 3) return; // ~60% đơn hoàn tất có đánh giá
+        if (index < 0 || index % 5 == 1 || index % 5 == 3) return;
         Instant base = (b.getProviderConfirmedAt() != null ? b.getProviderConfirmedAt()
                 : t.completed != null ? t.completed : b.getActualEndAt()).plus(3 + index % 7, ChronoUnit.HOURS);
         int vehicleRating = VEHICLE_RATINGS[index % VEHICLE_RATINGS.length];

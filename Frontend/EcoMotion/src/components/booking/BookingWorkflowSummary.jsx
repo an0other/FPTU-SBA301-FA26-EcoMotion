@@ -103,7 +103,6 @@ export default function BookingWorkflowSummary({
     }
   }
 
-
   return (
     <section aria-label="Tiến trình đơn thuê" className="space-y-3">
       {/* Visual Stepper & Phase Card */}
@@ -295,7 +294,6 @@ export default function BookingWorkflowSummary({
         </details>
       )}
 
-      {/* Refunds: only when multiple requests or renter/provider must act (receipt, proof, errors) */}
       {shouldShowRefundDetailsList(workflow?.refunds, { provider }) && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs space-y-2 shadow-2xs">
           <h3 className="font-bold text-slate-900 flex items-center gap-1.5">

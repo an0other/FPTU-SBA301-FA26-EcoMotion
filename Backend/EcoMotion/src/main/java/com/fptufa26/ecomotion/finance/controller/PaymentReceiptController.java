@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PaymentReceiptController {
     private final PaymentReceiptService paymentReceiptService;
 
-    @GetMapping({"/api/v1/payments/receipt", "/api/payments/receipt"})
+    @GetMapping("/api/payments/receipt")
     public ResponseEntity<ApiResponse<PaymentReceiptResponse>> getReceipt(
             @AuthenticationPrincipal SecurityUser principal, @RequestParam String reference) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())

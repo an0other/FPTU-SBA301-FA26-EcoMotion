@@ -40,7 +40,7 @@ async function adminPage(page, disputes, onPatch) {
     return route.fulfill({ json: { data: path.endsWith('/bookings') ? [] : {} } })
   })
   await page.goto('/admin')
-  await page.getByRole('button', { name: 'A04 — Vận hành & Hoàn tiền', exact: true }).click()
+  await page.getByRole('button', { name: 'Vận hành & Hoàn tiền', exact: true }).click()
   await page.getByRole('button', { name: 'Khiếu nại & Dispute' }).click()
 }
 
@@ -51,7 +51,7 @@ test('admin uses IN_REVIEW and charge ruling cannot contradict the selected stat
     payloads.push(route.request().postDataJSON())
     await route.fulfill({ json: { data: { ...row, ...payloads.at(-1) } } })
   })
-  await expect(page.getByRole('button', { name: 'IN_REVIEW', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Đang xem xét', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Phân xử & Chi tiết' }).click()
   const dialog = page.getByRole('dialog', { name: 'Phân xử khiếu nại #11' })
   await dialog.locator('select').selectOption('REJECTED')

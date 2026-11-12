@@ -42,7 +42,6 @@ class NotificationStreamHttpTest {
         Probe(NotificationStreamService streams, TransactionTemplate tx, EntityManager em) {this.streams=streams;this.tx=tx;this.em=em;}
         @GetMapping(value="/api/renter/sse-test/timeout/{id}",produces="text/event-stream")
         SseEmitter timeout(@PathVariable Long id) throws Exception {
-            // Deliberately leave a timed-out emitter registered: reproduce the original container failure.
             SseEmitter emitter=new SseEmitter(50L); streams.registerEmitter(id,emitter);
             emitter.send(SseEmitter.event().name("INIT").data("connected")); return emitter;
         }
@@ -65,7 +64,6 @@ class NotificationStreamHttpTest {
             HttpResponse<java.io.InputStream> stream=client.send(HttpRequest.newBuilder(URI.create("http://localhost:"+port+"/api/renter/sse-test/timeout/"+user.getId()))
                     .header("Authorization","Bearer "+token).GET().build(),HttpResponse.BodyHandlers.ofInputStream());
             assertThat(stream.statusCode()).isEqualTo(200);
-            // EOF proves the actual embedded Tomcat AsyncContext has timed out.
             try { stream.body().readAllBytes(); }
             catch (java.io.IOException disconnected) { /* Tomcat may abort chunked transfer on timeout. */ }
             finally { stream.body().close(); }

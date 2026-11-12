@@ -9,9 +9,12 @@ test('reconciliation carries optimistic version and stable request key without a
   assert.deepEqual(reconciliationPayload({ version: 3 }, proof, 'same-request'), result)
   assert.equal('amount' in result, false)
 })
-test('reconciliation blocks missing proof, stale data and invented resolution codes', () => {
+test('reconciliation blocks missing note, stale data and invented resolution codes; references are optional', () => {
   assert.throws(() => reconciliationPayload({}, proof, 'a'))
-  assert.throws(() => reconciliationPayload({ version: 0 }, { ...proof, evidenceReference: '' }, 'a'))
+  assert.throws(() => reconciliationPayload({ version: 0 }, { ...proof, note: '  ' }, 'a'))
+  const minimal = reconciliationPayload({ version: 0 }, { outcome: 'TRANSFER_VERIFIED', note: 'Sao kê khớp', evidenceReference: '', transactionReference: '' }, 'a')
+  assert.equal(minimal.evidenceReference, undefined)
+  assert.equal(minimal.transactionReference, undefined)
   assert.throws(() => reconciliationPayload({ version: 0 }, { ...proof, outcome: 'AUTO_REFUND_AGAIN' }, 'a'))
 })
 test('pre-handover cancellation ruling can retain money only through explicit zero award with evidence', () => {

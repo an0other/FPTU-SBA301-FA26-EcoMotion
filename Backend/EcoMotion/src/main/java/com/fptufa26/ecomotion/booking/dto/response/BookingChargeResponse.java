@@ -19,7 +19,6 @@ public record BookingChargeResponse(
         String createdByName,
         Instant createdAt,
         ChargeConfirmationStatus confirmationStatus,
-        /** Ai miễn khoản này: PROVIDER_WITHDRAWN (nhà xe rút), ADMIN_DISPUTE (admin phân xử), SYSTEM. */
         String waivedSource
 ) {
     public BookingChargeResponse(Long id, ChargeType chargeType, String description, Integer quantity,
@@ -37,7 +36,6 @@ public record BookingChargeResponse(
                 createdByName, createdAt, ChargeConfirmationStatus.ACCEPTED);
     }
 
-    /** Keeps the original renter booking response constructor available. */
     public BookingChargeResponse(ChargeType chargeType, String description, Integer quantity,
                                  BigDecimal unitPrice, BigDecimal amount) {
         this(null, chargeType, description, quantity, unitPrice, null, amount,

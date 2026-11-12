@@ -8,7 +8,7 @@ import java.util.Set;
 public final class StorageObjectPath {
 
     private static final Set<String> ALLOWED_ENTITIES = Set.of(
-            "renter", "provider", "driver", "vehicle", "booking", "payment-evidence", "refund-proof");
+            "renter", "provider", "driver", "vehicle", "booking", "payment-evidence", "refund-proof", "commission-proof");
 
     private StorageObjectPath() {
     }

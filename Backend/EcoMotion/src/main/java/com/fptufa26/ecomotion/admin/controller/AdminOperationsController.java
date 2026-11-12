@@ -1,7 +1,6 @@
 package com.fptufa26.ecomotion.admin.controller;
 
 import com.fptufa26.ecomotion.admin.dto.request.DisputeResolveRequest;
-import com.fptufa26.ecomotion.admin.dto.request.RefundRequest;
 import com.fptufa26.ecomotion.admin.dto.response.AdminBookingDto;
 import com.fptufa26.ecomotion.admin.dto.response.AdminDisputeDto;
 import com.fptufa26.ecomotion.admin.dto.response.AdminPaymentDto;
@@ -106,14 +105,6 @@ public class AdminOperationsController {
         List<PaymentTransaction> transactions = bookingService.listTransactions(status, type);
         List<AdminPaymentDto> dtos = transactions.stream().map(this::mapPaymentDto).toList();
         return ResponseEntity.ok(ApiResponse.ok(dtos));
-    }
-
-    @PostMapping("/refund")
-    @Operation(summary = "Thực hiện hoàn tiền mô phỏng (Mock Refund) cho đơn thuê")
-    public ResponseEntity<ApiResponse<AdminPaymentDto>> processRefund(
-            @Valid @RequestBody RefundRequest request) {
-        PaymentTransaction refund = bookingService.processMockRefund(request.getBookingId(), request.getAmount(), request.getReason());
-        return ResponseEntity.ok(ApiResponse.ok("Hoàn tiền thành công", mapPaymentDto(refund)));
     }
 
     private AdminBookingDto mapBookingDto(Booking b) {

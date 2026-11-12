@@ -12,10 +12,6 @@ const MISMATCH_TYPES = [
   { value: 'OTHER', label: 'Khác' },
 ]
 
-/**
- * Biên nhận cho khách: nhà xe xác nhận đã nhận bao nhiêu tiền. Khách chỉ cần đối chiếu với app ngân hàng;
- * nếu sai thì bấm "Số tiền không đúng?" để gửi khiếu nại kèm ảnh chuyển khoản.
- */
 export default function PaymentReceiptsCard({ bookingCode, bookingStatus, workflow, disputeCategories = [], onOpenDispute, onUploadEvidence, onChanged }) {
   const [receipts, setReceipts] = useState([])
   const [requestsById, setRequestsById] = useState({})
@@ -118,67 +114,79 @@ export default function PaymentReceiptsCard({ bookingCode, bookingStatus, workfl
   return (
     <section className="mx-auto mt-4 max-w-[1120px] px-4" aria-label="Biên nhận thanh toán">
       <div className="rounded-[16px] border border-[#E6EBE8] bg-white p-5 shadow-[0_8px_24px_rgba(20,34,26,0.06)]">
-        <h3 className="text-sm font-bold text-[#14221A]">Biên nhận thanh toán</h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-bold text-[#14221A]">Biên nhận thanh toán</h3>
+          {receipts.length > 0 && (
+            <p className="text-xs text-[#667085]">
+              Tổng đã ghi nhận <strong className="font-mono text-[#14221A]">{formatCurrency(receipts.reduce((sum, r) => sum + (Number(r.amount) || 0), 0))}</strong>
+            </p>
+          )}
+        </div>
 
         {receipts.length > 0 && (
-          <ul className="mt-3 divide-y divide-[#EEF2EF]">
+          <ul className="mt-3 space-y-2">
             {receipts.map((receipt) => {
               const request = requestsById[receipt.paymentRequestId]
               const requested = Number(request?.amount) || 0
               const shortfall = request && ['PARTIALLY_PAID', 'PENDING', 'REJECTED'].includes(request.status)
                 ? Math.max(0, requested - (Number(request.paidAmount) || 0)) : 0
               const acknowledgedAt = request?.renterAcknowledgedAt
+              const differs = requested > 0 && Math.round(requested) !== Math.round(Number(receipt.amount) || 0)
               return (
-              <li key={receipt.paymentRequestId} className="space-y-2 py-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[#475467]">
-                    {receipt.gateway ? 'Đã thanh toán qua VNPAY' : 'Nhà xe xác nhận đã nhận'}
-                    {' · '}<strong className="text-[#14221A]">{receipt.label}</strong>
-                    {receipt.lastPaidAt ? <span className="text-xs text-[#667085]"> · {formatBookingWhen(receipt.lastPaidAt)}</span> : null}
-                    {receipt.adminAdjusted ? <span className="ml-1 text-xs text-[#15803D]">(đã gồm phần admin đối soát)</span> : null}
-                  </span>
-                  <strong className="font-mono text-[#14221A]">{formatCurrency(receipt.amount)}</strong>
+              <li key={receipt.paymentRequestId} className="rounded-xl border border-[#EEF2EF] px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong className="text-[#14221A]">{receipt.label}</strong>
+                      <span className="rounded-full bg-[#F2F4F7] px-2 py-0.5 text-[10px] font-semibold text-[#475467]">
+                        {receipt.gateway ? 'VNPAY' : 'Chuyển khoản'}
+                      </span>
+                      {receipt.adminAdjusted && <span className="rounded-full bg-[#ECFDF3] px-2 py-0.5 text-[10px] font-semibold text-[#15803D]">Admin đã đối soát</span>}
+                    </div>
+                    <p className="mt-0.5 text-xs text-[#667085]">
+                      {receipt.gateway ? 'Cổng thanh toán xác nhận' : 'Nhà xe xác nhận đã nhận'}
+                      {receipt.lastPaidAt ? ` · ${formatBookingWhen(receipt.lastPaidAt)}` : ''}
+                      {differs && <> · cần {formatCurrency(requested)}</>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {!receipt.gateway && acknowledgedAt && (
+                      <span title={`Bạn đã xác nhận lúc ${formatBookingWhen(acknowledgedAt)}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-[#ECFDF3] px-2 py-0.5 text-[10px] font-semibold text-[#15803D]">
+                        ✓ Đã đối chiếu
+                      </span>
+                    )}
+                    <strong className="font-mono text-base text-[#14221A]">{formatCurrency(receipt.amount)}</strong>
+                  </div>
                 </div>
-                {requested > 0 && (
-                  <p className="text-xs text-[#667085]">
-                    Số cần thanh toán: {formatCurrency(requested)}
-                    {shortfall > 0 && <> · <span className="font-semibold text-[#B54708]">Còn thiếu {formatCurrency(shortfall)}</span></>}
-                  </p>
-                )}
                 {shortfall > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    <span>Bạn cần chuyển thêm <strong>{formatCurrency(shortfall)}</strong> để đủ {receipt.label.toLowerCase()}. Mã QR ở trang thanh toán đã điền sẵn số còn thiếu.</span>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <span>Còn thiếu <strong>{formatCurrency(shortfall)}</strong> — mã QR ở trang thanh toán đã điền sẵn số còn thiếu.</span>
                     <Link to={`/renter/bookings/${encodeURIComponent(bookingCode)}/payment`}
                       className="rounded-lg bg-amber-600 px-3 py-1.5 font-bold text-white hover:bg-amber-700">
                       Chuyển phần còn thiếu
                     </Link>
                   </div>
                 )}
-                {!receipt.gateway && (
-                  acknowledgedAt ? (
-                    <p className="flex flex-wrap items-center gap-2 text-xs text-[#15803D]">
-                      ✓ Bạn đã xác nhận số tiền này đúng lúc {formatBookingWhen(acknowledgedAt)}
-                      {canReport && (
-                        <button type="button" onClick={() => openReport(receipt)} className="font-semibold text-[#B54708] hover:underline">
-                          Báo sai
-                        </button>
-                      )}
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="text-[#667085]">Đối chiếu với app ngân hàng của bạn:</span>
-                      <button type="button" disabled={busy || !request} onClick={() => acknowledge(receipt.paymentRequestId)}
-                        className="rounded-lg border border-[#15803D] px-3 py-1.5 font-semibold text-[#15803D] hover:bg-[#F0FDF4] disabled:opacity-50">
-                        Đúng số tiền
+                {!receipt.gateway && !acknowledgedAt && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-[#667085]">Đối chiếu với app ngân hàng:</span>
+                    <button type="button" disabled={busy || !request} onClick={() => acknowledge(receipt.paymentRequestId)}
+                      className="rounded-lg border border-[#15803D] px-3 py-1 font-semibold text-[#15803D] hover:bg-[#F0FDF4] disabled:opacity-50">
+                      Đúng số tiền
+                    </button>
+                    {canReport && (
+                      <button type="button" onClick={() => openReport(receipt)}
+                        className="rounded-lg border border-[#F2D6B3] px-3 py-1 font-semibold text-[#B54708] hover:bg-[#FFFAF3]">
+                        Không đúng — gửi biên lai
                       </button>
-                      {canReport && (
-                        <button type="button" onClick={() => openReport(receipt)}
-                          className="rounded-lg border border-[#F2D6B3] px-3 py-1.5 font-semibold text-[#B54708] hover:bg-[#FFFAF3]">
-                          Không đúng — gửi biên lai
-                        </button>
-                      )}
-                    </div>
-                  )
+                    )}
+                  </div>
+                )}
+                {!receipt.gateway && acknowledgedAt && canReport && (
+                  <button type="button" onClick={() => openReport(receipt)} className="mt-1 text-[11px] font-semibold text-[#B54708] hover:underline">
+                    Báo sai số tiền
+                  </button>
                 )}
               </li>
               )

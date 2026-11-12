@@ -1,8 +1,16 @@
 package com.fptufa26.ecomotion.user.service.implement;
 
+import com.fptufa26.ecomotion.booking.entity.Booking;
+import com.fptufa26.ecomotion.booking.enums.BookingStatus;
+import com.fptufa26.ecomotion.booking.service.BookingQueryService;
 import com.fptufa26.ecomotion.common.exception.BadRequestException;
 import com.fptufa26.ecomotion.common.exception.ConflictException;
 import com.fptufa26.ecomotion.common.exception.NotFoundException;
+import com.fptufa26.ecomotion.common.response.PageResponse;
+import com.fptufa26.ecomotion.notification.external.dto.request.AccountCredentialNotificationRequest;
+import com.fptufa26.ecomotion.notification.external.dto.response.NotificationResult;
+import com.fptufa26.ecomotion.notification.external.exception.NotificationDeliveryException;
+import com.fptufa26.ecomotion.notification.external.service.ExternalNotificationDispatcherService;
 import com.fptufa26.ecomotion.user.dto.request.CreateDriverByProviderRequest;
 import com.fptufa26.ecomotion.user.dto.request.ToggleDriverStatusRequest;
 import com.fptufa26.ecomotion.user.dto.request.UpdateDriverByProviderRequest;
@@ -11,6 +19,8 @@ import com.fptufa26.ecomotion.user.dto.response.ProviderDriverStatsResponse;
 import com.fptufa26.ecomotion.user.entity.Driver;
 import com.fptufa26.ecomotion.user.entity.Provider;
 import com.fptufa26.ecomotion.user.entity.User;
+import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
+import com.fptufa26.ecomotion.user.enums.DriverOperationalStatus;
 import com.fptufa26.ecomotion.user.enums.DriverStatus;
 import com.fptufa26.ecomotion.user.enums.EkycStatus;
 import com.fptufa26.ecomotion.user.enums.Role;
@@ -18,30 +28,27 @@ import com.fptufa26.ecomotion.user.enums.UserStatus;
 import com.fptufa26.ecomotion.user.repository.DriverRepository;
 import com.fptufa26.ecomotion.user.repository.ProviderRepository;
 import com.fptufa26.ecomotion.user.repository.UserRepository;
-import com.fptufa26.ecomotion.user.service.ProviderDriverService;
-import com.fptufa26.ecomotion.booking.entity.Booking;
-import com.fptufa26.ecomotion.booking.enums.BookingStatus;
-import com.fptufa26.ecomotion.booking.service.BookingQueryService;
-import com.fptufa26.ecomotion.user.enums.DriverActivityStatus;
-import com.fptufa26.ecomotion.user.enums.DriverOperationalStatus;
 import com.fptufa26.ecomotion.user.service.DriverStatusService;
-import lombok.RequiredArgsConstructor;
+import com.fptufa26.ecomotion.user.service.ProviderDriverService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import com.fptufa26.ecomotion.common.response.PageResponse;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
 @Service
-@RequiredArgsConstructor
 public class ProviderDriverServiceImpl implements ProviderDriverService {
 
     private final DriverRepository driverRepository;
@@ -49,8 +56,43 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
     private final ProviderRepository providerRepository;
     private final BookingQueryService bookingQueryService;
     private final DriverStatusService driverStatusService;
+    private final ExternalNotificationDispatcherService externalNotificationDispatcherService;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
+
+    @Value("${app.frontend.base-url:http://localhost:5173}")
+    private String frontendBaseUrl;
+
+    @Autowired
+    public ProviderDriverServiceImpl(
+            DriverRepository driverRepository,
+            UserRepository userRepository,
+            ProviderRepository providerRepository,
+            BookingQueryService bookingQueryService,
+            DriverStatusService driverStatusService,
+            ExternalNotificationDispatcherService externalNotificationDispatcherService,
+            PasswordEncoder passwordEncoder,
+            Clock clock) {
+        this.driverRepository = driverRepository;
+        this.userRepository = userRepository;
+        this.providerRepository = providerRepository;
+        this.bookingQueryService = bookingQueryService;
+        this.driverStatusService = driverStatusService;
+        this.externalNotificationDispatcherService = externalNotificationDispatcherService;
+        this.passwordEncoder = passwordEncoder;
+        this.clock = clock;
+    }
+
+    public ProviderDriverServiceImpl(
+            DriverRepository driverRepository,
+            UserRepository userRepository,
+            ProviderRepository providerRepository,
+            BookingQueryService bookingQueryService,
+            DriverStatusService driverStatusService,
+            PasswordEncoder passwordEncoder,
+            Clock clock) {
+        this(driverRepository, userRepository, providerRepository, bookingQueryService, driverStatusService, null, passwordEncoder, clock);
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -176,10 +218,9 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
         user.setStatus(UserStatus.ACTIVE);
         user.setEkycStatus(EkycStatus.VERIFIED);
 
-        String rawPassword = (request.initialPassword() != null && !request.initialPassword().isBlank())
-                ? request.initialPassword().trim()
-                : "EcoMotion@123";
-        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        String temporaryPassword = generateTemporaryPassword();
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setMustChangePassword(true);
 
         user.setAvatarUrl(request.portraitUrl().trim());
 
@@ -198,6 +239,23 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
         driver.setRatingCount(0);
 
         Driver savedDriver = driverRepository.save(driver);
+
+        if (externalNotificationDispatcherService == null) {
+            throw new IllegalStateException("External notification dispatcher is required");
+        }
+        NotificationResult notificationResult = externalNotificationDispatcherService.sendDriverCredentials(
+                new AccountCredentialNotificationRequest(
+                        normalizedEmail,
+                        savedUser.getFullName(),
+                        temporaryPassword,
+                        buildChangePasswordUrl(normalizedEmail),
+                        provider.getDisplayName()
+                )
+        );
+        if (!notificationResult.success()) {
+            throw new NotificationDeliveryException("Không thể gửi email thông tin tài khoản tới " + normalizedEmail);
+        }
+
         return toResponse(savedDriver);
     }
 
@@ -303,7 +361,6 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
         User u = d.getUser();
         DriverOperationalStatus opStatus = driverStatusService.calculateOperationalStatus(d);
 
-        // Chuyến đang làm dở: đang chạy, hoặc đã tới điểm đón / chờ khách xác nhận bắt đầu.
         String currentTripBookingCode = bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.IN_PROGRESS)
                 .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.AWAITING_START_CONFIRMATION))
                 .or(() -> bookingQueryService.findFirstByDriverIdAndStatus(d.getId(), BookingStatus.DRIVER_ARRIVED))
@@ -351,5 +408,24 @@ public class ProviderDriverServiceImpl implements ProviderDriverService {
                 d.getUpdatedAt(),
                 upcoming.size()
         );
+    }
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final String TEMP_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+
+    private String generateTemporaryPassword() {
+        StringBuilder builder = new StringBuilder(8);
+        for (int i = 0; i < 8; i++) {
+            builder.append(TEMP_PASSWORD_ALPHABET.charAt(SECURE_RANDOM.nextInt(TEMP_PASSWORD_ALPHABET.length())));
+        }
+        return builder.toString();
+    }
+
+    private String buildChangePasswordUrl(String email) {
+        String base = frontendBaseUrl != null ? frontendBaseUrl.trim() : "http://localhost:5173";
+        if (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        return base + "/first-login?email=" + URLEncoder.encode(email, StandardCharsets.UTF_8);
     }
 }

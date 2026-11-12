@@ -50,6 +50,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
     private final org.springframework.core.env.Environment environment;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.verification.identity.service.PersonIdentityQueryService> identityQueries;
 
     private boolean identityAvailableInCurrentProfile(com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity identity) {
         return identity.getVerificationMethod() != com.fptufa26.ecomotion.verification.identity.enums.IdentityVerificationMethod.DEMO_SEED
@@ -71,7 +72,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void attachLinkedIdentity(Long userId, Long identityId) {
         User user = loadUser(userId);
-        var identity = entityManager.find(com.fptufa26.ecomotion.verification.identity.entity.PersonIdentity.class, identityId);
+        var identity = identityQueries.getObject().findById(identityId).orElse(null);
         if (user.getStatus() != UserStatus.PENDING || user.getIdentity() != null || identity == null
                 || identity.getVerificationMethod() == com.fptufa26.ecomotion.verification.identity.enums.IdentityVerificationMethod.DEMO_SEED
                 || identity.getStatus() != com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED
@@ -225,8 +226,18 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public Long resetPassword(String email, String rawPassword) {
+        return applyNewPassword(email, rawPassword);
+    }
+
+    @Override
+    public Long completeFirstLoginPasswordChange(String email, String rawPassword) {
+        return applyNewPassword(email, rawPassword);
+    }
+
+    private Long applyNewPassword(String email, String rawPassword) {
         User user = findByEmail(email).orElseThrow(() -> new NotFoundException("User not found"));
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setMustChangePassword(false);
         userRepository.saveAndFlush(user);
         return user.getUserId();
     }

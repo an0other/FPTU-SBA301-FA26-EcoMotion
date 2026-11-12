@@ -53,7 +53,6 @@ public class ReviewServiceImpl implements ReviewService {
         return evidenceImageStorage.store(file, userId, "review").url();
     }
 
-    /** Nhận xét không được chứa từ ngữ thô tục/xúc phạm. */
     private void validateComment(String comment) {
         if (!ReviewContentPolicy.isClean(comment)) {
             throw new IllegalArgumentException(
@@ -61,7 +60,6 @@ public class ReviewServiceImpl implements ReviewService {
         }
     }
 
-    /** Chỉ nhận ảnh do chính người đánh giá tải lên qua hệ thống; lưu vào cột media (mỗi dòng một URL). */
     private String normalizeMedia(Long userId, java.util.List<String> urls) {
         if (urls == null || urls.isEmpty()) return null;
         String prefix = "/api/files/booking/" + userId + "/review-";

@@ -6,10 +6,6 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-/**
- * Nhà xe báo sai lệch khi đối soát chuyển khoản. issueType: UNDERPAID (chuyển thiếu), OVERPAID (chuyển dư),
- * WRONG_CONTENT (sai nội dung), NOT_RECEIVED (không thấy tiền về), OTHER (khác — bắt buộc mô tả).
- */
 public record ReportIssueRequest(
         @Size(max = 500, message = "Mô tả tối đa 500 ký tự")
         String issueNote,
@@ -38,7 +34,6 @@ public record ReportIssueRequest(
         };
     }
 
-    /** Ghép thành ghi chú hiển thị cho khách và admin. */
     public String composedNote() {
         StringBuilder out = new StringBuilder();
         String label = label(issueType);

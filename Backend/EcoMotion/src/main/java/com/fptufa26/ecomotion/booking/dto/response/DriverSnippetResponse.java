@@ -8,7 +8,6 @@ public record DriverSnippetResponse(
         String portraitUrl,
         BigDecimal ratingAvg,
         int ratingCount,
-        /** Id tài xế để mở trang đánh giá công khai của tài xế. */
         Long id
 ) {
 }

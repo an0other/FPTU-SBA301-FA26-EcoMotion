@@ -68,9 +68,6 @@ function PaymentCompleteHighlight({ line }) {
   )
 }
 
-/**
- * Khối tóm tắt trạng thái đơn, lịch thuê và số tiền — dùng trên chi tiết đơn, thanh toán, submitted.
- */
 export function BookingOrderSummaryCard({
   bookingCode,
   status,
@@ -85,7 +82,6 @@ export function BookingOrderSummaryCard({
   pickupFee,
   charges,
   showStatusBadges = true,
-  // Khi trang đã có bảng "Khoản phí" bóc tách chi tiết: chỉ giữ dòng tổng, tránh lặp lại từng khoản.
   totalOnly = false,
   className = '',
 }) {

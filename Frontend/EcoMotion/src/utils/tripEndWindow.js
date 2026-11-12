@@ -1,7 +1,3 @@
-/**
- * Cửa sổ 12 giờ để Renter xác nhận giờ kết thúc do tài xế báo (không chặn luồng phụ phí/quyết toán).
- * Đọc lần báo kết thúc mới nhất trong workflow.endConfirmations (BE trả theo id giảm dần).
- */
 export function tripEndWindow(workflow, now = Date.now()) {
   const latest = (workflow?.endConfirmations || [])
     .slice()
@@ -10,7 +6,9 @@ export function tripEndWindow(workflow, now = Date.now()) {
   const deadline = Date.parse(latest.deadline)
   const secondsLeft = Number.isFinite(deadline) ? Math.max(0, Math.floor((deadline - now) / 1000)) : 0
   const base = {
-    reportedAt: latest.reportedAt,
+    reportedAt: latest.correctedEndAt || latest.reportedAt,
+    driverReportedAt: latest.reportedAt,
+    corrected: Boolean(latest.correctedEndAt),
     deadline: latest.deadline,
     confirmationMethod: latest.confirmationMethod || null,
     confirmedAt: latest.confirmedAt || null,

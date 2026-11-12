@@ -10,8 +10,6 @@ export const TV5_REALTIME_EVENTS = Object.fromEntries([
 
 const REALTIME_EVENT_NAMES = new Set(Object.values(TV5_REALTIME_EVENTS))
 
-// Khi SSE kết nối lại liên tục (stream đóng sớm, proxy lỗi) mỗi lần 'open' không được kéo dữ liệu lại;
-// chỉ đồng bộ nếu lần đồng bộ gần nhất đã cũ hơn ngưỡng này.
 export const RECONNECT_RESYNC_MIN_GAP_MS = 30000
 
 export function useRealtimeSync({ handlers = {}, onResync, pollIntervalMs = 15000, enabled = true } = {}) {

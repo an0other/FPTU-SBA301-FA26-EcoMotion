@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import ProviderHeader from '../../components/provider/ProviderHeader'
 import Toast from '../../components/Toast'
 import { providerService } from '../../services/providerService'
+import { providerBookingService } from '../../services/providerBookingService'
 import DriverStatusBadge from '../../components/driver/DriverStatusBadge'
 import { DRIVER_STATUS_LABELS } from '../../utils/driverStatus'
 import { useRealtimeSync } from '../../hooks/useRealtimeSync'
@@ -10,7 +11,6 @@ import { getErrorMessage } from '../../utils/errorMessage'
 import { formatBookingWhen } from '../../utils/bookingDateTime'
 import { isValidEmail, isValidVnPhone } from '../../utils/validation'
 
-// Nhà xe cần biết tài xế đang chạy chuyến nào và sắp chạy những chuyến nào trước khi phân công.
 function DriverTripSummary({ driver, compact = false }) {
   const upcomingCount = Number(driver.upcomingTripCount || 0)
   if (!driver.currentTripBookingCode && !driver.nextTripBookingCode) {
@@ -81,11 +81,21 @@ export default function ProviderDriverPage() {
   const [formLicenseClass, setFormLicenseClass] = useState('B2')
   const [formLicenseExpiry, setFormLicenseExpiry] = useState('')
   const [formLicenseImageUrl, setFormLicenseImageUrl] = useState('')
-  const [formInitialPassword, setFormInitialPassword] = useState('EcoMotion@123')
   const [uploadingPortrait, setUploadingPortrait] = useState(false)
   const [uploadingLicense, setUploadingLicense] = useState(false)
 
   const [previewData, setPreviewData] = useState(null)
+  const [tripModal, setTripModal] = useState({
+    isOpen: false,
+    loading: false,
+    driver: null,
+    trips: [],
+    tab: 'all',
+    selectedTripCode: null,
+    tripDetail: null,
+    detailLoading: false,
+    error: null,
+  })
 
   const portraitInputRef = useRef(null)
   const licenseInputRef = useRef(null)
@@ -152,7 +162,6 @@ export default function ProviderDriverPage() {
     setFormLicenseClass('B2')
     setFormLicenseExpiry('')
     setFormLicenseImageUrl('')
-    setFormInitialPassword('EcoMotion@123')
     setIsModalOpen(true)
   }
 
@@ -174,6 +183,136 @@ export default function ProviderDriverPage() {
     setIsModalOpen(false)
     setIsEditing(false)
     setEditingDriverId(null)
+  }
+
+  const formatTripDateTime = (isoString) => {
+    if (!isoString) return 'Chưa cập nhật'
+    const date = new Date(isoString)
+    if (isNaN(date.getTime())) return isoString
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} ${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
+  }
+
+  const getTripPriority = (status) => {
+    switch (status) {
+      case 'IN_PROGRESS':
+      case 'AWAITING_START_CONFIRMATION':
+      case 'AWAITING_END_CONFIRMATION':
+      case 'DRIVER_ARRIVED':
+      case 'DRIVER_CONFIRMED':
+        return 1
+      case 'DRIVER_ASSIGNED':
+      case 'CONFIRMED':
+      case 'ACCEPTED':
+      case 'AWAITING_DEPOSIT':
+      case 'PENDING':
+        return 2
+      case 'COMPLETED':
+      case 'AWAITING_EXTRA_CHARGE_CONFIRMATION':
+      case 'AWAITING_FINAL_PAYMENT':
+        return 3
+      case 'CANCELLATION_REVIEW':
+      case 'CANCELLED':
+      case 'REJECTED':
+        return 4
+      default:
+        return 5
+    }
+  }
+
+  const sortDriverTrips = (trips) => {
+    return [...trips].sort((a, b) => {
+      const p1 = getTripPriority(a.status)
+      const p2 = getTripPriority(b.status)
+      if (p1 !== p2) return p1 - p2
+      const t1 = a.pickupTime ? new Date(a.pickupTime).getTime() : 0
+      const t2 = b.pickupTime ? new Date(b.pickupTime).getTime() : 0
+      if (p1 <= 2) {
+        return t1 - t2
+      }
+      return t2 - t1
+    })
+  }
+
+  const getTripStatusBadge = (status) => {
+    switch (status) {
+      case 'IN_PROGRESS':
+        return { label: 'Đang thực hiện chuyến', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-600 animate-pulse' }
+      case 'CONFIRMED':
+      case 'DRIVER_ASSIGNED':
+      case 'DRIVER_CONFIRMED':
+      case 'DRIVER_ARRIVED':
+        return { label: 'Có lịch sắp tới', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' }
+      case 'COMPLETED':
+        return { label: 'Đã hoàn thành', bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', dot: 'bg-slate-500' }
+      case 'CANCELLED':
+      case 'REJECTED':
+        return { label: 'Đã hủy', bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', dot: 'bg-rose-500' }
+      default:
+        return { label: status || 'Khác', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', dot: 'bg-slate-400' }
+    }
+  }
+
+  const handleOpenDriverTripsModal = async (driver) => {
+    if (!driver) return
+    setTripModal({
+      isOpen: true,
+      loading: true,
+      driver,
+      trips: [],
+      tab: 'all',
+      selectedTripCode: null,
+      tripDetail: null,
+      detailLoading: false,
+      error: null,
+    })
+    try {
+      const trips = await providerService.getDriverTrips(driver.id)
+      setTripModal((prev) => ({ ...prev, loading: false, trips: trips || [] }))
+    } catch {
+      setTripModal((prev) => ({ ...prev, loading: false, error: 'Không thể tải danh sách chuyến xe của tài xế.' }))
+    }
+  }
+
+  const handleSelectTrip = async (tripCode) => {
+    if (!tripCode) return
+    setTripModal((prev) => ({
+      ...prev,
+      selectedTripCode: tripCode,
+      detailLoading: true,
+      tripDetail: null,
+      error: null,
+    }))
+    try {
+      const detail = await providerBookingService.getBookingDetail(tripCode)
+      setTripModal((prev) => ({ ...prev, detailLoading: false, tripDetail: detail }))
+    } catch {
+      setTripModal((prev) => ({ ...prev, detailLoading: false, error: 'Không thể tải chi tiết chuyến xe.' }))
+    }
+  }
+
+  const handleBackToTripList = () => {
+    setTripModal((prev) => ({
+      ...prev,
+      selectedTripCode: null,
+      tripDetail: null,
+      detailLoading: false,
+      error: null,
+    }))
+  }
+
+  const handleCloseTripModal = () => {
+    setTripModal({
+      isOpen: false,
+      loading: false,
+      driver: null,
+      trips: [],
+      tab: 'all',
+      selectedTripCode: null,
+      tripDetail: null,
+      detailLoading: false,
+      error: null,
+    })
   }
 
   const handleFileUpload = async (file, type) => {
@@ -293,11 +432,10 @@ export default function ProviderDriverPage() {
           licenseClass: formLicenseClass,
           licenseExpiry: formLicenseExpiry,
           licenseImageUrl: formLicenseImageUrl,
-          initialPassword: formInitialPassword,
         })
         setToast({
           type: 'success',
-          message: 'Tạo hộ tài khoản tài xế thành công! Hồ sơ đang ở trạng thái Chờ duyệt.',
+          message: `Tạo hộ tài xế thành công! Mật khẩu tạm 8 ký tự đã được gửi riêng tới email ${cleanEmail}.`,
         })
       }
       handleCloseModal()
@@ -690,12 +828,13 @@ export default function ProviderDriverPage() {
             {filteredDrivers.map((driver) => (
               <div
                 key={driver.id}
-                className={`bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group border ${driver.status === 'REJECTED' ? 'border-rose-300/80' : 'border-slate-200/90'
-                  }`}
+                className={`bg-white rounded-2xl p-5 sm:p-6 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group border h-full ${
+                  driver.status === 'REJECTED' ? 'border-rose-300/80' : 'border-slate-200/90'
+                }`}
               >
-                <div>
+                <div className="flex-1 flex flex-col">
 
-                  <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3.5 min-w-0 flex-1">
                       <div className="relative shrink-0">
                         {driver.portraitUrl && !brokenAvatarIds.has(driver.id) ? (
@@ -719,19 +858,16 @@ export default function ProviderDriverPage() {
                         {driver.status === 'REJECTED' && (
                           <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-rose-500 border-2 border-white"></span>
                         )}
+                        {driver.status === 'SUSPENDED' && (
+                          <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-slate-400 border-2 border-white"></span>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-bold text-base text-slate-900 leading-tight group-hover:text-emerald-700 transition-colors truncate">
                           {driver.fullName}
                         </h3>
-                        {driver.status === 'APPROVED' && (
-                          <div className="mt-1">
-                            <DriverStatusBadge status={driver.operationalStatus} />
-                            <DriverTripSummary driver={driver} />
-                          </div>
-                        )}
-                        <p className="mt-1 text-xs text-slate-500">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
-                        <div className="flex items-center gap-1.5 mt-1">
+                        <p className="mt-1 text-xs text-slate-500 truncate">Cập nhật: {formatBookingWhen(driver.updatedAt) || 'Chưa có thời gian cập nhật'}</p>
+                        <div className="flex items-center gap-1.5 mt-1 h-5">
                           {driver.ratingCount > 0 ? (
                             <>
                               <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-bold flex items-center gap-1">
@@ -741,7 +877,8 @@ export default function ProviderDriverPage() {
                               <span className="text-xs text-slate-400">({driver.ratingCount} đánh giá)</span>
                             </>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-xs font-medium">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-xs font-medium flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px] text-slate-400">star_outline</span>
                               Mới tạo (0 đánh giá)
                             </span>
                           )}
@@ -775,7 +912,92 @@ export default function ProviderDriverPage() {
                     )}
                   </div>
 
-                  <div className="space-y-1.5 mb-5 text-slate-600 text-xs">
+                  <div className="my-2.5">
+                    {driver.status === 'APPROVED' ? (
+                      driver.operationalStatus === 'ON_TRIP' ? (
+                        <div className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-emerald-50/90 border border-emerald-200/80 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
+                            <span>Đang thực hiện chuyến</span>
+                          </div>
+                          {driver.currentTripBookingCode && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDriverTripsModal(driver)}
+                              className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 text-xs font-bold hover:bg-emerald-100/70 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">visibility</span>
+                              Chi tiết chuyến
+                            </button>
+                          )}
+                        </div>
+                      ) : driver.operationalStatus === 'SCHEDULED' ? (
+                        <div className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-blue-50/90 border border-blue-200/80 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-800 shrink-0">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+                            <span>Có lịch sắp tới</span>
+                          </div>
+                          {driver.nextTripBookingCode && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDriverTripsModal(driver)}
+                              className="px-2.5 py-1 rounded-lg bg-white border border-blue-300 text-blue-800 text-xs font-bold hover:bg-blue-100/70 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">visibility</span>
+                              Chi tiết chuyến
+                            </button>
+                          )}
+                        </div>
+                      ) : driver.operationalStatus === 'UNAVAILABLE' ? (
+                        <div className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                            <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+                            <span>Đang tạm nghỉ</span>
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-medium">Tạm ngưng nhận lịch</span>
+                        </div>
+                      ) : (
+                        <div className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                            <span>Sẵn sàng đón khách</span>
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-medium">Chưa có lịch mới</span>
+                        </div>
+                      )
+                    ) : driver.status === 'SUSPENDED' ? (
+                      <div className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-100/80 border border-slate-200 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                          <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+                          <span>Tài xế đang tạm ngưng</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400">Chưa thể gán chuyến</span>
+                      </div>
+                    ) : driver.status === 'PENDING' ? (
+                      <div className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-amber-50/70 border border-amber-200/70 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-amber-800">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+                          <span>Hồ sơ đang chờ duyệt</span>
+                        </div>
+                        <span className="text-[11px] text-amber-600 font-medium">Đợi Admin xác thực</span>
+                      </div>
+                    ) : (
+                      <div className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-rose-50/70 border border-rose-200/70 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-rose-800">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                          <span>Hồ sơ bị từ chối</span>
+                        </div>
+                        <span className="text-[11px] text-rose-600 font-medium">Cần cập nhật lại</span>
+                      </div>
+                    )}
+                    {driver.status === 'APPROVED' && (driver.currentTripBookingCode || driver.nextTripBookingCode) && (
+                      <div className="mt-1.5 px-1">
+                        <DriverTripSummary driver={driver} compact />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 my-3 text-slate-600 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-[17px] text-slate-400">call</span>
                       <span className="font-semibold text-slate-700">{driver.phone || 'Chưa có SĐT'}</span>
@@ -786,7 +1008,7 @@ export default function ProviderDriverPage() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 mb-4">
+                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 mb-3">
                     <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-200/80">
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-xs rounded font-bold">
@@ -827,7 +1049,7 @@ export default function ProviderDriverPage() {
                   </div>
 
                   {driver.status === 'REJECTED' && (
-                    <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 mb-4 text-xs leading-relaxed">
+                    <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 mb-3 text-xs leading-relaxed">
                       <div className="flex items-start gap-2">
                         <span className="material-symbols-outlined text-[18px] text-rose-600 flex-shrink-0 mt-0.5">
                           error
@@ -844,7 +1066,7 @@ export default function ProviderDriverPage() {
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div className="mt-auto pt-3.5 border-t border-slate-100 flex items-center justify-between min-h-[44px]">
                   {driver.status === 'APPROVED' || driver.status === 'SUSPENDED' ? (
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -919,8 +1141,22 @@ export default function ProviderDriverPage() {
                             <div className="font-bold text-slate-900 truncate">{driver.fullName}</div>
                             {driver.status === 'APPROVED' && (
                               <div className="mt-0.5">
-                                <DriverStatusBadge status={driver.operationalStatus} />
-                                <DriverTripSummary driver={driver} compact />
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <DriverStatusBadge status={driver.operationalStatus} />
+                                  {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenDriverTripsModal(driver)}
+                                      className="text-[11px] text-emerald-700 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
+                                    >
+                                      <span className="material-symbols-outlined text-[13px]">visibility</span>
+                                      Chi tiết chuyến
+                                    </button>
+                                  )}
+                                </div>
+                                {(driver.currentTripBookingCode || driver.nextTripBookingCode) && (
+                                  <DriverTripSummary driver={driver} compact />
+                                )}
                               </div>
                             )}
                             <div className="text-[11px] text-slate-400 font-mono">ID #{driver.id}</div>
@@ -1038,28 +1274,27 @@ export default function ProviderDriverPage() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-hidden transform transition-all flex flex-col">
-
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white z-20">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[96vh] overflow-hidden transform transition-all flex flex-col">
+            <div className="px-6 py-3.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 shrink-0">
-                  <span className="material-symbols-outlined text-[22px]">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-700 shrink-0">
+                  <span className="material-symbols-outlined text-[20px]">
                     {isEditing ? 'edit_document' : 'person_add'}
                   </span>
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">
+                  <h2 className="text-base font-bold text-slate-900 leading-tight">
                     {isEditing ? 'Cập nhật Hồ sơ tài xế' : 'Tạo hộ tài khoản & Hồ sơ tài xế'}
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-amber-700 font-medium">
                     {isEditing
-                      ? 'Điều chỉnh thông tin bằng lái và gửi Quản trị viên thẩm định lại nếu sửa đổi GPLX'
-                      : 'Nhập thông tin ban đầu để gửi Quản trị viên thẩm định bằng lái'}
+                      ? 'Chỉnh sửa GPLX hoặc ảnh chân dung sẽ chuyển tài xế về trạng thái Chờ duyệt để thẩm định lại.'
+                      : 'Tài xế tạo hộ sẽ ở trạng thái Chờ duyệt cho đến khi Quản trị viên phê duyệt bằng lái.'}
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={handleCloseModal}
                 className="w-8 h-8 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
               >
@@ -1067,25 +1302,10 @@ export default function ProviderDriverPage() {
               </button>
             </div>
 
-            {/* Modal Form */}
             <form onSubmit={handleSubmitForm} className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-
-                {/* Info Banner */}
-                <div className="px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200/80 flex items-start sm:items-center gap-2.5 text-xs text-amber-800">
-                  <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0 mt-0.5 sm:mt-0">info</span>
-                  <p>
-                    {isEditing
-                      ? 'Chỉnh sửa giấy phép lái xe hoặc ảnh chân dung sẽ chuyển tài xế về trạng thái Chờ duyệt để Quản trị viên thẩm định lại.'
-                      : 'Tài xế tạo hộ sẽ ở trạng thái Chờ duyệt cho đến khi Quản trị viên phê duyệt bằng lái.'}
-                  </p>
-                </div>
-
-                {/* 2-Column Grid for Balanced Form */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                  {/* Column 1: Account & Driver License */}
-                  <div className="space-y-3.5">
+              <div className="flex-1 overflow-y-auto px-6 py-3.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2.5">
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-slate-100">
                       <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                       1. Tài khoản & Giấy phép lái xe
@@ -1102,129 +1322,123 @@ export default function ProviderDriverPage() {
                         value={formFullName}
                         onChange={(e) => setFormFullName(e.target.value)}
                         placeholder="Ví dụ: Hoàng Minh Đức"
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                        className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Email đăng nhập *
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        disabled={isEditing}
-                        maxLength={255}
-                        value={formEmail}
-                        onChange={(e) => setFormEmail(e.target.value)}
-                        placeholder="duc.driver@ecomotion.vn"
-                        className={`w-full border px-3.5 py-2 rounded-xl text-xs ${isEditing
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Email đăng nhập *
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          disabled={isEditing}
+                          maxLength={255}
+                          value={formEmail}
+                          onChange={(e) => setFormEmail(e.target.value)}
+                          placeholder="duc.driver@ecomotion.vn"
+                          className={`w-full border px-3 py-1.5 rounded-xl text-xs ${isEditing
                             ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                             : 'bg-slate-50 text-slate-800 border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40'
                           }`}
-                      />
-                      {isEditing && (
-                        <p className="text-[10px] text-slate-400 mt-0.5">Email không thể thay đổi sau khi tạo.</p>
-                      )}
-                    </div>
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Số điện thoại *
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        maxLength={20}
-                        value={formPhone}
-                        onChange={(e) => setFormPhone(e.target.value)}
-                        placeholder="0987 654 321"
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                      />
-                    </div>
-
-                    {!isEditing && (
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Mật khẩu ban đầu
+                          Số điện thoại *
                         </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            readOnly
-                            value={formInitialPassword}
-                            className="w-full bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-xl font-mono text-xs text-slate-500 cursor-not-allowed"
-                          />
-                          <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">
-                            lock
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Tài xế sẽ đổi mật khẩu ở lần đăng nhập đầu tiên.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="pt-2 border-t border-slate-100">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Số GPLX *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            maxLength={20}
-                            value={formLicenseNo}
-                            onChange={(e) => setFormLicenseNo(e.target.value)}
-                            placeholder="790184920194"
-                            className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">
-                            Hạng bằng *
-                          </label>
-                          <select
-                            required
-                            value={formLicenseClass}
-                            onChange={(e) => setFormLicenseClass(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
-                          >
-                            <option value="B1">B1 (&le; 9 chỗ TĐ)</option>
-                            <option value="B2">B2 (&le; 9 chỗ KD)</option>
-                            <option value="C">C (&gt; 3.5 tấn)</option>
-                            <option value="D">D (10-30 chỗ)</option>
-                            <option value="E">E (&gt; 30 chỗ)</option>
-                          </select>
-                        </div>
+                        <input
+                          type="tel"
+                          required
+                          maxLength={20}
+                          value={formPhone}
+                          onChange={(e) => setFormPhone(e.target.value)}
+                          placeholder="0987 654 321"
+                          className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                        />
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Ngày hết hạn GPLX *
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        min={new Date().toLocaleDateString('en-CA')}
-                        value={formLicenseExpiry}
-                        onChange={(e) => setFormLicenseExpiry(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Số GPLX *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={20}
+                          value={formLicenseNo}
+                          onChange={(e) => setFormLicenseNo(e.target.value)}
+                          placeholder="790184920194"
+                          className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Hạng bằng *
+                        </label>
+                        <select
+                          required
+                          value={formLicenseClass}
+                          onChange={(e) => setFormLicenseClass(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
+                        >
+                          <option value="B1">B1 (&le; 9 chỗ TĐ)</option>
+                          <option value="B2">B2 (&le; 9 chỗ KD)</option>
+                          <option value="C">C (&gt; 3.5 tấn)</option>
+                          <option value="D">D (10-30 chỗ)</option>
+                          <option value="E">E (&gt; 30 chỗ)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Ngày hết hạn GPLX *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          min={new Date().toLocaleDateString('en-CA')}
+                          value={formLicenseExpiry}
+                          onChange={(e) => setFormLicenseExpiry(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer"
+                        />
+                      </div>
+
+                      {!isEditing ? (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Mật khẩu tài khoản
+                          </label>
+                          <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-xl text-[11px] text-emerald-800 leading-tight">
+                            <span className="material-symbols-outlined text-emerald-600 text-[15px] shrink-0">
+                              mail
+                            </span>
+                            <span className="truncate">Gửi mã 8 ký tự tới email tài xế</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col justify-end">
+                          <label className="block text-xs font-bold text-slate-400 mb-1">Mật khẩu tài khoản</label>
+                          <span className="text-xs text-slate-400 italic py-1.5">Tài xế tự quản lý mật khẩu</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Column 2: Verification Images */}
-                  <div className="space-y-4">
+                  <div className="space-y-2.5">
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-slate-100">
                       <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                       2. Hình ảnh hồ sơ xác thực
                     </h3>
 
-                    {/* Portrait Photo */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Ảnh chân dung đại diện *
@@ -1240,14 +1454,14 @@ export default function ProviderDriverPage() {
                         }}
                       />
                       {formPortraitUrl ? (
-                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 group h-32 bg-slate-100 flex items-center justify-center shadow-sm">
+                        <div className="relative rounded-xl overflow-hidden border border-slate-200 group h-24 bg-slate-100 flex items-center justify-center shadow-xs">
                           <img src={formPortraitUrl} alt="Portrait preview" className="h-full w-full object-cover" />
                           <button
                             type="button"
                             onClick={() => portraitInputRef.current?.click()}
                             className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1.5 cursor-pointer backdrop-blur-[2px]"
                           >
-                            <span className="material-symbols-outlined text-[18px]">cached</span>
+                            <span className="material-symbols-outlined text-[16px]">cached</span>
                             Đổi ảnh chân dung
                           </button>
                         </div>
@@ -1261,34 +1475,29 @@ export default function ProviderDriverPage() {
                               handleFileUpload(e.dataTransfer.files[0], 'portrait')
                             }
                           }}
-                          className="border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group h-32 flex flex-col items-center justify-center"
+                          className="border-2 border-dashed border-slate-300 rounded-xl p-2.5 text-center hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group h-24 flex flex-col items-center justify-center"
                         >
                           {uploadingPortrait ? (
                             <div className="flex flex-col items-center justify-center">
-                              <span className="material-symbols-outlined text-[24px] text-emerald-700 animate-spin">
-                                progress_activity
-                              </span>
-                              <p className="text-xs text-slate-500 mt-1">Đang tải lên...</p>
+                              <span className="material-symbols-outlined text-[20px] text-emerald-700 animate-spin">progress_activity</span>
+                              <p className="text-[11px] text-slate-500 mt-1">Đang tải lên...</p>
                             </div>
                           ) : (
                             <>
-                              <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                <span className="material-symbols-outlined text-[20px]">
-                                  add_a_photo
-                                </span>
+                              <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mb-0.5 group-hover:scale-110 transition-transform">
+                                <span className="material-symbols-outlined text-[18px]">add_a_photo</span>
                               </div>
                               <p className="text-xs font-bold text-slate-700">Tải ảnh chân dung</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">JPG, PNG, WEBP &le; 5MB</p>
+                              <p className="text-[10px] text-slate-400">JPG, PNG, WEBP &le; 5MB</p>
                             </>
                           )}
                         </div>
                       )}
                     </div>
 
-                    {/* License Photo */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Ảnh chụp GPLX 2 mặt *
+                        Ảnh chụp GPLX *
                       </label>
                       <input
                         type="file"
@@ -1301,14 +1510,14 @@ export default function ProviderDriverPage() {
                         }}
                       />
                       {formLicenseImageUrl ? (
-                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 group h-32 bg-slate-100 flex items-center justify-center shadow-sm">
+                        <div className="relative rounded-xl overflow-hidden border border-slate-200 group h-24 bg-slate-100 flex items-center justify-center shadow-xs">
                           <img src={formLicenseImageUrl} alt="License preview" className="h-full w-full object-cover" />
                           <button
                             type="button"
                             onClick={() => licenseInputRef.current?.click()}
                             className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs gap-1.5 cursor-pointer backdrop-blur-[2px]"
                           >
-                            <span className="material-symbols-outlined text-[18px]">cached</span>
+                            <span className="material-symbols-outlined text-[16px]">cached</span>
                             Đổi ảnh GPLX
                           </button>
                         </div>
@@ -1322,24 +1531,20 @@ export default function ProviderDriverPage() {
                               handleFileUpload(e.dataTransfer.files[0], 'license')
                             }
                           }}
-                          className="border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group h-32 flex flex-col items-center justify-center"
+                          className="border-2 border-dashed border-slate-300 rounded-xl p-2.5 text-center hover:bg-emerald-50/30 hover:border-emerald-300 transition-all cursor-pointer group h-24 flex flex-col items-center justify-center"
                         >
                           {uploadingLicense ? (
                             <div className="flex flex-col items-center justify-center">
-                              <span className="material-symbols-outlined text-[24px] text-emerald-700 animate-spin">
-                                progress_activity
-                              </span>
-                              <p className="text-xs text-slate-500 mt-1">Đang tải lên...</p>
+                              <span className="material-symbols-outlined text-[20px] text-emerald-700 animate-spin">progress_activity</span>
+                              <p className="text-[11px] text-slate-500 mt-1">Đang tải lên...</p>
                             </div>
                           ) : (
                             <>
-                              <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                <span className="material-symbols-outlined text-[20px]">
-                                  badge
-                                </span>
+                              <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mb-0.5 group-hover:scale-110 transition-transform">
+                                <span className="material-symbols-outlined text-[18px]">badge</span>
                               </div>
                               <p className="text-xs font-bold text-slate-700">Tải ảnh bằng lái</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">Rõ số và mộc đỏ &le; 5MB</p>
+                              <p className="text-[10px] text-slate-400">JPG, PNG, WEBP &le; 5MB · Rõ số và mộc đỏ</p>
                             </>
                           )}
                         </div>
@@ -1349,8 +1554,7 @@ export default function ProviderDriverPage() {
                 </div>
               </div>
 
-              {/* Fixed Modal Footer - Always Visible Without Scrolling */}
-              <div className="px-6 py-3 border-t border-slate-200 bg-slate-50/90 flex items-center justify-end gap-3 shrink-0">
+              <div className="px-6 py-2.5 border-t border-slate-200 bg-slate-50/90 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={handleCloseModal}
@@ -1431,6 +1635,292 @@ export default function ProviderDriverPage() {
                   Đang thẩm định
                 </span>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tripModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 p-6 space-y-4">
+            {tripModal.selectedTripCode ? (
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBackToTripList}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-slate-100 transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-base">arrow_back</span>
+                    <span>Quay lại</span>
+                  </button>
+                  <div className="h-4 w-px bg-slate-200"></div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-sm">Chi tiết chuyến xe</h3>
+                    <p className="text-[11px] text-slate-500">Tài xế: {tripModal.driver?.fullName}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseTripModal}
+                  className="w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-xl">commute</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-slate-900 text-base">Danh sách chuyến xe</h3>
+                      {!tripModal.loading && (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-bold">
+                          {tripModal.trips.length} chuyến
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">Tài xế: {tripModal.driver?.fullName} {tripModal.driver?.phone ? `· ${tripModal.driver.phone}` : ''}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseTripModal}
+                  className="w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+            )}
+
+            {tripModal.selectedTripCode ? (
+              tripModal.detailLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                  <span className="material-symbols-outlined text-3xl text-emerald-700 animate-spin">progress_activity</span>
+                  <span className="text-xs text-slate-500 mt-2 font-medium">Đang tải thông tin chuyến đi...</span>
+                </div>
+              ) : tripModal.error ? (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                  {tripModal.error}
+                </div>
+              ) : (
+                <div className="space-y-3.5 text-xs text-slate-600">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Mã đơn đặt xe</span>
+                      <span className="font-mono font-extrabold text-slate-900 text-sm">{tripModal.selectedTripCode}</span>
+                    </div>
+                    {(() => {
+                      const badge = getTripStatusBadge(tripModal.tripDetail?.status || tripModal.tripDetail?.bookingStatus)
+                      return (
+                        <span className={`px-2.5 py-1 rounded-full font-bold text-xs flex items-center gap-1.5 border ${badge.bg} ${badge.text} ${badge.border}`}>
+                          <span className={`w-2 h-2 rounded-full ${badge.dot}`}></span>
+                          {badge.label}
+                        </span>
+                      )
+                    })()}
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-lg text-slate-400 shrink-0 mt-0.5">schedule</span>
+                      <div>
+                        <span className="font-bold text-slate-800 block text-xs">Thời gian đón:</span>
+                        <span className="text-slate-600 font-medium">
+                          {formatTripDateTime(tripModal.tripDetail?.pickupTime)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-lg text-slate-400 shrink-0 mt-0.5">location_on</span>
+                      <div>
+                        <span className="font-bold text-slate-800 block text-xs">Điểm đón khách:</span>
+                        <span className="text-slate-600">
+                          {tripModal.tripDetail?.pickupAddress || 'Đang cập nhật địa chỉ đón'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-lg text-slate-400 shrink-0 mt-0.5">person</span>
+                      <div>
+                        <span className="font-bold text-slate-800 block text-xs">Khách hàng:</span>
+                        <span className="text-slate-600 font-medium">
+                          {tripModal.tripDetail?.renterName || 'Đang cập nhật'} {tripModal.tripDetail?.renterPhone ? `· ${tripModal.tripDetail.renterPhone}` : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-lg text-slate-400 shrink-0 mt-0.5">directions_car</span>
+                      <div>
+                        <span className="font-bold text-slate-800 block text-xs">Phương tiện:</span>
+                        <span className="text-slate-600 font-medium">
+                          {tripModal.tripDetail?.vehicleName || 'Phương tiện theo hợp đồng'} {tripModal.tripDetail?.licensePlate ? `· Biển số: ${tripModal.tripDetail.licensePlate}` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            ) : (
+              tripModal.loading ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                  <span className="material-symbols-outlined text-3xl text-emerald-700 animate-spin">progress_activity</span>
+                  <span className="text-xs text-slate-500 mt-2 font-medium">Đang tải danh sách chuyến xe...</span>
+                </div>
+              ) : tripModal.error ? (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                  {tripModal.error}
+                </div>
+              ) : tripModal.trips.length === 0 ? (
+                <div className="py-10 text-center text-slate-400">
+                  <span className="material-symbols-outlined text-4xl text-slate-300">directions_car</span>
+                  <p className="text-xs text-slate-600 mt-2 font-semibold">Chưa có chuyến xe nào</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Tài xế hiện chưa được phân công chuyến xe nào trong hệ thống.</p>
+                </div>
+              ) : (() => {
+                const sortedTrips = sortDriverTrips(tripModal.trips || [])
+                const upcomingCount = sortedTrips.filter((t) => getTripPriority(t.status) <= 2).length
+                const historyCount = sortedTrips.filter((t) => getTripPriority(t.status) >= 3).length
+                const displayedTrips = sortedTrips.filter((t) => {
+                  if (tripModal.tab === 'upcoming') return getTripPriority(t.status) <= 2
+                  if (tripModal.tab === 'history') return getTripPriority(t.status) >= 3
+                  return true
+                })
+
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setTripModal((prev) => ({ ...prev, tab: 'all' }))}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          tripModal.tab === 'all'
+                            ? 'bg-white text-emerald-800 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Tất cả ({sortedTrips.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTripModal((prev) => ({ ...prev, tab: 'upcoming' }))}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                          tripModal.tab === 'upcoming'
+                            ? 'bg-white text-emerald-800 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {upcomingCount > 0 && <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>}
+                        Đang chạy & Sắp tới ({upcomingCount})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTripModal((prev) => ({ ...prev, tab: 'history' }))}
+                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          tripModal.tab === 'history'
+                            ? 'bg-white text-emerald-800 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Lịch sử ({historyCount})
+                      </button>
+                    </div>
+
+                    {displayedTrips.length === 0 ? (
+                      <div className="py-10 text-center text-slate-400">
+                        <span className="material-symbols-outlined text-4xl text-slate-300">event_busy</span>
+                        <p className="text-xs text-slate-600 mt-2 font-semibold">Không có chuyến xe nào trong mục này</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Vui lòng chọn tab khác để xem các chuyến xe của tài xế.</p>
+                      </div>
+                    ) : (
+                      <div className="max-h-[50vh] overflow-y-auto space-y-2.5 pr-1">
+                        {displayedTrips.map((trip) => {
+                          const badge = getTripStatusBadge(trip.status)
+                          const isOngoing = getTripPriority(trip.status) === 1
+                          return (
+                            <div
+                              key={trip.bookingId || trip.bookingCode}
+                              onClick={() => handleSelectTrip(trip.bookingCode)}
+                              className={`p-3 rounded-xl border transition-all cursor-pointer group ${
+                                isOngoing
+                                  ? 'border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70 hover:border-emerald-500 shadow-2xs'
+                                  : 'border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/20'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2 mb-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-extrabold text-slate-900 text-xs">{trip.bookingCode}</span>
+                                  {isOngoing && (
+                                    <span className="px-1.5 py-0.2 bg-emerald-600 text-white text-[9px] font-extrabold rounded uppercase tracking-wider">
+                                      Hiện tại
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border ${badge.bg} ${badge.text} ${badge.border}`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`}></span>
+                                  {badge.label}
+                                </span>
+                              </div>
+
+                              <div className="space-y-1 text-slate-600 text-[11px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="material-symbols-outlined text-[15px] text-slate-400 shrink-0">schedule</span>
+                                  <span className="font-medium text-slate-700">{formatTripDateTime(trip.pickupTime)}</span>
+                                </div>
+                                {trip.vehicleName && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-[15px] text-slate-400 shrink-0">directions_car</span>
+                                    <span className="truncate">{trip.vehicleName} {trip.licensePlate ? `· ${trip.licensePlate}` : ''}</span>
+                                  </div>
+                                )}
+                                {trip.pickupAddress && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-[15px] text-slate-400 shrink-0">location_on</span>
+                                    <span className="truncate text-slate-500">{trip.pickupAddress}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-emerald-700 font-semibold group-hover:text-emerald-800">
+                                <span>Xem chi tiết chuyến</span>
+                                <span className="material-symbols-outlined text-[16px] group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()
+            )}
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              {tripModal.selectedTripCode ? (
+                <button
+                  type="button"
+                  onClick={handleBackToTripList}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-sm">arrow_back</span>
+                  Danh sách chuyến
+                </button>
+              ) : (
+                <div></div>
+              )}
+              <button
+                type="button"
+                onClick={handleCloseTripModal}
+                className="px-5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

@@ -16,10 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Sinh ảnh/tài liệu minh hoạ offline cho dữ liệu demo: avatar chữ cái đầu, thẻ chân dung và bằng lái tài xế,
- * biên nhận chuyển khoản (SVG) và PDF giấy tờ xe tối giản. Không phụ thuộc dịch vụ ngoài.
- */
 final class DemoAssetFactory {
 
     private static final ZoneId VN = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -167,7 +163,6 @@ final class DemoAssetFactory {
         return svg.getBytes(StandardCharsets.UTF_8);
     }
 
-    /** PDF 1 trang (A4) với vài dòng chữ Helvetica; tiếng Việt được bỏ dấu vì font chuẩn không có glyph. */
     static byte[] documentPdf(String title, List<String> lines) {
         StringBuilder content = new StringBuilder();
         content.append("0.75 0.11 0.11 rg 0 792 595 50 re f\n");
@@ -188,7 +183,7 @@ final class DemoAssetFactory {
         objects.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
         objects.add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R "
                 + "/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>");
-        objects.add(null); // stream object written separately
+        objects.add(null);
         objects.add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
         objects.add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
 

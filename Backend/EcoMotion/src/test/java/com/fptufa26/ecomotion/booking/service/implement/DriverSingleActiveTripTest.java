@@ -30,7 +30,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** Tài xế đang chạy chuyến DF-2026-9003 thì không được báo đến / bắt đầu chuyến EM-2026-000043. */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class DriverSingleActiveTripTest {

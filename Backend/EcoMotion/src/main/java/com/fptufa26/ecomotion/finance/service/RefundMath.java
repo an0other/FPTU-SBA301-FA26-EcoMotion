@@ -23,7 +23,6 @@ public final class RefundMath {
         return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
 
-    /** Late IPN stores applied 0 on purpose. A legacy row with applied 0 still counts its received amount. */
     public static BigDecimal appliedPortion(BigDecimal amount, BigDecimal applied, String processingNote) {
         if (applied == null || (applied.signum() == 0 && !unapplied(processingNote) && !excess(processingNote))) {
             return money(amount);
@@ -31,7 +30,6 @@ public final class RefundMath {
         return money(applied);
     }
 
-    /** Tiền khách chuyển dư: không tính vào nghĩa vụ đơn, phải hoàn hoặc cấn trừ. */
     public static final String EXCESS_PREFIX = "EXCESS";
     public static final String OVERPAY_EVENT = "OVERPAY:";
     public static final String MISMATCH_EVENT = "MISMATCH:";
@@ -49,7 +47,6 @@ public final class RefundMath {
                 || processingNote.startsWith("LATE_IPN"));
     }
 
-    /** Remaining refund that may still be created against allocated booking money. EXCESS is not part of A, F or R. */
     public static BigDecimal openAllocated(BigDecimal allocated, BigDecimal obligation,
                                            BigDecimal refundedAllocated, BigDecimal reservedAllocated) {
         return money(allocated).subtract(money(obligation)).subtract(money(refundedAllocated))
@@ -60,7 +57,7 @@ public final class RefundMath {
         if (sourceEventId == null) {
             return true;
         }
-        return !sourceEventId.startsWith("EXCESS:") && !sourceEventId.startsWith("LATE_IPN:");
+        return !sourceEventId.startsWith("EXCESS:") && !sourceEventId.startsWith("LATE_IPN:") && !excessEvent(sourceEventId);
     }
 
     public static String partId(String sourceEventId, Long transactionId) {

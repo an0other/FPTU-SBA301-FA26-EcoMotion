@@ -229,7 +229,6 @@ export default function BookingProgressStepper({
   const isCancelled = isTerminalBooking(status)
   const financialMetrics = getActiveFinancialMetrics(workflow)
 
-  // When booking is terminal (cancelled/rejected/cancellation_review)
   if (isCancelled) {
     const refundData = evaluateRefundWorkflow(workflow, booking)
 

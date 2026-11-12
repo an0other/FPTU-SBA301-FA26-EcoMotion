@@ -24,6 +24,8 @@ class RefundMathTest {
     void excessAndLateIpnStayOutsideAllocatedRefunds() {
         assertThat(RefundMath.countsTowardAllocatedRefund("EXCESS:15")).isFalse();
         assertThat(RefundMath.countsTowardAllocatedRefund("LATE_IPN:REF1")).isFalse();
+        assertThat(RefundMath.countsTowardAllocatedRefund("OVERPAY:12")).isFalse();
+        assertThat(RefundMath.countsTowardAllocatedRefund("MISMATCH:4")).isFalse();
         assertThat(RefundMath.countsTowardAllocatedRefund("WAIVE:9")).isTrue();
         assertThat(RefundMath.countsTowardAllocatedRefund("SETTLE:3")).isTrue();
     }

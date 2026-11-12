@@ -18,7 +18,6 @@ public interface VehicleCatalogService {
 
     RentalPlan requireActivePlan(Long vehicleId, Long planId);
 
-    /** Các gói thuê đang hoạt động của xe, theo thứ tự tạo. */
     List<RentalPlan> findActivePlans(Long vehicleId);
 
     String coverImageUrl(Long vehicleId);

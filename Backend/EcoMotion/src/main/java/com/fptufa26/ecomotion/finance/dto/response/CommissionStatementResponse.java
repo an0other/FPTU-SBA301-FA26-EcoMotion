@@ -1,0 +1,47 @@
+package com.fptufa26.ecomotion.finance.dto.response;
+
+import com.fptufa26.ecomotion.finance.enums.CommissionStatementStatus;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+
+public record CommissionStatementResponse(
+        Long id,
+        Long providerId,
+        String providerName,
+        String periodMonth,
+        Instant periodStart,
+        Instant periodEnd,
+        Instant dueAt,
+        BigDecimal grossRevenue,
+        BigDecimal commissionRate,
+        BigDecimal commissionAmount,
+        BigDecimal paidAmount,
+        BigDecimal remainingAmount,
+        int bookingCount,
+        CommissionStatementStatus status,
+        long overdueDays,
+        boolean blocking,
+        Instant reportedAt,
+        String paymentReference,
+        String reportedNote,
+        Instant confirmedAt,
+        String adminNote,
+        String transferContent,
+        String qrCodeUrl,
+        List<Line> lines,
+        BigDecimal creditApplied,
+        BigDecimal overpaidAmount,
+        String paymentState,
+        List<Payment> payments
+) {
+    public record Payment(Long id, BigDecimal declaredAmount, String paymentReference, String note, boolean hasProof,
+                          Instant reportedAt, String status, BigDecimal confirmedAmount, Instant decidedAt, String adminNote,
+                          String disputeStatus, BigDecimal claimedAmount, String disputeNote, Instant disputedAt,
+                          Instant disputeResolvedAt, String disputeResolution, boolean hasDisputeProof) {
+    }
+
+    public record Line(Long bookingId, String bookingCode, Instant completedAt, BigDecimal revenue, BigDecimal commission) {
+    }
+}

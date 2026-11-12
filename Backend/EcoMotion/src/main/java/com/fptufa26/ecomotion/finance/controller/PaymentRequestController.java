@@ -57,7 +57,7 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.getPaymentRequestsByBooking(bookingId, principal.getUserId()));
     }
 
-    @GetMapping({"/api/v1/renter/bookings/{bookingCode}/payment-requests", "/api/renter/bookings/{bookingCode}/payment-requests"})
+    @GetMapping("/api/renter/bookings/{bookingCode}/payment-requests")
     @Operation(summary = "Get VietQR requests for a renter booking code")
     public ApiResponse<List<PaymentRequestResponse>> getPaymentRequestsByBookingCode(
             @AuthenticationPrincipal SecurityUser principal,
@@ -66,8 +66,7 @@ public class PaymentRequestController {
                 bookingCode, principal.getUserId()));
     }
 
-    @PostMapping({"/api/v1/renter/bookings/{bookingCode}/payment-requests/deposit/reissue",
-            "/api/renter/bookings/{bookingCode}/payment-requests/deposit/reissue"})
+    @PostMapping("/api/renter/bookings/{bookingCode}/payment-requests/deposit/reissue")
     @PreAuthorize("hasRole('RENTER')")
     @Operation(summary = "Cấp lại yêu cầu đặt cọc đã hết hạn nếu lịch xe vẫn còn trống")
     public ApiResponse<PaymentRequestResponse> reissueDeposit(
@@ -91,8 +90,7 @@ public class PaymentRequestController {
         return ResponseEntity.status(HttpStatus.GONE).build();
     }
 
-    @PostMapping(value = {"/api/v1/payment-requests/{id}/proofs/multipart",
-            "/api/payment-requests/{id}/proofs/multipart"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/api/payment-requests/{id}/proofs/multipart", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Customer marks a bank transfer as sent (receipt image optional)")
     public ApiResponse<PaymentEvidenceResponse> uploadPaymentProof(
             @AuthenticationPrincipal SecurityUser principal,
@@ -115,7 +113,7 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.acknowledgeReceipt(id, principal.getUserId()));
     }
 
-    @GetMapping({"/api/v1/payment-evidences/{id}/file", "/api/payment-evidences/{id}/file"})
+    @GetMapping("/api/payment-evidences/{id}/file")
     @Operation(summary = "View an authorized payment-evidence image")
     public ResponseEntity<byte[]> viewPaymentEvidence(
             @AuthenticationPrincipal SecurityUser principal,
@@ -172,8 +170,7 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.confirmPayment(id, principal.getUserId(), effectiveRequest));
     }
 
-    @PostMapping({"/api/v1/provider/payment-requests/{id}/bank-reconciliation",
-            "/api/provider/payment-requests/{id}/bank-reconciliation"})
+    @PostMapping("/api/provider/payment-requests/{id}/bank-reconciliation")
     @PreAuthorize("hasRole('PROVIDER')")
     @Operation(summary = "Record a bank-statement-verified exception without applying payment or issuing a refund")
     public ApiResponse<PaymentRequestResponse> recordBankTransferForReconciliation(

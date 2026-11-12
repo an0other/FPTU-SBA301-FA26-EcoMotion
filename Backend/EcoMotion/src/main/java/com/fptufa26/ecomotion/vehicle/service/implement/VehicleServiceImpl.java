@@ -55,6 +55,7 @@ public class VehicleServiceImpl implements VehicleService {
     private final MapLocationService mapLocationService;
 
     private final VehicleDocumentRepository vehicleDocumentRepository;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptufa26.ecomotion.finance.service.CommissionService> commissions;
 
     @Override
     public List<Vehicle> findApprovedProviderVehicles(Long providerId) {
@@ -82,7 +83,7 @@ public class VehicleServiceImpl implements VehicleService {
             throw new IllegalArgumentException("radiusKm must be 10 or 15");
         }
 
-        List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
+        List<Vehicle> vehicles = rentableVehicles();
         Map<Long, ProviderSummary> providers = findProviders(vehicles);
         return matchingCards(vehicles, providers, keyword, location, fuelType, planType, maxPrice, sort).stream()
                 .map(card -> {
@@ -106,10 +107,17 @@ public class VehicleServiceImpl implements VehicleService {
                 .toList();
     }
 
+    private List<Vehicle> rentableVehicles() {
+        java.util.Set<Long> blocked = commissions.getObject().blockedProviderIds();
+        return vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED).stream()
+                .filter(v -> v.getProvider() == null || !blocked.contains(v.getProvider().getId()))
+                .toList();
+    }
+
     private List<VehicleCardResponse> matchingCards(String keyword, String location,
                                                      String fuelType, String planType,
                                                      BigDecimal maxPrice, VehicleSort sort) {
-        List<Vehicle> vehicles = vehicleRepository.findByStatusOrderByIdAsc(VehicleStatus.APPROVED);
+        List<Vehicle> vehicles = rentableVehicles();
         return matchingCards(vehicles, findProviders(vehicles), keyword, location, fuelType, planType,
                 maxPrice, sort);
     }

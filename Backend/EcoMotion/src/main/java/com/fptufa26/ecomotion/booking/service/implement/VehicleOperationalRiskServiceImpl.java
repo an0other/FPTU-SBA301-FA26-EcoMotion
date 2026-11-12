@@ -70,10 +70,6 @@ public class VehicleOperationalRiskServiceImpl implements VehicleOperationalRisk
                 .orElseGet(OperationalRiskResponse::safe);
     }
 
-    /**
-     * Xe sẵn sàng = max(giờ trả theo lịch của chuyến trước, hiện tại nếu đã quá giờ) + thời gian chuẩn bị xe.
-     * Chỉ cảnh báo khi mốc đó vượt giờ nhận của đơn này; chuyến trước trả sớm hơn nhiều thì không báo nhầm.
-     */
     private OperationalRiskResponse lateness(Booking booking, Booking previous) {
         Instant plannedEnd = previous.getPlannedEndAt();
         if (plannedEnd == null) return OperationalRiskResponse.vehicleBusy();

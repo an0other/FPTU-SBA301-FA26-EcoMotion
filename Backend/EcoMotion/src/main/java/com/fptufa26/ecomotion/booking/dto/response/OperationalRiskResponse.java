@@ -2,10 +2,6 @@ package com.fptufa26.ecomotion.booking.dto.response;
 
 import java.time.Instant;
 
-/**
- * Rủi ro vận hành của đơn: xe đang chạy chuyến trước và có thể về trễ so với giờ nhận xe.
- * Các trường blocking* / estimated* cho biết chuyến nào đang giữ xe, lịch trả xe, dự kiến trễ bao lâu.
- */
 public record OperationalRiskResponse(
         boolean atRisk,
         String riskType,
@@ -21,7 +17,6 @@ public record OperationalRiskResponse(
         return new OperationalRiskResponse(false, null, null, null, null, null, null, null, null);
     }
 
-    /** Giữ tương thích: cảnh báo chung khi không có dữ liệu lịch của chuyến trước. */
     public static OperationalRiskResponse vehicleBusy() {
         return new OperationalRiskResponse(true, "VEHICLE_BUSY", "WARNING",
                 "Phương tiện đang thực hiện một chuyến đi khác và có thể ảnh hưởng đến thời gian nhận xe của bạn. Nhà cung cấp đang kiểm tra khả năng đáp ứng lịch trình.",
