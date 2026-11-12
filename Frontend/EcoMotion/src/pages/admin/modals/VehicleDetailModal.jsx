@@ -9,19 +9,15 @@ import {
 } from '../../../components/icons/Icons'
 import AdminModalShell from './AdminModalShell'
 import AdminPopupModal from './AdminPopupModal'
+import { VEHICLE_STATUS_BADGES } from '../../../utils/vehicleStatus'
+import { formatAdminRating } from '../../../utils/adminRating'
 
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
 }
 
-const STATUS_BADGES = {
-  APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
-  REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
-  BLOCKED: 'bg-slate-100 text-slate-700 border-slate-300',
-  MAINTENANCE: 'bg-blue-50 text-blue-700 border-blue-200',
-}
+const STATUS_BADGES = VEHICLE_STATUS_BADGES
 
 const DOC_TYPE_LABELS = {
   REGISTRATION: 'Đăng ký xe (Cà-vẹt)',
@@ -80,6 +76,7 @@ export default function VehicleDetailModal({
   if (!vehicle) return null
 
   const images = vehicle.imageUrls && vehicle.imageUrls.length > 0 ? vehicle.imageUrls : []
+  const vehicleRating = formatAdminRating(vehicle.ratingAvg, vehicle.ratingCount, 'lượt')
 
   function handleRejectSubmit(e) {
     e.preventDefault()
@@ -380,7 +377,9 @@ export default function VehicleDetailModal({
               </div>
               <div>
                 <span className="block text-slate-500">Đánh giá trung bình:</span>
-                <strong className="text-slate-900">★ {vehicle.ratingAvg || '5.0'} ({vehicle.ratingCount || 0} lượt)</strong>
+                <strong className={vehicleRating ? 'text-slate-900' : 'text-slate-500'}>
+                  {vehicleRating || 'Chưa có'}
+                </strong>
               </div>
             </div>
           </div>

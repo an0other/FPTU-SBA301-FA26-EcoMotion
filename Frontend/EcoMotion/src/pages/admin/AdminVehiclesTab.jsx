@@ -8,14 +8,12 @@ import {
 } from '../../components/icons/Icons'
 import VehicleDetailModal from './modals/VehicleDetailModal'
 import AdminPopupModal from './modals/AdminPopupModal'
-
-const STATUS_BADGES = {
-  APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
-  REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
-  BLOCKED: 'bg-slate-100 text-slate-700 border-slate-300',
-  MAINTENANCE: 'bg-blue-50 text-blue-700 border-blue-200',
-}
+import {
+  VEHICLE_STATUS_BADGES,
+  VEHICLE_STATUS_FILTERS,
+  VEHICLE_STATUS_LABELS,
+  VEHICLE_STATUS_TITLES,
+} from '../../utils/vehicleStatus'
 
 export default function AdminVehiclesTab({
   initialStatus = 'ALL',
@@ -28,7 +26,9 @@ export default function AdminVehiclesTab({
   const [actionLoading, setActionLoading] = useState(false)
   const [message, setMessage] = useState(null)
 
-  const [statusFilter, setStatusFilter] = useState(initialStatus)
+  const [statusFilter, setStatusFilter] = useState(
+    VEHICLE_STATUS_FILTERS.includes(initialStatus) ? initialStatus : 'ALL'
+  )
   const [keyword, setKeyword] = useState('')
 
   // Detail Modal
@@ -42,8 +42,9 @@ export default function AdminVehiclesTab({
     setMessage(null)
     try {
       const data = await adminService.getVehicles({ status: statusFilter, keyword })
-      setVehicles(data)
+      setVehicles(Array.isArray(data) ? data : [])
     } catch (err) {
+      setVehicles([])
       setMessage({ type: 'error', text: err.message || 'Không thể tải danh sách xe' })
     } finally {
       setLoading(false)
@@ -156,28 +157,21 @@ export default function AdminVehiclesTab({
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-slate-500">Trạng thái:</span>
-          {['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'BLOCKED'].map((st) => (
+          {VEHICLE_STATUS_FILTERS.map((st) => (
             <button
               key={st}
               type="button"
               onClick={() => setStatusFilter(st)}
+              title={VEHICLE_STATUS_TITLES[st]}
               className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
                 statusFilter === st
                   ? 'bg-brand-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {st === 'ALL' ? 'Tất cả' : st}
+              {VEHICLE_STATUS_LABELS[st] || st}
             </button>
           ))}
-
-          <button
-            type="button"
-            onClick={loadVehicles}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Làm mới
-          </button>
         </div>
       </div>
 
@@ -235,7 +229,7 @@ export default function AdminVehiclesTab({
 
                   <span
                     className={`absolute right-3 top-3 rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold tracking-wider shadow-xs ${
-                      STATUS_BADGES[v.status] || 'bg-slate-100 text-slate-700'
+                      VEHICLE_STATUS_BADGES[v.status] || 'bg-slate-100 text-slate-700'
                     }`}
                   >
                     {v.status}

@@ -30,6 +30,15 @@ const STATUS_BADGES = {
   REJECTED: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
+const FILTER_STATUS_LABELS = {
+  ALL: 'Tất cả',
+  PENDING: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  VERIFIED: 'Đã xác thực',
+  LOCKED: 'Đã khóa',
+  REJECTED: 'Đã từ chối',
+}
+
 function resolveValidImageUrl(url) {
   if (!url || typeof url !== 'string') return null
   if (/^\/images\/(portrait|license)-\d+\.webp$/i.test(url.trim())) return null
@@ -643,7 +652,7 @@ export default function AdminUsersTab({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {st === 'ALL' ? 'Tất cả' : st}
+                  {FILTER_STATUS_LABELS[st] || st}
                 </button>
               ))}
             </div>
@@ -751,7 +760,7 @@ export default function AdminUsersTab({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {st === 'ALL' ? 'Tất cả' : st}
+                  {FILTER_STATUS_LABELS[st] || st}
                 </button>
               ))}
             </div>
@@ -892,7 +901,7 @@ export default function AdminUsersTab({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {st === 'ALL' ? 'Tất cả' : st}
+                  {FILTER_STATUS_LABELS[st] || st}
                 </button>
               ))}
             </div>

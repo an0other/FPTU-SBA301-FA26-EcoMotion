@@ -1,5 +1,6 @@
 import { IconX, IconShield, IconCheckCircle, IconLock } from '../../../components/icons/Icons'
 import AdminModalShell from './AdminModalShell'
+import { formatAdminRating } from '../../../utils/adminRating'
 
 const STATUS_BADGES = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -17,6 +18,8 @@ export default function ProviderDetailModal({
   onSelectUser,
 }) {
   if (!provider) return null
+
+  const providerRating = formatAdminRating(provider.ratingAvg, provider.ratingCount, 'đánh giá')
 
   return (
     <AdminModalShell
@@ -116,8 +119,8 @@ export default function ProviderDetailModal({
               </div>
               <div>
                 <span className="block text-slate-500">Đánh giá trung bình:</span>
-                <strong className="text-slate-900">
-                  ★ {provider.ratingAvg || '5.0'} ({provider.ratingCount || 0} đánh giá)
+                <strong className={providerRating ? 'text-slate-900' : 'text-slate-500'}>
+                  {providerRating || 'Chưa có'}
                 </strong>
               </div>
               <div>

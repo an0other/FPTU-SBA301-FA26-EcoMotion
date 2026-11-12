@@ -26,6 +26,14 @@ const BOOKING_FILTER_LABELS = {
   CANCELLED: 'Đã huỷ',
 }
 
+const DISPUTE_FILTER_LABELS = {
+  ALL: 'Tất cả',
+  OPEN: 'Chờ thụ lý',
+  IN_REVIEW: 'Đang xem xét',
+  RESOLVED: 'Đã phân xử',
+  REJECTED: 'Đã bác bỏ',
+}
+
 function formatVND(amount) {
   if (amount == null) return '0 ₫'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
@@ -475,7 +483,7 @@ export default function AdminOperationsTab({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {st === 'ALL' ? 'Tất cả' : st}
+                  {DISPUTE_FILTER_LABELS[st] || st}
                 </button>
               ))}
             </div>

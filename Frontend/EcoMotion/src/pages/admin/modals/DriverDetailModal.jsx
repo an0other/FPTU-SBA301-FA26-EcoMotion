@@ -1,5 +1,6 @@
 import { IconX, IconCheckCircle, IconEye, IconUsers, IconAlertTriangle } from '../../../components/icons/Icons'
 import AdminModalShell from './AdminModalShell'
+import { formatAdminRating } from '../../../utils/adminRating'
 
 const STATUS_BADGES = {
   APPROVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -28,6 +29,7 @@ export default function DriverDetailModal({
   const portraitUrl = resolveValidImageUrl(driver.portraitUrl)
   const licenseImageUrl = resolveValidImageUrl(driver.licenseImageUrl)
   const isExpired = driver.licenseExpiry ? new Date(driver.licenseExpiry) < new Date() : false
+  const driverRating = formatAdminRating(driver.ratingAvg, driver.ratingCount, 'lượt')
 
   return (
     <AdminModalShell
@@ -201,8 +203,8 @@ export default function DriverDetailModal({
               </div>
               <div>
                 <span className="block text-slate-500">Đánh giá uy tín:</span>
-                <strong className="text-slate-900">
-                  ★ {driver.ratingAvg || '5.0'} ({driver.ratingCount || 0} lượt)
+                <strong className={driverRating ? 'text-slate-900' : 'text-slate-500'}>
+                  {driverRating || 'Chưa có'}
                 </strong>
               </div>
               <div>
