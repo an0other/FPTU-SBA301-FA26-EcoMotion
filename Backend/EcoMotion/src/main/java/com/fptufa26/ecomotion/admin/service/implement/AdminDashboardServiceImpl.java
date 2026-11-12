@@ -93,8 +93,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             if (escrowDeposits == null) {
                 escrowDeposits = BigDecimal.ZERO;
             }
-            gmv = grossCompleted.compareTo(BigDecimal.ZERO) > 0 ? grossCompleted
-                    : bookingService.sumTotalRevenue(from, to);
+            // Keep GMV aligned with completed bookings across KPI cards, charts, and monthly summaries
+            // rather than falling back to total paid-in cash when completed gross volume is 0.
+            gmv = grossCompleted;
             completedBookings = bookingService.countCompletedBookings(from, to);
             totalBookings = bookingService.countTotalBookings(from, to);
 
@@ -137,8 +138,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             if (escrowDeposits == null) {
                 escrowDeposits = BigDecimal.ZERO;
             }
-            gmv = grossCompleted.compareTo(BigDecimal.ZERO) > 0 ? grossCompleted
-                    : bookingService.sumTotalRevenue(from, to);
+            // Keep GMV aligned with completed bookings across KPI cards, charts, and monthly summaries
+            // rather than falling back to total paid-in cash when completed gross volume is 0.
+            gmv = grossCompleted;
             completedBookings = bookingService.countCompletedBookings(from, to);
             totalBookings = bookingService.countTotalBookings(from, to);
 
@@ -174,7 +176,8 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             if (escrowDeposits == null) {
                 escrowDeposits = BigDecimal.ZERO;
             }
-            gmv = grossCompleted.compareTo(BigDecimal.ZERO) > 0 ? grossCompleted : bookingService.sumTotalRevenue();
+            // Keep GMV aligned with completed bookings in all-time stats as well.
+            gmv = grossCompleted;
             completedBookings = bookingService.countBookingsByStatus(BookingStatus.COMPLETED);
             totalBookings = bookingService.countTotalBookings();
         }
