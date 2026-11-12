@@ -73,11 +73,22 @@ public class ProviderFinanceController {
                 new com.fptufa26.ecomotion.finance.dto.request.ReportCommissionPaymentRequest(amount, paymentReference, note), file));
     }
 
+    @PostMapping(value = "/commission-statements/{id}/payments/{paymentId}/dispute", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Provider disputes the amount admin confirmed, with an evidence image")
+    public ApiResponse<com.fptufa26.ecomotion.finance.dto.response.CommissionStatementResponse> disputeCommissionPayment(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id, @PathVariable Long paymentId,
+            @RequestParam(required = false) java.math.BigDecimal claimedAmount,
+            @RequestParam(required = false) String note,
+            @RequestParam(required = false) org.springframework.web.multipart.MultipartFile file) {
+        return ApiResponse.success(commissionService.disputePayment(principal.getUserId(), id, paymentId, claimedAmount, note, file));
+    }
+
     @GetMapping("/commission-statements/{id}/payments/{paymentId}/proof")
     @Operation(summary = "View the receipt image of one commission payment")
     public org.springframework.http.ResponseEntity<byte[]> commissionPaymentProof(
-            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id, @PathVariable Long paymentId) {
-        var file = commissionService.providerProof(principal.getUserId(), id, paymentId);
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id, @PathVariable Long paymentId,
+            @RequestParam(defaultValue = "false") boolean dispute) {
+        var file = commissionService.providerProof(principal.getUserId(), id, paymentId, dispute);
         return org.springframework.http.ResponseEntity.ok()
                 .contentType(org.springframework.http.MediaType.parseMediaType(file.contentType()))
                 .cacheControl(org.springframework.http.CacheControl.noStore())

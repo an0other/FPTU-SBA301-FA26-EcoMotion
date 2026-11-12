@@ -194,41 +194,99 @@ export default function ProviderCommissionPanel({ onToast }) {
       </section>
 
       {paying && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => !busy && setPaying(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 sm:p-4" onClick={() => !busy && setPaying(null)}>
           <form role="dialog" aria-modal="true" aria-label="Nộp hoa hồng" onClick={(e) => e.stopPropagation()} onSubmit={reportPaid}
-            className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-base font-bold text-slate-900">Nộp hoa hồng {periodLabel(paying.periodMonth)}</h3>
-            {paying.qrCodeUrl && <img src={paying.qrCodeUrl} alt="Mã VietQR nộp hoa hồng" className="mx-auto h-56 w-56 rounded-lg border border-slate-200 object-contain" />}
-            <dl className="space-y-1.5 rounded-xl bg-slate-50 p-3 text-xs">
-              <div className="flex justify-between"><dt className="text-slate-500">Còn phải nộp</dt><dd className="font-mono font-bold">{formatCurrency(paying.remainingAmount)}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-500">Ngân hàng</dt><dd>{data.platformBank.bankName}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-500">Số tài khoản</dt><dd className="font-mono">{data.platformBank.accountNumber}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-500">Chủ tài khoản</dt><dd>{data.platformBank.accountHolder}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-500">Nội dung</dt><dd className="font-mono font-bold">{paying.transferContent}</dd></div>
-            </dl>
-            <label className="block text-xs font-semibold text-slate-700">Số tiền bạn đã chuyển
-              <input required inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 font-semibold" />
-            </label>
-            {Number(amount) > 0 && Number(amount) < Number(paying.remainingAmount) && (
-              <p className="text-[11px] text-amber-700">Chuyển thiếu {formatCurrency(Number(paying.remainingAmount) - Number(amount))}: bảng kê sẽ còn nợ phần chênh.</p>
-            )}
-            {Number(amount) > Number(paying.remainingAmount) && (
-              <p className="text-[11px] text-teal-700">Chuyển dư {formatCurrency(Number(amount) - Number(paying.remainingAmount))}: phần dư được trừ vào bảng kê kỳ sau.</p>
-            )}
-            <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng (tuỳ chọn)
-              <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="FT24..." className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3" />
-            </label>
-            <label className="block text-xs font-semibold text-slate-700">Ảnh biên lai chuyển khoản (tuỳ chọn)
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickFile} className="mt-1 block w-full text-xs" />
-            </label>
-            {preview && <img src={preview} alt="Ảnh biên lai đã chọn" className="max-h-40 rounded-lg border border-slate-200 object-contain" />}
-            <label className="block text-xs font-semibold text-slate-700">Ghi chú (tuỳ chọn)
-              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3" />
-            </label>
-            <div className="flex justify-end gap-2">
+            className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Nộp hoa hồng {periodLabel(paying.periodMonth)}</h3>
+                <p className="text-xs text-slate-500">Quét mã QR bằng app ngân hàng — số tiền và nội dung đã điền sẵn.</p>
+              </div>
+              <button type="button" disabled={busy} onClick={() => setPaying(null)} aria-label="Đóng"
+                className="rounded-lg px-2 py-1 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              <div className="grid gap-4 sm:grid-cols-[200px_1fr] sm:items-center">
+                {paying.qrCodeUrl && (
+                  <img src={paying.qrCodeUrl} alt="Mã VietQR nộp hoa hồng"
+                    className="mx-auto h-48 w-48 rounded-xl border border-slate-200 bg-white object-contain p-1" />
+                )}
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-brand-50 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase text-brand-800">Còn phải nộp</p>
+                    <p className="font-mono text-2xl font-extrabold text-brand-900">{formatCurrency(paying.remainingAmount)}</p>
+                  </div>
+                  <dl className="space-y-1.5 text-xs">
+                    {[
+                      ['Ngân hàng', data.platformBank.bankName, false],
+                      ['Số tài khoản', data.platformBank.accountNumber, true],
+                      ['Chủ tài khoản', data.platformBank.accountHolder, false],
+                      ['Nội dung', paying.transferContent, true],
+                    ].map(([label, value, copyable]) => (
+                      <div key={label} className="flex items-center justify-between gap-2">
+                        <dt className="text-slate-500">{label}</dt>
+                        <dd className="flex items-center gap-1.5 text-right font-semibold text-slate-900">
+                          <span className={copyable ? 'font-mono' : ''}>{value}</span>
+                          {copyable && (
+                            <button type="button" onClick={() => { navigator.clipboard?.writeText(String(value)); onToast?.(`Đã sao chép ${label.toLowerCase()}`, 'success') }}
+                              className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50">Sao chép</button>
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </div>
+
+              <details className="group rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-2.5">
+                <summary className="flex cursor-pointer select-none list-none items-center justify-between gap-3 text-xs font-semibold text-slate-700">
+                  <span>Chuyển số tiền khác, đính kèm biên lai hoặc mã giao dịch</span>
+                  <span className="shrink-0 text-brand-700 group-open:hidden">Xem thêm ▾</span>
+                  <span className="hidden shrink-0 text-brand-700 group-open:inline">Thu gọn ▴</span>
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block text-xs font-semibold text-slate-700">Số tiền bạn đã chuyển
+                      <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                        className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 font-semibold" />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-700">Mã giao dịch ngân hàng
+                      <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="FT24..."
+                        className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3" />
+                    </label>
+                  </div>
+                  {Number(amount) > 0 && Number(amount) < Number(paying.remainingAmount) && (
+                    <p className="text-[11px] text-amber-700">Chuyển thiếu {formatCurrency(Number(paying.remainingAmount) - Number(amount))}: bảng kê sẽ còn nợ phần chênh.</p>
+                  )}
+                  {Number(amount) > Number(paying.remainingAmount) && (
+                    <p className="text-[11px] text-teal-700">Chuyển dư {formatCurrency(Number(amount) - Number(paying.remainingAmount))}: phần dư được trừ vào bảng kê kỳ sau.</p>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex h-10 shrink-0 cursor-pointer items-center rounded-lg border border-dashed border-slate-400 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-brand-600 hover:text-brand-700">
+                      {file ? 'Đổi ảnh biên lai' : 'Chọn ảnh biên lai'}
+                      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickFile} className="sr-only" />
+                    </label>
+                    {preview ? (
+                      <div className="flex min-w-0 items-center gap-2">
+                        <img src={preview} alt="Ảnh biên lai đã chọn" className="h-12 w-12 shrink-0 rounded-md border border-slate-200 object-cover" />
+                        <span className="truncate text-[11px] text-slate-600">{file?.name}</span>
+                        <button type="button" onClick={() => { URL.revokeObjectURL(preview); setPreview(null); setFile(null) }}
+                          className="shrink-0 text-[11px] font-semibold text-rose-700 hover:underline">Bỏ</button>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">JPG, PNG, WebP · tối đa 5 MB</span>
+                    )}
+                  </div>
+                  <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Ghi chú cho admin (tuỳ chọn)"
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs" />
+                </div>
+              </details>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-white px-5 py-3">
               <button type="button" disabled={busy} onClick={() => setPaying(null)} className="h-10 rounded-lg border border-slate-300 px-4 text-xs font-semibold text-slate-700">Đóng</button>
-              <button type="submit" disabled={busy} className="h-10 rounded-lg bg-brand-700 px-4 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50">{busy ? 'Đang gửi...' : 'Tôi đã chuyển khoản'}</button>
+              <button type="submit" disabled={busy} className="h-10 rounded-lg bg-brand-700 px-5 text-xs font-bold text-white hover:bg-brand-800 disabled:opacity-50">{busy ? 'Đang gửi...' : 'Tôi đã chuyển khoản'}</button>
             </div>
           </form>
         </div>
@@ -251,7 +309,12 @@ export default function ProviderCommissionPanel({ onToast }) {
             </dl>
             {detail.adminNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-700">Ghi chú admin: {detail.adminNote}</p>}
             <h4 className="text-xs font-bold uppercase text-slate-500">Các lần nộp</h4>
-            <CommissionPaymentHistory payments={detail.payments} loadProof={(paymentId) => commissionService.providerProof(detail.id, paymentId)} />
+            <CommissionPaymentHistory payments={detail.payments} loadProof={(paymentId, dispute) => commissionService.providerProof(detail.id, paymentId, dispute)}
+              onDispute={async (paymentId, claimed, reason, file) => {
+                setDetail(await commissionService.disputePayment(detail.id, paymentId, claimed, reason, file))
+                onToast?.('Đã gửi báo sai số tiền. Admin sẽ đối chiếu sao kê và trả lời.', 'success')
+                await load()
+              }} />
             <h4 className="text-xs font-bold uppercase text-slate-500">Các chuyến trong kỳ</h4>
             <Lines lines={detail.lines} />
             <div className="text-right"><button type="button" onClick={() => setDetail(null)} className="h-9 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Đóng</button></div>

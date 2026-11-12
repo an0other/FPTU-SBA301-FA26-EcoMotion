@@ -69,4 +69,32 @@ public class CommissionPayment {
 
     @Column(name = "admin_note", length = 500)
     private String adminNote;
+
+    public static final String DISPUTE_OPEN = "OPEN";
+    public static final String DISPUTE_ACCEPTED = "ACCEPTED";
+    public static final String DISPUTE_REJECTED = "REJECTED";
+
+    @Column(name = "dispute_status", length = 20)
+    private String disputeStatus;
+
+    @Column(name = "claimed_amount", precision = 14, scale = 2)
+    private BigDecimal claimedAmount;
+
+    @Column(name = "dispute_note", length = 500)
+    private String disputeNote;
+
+    @Column(name = "disputed_at")
+    private Instant disputedAt;
+
+    @Column(name = "dispute_resolved_at")
+    private Instant disputeResolvedAt;
+
+    @Column(name = "dispute_resolution", length = 500)
+    private String disputeResolution;
+
+    @Column(name = "dispute_proof_path", length = 500)
+    private String disputeProofPath;
+
+    @Column(name = "dispute_proof_content_type", length = 60)
+    private String disputeProofContentType;
 }

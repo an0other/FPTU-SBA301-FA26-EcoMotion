@@ -157,6 +157,9 @@ export default function AdminCommissionTab() {
                   <td className="px-4 text-slate-600">{formatBookingWhen(r.dueAt)}{r.overdueDays > 0 && <span className="block font-semibold text-rose-700">Quá hạn {r.overdueDays} ngày{r.blocking ? ' · đang khoá nhận đơn' : ''}</span>}</td>
                   <td className="px-4">
                     <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${meta.cls}`}>{meta.label}</span>
+                    {(r.payments || []).some((p) => p.disputeStatus === 'OPEN') && (
+                      <span className="mt-1 inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-800">Nhà xe báo sai số tiền</span>
+                    )}
                     {r.status === 'PAYMENT_REPORTED' && (() => {
                       const latest = (r.payments || []).find((p) => p.status === 'REPORTED')
                       return (
@@ -208,7 +211,12 @@ export default function AdminCommissionTab() {
               ))}
             </dl>
             <h4 className="text-xs font-bold uppercase text-slate-500">Các lần nộp</h4>
-            <CommissionPaymentHistory payments={detail.payments} loadProof={(paymentId) => commissionService.adminProof(detail.id, paymentId)} expandLatest />
+            <CommissionPaymentHistory payments={detail.payments} loadProof={(paymentId, dispute) => commissionService.adminProof(detail.id, paymentId, dispute)} expandLatest
+              onResolve={async (paymentId, accept, reason) => {
+                setDetail(await commissionService.resolvePaymentDispute(detail.id, paymentId, accept, reason))
+                setMessage({ type: 'success', text: accept ? 'Đã chấp nhận số tiền nhà xe khai.' : 'Đã giữ nguyên số đã xác nhận và gửi lý do cho nhà xe.' })
+                await load()
+              }} />
             <h4 className="text-xs font-bold uppercase text-slate-500">Các chuyến trong kỳ</h4>
             <div className="overflow-x-auto rounded-lg border border-slate-200">
               <table className="w-full text-xs">
@@ -257,9 +265,19 @@ export default function AdminCommissionTab() {
             {Number(amount) > Number(confirming.remainingAmount) && (
               <p className="text-[11px] text-teal-700">Nhận dư {formatCurrency(Number(amount) - Number(confirming.remainingAmount))}: bảng kê "Nộp dư", phần dư tự trừ vào bảng kê kỳ sau của nhà xe.</p>
             )}
-            <label className="block text-xs font-semibold text-slate-700">Ghi chú (tuỳ chọn)
-              <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
-            </label>
+            {(() => {
+              const declared = Number((confirming.payments || []).find((p) => p.status === 'REPORTED')?.declaredAmount || 0)
+              const less = declared > 0 && Number(amount) > 0 && Number(amount) < declared
+              return (
+                <label className="block text-xs font-semibold text-slate-700">
+                  {less ? 'Lý do ghi nhận ít hơn số nhà xe khai (bắt buộc)' : 'Ghi chú (tuỳ chọn)'}
+                  {less && <span className="mt-0.5 block font-normal text-rose-700">Nhà xe khai {formatCurrency(declared)}, bạn ghi nhận {formatCurrency(Number(amount))}. Nhà xe sẽ thấy lý do và có thể báo sai số tiền.</span>}
+                  <textarea rows={2} required={less} value={note} onChange={(e) => setNote(e.target.value)}
+                    placeholder={less ? 'Ví dụ: sao kê ngày 12/11 chỉ có giao dịch 300.000 với nội dung HH-2-202610' : ''}
+                    className="mt-1 w-full rounded-lg border border-slate-300 p-2" />
+                </label>
+              )
+            })()}
             <div className="flex justify-end gap-2">
               <button type="button" disabled={busy} onClick={() => setConfirming(null)} className="h-10 rounded-lg border border-slate-300 px-4 text-xs font-semibold">Huỷ</button>
               <button type="submit" disabled={busy || !Number(amount)} className="h-10 rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white disabled:opacity-50">{busy ? 'Đang lưu...' : 'Xác nhận'}</button>

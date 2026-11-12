@@ -48,12 +48,22 @@ public class AdminCommissionController {
 
     @GetMapping("/{id}/payments/{paymentId}/proof")
     @Operation(summary = "View the receipt image of one commission payment")
-    public org.springframework.http.ResponseEntity<byte[]> proof(@PathVariable Long id, @PathVariable Long paymentId) {
-        var file = commissionService.adminProof(id, paymentId);
+    public org.springframework.http.ResponseEntity<byte[]> proof(@PathVariable Long id, @PathVariable Long paymentId,
+                                                               @RequestParam(defaultValue = "false") boolean dispute) {
+        var file = commissionService.adminProof(id, paymentId, dispute);
         return org.springframework.http.ResponseEntity.ok()
                 .contentType(org.springframework.http.MediaType.parseMediaType(file.contentType()))
                 .cacheControl(org.springframework.http.CacheControl.noStore())
                 .body(file.content());
+    }
+
+    @PostMapping("/{id}/payments/{paymentId}/resolve-dispute")
+    @Operation(summary = "Resolve a provider's dispute about a confirmed commission amount")
+    public ApiResponse<CommissionStatementResponse> resolveDispute(@AuthenticationPrincipal SecurityUser principal,
+                                                                   @PathVariable Long id, @PathVariable Long paymentId,
+                                                                   @RequestBody Map<String, Object> body) {
+        return ApiResponse.success(commissionService.resolvePaymentDispute(principal.getUserId(), id, paymentId,
+                Boolean.TRUE.equals(body.get("accept")), (String) body.get("note")));
     }
 
     @PostMapping("/{id}/confirm")

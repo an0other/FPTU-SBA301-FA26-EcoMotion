@@ -55,6 +55,8 @@ class CommissionServiceImplTest {
     private final DisputeQueryService disputes = mock(DisputeQueryService.class);
     private final com.fptufa26.ecomotion.finance.repository.CommissionPaymentRepository payments =
             mock(com.fptufa26.ecomotion.finance.repository.CommissionPaymentRepository.class);
+    private final com.fptufa26.ecomotion.common.storage.service.FileStorageService fileStorage =
+            mock(com.fptufa26.ecomotion.common.storage.service.FileStorageService.class);
     private final List<CommissionStatement> saved = new ArrayList<>();
     private CommissionServiceImpl service;
     private Provider provider;
@@ -63,7 +65,8 @@ class CommissionServiceImplTest {
     void setUp() {
         service = new CommissionServiceImpl(statements, lines, ledger, users, disputes,
                 mock(NotificationStreamService.class), Clock.fixed(NOW, ZoneOffset.UTC), payments,
-                mock(com.fptufa26.ecomotion.common.storage.service.FileStorageService.class));
+                fileStorage);
+        when(fileStorage.store(anyString(), any(), any(), any(), any())).thenReturn("commission-proof/7/proof.png");
         when(statements.findByProvider_IdOrderByPeriodMonthDesc(7L)).thenAnswer(inv -> List.copyOf(saved));
         ReflectionTestUtils.setField(service, "graceDays", 3);
         ReflectionTestUtils.setField(service, "bankCode", "VCB");
@@ -231,5 +234,58 @@ class CommissionServiceImplTest {
         assertThat(october.credit()).as("200k dư của tháng 9 trừ vào tháng 10").isEqualByComparingTo("200000");
         assertThat(october.remainingAmount()).isEqualByComparingTo("100000");
         assertThat(CommissionServiceImpl.availableCredit(List.of(september, october))).isZero();
+    }
+
+    private com.fptufa26.ecomotion.finance.entity.CommissionPayment reported(CommissionStatement st, long id, String declared) {
+        var p = new com.fptufa26.ecomotion.finance.entity.CommissionPayment();
+        p.setId(id);
+        p.setStatement(st);
+        p.setDeclaredAmount(new BigDecimal(declared));
+        p.setReportedAt(NOW);
+        st.getPayments().add(p);
+        st.setStatus(CommissionStatementStatus.PAYMENT_REPORTED);
+        when(payments.findFirstByStatement_IdAndStatusOrderByReportedAtDesc(st.getId(), "REPORTED")).thenReturn(Optional.of(p));
+        return p;
+    }
+
+    @Test
+    void confirmingLessThanDeclaredRequiresAReason() {
+        admin();
+        CommissionStatement st = statement(5L, "2026-10", "800000", CommissionStatementStatus.OVERDUE);
+        reported(st, 50L, "1000000");
+        assertThatThrownBy(() -> service.confirmPayment(1L, 5L, new ConfirmCommissionPaymentRequest(new BigDecimal("300000"), null)))
+                .as("không ghi lý do thì không được ghi nhận ít hơn số nhà xe khai").isInstanceOf(RuntimeException.class);
+        var ok = service.confirmPayment(1L, 5L, new ConfirmCommissionPaymentRequest(new BigDecimal("300000"), "Sao kê chỉ có 300k"));
+        assertThat(ok.payments().getFirst().confirmedAmount()).isEqualByComparingTo("300000");
+    }
+
+    @Test
+    void providerDisputeAcceptedAddsTheDifferenceAndCreditsOverpayment() {
+        admin();
+        User providerUser = new User(); providerUser.setId(2L); providerUser.setRole(Role.PROVIDER);
+        provider.setUser(providerUser);
+        when(users.findProviderByUserId(2L)).thenReturn(Optional.of(provider));
+        CommissionStatement st = statement(5L, "2026-10", "800000", CommissionStatementStatus.OVERDUE);
+        st.setPaidAmount(new BigDecimal("500000"));
+        reported(st, 50L, "1000000");
+        service.confirmPayment(1L, 5L, new ConfirmCommissionPaymentRequest(new BigDecimal("300000"), "Sao kê chỉ có 300k"));
+        assertThat(st.getStatus()).isEqualTo(CommissionStatementStatus.PAID);
+
+        var image = new org.springframework.mock.web.MockMultipartFile("file", "sao-ke.png", "image/png", new byte[]{1, 2, 3});
+        assertThatThrownBy(() -> service.disputePayment(2L, 5L, 50L, new BigDecimal("1000000"), " ", image))
+                .as("phải có lý do").isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> service.disputePayment(2L, 5L, 50L, new BigDecimal("1000000"), "Sao kê ghi 1.000.000", null))
+                .as("phải có ảnh minh chứng").isInstanceOf(RuntimeException.class);
+        var disputed = service.disputePayment(2L, 5L, 50L, new BigDecimal("1000000"), "Sao kê Vietcombank ghi 1.000.000", image);
+        assertThat(disputed.payments().getFirst().hasDisputeProof()).isTrue();
+        assertThat(disputed.payments().getFirst().disputeStatus()).isEqualTo("OPEN");
+
+        assertThatThrownBy(() -> service.resolvePaymentDispute(1L, 5L, 50L, false, null))
+                .as("giữ nguyên phải có lý do").isInstanceOf(RuntimeException.class);
+        var accepted = service.resolvePaymentDispute(1L, 5L, 50L, true, "Đã thấy đủ 1.000.000 trong sao kê");
+        assertThat(accepted.paidAmount()).isEqualByComparingTo("1500000");
+        assertThat(accepted.paymentState()).isEqualTo("OVERPAID");
+        assertThat(accepted.overpaidAmount()).isEqualByComparingTo("700000");
+        assertThat(accepted.payments().getFirst().disputeStatus()).isEqualTo("ACCEPTED");
     }
 }
