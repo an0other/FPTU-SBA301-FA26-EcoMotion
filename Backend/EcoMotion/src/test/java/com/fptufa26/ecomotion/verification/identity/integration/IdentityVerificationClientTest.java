@@ -32,11 +32,60 @@ class IdentityVerificationClientTest {
     private MockRestServiceServer server;
     private IdentityVerificationClient client;
 
+    @Test
+    void validatesUncalibratedAssessmentAndRejectsContradictoryStatus() {
+        String assessment="{\"status\":\"NOT_CALIBRATED\",\"score\":0.55,\"comparedFrames\":8,\"minimumFrames\":3,\"metric\":\"cosine_similarity\",\"modelSha256\":\""+"a".repeat(64)+"\",\"policyVersion\":\"test-v1\",\"calibrationStatus\":\"NOT_CALIBRATED\"}";
+        String body=VALID_RESULT.stripTrailing();
+        body=body.substring(0,body.length()-1)+",\"matchAssessment\":"+assessment+"}";
+        server.expect(requestTo("http://identity.test/v1/verifications")).andRespond(withSuccess(body,MediaType.APPLICATION_JSON));
+        assertEquals("NOT_CALIBRATED",client.assess(new byte[]{1},"front.png",new byte[]{2}).matchAssessment().status());
+        server.verify();
+        setUp();
+        server.expect(requestTo("http://identity.test/v1/verifications")).andRespond(withSuccess(body.replace("NOT_CALIBRATED\",\"score", "LIKELY_MATCH\",\"score"),MediaType.APPLICATION_JSON));
+        assertThrows(IdentityAiException.class,()->client.assess(new byte[]{1},"front.png",new byte[]{2}));
+        server.verify();
+    }
+
     @BeforeEach
     void setUp() {
         var builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         client = new IdentityVerificationClient(builder.build(), "http://identity.test/", "test-service-key");
+    }
+
+    @Test
+    void asyncResultKeepsValidationAndClearsOperationProgress() {
+        String id = "0123456789abcdef0123456789abcdef";
+        var operation = java.util.UUID.randomUUID();
+        String url = "http://identity.test/v1/verifications/jobs";
+        server.expect(requestTo(url)).andExpect(header("X-API-Key", "test-service-key"))
+                .andRespond(withSuccess("{\"jobId\":\"" + id + "\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(url + "/" + id)).andRespond(withSuccess(
+                "{\"state\":\"COMPLETED\",\"progress\":{\"stage\":\"FINALIZING\"},\"result\":" + VALID_RESULT + "}", MediaType.APPLICATION_JSON));
+        try (var scope = com.fptufa26.ecomotion.verification.progress.AiProgressContext.open(operation)) {
+            assertFalse(client.assess(new byte[]{1}, "front.png", new byte[]{2}).automaticApproval());
+            assertEquals("FINALIZING", com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(operation).stage());
+            var first = com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(operation);
+            com.fptufa26.ecomotion.verification.progress.AiProgressContext.update(java.util.Map.of("stage", "FINALIZING", "sampledFrames", 12, "videoSeconds", 5.5));
+            var next = com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(operation);
+            assertEquals(first.updatedAt(), next.updatedAt());
+            com.fptufa26.ecomotion.verification.progress.AiProgressContext.update(java.util.Map.of("stage", "FINALIZING", "events", java.util.List.of(
+                    java.util.Map.of("stage", "READING_FIELDS", "side", "FRONT", "elapsedMs", 1),
+                    java.util.Map.of("stage", "READING_FIELDS", "side", "BACK", "elapsedMs", 2),
+                    java.util.Map.of("stage", "INVALID/<secret>", "side", "BACK", "elapsedMs", 3))));
+            var stages = com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(operation).steps();
+            assertEquals(2, stages.size());
+            assertEquals("FRONT", stages.getFirst().side());
+            assertEquals("BACK", stages.getLast().side());
+            assertEquals(12L, next.sampledFrames());
+            assertEquals(5.5, next.videoSeconds());
+            com.fptufa26.ecomotion.verification.progress.AiProgressContext.update(java.util.Map.of("stage", "FINALIZING", "sampledFrames", -1, "videoSeconds", Double.NaN));
+            assertEquals(null, com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(operation).sampledFrames());
+            assertEquals(null, com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(operation).videoSeconds());
+            assertEquals(null, com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(java.util.UUID.randomUUID()));
+        }
+        assertEquals(null, com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(operation));
+        server.verify();
     }
 
     @Test

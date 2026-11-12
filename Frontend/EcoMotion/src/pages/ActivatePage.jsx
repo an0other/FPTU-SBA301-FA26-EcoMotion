@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 import PhoneVerification from '../components/identity/PhoneVerification'
 import IdentityVerificationPanel from '../components/identity/IdentityVerificationPanel'
-import AccountLinkPanel from '../components/identity/AccountLinkPanel'
 import { authService } from '../services/authService'
 import { identityVerificationService as identity } from '../services/identityVerificationService'
 import { clearPendingActivation, getPendingActivation, setPendingActivation } from '../utils/pendingActivation'
@@ -20,7 +19,6 @@ export default function ActivatePage() {
   const [summary, setSummary] = useState(null)
   const [error, setError] = useState('')
   const [retryAt, setRetryAt] = useState(0)
-  const [revision, setRevision] = useState(0)
   const completed = useCallback(() => {
     clearPendingActivation()
     navigate('/login', { replace: true, state: { email, notice: 'Xác minh đã hoàn tất. Bạn có thể đăng nhập để sử dụng tài khoản.' } })
@@ -28,10 +26,10 @@ export default function ActivatePage() {
   const expired = useCallback(() => { clearPendingActivation(); setToken(''); setSummary(null); setError('Phiên kích hoạt đã hết hiệu lực. Hãy xác nhận email để tiếp tục hoặc đăng nhập nếu tài khoản đã được kích hoạt.') }, [])
   const reload = useCallback(async () => {
     if (!token) return
-    try { setSummary(await identity.activationStatus(token)) }
+    try { const result = await identity.activationStatus(token); if (result.accountStatus === 'ACTIVE' && result.role === 'RENTER' && result.identityStatus === 'VERIFIED' && result.nextAction === 'LOGIN_OR_DASHBOARD') completed(); else setSummary(result) }
     catch (err) { if ([401, 410].includes(err.status)) expired(); else setError(identityMessage(err)) }
-  }, [token, expired])
-  useEffect(() => { if (token) { let alive = true; identity.activationStatus(token).then(data => { if (alive) setSummary(data) }).catch(err => { if (alive) { if ([401, 410].includes(err.status)) expired(); else setError(identityMessage(err)) } }); return () => { alive = false } } }, [token, expired])
+  }, [token, expired, completed])
+  useEffect(() => { if (token) { let alive = true; identity.activationStatus(token).then(data => { if (alive) { if (data.accountStatus === 'ACTIVE' && data.role === 'RENTER' && data.identityStatus === 'VERIFIED' && data.nextAction === 'LOGIN_OR_DASHBOARD') completed(); else setSummary(data) } }).catch(err => { if (alive) { if ([401, 410].includes(err.status)) expired(); else setError(identityMessage(err)) } }); return () => { alive = false } } }, [token, expired, completed])
   async function perform(action) {
     setBusy(true); setError('')
     try { await action() } catch (err) { setError(identityMessage(err)) } finally { setBusy(false) }
@@ -48,8 +46,7 @@ export default function ActivatePage() {
       {token && !summary && <p role="status">Đang lấy trạng thái… <button className="underline" onClick={reload}>Thử lại</button></p>}
       {token && summary && <>
         <PhoneVerification activationToken={token} verified={summary.phoneVerified} onExpired={expired} onVerified={async () => { if (summary.identityId && summary.role === 'RENTER') completed(); else await reload() }} />
-        <AccountLinkPanel activationToken={token} userId={summary.userId} onChanged={async result => { if (result.targetAccountStatus === 'ACTIVE') completed(); else { await reload(); setRevision(value => value + 1) } }} />
-        {summary.phoneVerified && <IdentityVerificationPanel key={revision} activationToken={token} onComplete={completed} onChanged={reload} onExpired={expired} />}
+        {summary.phoneVerified && <IdentityVerificationPanel key={token} activationToken={token} onComplete={completed} onChanged={reload} onExpired={expired} />}
         {summary.role === 'PROVIDER' && <p className="text-sm text-slate-600">Provider có thể <Link className="font-semibold text-brand-700 underline" to="/login">đăng nhập</Link> để tiếp tục nhập hồ sơ và theo dõi xét duyệt.</p>}
       </>}
       <div className="flex flex-wrap gap-4 text-sm"><Link className="font-semibold text-brand-700" to="/login">Đăng nhập</Link><Link to="/register">Tạo tài khoản</Link>{token && <button className="text-brand-700 underline" onClick={() => { clearPendingActivation(); setToken(''); setSummary(null); setSent(false); setError(''); setOtp('') }}>Khôi phục phiên qua email</button>}</div>

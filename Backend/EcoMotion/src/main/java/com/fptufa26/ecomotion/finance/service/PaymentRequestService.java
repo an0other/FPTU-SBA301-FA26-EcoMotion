@@ -29,6 +29,8 @@ public interface PaymentRequestService {
     YearlyCash yearlyCash(Long bookingId);
     void finalizeYearlyObligations(Long bookingId, BigDecimal balance);
     boolean yearlyBalancePaid(Long bookingId, BigDecimal balance);
+    void recordYearlyRefundPart(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl,
+                               Long actorId, boolean admin, String transferKey);
     void recordYearlyRefund(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long renterUserId);
     void recordYearlyRefundByAdmin(Long bookingId, BigDecimal rent, BigDecimal deposit, String reference, String evidenceUrl, Long adminId);
 
@@ -86,6 +88,8 @@ public interface PaymentRequestService {
 
     PaymentRequestResponse recordBankTransferForReconciliation(Long paymentRequestId, Long currentUserId,
             BankTransferReconciliationRequest request);
+
+    PaymentRequestResponse rejectYearlyEvidence(Long paymentRequestId, Long evidenceId, Long currentUserId, RejectPaymentRequest request);
 
     PaymentRequestResponse rejectPayment(Long paymentRequestId, Long currentUserId, RejectPaymentRequest request);
 

@@ -113,6 +113,11 @@ export const providerFinanceService = {
     return data?.data
   },
 
+  async rejectYearlyEvidence(id, evidenceId, payload) {
+    const { data } = await apiClient.post('/provider/payment-requests/' + id + '/evidences/' + evidenceId + '/reject', payload)
+    return data?.data
+  },
+
   async rejectPayment(paymentRequestId, payload) {
     const { data } = await apiClient.post(`/provider/payment-requests/${paymentRequestId}/reject`, payload)
     return data?.data

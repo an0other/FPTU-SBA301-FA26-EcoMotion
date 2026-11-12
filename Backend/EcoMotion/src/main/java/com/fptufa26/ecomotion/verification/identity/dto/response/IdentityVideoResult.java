@@ -11,7 +11,14 @@ public record IdentityVideoResult(
         FaceMatching faceMatching,
         String identityDecision,
         Boolean automaticApproval,
-        Workflow workflow) {
+        Workflow workflow, MatchAssessment matchAssessment) {
+    public IdentityVideoResult(Integer sampledFrames, MotionChallenge motionChallenge, FaceMatching faceMatching,
+            String identityDecision, Boolean automaticApproval, Workflow workflow) {
+        this(sampledFrames,motionChallenge,faceMatching,identityDecision,automaticApproval,workflow,null);
+    }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record MatchAssessment(String status,Double score,Double lowThreshold,Double highThreshold,
+            Integer comparedFrames,Integer minimumFrames,String metric,String modelSha256,String policyVersion,String calibrationStatus,List<String> reasons) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record MotionChallenge(String status, List<String> expected, List<CompletedStep> completed) {

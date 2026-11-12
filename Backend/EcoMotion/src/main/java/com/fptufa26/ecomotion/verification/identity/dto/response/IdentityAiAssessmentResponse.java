@@ -17,6 +17,14 @@ public record IdentityAiAssessmentResponse(
             String documentType, String status, String code,
             String documentNumber, String fullName, String dateOfBirth,
             String expiryDate, String sex, String address,
-            boolean requiredFieldsReadable) {
+            boolean requiredFieldsReadable,
+            com.fptufa26.ecomotion.verification.documentai.DocumentAiEvidence evidence) {
+        // Keep existing callers and persisted snapshots without evidence compatible.
+        public DocumentRead(String documentType, String status, String code,
+                String documentNumber, String fullName, String dateOfBirth,
+                String expiryDate, String sex, String address, boolean requiredFieldsReadable) {
+            this(documentType, status, code, documentNumber, fullName, dateOfBirth,
+                    expiryDate, sex, address, requiredFieldsReadable, null);
+        }
     }
 }

@@ -36,6 +36,12 @@ public class BookingPaymentLedgerServiceImpl implements BookingPaymentLedgerServ
     private final jakarta.persistence.EntityManager entityManager;
 
     @Override
+    public boolean yearlyCollectionsOpen(Long bookingId) {
+        var policy = entityManager.find(YearlyWorkflow.class, bookingId);
+        return policy != null && policy.isTermsAccepted() && "TERMS_ACCEPTED".equals(policy.getStage());
+    }
+
+    @Override
     public Optional<java.math.BigDecimal> yearlyRoundingUnit(Long bookingId) {
         var policy = entityManager.find(YearlyWorkflow.class, bookingId);
         var booking = entityManager.find(Booking.class, bookingId);

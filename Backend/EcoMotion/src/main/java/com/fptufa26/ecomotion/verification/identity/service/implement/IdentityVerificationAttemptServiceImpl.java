@@ -53,7 +53,22 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
     private final Duration processingTimeout;
     private final int maxImageBytes;
     private final int maxVideoBytes;
+    private com.fptufa26.ecomotion.verification.progress.VerificationPipelineRunService pipelineRuns;
     @Value("${app.identity.acceptance-threshold:}") private String acceptanceThreshold;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public IdentityVerificationAttemptServiceImpl(
+            IdentityVerificationAttemptRepository attempts, UserService users,
+            IdentityEvidenceStorageService storage, IdentityAiAssessmentService ai,
+            ObjectMapper mapper, Clock clock, PlatformTransactionManager transactionManager,
+            @Value("${app.identity.attempt-ttl:24h}") Duration lifetime,
+            @Value("${app.identity.processing-timeout:10m}") Duration processingTimeout,
+            @Value("${app.identity.ai.max-image-bytes:8388608}") int maxImageBytes,
+            @Value("${app.identity.ai.max-video-bytes:20971520}") int maxVideoBytes,
+            com.fptufa26.ecomotion.verification.progress.VerificationPipelineRunService pipelineRuns) {
+        this(attempts, users, storage, ai, mapper, clock, transactionManager, lifetime, processingTimeout, maxImageBytes, maxVideoBytes);
+        this.pipelineRuns=pipelineRuns;
+    }
 
     public IdentityVerificationAttemptServiceImpl(
             IdentityVerificationAttemptRepository attempts, UserService users,
@@ -165,7 +180,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
             throw exception;
         }
         operation.obsoleteKeys().forEach(this::cleanup);
-        try {
+        try (var progress = com.fptufa26.ecomotion.verification.progress.AiProgressContext.open(operation.id(), snapshot -> { if(pipelineRuns!=null) pipelineRuns.checkpoint(userId,operation.id(),snapshot); })) {
             byte[] frontBytes = storage.read(frontKey, maxImageBytes);
             byte[] backBytes = storage.read(backKey, maxImageBytes);
             DocumentRead result = ai.readDocuments(userId, frontBytes, backBytes);
@@ -215,7 +230,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
             throw exception;
         }
         operation.obsoleteKeys().forEach(this::cleanup);
-        try {
+        try (var progress = com.fptufa26.ecomotion.verification.progress.AiProgressContext.open(operation.id(), snapshot -> { if(pipelineRuns!=null) pipelineRuns.checkpoint(userId,operation.id(),snapshot); })) {
             var reference = transactions.execute(transaction -> {
                 var attempt = requireOperation(userId, attemptId, operation.id());
                 return new Reference(attempt.getFrontKey(), attempt.getFrontSha256());
@@ -284,6 +299,48 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
         return storage.read(key, "video".equals(kind) ? maxVideoBytes : maxImageBytes);
     }
 
+    @Override
+    public com.fptufa26.ecomotion.verification.identity.dto.response.IdentityProcessingResponse progress(Long userId, UUID id) {
+        authorize(userId);
+        return transactions.execute(tx -> {
+            var attempt = owned(userId, id);
+            recover(attempt);
+            attempts.saveAndFlush(attempt);
+            var started = attempt.getOperationStartedAt();
+            var liveProgress = com.fptufa26.ecomotion.verification.progress.AiProgressContext.get(attempt.getOperationId());
+            if(liveProgress==null && pipelineRuns!=null && attempt.getOperationId()!=null) liveProgress=pipelineRuns.owned(userId,attempt.getOperationId()).progress();
+            return new com.fptufa26.ecomotion.verification.identity.dto.response.IdentityProcessingResponse(
+                    attempt.getPublicId(), attempt.getStatus(), attempt.getProcessingStage(), started, clock.instant(),
+                    started == null ? null : started.plus(processingTimeout), attempt.getLastErrorCode(),
+                    attempt.getVersion(), attempt.getDocumentRevision(),
+                    liveProgress);
+        });
+    }
+
+    @Override
+    public java.util.List<IdentityAttemptResponse> history(Long userId, int page) {
+        authorize(userId);
+        if (page < 0) throw failure(HttpStatus.BAD_REQUEST, "IDENTITY_PAGE_INVALID", "Trang không hợp lệ.");
+        return transactions.execute(tx -> attempts.findByUser_IdOrderByIdDesc(userId,
+                org.springframework.data.domain.PageRequest.of(page, 10)).map(this::view).getContent());
+    }
+
+    @Override
+    public byte[] historyEvidence(Long userId, UUID id, Long eventId, String kind) {
+        authorize(userId);
+        String key = transactions.execute(tx -> {
+            var attempt = owned(userId, id);
+            var event = attempt.getReviewHistory().stream().filter(row -> Objects.equals(row.getId(), eventId))
+                    .findFirst().orElseThrow(this::notFound);
+            return switch (kind) {
+                case "front" -> event.getFrontKey(); case "back" -> event.getBackKey(); case "video" -> event.getVideoKey();
+                default -> throw notFound();
+            };
+        });
+        if (key == null) throw notFound();
+        return storedEvidence(key, kind);
+    }
+
     private User authorize(Long userId) {
         var user = users.findById(userId).orElseThrow(() -> new AccessDeniedException("Account not found"));
         if ((user.getStatus() != UserStatus.ACTIVE && user.getStatus() != UserStatus.PENDING)
@@ -340,9 +397,16 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
         attempt.setOperationId(UUID.randomUUID());
         attempt.setOperationStartedAt(clock.instant());
         attempt.setLastErrorCode(null);
+        if(pipelineRuns!=null) pipelineRuns.start(attempt.getUser().getId(),attempt.getOperationId(),attempt.getPublicId(),stage,attempt.getDocumentRevision()+("DOCUMENT".equals(stage)?1:0));
+    }
+
+    private void finishPipeline(IdentityVerificationAttempt attempt) {
+        if(pipelineRuns!=null && attempt.getOperationId()!=null) pipelineRuns.finish(attempt.getUser().getId(),attempt.getOperationId(),
+            attempt.getStatus()==ERROR || attempt.getStatus()==EXPIRED ? "ERROR" : attempt.getStatus()==CANCELLED ? "CANCELLED" : "COMPLETED",attempt.getLastErrorCode());
     }
 
     private void clearOperation(IdentityVerificationAttempt attempt) {
+        finishPipeline(attempt);
         attempt.setOperationId(null);
         attempt.setOperationStartedAt(null);
         attempt.setProcessingStage(null);
@@ -360,6 +424,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
                 && !attempt.getOperationStartedAt().plus(processingTimeout).isAfter(clock.instant())) {
             attempt.setStatus(ERROR);
             attempt.setLastErrorCode("IDENTITY_PROCESSING_TIMEOUT");
+            finishPipeline(attempt);
             attempt.setOperationId(null);
             attempt.setOperationStartedAt(null);
         }
@@ -381,6 +446,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
                 attempt.setStatus(ERROR);
                 attempt.setLastErrorCode(error instanceof IdentityAiException failure
                         ? failure.getErrorCode() : "IDENTITY_PROCESSING_FAILED");
+                finishPipeline(attempt);
                 attempt.setOperationId(null);
                 attempt.setOperationStartedAt(null);
             }
@@ -395,8 +461,7 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
             case DRAFT -> "UPLOAD_DOCUMENTS";
             case PROCESSING -> "WAIT_FOR_PROCESSING";
             case DOCUMENT_READY -> "UPLOAD_VIDEO";
-            case READY_TO_SUBMIT -> acceptanceThreshold == null || acceptanceThreshold.isBlank()
-                    ? "SERVICE_NOT_CONFIGURED" : attempt.getRole() == Role.PROVIDER ? "COMPLETE_PROVIDER_PROFILE" : "SUBMIT_IDENTITY";
+            case READY_TO_SUBMIT -> attempt.getRole() == Role.PROVIDER ? "COMPLETE_PROVIDER_PROFILE" : "SUBMIT_IDENTITY";
             case ERROR -> "VIDEO".equals(attempt.getProcessingStage()) ? "RETRY_VIDEO" : "RETRY_DOCUMENTS";
             case CANCELLED, EXPIRED -> "CREATE_NEW_ATTEMPT";
             case SUBMITTED -> "WAIT_FOR_ADMIN";
@@ -410,11 +475,17 @@ public class IdentityVerificationAttemptServiceImpl implements IdentityVerificat
                 attempt.getBackKey() != null, attempt.getVideoKey() != null,
                 document, video, attempt.getStatus() == APPROVED ? "ACCEPTED" : "NOT_EVALUATED",
                 attempt.getStatus() == READY_TO_SUBMIT && attempt.getExpiresAt().isAfter(clock.instant())
-                        && acceptanceThreshold != null && !acceptanceThreshold.isBlank() && attempt.hasRequiredNewEvidence(),
+                        && attempt.hasRequiredNewEvidence(),
                 attempt.getStatus() == APPROVED && "SYSTEM".equals(attempt.getDecisionActor()),
                 attempt.getUser().getId(), attempt.getUser().getEmail(), attempt.getUser().getFullName(),
                 attempt.getDecisionActor(), attempt.getDecisionReason(), attempt.getDecisionPolicyVersion(),
-                attempt.getSubmittedAt(), attempt.getDecidedAt(), attempt.getReviewedBy(), attempt.getResultingIdentityId());
+                attempt.getSubmittedAt(), attempt.getDecidedAt(), attempt.getReviewedBy(), attempt.getResultingIdentityId(),
+                attempt.getReviewHistory().stream().map(event -> new com.fptufa26.ecomotion.verification.identity.dto.response.IdentityReviewEventResponse(
+                        event.getId(), event.getEventType(), event.getActorType(), event.getActorId(), event.getReasonCode(),
+                        event.getNote(), event.getPolicyVersion(), event.getDocumentRevision(), event.getAttemptVersion(),
+                        event.getOccurredAt(), decode(event.getDocumentJson(), DocumentRead.class),
+                        decode(event.getVideoJson(), IdentityVideoResult.class))).toList(),
+                pipelineRuns==null?java.util.List.of():pipelineRuns.forAttempt(attempt.getUser().getId(),attempt.getPublicId()));
     }
 
     private <T> T decode(String json, Class<T> type) {

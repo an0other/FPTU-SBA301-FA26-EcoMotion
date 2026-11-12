@@ -1,7 +1,13 @@
+import IdentityEvidenceGallery from './IdentityEvidenceGallery'
+import IdentityAttemptArchive from './IdentityAttemptArchive'
+import IdentityProcessingProgress from './IdentityProcessingProgress'
+import useIdentityProcessing from './useIdentityProcessing'
+import IdentityReviewHistory from './IdentityReviewHistory'
+import VerificationEvidenceSummary from './VerificationEvidenceSummary'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { identityVerificationService as api } from '../../services/identityVerificationService'
 import VideoCapture from './VideoCapture'
-import { buttonClass, secondaryClass, cardClass, identityMessage, statusLabels } from './identityUi'
+import { buttonClass, secondaryClass, cardClass, identityMessage } from './identityUi'
 
 function DocumentUpload({ label, value, onChange, disabled }) {
   const previewRef = useRef(null)
@@ -36,6 +42,9 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
 
   const fetchAttempt = useCallback(async () => {
     const summary = activationToken ? await api.activationStatus(activationToken) : await api.status()
+    if (activationToken && summary.accountStatus === 'ACTIVE' && summary.role === 'RENTER' && summary.identityStatus === 'VERIFIED' && summary.nextAction === 'LOGIN_OR_DASHBOARD') {
+      return { status: 'APPROVED', role: summary.role, canSubmit: false }
+    }
     if (summary.attemptId) {
       const result = activationToken ? await api.activationAttempt(activationToken, '', summary.attemptId) : await api.getAttempt(summary.attemptId)
       return result
@@ -43,6 +52,10 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
     return null
   }, [activationToken])
   const load = useCallback(async () => setAttempt(await fetchAttempt()), [fetchAttempt])
+  const processing = useIdentityProcessing({ attempt, activationToken, onRefresh: load })
+  useEffect(() => {
+    if (activationToken && attempt?.status === 'APPROVED') onComplete?.()
+  }, [activationToken, attempt?.status, onComplete])
 
   useEffect(() => {
     let alive = true
@@ -60,7 +73,8 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
   async function perform(label, action) {
     setBusy(label)
     setError('')
-    try { await action() }
+    let succeeded = false
+    try { await action(); succeeded = true }
     catch (err) {
       setError(identityMessage(err))
       if ([401, 410].includes(err.status) && activationToken && aliveRef.current) onExpired?.()
@@ -77,7 +91,7 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
           }
         }
       } catch { }
-    } finally { setBusy('') }
+    } finally { processing.finish(succeeded); setBusy('') }
   }
 
   async function create() {
@@ -92,9 +106,10 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
     if (!front || !back) { setError('Hãy chọn đủ ảnh mặt trước và mặt sau CCCD.'); return }
     if ([front, back].some(file => file.size > constraints.maxImageBytes)) { setError('Ảnh CCCD vượt dung lượng cho phép.'); return }
     await perform('Đang đọc hai mặt CCCD…', async () => {
+      const onUploadProgress = processing.start('DOCUMENT')
       const result = activationToken
-        ? await api.uploadActivationDocuments(activationToken, attempt.attemptId, attempt.version, { cccdFront: front, cccdBack: back })
-        : await api.uploadDocuments(attempt.attemptId, attempt.version, { cccdFront: front, cccdBack: back })
+        ? await api.uploadActivationDocuments(activationToken, attempt.attemptId, attempt.version, { cccdFront: front, cccdBack: back }, onUploadProgress)
+        : await api.uploadDocuments(attempt.attemptId, attempt.version, { cccdFront: front, cccdBack: back }, onUploadProgress)
       setAttempt(result)
       setVideo(null)
       setFront(null)
@@ -114,8 +129,9 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
         setSelectedStep(null)
         throw new Error('CCCD đã thay đổi. Hãy kiểm tra lại thông tin trước khi gửi video.')
       }
-      const result = activationToken ? await api.uploadActivationVideo(activationToken, latest.attemptId, latest.version, video)
-        : await api.uploadVideo(latest.attemptId, latest.version, video)
+      const onUploadProgress = processing.start('VIDEO')
+      const result = activationToken ? await api.uploadActivationVideo(activationToken, latest.attemptId, latest.version, video, onUploadProgress)
+        : await api.uploadVideo(latest.attemptId, latest.version, video, onUploadProgress)
       setAttempt(result)
       setVideo(null)
       setConfirmed(false)
@@ -139,20 +155,18 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
   const writable = constraints?.verificationEnabled && !busy && !loading && !capturing
   const availableStep = attempt?.status === 'READY_TO_SUBMIT' ? 2 : attempt?.document?.requiredFieldsReadable ? 1 : 0
   const resumeStep = attempt?.decisionReason === 'DOCUMENT_UNREADABLE' && !attempt.canSubmit ? 0
-    : attempt?.decisionReason === 'FACE_UNCLEAR' && !attempt.canSubmit ? 1 : availableStep
+    : ['FACE_UNCLEAR', 'FACE_MISMATCH'].includes(attempt?.decisionReason) && !attempt.canSubmit ? 1 : availableStep
   const step = Math.min(selectedStep ?? resumeStep, availableStep)
   return <section className={`${cardClass} space-y-5`}>
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold">Xác minh CCCD và khuôn mặt</h2><p className="mt-1 text-sm text-slate-500">Đọc hai mặt CCCD, quay video và xác nhận gửi.</p></div><button className={secondaryClass} disabled={!!busy || capturing} onClick={() => perform('Đang cập nhật…', async () => { const limits = await api.constraints(); setConstraints(limits); await load(); onChanged?.() })}>Cập nhật trạng thái</button></div>
     {loading && <p role="status">Đang tải phiên xác minh…</p>}
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-    {busy && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{busy}</p>}
-    {constraints && (!constraints.acceptanceConfigured || !constraints.verificationEnabled) && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Hệ thống chưa sẵn sàng hoàn tất xác minh. Vui lòng liên hệ quản trị viên.</p>}
+    {processing.running ? <IdentityProcessingProgress task={processing.task || { kind: attempt?.processingStage }} remote={processing.remote} pollError={processing.pollError} /> : busy && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{busy}</p>}
+    {Object.entries(processing.reports).filter(([kind, report]) => report.complete && report.attemptId === attempt?.attemptId && (step === 2 || !editable || kind === (step === 1 ? 'VIDEO' : 'DOCUMENT'))).map(([kind, report]) => <details key={kind} open={attempt?.role === 'PROVIDER'} className="rounded-xl border border-blue-200 p-3"><summary className="cursor-pointer font-semibold">{kind === 'VIDEO' ? 'Pipeline phân tích video' : 'Pipeline phân tích CCCD'} — đã kết thúc</summary><div className="mt-3"><IdentityProcessingProgress task={report.task} remote={report.remote} completed /></div></details>)}
+    {constraints && !constraints.verificationEnabled && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Hệ thống chưa sẵn sàng hoàn tất xác minh. Vui lòng liên hệ quản trị viên.</p>}
     {editable && <nav aria-label="Các bước xác minh"><ol className="grid grid-cols-3 gap-2">{['CCCD', 'Video khuôn mặt', 'Xác nhận'].map((label, index) => <li key={label}><button type="button" aria-current={step === index ? 'step' : undefined} disabled={!writable || index > availableStep} onClick={() => { setSelectedStep(index); setError('') }} className={`flex w-full flex-col items-center gap-2 rounded-xl border px-2 py-4 text-center text-xs font-semibold transition sm:text-sm ${step === index ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 text-slate-500'} disabled:cursor-not-allowed`}><span className={`flex h-7 w-7 items-center justify-center rounded-full ${step === index ? 'bg-emerald-600 text-white' : 'bg-slate-100'}`}>{index < availableStep ? '✓' : index + 1}</span>{label}</button></li>)}</ol></nav>}
-    {attempt && (!editable || attempt.decisionReason || (attempt.lastErrorCode && !error)) && <div className="rounded-xl bg-slate-50 p-3 text-sm"><strong>{statusLabels[attempt.status] || attempt.status}</strong>
+    {attempt && (attempt.decisionReason || (attempt.lastErrorCode && !error && (!editable || (attempt.lastErrorCode.startsWith('VIDEO') ? step === 1 : step === 0)))) && <div className="rounded-xl bg-slate-50 p-3 text-sm"><strong>Thông báo hồ sơ</strong>
       {(attempt.decisionReason || attempt.lastErrorCode) && <p className="mt-1">{identityMessage(attempt.decisionReason || attempt.lastErrorCode)}</p>}
-      {attempt.status === 'SUBMITTED' && <p className="mt-1">Danh tính đang chờ Admin xem xét. Bạn có thể tiếp tục nhập hồ sơ Provider.</p>}
-      {attempt.status === 'APPROVED' && <p className="mt-1">Đã xác minh danh tính. Provider tiếp tục hoàn thiện và gửi hồ sơ hoạt động.</p>}
-      {attempt.status === 'PROCESSING' && <p className="mt-1">Yêu cầu đang được xử lý. Hãy cập nhật trạng thái sau ít phút; không cần tạo phiên mới.</p>}
     </div>}
     {(!attempt || ['CANCELLED', 'EXPIRED', 'REJECTED'].includes(attempt.status)) && <button className={buttonClass} disabled={!writable} onClick={() => perform('Đang tạo phiên…', create)}>Bắt đầu xác minh</button>}
     {editable && step === 0 && <form onSubmit={documents} className="space-y-4">
@@ -161,18 +175,31 @@ export default function IdentityVerificationPanel({ activationToken, onComplete,
       <div className="grid gap-3 sm:grid-cols-2">{[['Mặt trước', front, setFront], ['Mặt sau', back, setBack]].map(([label, value, setter]) => <DocumentUpload key={`${label}-${attempt.documentRevision}`} label={label} value={value} disabled={!writable} onChange={file => { setter(file); setConfirmed(false) }} />)}</div>
       <button type="submit" className={secondaryClass} disabled={!writable || !front || !back}>{attempt.document ? 'Đọc lại CCCD (sẽ xóa kết quả video cũ)' : 'Đọc thông tin CCCD'}</button>
     </form>}
-    {attempt?.document && (step === 0 || step === 2) && <dl className="grid gap-2 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
+    {attempt && (attempt.document || attempt.video || !editable) && <VerificationEvidenceSummary document={step === 1 ? undefined : attempt.document} video={step === 0 && editable ? undefined : attempt.video} videoOnly={step === 1 && editable} status={attempt.status}
+      canContinue={!!(editable && step === 0 && availableStep >= 1 && writable && !front && !back)}
+      canSubmitForReview={attempt.status === 'READY_TO_SUBMIT' && attempt.canSubmit}
+      onContinue={() => setSelectedStep(1)}
+      onRetake={editable && writable && step !== 0 ? () => setSelectedStep(0) : undefined}
+      onRetryVideo={editable && writable && availableStep >= 1 ? () => setSelectedStep(1) : undefined} />}
+    {attempt?.document && (step === 0 || step === 2) && <details className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold">Xem thông tin đã đọc</summary><dl className="grid gap-2 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
       <div><dt className="text-slate-500">Họ tên</dt><dd className="font-semibold">{attempt.document.fullName || 'Chưa đọc được'}</dd></div><div><dt className="text-slate-500">Số CCCD</dt><dd>{attempt.document.documentNumber || 'Chưa đọc được'}</dd></div><div><dt className="text-slate-500">Ngày sinh</dt><dd>{attempt.document.dateOfBirth || 'Chưa đọc được'}</dd></div><div><dt className="text-slate-500">Ngày hết hạn</dt><dd>{attempt.document.expiryDate || 'Chưa đọc được'}</dd></div>
-    </dl>}
-    {editable && step === 0 && availableStep >= 1 && <button className={buttonClass} disabled={!writable || !!front || !!back} onClick={() => setSelectedStep(1)}>Thông tin đúng, tiếp tục →</button>}
+    </dl></details>}
+    {attempt && !processing.running && (attempt.hasFront || attempt.hasBack || attempt.hasVideo) && <IdentityEvidenceGallery
+      attemptId={attempt.attemptId} revision={attempt.version} activationToken={activationToken}
+      hasFront={attempt.hasFront && (!editable || step !== 1)} hasBack={attempt.hasBack && (!editable || step !== 1)} hasVideo={attempt.hasVideo && (!editable || step !== 0)}
+      title={attempt.status === 'SUBMITTED' ? 'Bằng chứng trong hồ sơ đã gửi — chỉ xem' : 'Ảnh và video đang lưu — chỉ xem'} />}
+    {!!attempt?.pipelineReports?.length && <details className="rounded-xl border border-blue-200 p-3"><summary className="cursor-pointer font-semibold">Lịch sử pipeline lưu trên hồ sơ ({attempt.pipelineReports.length} lượt)</summary><div className="mt-3 space-y-3">{attempt.pipelineReports.filter(run=>run.status !== 'PROCESSING').map(run=><details key={run.id} className="rounded-lg border p-3"><summary className="cursor-pointer text-sm">{run.kind === 'VIDEO' ? 'Video' : 'CCCD'} · bản giấy tờ {run.revision} · {new Date(run.startedAt).toLocaleString('vi-VN')} · {run.status}</summary><IdentityProcessingProgress task={{kind:run.kind,startedAt:Date.parse(run.startedAt),finishedAt:Date.parse(run.finishedAt)}} remote={{status:run.status,aiProgress:run.progress,errorCode:run.errorCode,seenProcessing:true}} completed /></details>)}</div></details>}
+    {attempt && <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer font-semibold">Lịch sử gửi và xét duyệt</summary><IdentityReviewHistory entries={attempt.reviewHistory} renderEvidence={entry => <IdentityEvidenceGallery
+      attemptId={attempt.attemptId} eventId={entry.id} activationToken={activationToken}
+      hasVideo={!!entry.video} title="Bằng chứng tại thời điểm gửi/xét duyệt này" />} /></details>}
+    {!processing.running && <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer font-semibold">Các phiên xác minh trước</summary><IdentityAttemptArchive activationToken={activationToken} currentAttemptId={attempt?.attemptId} /></details>}
     {editable && step === 1 && attempt.document?.requiredFieldsReadable && constraints && <div className="space-y-4">
       <h3 className="font-semibold">2. Video khuôn mặt</h3><p className="text-sm text-slate-500">Tối đa {constraints.maxVideoSeconds} giây và {(constraints.maxVideoBytes / 1048576).toFixed(0)} MB.</p>
       <VideoCapture value={video} onChange={file => { setVideo(file); setConfirmed(false) }} constraints={constraints} disabled={!constraints.verificationEnabled || !!busy} onCaptureChange={setCapturing} />
       <button className={buttonClass} disabled={!writable || !video} onClick={uploadVideo}>Gửi video để kiểm tra</button>
       {availableStep === 2 && !video && <button className={secondaryClass} disabled={!writable} onClick={() => setSelectedStep(2)}>Tiếp tục xác nhận →</button>}
     </div>}
-    {editable && attempt?.video && step !== 0 && <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900"><p>Động tác: {attempt.video.motionChallenge?.status === 'PASS' ? 'Đã hoàn thành' : 'Chưa hoàn thành đủ hướng dẫn'}</p><p className="mt-1">{attempt.role === 'PROVIDER' ? 'CCCD/video sẽ được gửi cùng thông tin dịch vụ ở bước cuối.' : 'Hệ thống sẽ xác minh danh tính sau khi bạn xác nhận gửi.'}</p></div>}
     {step === 2 && attempt?.status === 'READY_TO_SUBMIT' && <div className="space-y-4">{(video || front || back) && <p className="text-sm text-amber-800">Bạn đã chọn dữ liệu mới. Hãy quay lại bước tương ứng và gửi để kiểm tra trước khi xác nhận.</p>}<label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm leading-6"><input className="mt-1 accent-emerald-600" type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={!!busy || capturing} />Tôi xác nhận CCCD và người trong video là của chính tôi.</label><button className={buttonClass} disabled={!!busy || capturing || !!video || !!front || !!back || !confirmed || !attempt.canSubmit} onClick={submit}>{attempt.role === 'PROVIDER' ? 'Xác nhận và tiếp tục hồ sơ' : 'Xác nhận và gửi hồ sơ'}</button></div>}
-    {attempt && !terminal && attempt.status !== 'SUBMITTED' && <button className="text-sm font-medium text-red-700 underline disabled:opacity-50" disabled={!!busy || capturing} onClick={() => perform('Đang hủy phiên…', async () => { const result = activationToken ? await api.cancelActivationAttempt(activationToken, attempt.attemptId, attempt.version) : await api.cancelAttempt(attempt.attemptId, attempt.version); setAttempt(result); setVideo(null); setFront(null); setBack(null) })}>Hủy phiên hiện tại</button>}
+    {attempt && !terminal && attempt.status !== 'SUBMITTED' && <button className="text-sm font-medium text-red-700 underline disabled:opacity-50" disabled={!!busy || capturing || processing.running} onClick={() => perform('Đang hủy phiên…', async () => { const result = activationToken ? await api.cancelActivationAttempt(activationToken, attempt.attemptId, attempt.version) : await api.cancelAttempt(attempt.attemptId, attempt.version); setAttempt(result); setVideo(null); setFront(null); setBack(null) })}>Hủy phiên hiện tại</button>}
   </section>
 }

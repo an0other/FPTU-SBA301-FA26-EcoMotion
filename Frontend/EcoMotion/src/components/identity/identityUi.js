@@ -10,6 +10,12 @@ export const statusLabels = {
 }
 
 const messages = {
+  LICENSE_PROCESSING_FAILED: 'Có lỗi khi hoàn tất lượt đọc GPLX. Trạng thái hồ sơ bên dưới là nguồn kiểm tra trước khi gửi lại.',
+  LICENSE_PROCESSING_TIMEOUT: 'Lượt đọc GPLX quá thời gian theo dõi. Cập nhật hồ sơ để kiểm tra kết quả trước khi gửi lại.',
+  LICENSE_PROGRESS_UNAVAILABLE: 'Chưa lấy được tiến trình GPLX. Đây không phải kết luận giấy tờ bị từ chối.',
+  DOCUMENT_AI_UNAVAILABLE: 'Chưa nhận được kết quả từ dịch vụ đọc giấy tờ. Vui lòng thử lại khi dịch vụ sẵn sàng.',
+
+  IDENTITY_REVIEW_NOTE_REQUIRED: 'Hãy ghi hướng dẫn hoặc lý do cụ thể từ 5 đến 1.000 ký tự.',
   IDENTITY_NEW_EVIDENCE_REQUIRED: 'Admin yêu cầu bổ sung giấy tờ hoặc video. Hãy tải bằng chứng mới trước khi gửi lại.',
   PROVIDER_REVIEW_NOTE_REQUIRED: 'Hãy ghi rõ thông tin người đăng ký cần bổ sung hoặc lý do từ chối.',
   IDENTITY_THRESHOLD_NOT_CONFIGURED: 'Hệ thống chưa cấu hình ngưỡng xác minh. Vui lòng liên hệ quản trị viên.',
@@ -23,6 +29,9 @@ const messages = {
   IDENTITY_ATTEMPT_STALE: 'Hồ sơ đã thay đổi. Hãy cập nhật trạng thái rồi thực hiện lại.',
   PROVIDER_APPLICATION_STALE: 'Hồ sơ đã thay đổi. Hãy cập nhật trước khi gửi lại.',
   IDENTITY_FACE_RETRY_REQUIRED: 'Chưa đủ điều kiện đối chiếu khuôn mặt. Hãy quay lại ở nơi đủ sáng và giữ mặt rõ trong khung.',
+  IDENTITY_PHONE_DOCUMENT_MISMATCH: 'Số điện thoại đang được dùng với CCCD khác ở vai trò còn lại. Cần đối chiếu danh tính trước khi duyệt.',
+  IDENTITY_ROLE_ALREADY_EXISTS: 'CCCD đã có tài khoản cùng vai trò. Mỗi CCCD chỉ có một Renter và một Provider.',
+  IDENTITY_EXISTING_DETAILS_MISMATCH: 'Thông tin CCCD chưa khớp hồ sơ danh tính đã duyệt. Admin cần đối chiếu lại.',
   VIDEO_RETAKE_REQUIRED: 'Video chưa hoàn thành hướng dẫn hoặc chưa đủ hình ảnh rõ. Vui lòng quay lại.',
   DOCUMENT_RETAKE_REQUIRED: 'Chưa đọc đủ thông tin CCCD. Hãy chụp rõ cả hai mặt, tránh lóa sáng.',
   IDENTITY_PROCESSING_TIMEOUT: 'Lượt xử lý đã quá thời gian. Bạn có thể gửi lại.',
@@ -35,6 +44,7 @@ const messages = {
   PROVIDER_IDENTITY_APPROVAL_REQUIRED: 'Cần hoàn tất duyệt danh tính trước khi gửi hồ sơ Provider.',
   PROVIDER_ACCOUNT_VERIFICATION_REQUIRED: 'Bạn cần hoàn tất xác nhận tài khoản và số điện thoại.',
   DOCUMENT_UNREADABLE: 'Giấy tờ chưa rõ. Hãy gửi lại ảnh rõ nét, không lóa.',
+  FACE_MISMATCH: 'Admin nhận thấy khuôn mặt video chưa khớp ảnh CCCD. Hãy kiểm tra đúng giấy tờ và quay lại video của chính bạn.',
   FACE_UNCLEAR: 'Khuôn mặt hoặc video chưa rõ. Vui lòng quay lại ở nơi đủ sáng.',
   DETAILS_INCONSISTENT: 'Thông tin chưa nhất quán. Vui lòng kiểm tra và bổ sung hồ sơ.',
   ADDRESS_REQUIRED: 'Vui lòng kiểm tra, bổ sung địa chỉ và vị trí giao nhận.',

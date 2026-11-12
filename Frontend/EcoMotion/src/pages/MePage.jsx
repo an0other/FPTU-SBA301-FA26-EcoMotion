@@ -184,7 +184,6 @@ export default function MePage() {
         </nav>
 
         <div className="mb-6">
-          {['RENTER', 'PROVIDER'].includes(user?.role) && <Link to="/identity/accounts" className="mb-3 inline-block rounded-xl border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700">Liên kết tài khoản Renter / Provider →</Link>}
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-700">
             Tài khoản EcoMotion
           </p>

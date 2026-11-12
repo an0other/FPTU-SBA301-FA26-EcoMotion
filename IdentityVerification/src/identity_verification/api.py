@@ -3,6 +3,8 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Lock
+from contextlib import asynccontextmanager
+from identity_verification.jobs import VerificationJobs
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -13,7 +15,12 @@ from identity_verification.security import require_api_key
 from identity_verification.verification_pipeline import verify_video
 
 settings = get_settings()
-app = FastAPI(
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    jobs.close()
+
+app = FastAPI(lifespan=lifespan,
     title="EcoMotion Identity Verification",
     version="0.1.0",
 )
@@ -31,6 +38,7 @@ MAX_IMAGE_BYTES = settings.max_image_mb * 1024 * 1024
 MAX_IMAGE_PIXELS = settings.max_image_pixels
 MAX_VIDEO_BYTES = settings.max_video_mb * 1024 * 1024
 verification_lock = Lock()
+jobs = VerificationJobs(verification_lock)
 
 
 @app.get("/v1/constraints", dependencies=[Depends(require_api_key)])
@@ -143,6 +151,37 @@ def create_verification(cccd: UploadFile, video: UploadFile):
 
         if acquired:
             verification_lock.release()
+
+
+@app.post('/v1/verifications/jobs', status_code=202, dependencies=[Depends(require_api_key)])
+def create_verification_job(cccd: UploadFile, video: UploadFile):
+    directory = TemporaryDirectory(prefix='identity-verification-')
+    try:
+        workspace = Path(directory.name)
+        reference = workspace / 'reference.image'
+        capture = workspace / 'capture.video'
+        save_upload(cccd, reference, MAX_IMAGE_BYTES)
+        save_upload(video, capture, MAX_VIDEO_BYTES)
+        validate_reference_image(reference)
+        try:
+            key = jobs.submit(lambda progress: verify_video(reference, capture, progress=progress), directory.cleanup)
+        except RuntimeError as error:
+            raise HTTPException(503, 'Verification busy; retry later') from error
+        return {'jobId':key}
+    except Exception:
+        directory.cleanup()
+        raise
+    finally:
+        cccd.file.close()
+        video.file.close()
+
+
+@app.get('/v1/verifications/jobs/{job_id}', dependencies=[Depends(require_api_key)])
+def verification_job(job_id: str):
+    result = jobs.get(job_id)
+    if result is None:
+        raise HTTPException(404, 'Job not found or expired')
+    return result
 
 
 @app.post("/v1/images/inspect")

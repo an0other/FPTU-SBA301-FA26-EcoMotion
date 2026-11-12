@@ -48,12 +48,13 @@ public class YearlyHandoverServiceImpl implements YearlyHandoverService {
         if (booking.getStatus() != BookingStatus.CONFIRMED || !payments.yearlyInitialPaymentsComplete(booking.getId())) {
             throw new ConflictException("Cần xác nhận đủ tiền bảo đảm và tiền thuê tháng đầu");
         }
+        payments.yearlyCash(booking.getId());
         row = new YearlyHandover();
         row.setBookingId(booking.getId());
         row.setStage("DISPATCHED");
         row.setDispatchedAt(clock.instant());
         notifications.changed(booking, "BOOKING_CHANGED");
-        return view(handovers.save(row));
+        return view(handovers.saveAndFlush(row));
     }
 
     @Override
@@ -74,20 +75,26 @@ public class YearlyHandoverServiceImpl implements YearlyHandoverService {
         row.setEvidenceId(evidenceId);
         row.setEvidenceUrl(photo.imageUrl());
         notifications.changed(booking, "BOOKING_CHANGED");
+        handovers.flush();
         return view(row);
     }
 
     @Override
     @Transactional
-    public Handover receive(Long userId, String code) {
+    public Handover receive(Long userId, String code, Long version) {
         Booking booking = requiredBooking(code);
         if (!booking.getRenter().getUser().getUserId().equals(userId)) throw new AccessDeniedException("Không thuộc đơn thuê của bạn");
         YearlyHandover row = requiredHandover(booking);
         if ("RECEIVED".equals(row.getStage())) return view(row);
+        if (version == null || !version.equals(row.getVersion() == null ? 0L : row.getVersion())) {
+            throw new ConflictException("Biên bản giao xe đã thay đổi. Vui lòng tải lại và kiểm tra ảnh, số km trước khi xác nhận.");
+        }
         if (!"ARRIVED".equals(row.getStage()) || booking.getStatus() != BookingStatus.CONFIRMED
                 || !payments.yearlyInitialPaymentsComplete(booking.getId())) throw new ConflictException("Xe chưa sẵn sàng xác nhận nhận");
         vehicles.findVehicleByIdForUpdate(booking.getVehicle().getId())
                 .orElseThrow(() -> new ConflictException("Không tìm thấy xe"));
+        if (!workflow.get(userId, code).termsAccepted()) throw new ConflictException("Chưa đồng ý điều khoản năm");
+        payments.yearlyCash(booking.getId());
         var now = clock.instant();
         var end = YearlyRentalRules.contractEnd(now);
         DrivingLicenseEligibilityPolicy.requireEligibleForBooking(booking.getRenter(), booking.getVehicle(), now, end);
@@ -99,6 +106,7 @@ public class YearlyHandoverServiceImpl implements YearlyHandoverService {
         row.setStage("RECEIVED");
         row.setReceivedOn(now.atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate());
         notifications.changed(booking, "BOOKING_CHANGED");
+        handovers.flush();
         return view(row);
     }
 
@@ -110,7 +118,7 @@ public class YearlyHandoverServiceImpl implements YearlyHandoverService {
                 && !booking.getVehicle().getProvider().getUser().getUserId().equals(userId)) throw new AccessDeniedException("Không có quyền xem bàn giao");
         if (booking.getPlan().getPlanType() != PlanType.YEARLY) throw new ConflictException("Chỉ áp dụng cho gói năm");
         return handovers.findById(booking.getId()).map(this::view)
-                .orElse(new Handover("NOT_DISPATCHED", null, null, null, null, null));
+                .orElse(new Handover("NOT_DISPATCHED", null, null, null, null, null, null));
     }
 
     private Booking providerBooking(Long userId, String code) {
@@ -130,6 +138,6 @@ public class YearlyHandoverServiceImpl implements YearlyHandoverService {
     }
 
     private Handover view(YearlyHandover row) {
-        return new Handover(row.getStage(), row.getDispatchedAt(), row.getArrivedAt(), row.getReceivedOn(), row.getInitialKm(), row.getEvidenceUrl());
+        return new Handover(row.getStage(), row.getDispatchedAt(), row.getArrivedAt(), row.getReceivedOn(), row.getInitialKm(), row.getEvidenceUrl(), row.getVersion() == null ? 0L : row.getVersion());
     }
 }

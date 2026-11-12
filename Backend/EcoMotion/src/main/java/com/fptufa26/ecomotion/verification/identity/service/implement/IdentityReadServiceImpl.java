@@ -66,16 +66,14 @@ public class IdentityReadServiceImpl implements IdentityReadService {
         String next = restrictedIdentity ? "CONTACT_SUPPORT" : user.getPhoneVerifiedAt() == null ? "VERIFY_PHONE"
                 : verified && (user.getRole() == Role.RENTER || reviewed)
                 ? user.getRole() == Role.RENTER ? "LOGIN_OR_DASHBOARD" : "PROVIDER_APPLICATION"
-                : attempt == null ? "START_VERIFICATION_OR_LINK" : attempt.nextAction();
+                : attempt == null ? "START_VERIFICATION" : attempt.nextAction();
         return new com.fptufa26.ecomotion.verification.identity.dto.response.IdentityStatusResponse(userId,
                 user.getRole(), user.getStatus(), user.getPhoneVerifiedAt() != null,
                 user.getIdentity() == null ? null : user.getIdentity().getId(),
                 user.getIdentity() == null ? "UNVERIFIED" : user.getIdentity().getStatus().name(), reviewed,
                 attempt == null ? null : attempt.attemptId(), attempt == null ? null : attempt.status(),
                 attempt == null ? null : attempt.version(), attempt == null ? null : attempt.decisionReason(),
-                user.isActive() && verified && !restrictedIdentity
-                        && user.getIdentity().getVerificationMethod() != com.fptufa26.ecomotion.verification.identity.enums.IdentityVerificationMethod.DEMO_SEED
-                        && (user.getRole() != Role.PROVIDER || users.isProviderOperational(userId)),
+                false,
                 !restrictedIdentity && (user.getIdentity() == null || user.getRole() == Role.PROVIDER && !reviewed), next);
     }
 }

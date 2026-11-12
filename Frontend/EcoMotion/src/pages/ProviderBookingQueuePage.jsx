@@ -984,7 +984,7 @@ export default function ProviderBookingQueuePage() {
                                     </button>
                                   )}
 
-                                  {['CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED'].includes(item.status) && (
+                                  {item.planType !== 'YEARLY' && ['CONFIRMED', 'DRIVER_ASSIGNED', 'DRIVER_CONFIRMED'].includes(item.status) && (
                                     <button
                                       type="button"
                                       onClick={() => {

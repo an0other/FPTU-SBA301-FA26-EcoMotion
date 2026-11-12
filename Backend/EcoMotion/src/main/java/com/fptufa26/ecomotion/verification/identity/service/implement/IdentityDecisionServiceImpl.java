@@ -36,8 +36,6 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
     private final IdentityVerificationAttemptService sessions;
     private final ObjectMapper mapper;
     private final Clock clock;
-    private static final int MINIMUM_FRAMES = 4;
-    private static final double MINIMUM_COVERAGE = 0.75;
     private final String policyVersion;
     private final Double acceptanceThreshold;
 
@@ -57,7 +55,7 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
                 || acceptanceThreshold <= 0 || acceptanceThreshold > 1)) {
             throw new IllegalArgumentException("Identity acceptance threshold must be in (0, 1]");
         }
-        policyVersion = "identity-screen-v1:t=" + acceptanceThreshold + ":n=" + MINIMUM_FRAMES + ":c=" + MINIMUM_COVERAGE;
+        policyVersion = "identity-manual-screen-v2";
     }
 
     @Override
@@ -71,7 +69,7 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
                 .filter(a -> a.getRole() == Role.PROVIDER && (a.getStatus() == SUBMITTED
                         || a.getStatus() == READY_TO_SUBMIT && a.getExpiresAt().isAfter(clock.instant())))
                 .filter(this::hasRequiredNewEvidence)
-                .filter(a -> a.getVideoJson() != null && acceptedVideo(mapper.readValue(a.getVideoJson(), IdentityVideoResult.class)))
+                .filter(a -> a.getVideoJson() != null && reviewableVideo(mapper.readValue(a.getVideoJson(), IdentityVideoResult.class)))
                 .isPresent();
     }
 
@@ -93,7 +91,7 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
                 attempt.setRequiredPreviousFrontSha(attempt.getFrontSha256());
                 attempt.setRequiredPreviousBackSha(attempt.getBackSha256());
             }
-            if ("FACE_UNCLEAR".equals(reason) || "DOCUMENT_UNREADABLE".equals(reason)) {
+            if (Set.of("FACE_UNCLEAR", "FACE_MISMATCH").contains(reason) || "DOCUMENT_UNREADABLE".equals(reason)) {
                 attempt.setRequiredPreviousVideoSha(attempt.getVideoSha256() == null ? attempt.getVideoKey() : attempt.getVideoSha256());
             }
             attempt.setStatus(READY_TO_SUBMIT);
@@ -130,11 +128,8 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
                 || video.motionChallenge() == null || !"PASS".equals(video.motionChallenge().status())) {
             throw failure(HttpStatus.CONFLICT, "IDENTITY_EVIDENCE_INCOMPLETE");
         }
-        if (acceptanceThreshold == null) {
-            throw failure(HttpStatus.SERVICE_UNAVAILABLE, "IDENTITY_THRESHOLD_NOT_CONFIGURED");
-        }
         attempt.setSubmittedAt(clock.instant());
-        boolean accepted = acceptedVideo(video);
+        boolean accepted = user.getRole() == Role.RENTER || reviewableVideo(video);
         attempt.setDecisionPolicyVersion(policyVersion);
         if (!accepted) {
             attempt.setDecisionActor("SYSTEM");
@@ -145,21 +140,22 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
             attempt.setStatus(queueProvider ? SUBMITTED : READY_TO_SUBMIT);
             attempt.setDecisionReason(null);
         } else {
-            attempt.setDecisionActor("SYSTEM");
-            attempt.setDecidedAt(clock.instant());
-            approve(attempt, document, null);
+            // Similarity is evidence for an administrator, never an automatic renter approval.
+            attempt.setStatus(SUBMITTED);
+            attempt.setDecisionActor(null);
+            attempt.setDecisionReason(null);
+            attempt.setDecidedAt(null);
+            attempt.setDecisionPolicyVersion("renter-manual-review-v1");
+        }
+        if (attempt.getStatus() == SUBMITTED) {
+            recordEvent(attempt, "SUBMIT", "USER", userId, null, null);
         }
         return view(attempts.saveAndFlush(attempt));
     }
 
-    private boolean acceptedVideo(IdentityVideoResult video) {
-        var scores = video.faceMatching();
-        return acceptanceThreshold != null && video.workflow() != null && "READY_FOR_REVIEW".equals(video.workflow().status())
-                && video.motionChallenge() != null && "PASS".equals(video.motionChallenge().status())
-                && scores != null && scores.scoredFrames() != null && scores.candidateFrames() != null && scores.candidateFrames() > 0
-                && scores.scoredFrames() >= MINIMUM_FRAMES && scores.scoredFrames() <= scores.candidateFrames()
-                && scores.median() != null && Double.isFinite(scores.median()) && scores.median() <= 1 && scores.median() >= acceptanceThreshold
-                && (double) scores.scoredFrames() / scores.candidateFrames() >= MINIMUM_COVERAGE;
+    private boolean reviewableVideo(IdentityVideoResult video) {
+        return video != null && video.workflow() != null && "READY_FOR_REVIEW".equals(video.workflow().status())
+                && video.motionChallenge() != null && "PASS".equals(video.motionChallenge().status());
     }
 
     private boolean hasRequiredNewEvidence(IdentityVerificationAttempt a) {
@@ -191,11 +187,27 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
 
     @Override
     public IdentityDecisionResponse review(Long adminId, UUID id, long version, String decision, String reason) {
+        return reviewDecision(adminId, id, version, decision, reason, null);
+    }
+
+    @Override
+    public IdentityDecisionResponse reviewRenter(Long adminId, UUID id, long version, String decision, String reason, String note) {
+        admin(adminId);
+        var attempt = attempts.findPublicForUpdate(id).orElseThrow(this::notFound);
+        if (attempt.getRole() != Role.RENTER) throw failure(HttpStatus.CONFLICT, "PROVIDER_COMBINED_REVIEW_REQUIRED");
+        note = note == null ? null : note.trim();
+        if (note != null && note.length() > 1000 || !"APPROVE".equals(decision) && (note == null || note.length() < 5)) {
+            throw failure(HttpStatus.BAD_REQUEST, "IDENTITY_REVIEW_NOTE_REQUIRED");
+        }
+        return reviewDecision(adminId, id, version, decision, reason, note);
+    }
+
+    private IdentityDecisionResponse reviewDecision(Long adminId, UUID id, long version, String decision, String reason, String note) {
         admin(adminId);
         var attempt = attempts.findPublicForUpdate(id).orElseThrow(this::notFound);
         requireVersion(attempt, version);
         boolean reopen = "REOPEN".equals(decision) && attempt.getStatus() == REJECTED;
-        if (attempt.getRole() != Role.PROVIDER || attempt.getStatus() != SUBMITTED && !reopen) {
+        if (!Set.of(Role.RENTER, Role.PROVIDER).contains(attempt.getRole()) || attempt.getStatus() != SUBMITTED && !reopen) {
             throw failure(HttpStatus.CONFLICT, "IDENTITY_REVIEW_STATE_INVALID");
         }
         var user = users.lockForIdentityDecision(attempt.getUser().getId());
@@ -210,14 +222,32 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
         attempt.setDecisionActor("ADMIN");
         attempt.setReviewedBy(adminId);
         attempt.setDecidedAt(clock.instant());
-        attempt.setDecisionPolicyVersion("provider-admin-v1");
+        attempt.setDecisionPolicyVersion(attempt.getRole() == Role.RENTER ? "renter-admin-v1" : "provider-admin-v1");
         attempt.setDecisionReason("APPROVE".equals(decision) ? null : reason);
         if ("APPROVE".equals(decision)) {
+            if (attempt.getRole() == Role.RENTER) {
+                var video = attempt.getVideoJson() == null ? null : mapper.readValue(attempt.getVideoJson(), IdentityVideoResult.class);
+                if (attempt.getFrontKey() == null || attempt.getBackKey() == null || attempt.getVideoKey() == null
+                        || !hasRequiredNewEvidence(attempt) || video == null || video.workflow() == null
+                        || !"READY_FOR_REVIEW".equals(video.workflow().status()) || video.motionChallenge() == null
+                        || !"PASS".equals(video.motionChallenge().status())) {
+                    throw failure(HttpStatus.CONFLICT, "IDENTITY_EVIDENCE_INCOMPLETE");
+                }
+            }
             approve(attempt, document(attempt), adminId);
         } else if ("REJECT".equals(decision)) {
             attempt.setStatus(REJECTED);
             attempt.setActiveUserId(null);
         } else {
+            if (attempt.getRole() == Role.RENTER) {
+                if ("DOCUMENT_UNREADABLE".equals(reason) || "DETAILS_INCONSISTENT".equals(reason)) {
+                    attempt.setRequiredPreviousFrontSha(attempt.getFrontSha256());
+                    attempt.setRequiredPreviousBackSha(attempt.getBackSha256());
+                    attempt.setRequiredPreviousVideoSha(attempt.getVideoSha256());
+                } else if ("FACE_UNCLEAR".equals(reason)) {
+                    attempt.setRequiredPreviousVideoSha(attempt.getVideoSha256());
+                }
+            }
             if (reopen && attempts.existsByActiveUserId(user.getId())) {
                 throw failure(HttpStatus.CONFLICT, "IDENTITY_CANCEL_ACTIVE_ATTEMPT_FIRST");
             }
@@ -225,7 +255,28 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
             attempt.setActiveUserId(user.getId());
             attempt.setExpiresAt(clock.instant().plus(Duration.ofHours(24)));
         }
+        recordEvent(attempt, decision, "ADMIN", adminId, reason, note);
         return view(attempts.saveAndFlush(attempt));
+    }
+
+    private void recordEvent(IdentityVerificationAttempt attempt, String action, String actor, Long actorId, String reason, String note) {
+        attempt.getReviewHistory().add(new IdentityReviewEvent(attempt, action, actor, actorId, reason, note, clock.instant()));
+        // Uploaded replacements must not delete files referenced by historical decisions.
+        attempt.setEvidenceRetained(true);
+    }
+
+    @Override
+    public byte[] historyEvidence(Long adminId, UUID id, Long eventId, String kind) {
+        admin(adminId);
+        var attempt = reviewableAttempt(id);
+        var event = attempt.getReviewHistory().stream().filter(row -> Objects.equals(row.getId(), eventId))
+                .findFirst().orElseThrow(this::notFound);
+        var key = switch (kind) {
+            case "front" -> event.getFrontKey(); case "back" -> event.getBackKey(); case "video" -> event.getVideoKey();
+            default -> throw notFound();
+        };
+        if (key == null) throw notFound();
+        return sessions.storedEvidence(key, kind);
     }
 
     private void approve(IdentityVerificationAttempt attempt, IdentityAiAssessmentResponse.DocumentRead doc, Long adminId) {
@@ -256,8 +307,20 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
             attempt.setActiveUserId(null);
             return;
         }
-        if (identities.findByCccdFingerprint(fingerprint).isPresent()) {
-            throw failure(HttpStatus.CONFLICT, "IDENTITY_LINK_REQUIRED");
+        var existing = identities.findByCccdFingerprint(fingerprint);
+        if (existing.isPresent()) {
+            var verified = identities.findByIdForUpdate(existing.get().getId()).orElseThrow();
+            if (verified.getStatus() != PersonIdentityStatus.VERIFIED
+                    || !birth.equals(verified.getDateOfBirth())
+                    || !normalizedName(doc.fullName()).equals(normalizedName(verified.getFullName()))) {
+                throw failure(HttpStatus.CONFLICT, "IDENTITY_EXISTING_DETAILS_MISMATCH");
+            }
+            users.applyVerifiedIdentity(owner.getId(), verified);
+            attempt.setResultingIdentityId(verified.getId());
+            attempt.setStatus(APPROVED);
+            attempt.setDecisionReason(null);
+            attempt.setActiveUserId(null);
+            return;
         }
         var identity = new PersonIdentity();
         identity.setCccdNo(number);
@@ -287,6 +350,11 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
         attempt.setActiveUserId(null);
     }
 
+    private String normalizedName(String value) {
+        return value == null ? "" : java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").replace('đ','d').replace('Đ','D').replaceAll("\\s+", " ").trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
     private LocalDate date(String value, boolean required) {
         if (value == null || value.isBlank()) {
             if (!required) return null;
@@ -306,22 +374,29 @@ public class IdentityDecisionServiceImpl implements IdentityDecisionService {
         if (!Set.of(SUBMITTED, APPROVED, REJECTED, NEEDS_CHANGES).contains(status)) {
             throw failure(HttpStatus.BAD_REQUEST, "IDENTITY_REVIEW_STATUS_INVALID");
         }
-        return attempts.findByStatusAndRole(status, Role.PROVIDER,
+        return attempts.findByStatusAndRole(status, Role.RENTER,
                 PageRequest.of(page, 20, Sort.by("submittedAt").ascending().and(Sort.by("id")))).map(this::view).getContent();
     }
 
     @Override
     public IdentityAttemptResponse detail(Long adminId, UUID id) {
         admin(adminId);
-        var attempt = providerAttempt(id);
+        var attempt = reviewableAttempt(id);
         return sessions.get(attempt.getUser().getId(), id);
     }
 
     @Override
     public byte[] evidence(Long adminId, UUID id, String kind) {
         admin(adminId);
-        var attempt = providerAttempt(id);
+        var attempt = reviewableAttempt(id);
         return sessions.evidence(attempt.getUser().getId(), id, kind);
+    }
+
+    private IdentityVerificationAttempt reviewableAttempt(UUID id) {
+        var attempt = attempts.findPublicForUpdate(id).orElseThrow(this::notFound);
+        if (!Set.of(Role.RENTER, Role.PROVIDER).contains(attempt.getRole())
+                || attempt.getSubmittedAt() == null && attempt.getReviewHistory().isEmpty()) throw notFound();
+        return attempt;
     }
 
     private IdentityVerificationAttempt providerAttempt(UUID id) {

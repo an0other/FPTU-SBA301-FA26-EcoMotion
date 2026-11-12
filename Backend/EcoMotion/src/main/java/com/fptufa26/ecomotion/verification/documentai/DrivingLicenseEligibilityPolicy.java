@@ -73,7 +73,7 @@ public final class DrivingLicenseEligibilityPolicy {
         }
         if (!renter.isLicenseVerified()) {
             throw new ConflictException(
-                    "Cần tải đủ hai mặt GPLX và hoàn tất kiểm tra OCR/QR trước khi đặt gói năm.");
+                    "Cần GPLX được Admin chấp nhận trước khi đặt gói năm tự lái.");
         }
         if (!isEligibleForYearlyRental(
                 renter.getLicenseClass(),

@@ -108,6 +108,8 @@ class YearlyRentalDataSeederTest {
     @Test
     void threeRentersCoverActiveClosingAndSeparateCancellationWithoutFakeHandover() {
         seeder.seed();
+        assertNotNull(vehicles.get("51Y-00009"));
+        assertNotNull(vehicles.get("51Y-00012"));
         assertEquals(Set.of("EM-Y2-MONTHLY", "EM-Y2-HAPPY-END", "EM-Y2-CANCEL"), bookings.keySet());
         var monthly = bookings.get("EM-Y2-MONTHLY");
         var closing = bookings.get("EM-Y2-HAPPY-END");

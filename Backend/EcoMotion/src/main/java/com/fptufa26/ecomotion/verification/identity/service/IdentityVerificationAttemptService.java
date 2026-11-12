@@ -22,4 +22,7 @@ public interface IdentityVerificationAttemptService {
 
     byte[] evidence(Long userId, UUID attemptId, String kind);
     byte[] storedEvidence(String key, String kind);
+    com.fptufa26.ecomotion.verification.identity.dto.response.IdentityProcessingResponse progress(Long userId, UUID attemptId);
+    java.util.List<IdentityAttemptResponse> history(Long userId, int page);
+    byte[] historyEvidence(Long userId, UUID attemptId, Long eventId, String kind);
 }

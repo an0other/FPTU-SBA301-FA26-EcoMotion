@@ -51,6 +51,11 @@ public class BookingContractServiceImpl implements BookingContractService {
     private final Clock clock;
     private final long maxBytes;
     private final com.fptufa26.ecomotion.user.service.UserService userService;
+    private final com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService yearlyLedger;
+
+    private boolean snapshotTermsAccepted(Booking booking) {
+        return yearlyLedger.yearlyRoundingUnit(booking.getId()).isPresent();
+    }
 
     public BookingContractServiceImpl(
             BookingRepository bookingRepository,
@@ -61,7 +66,8 @@ public class BookingContractServiceImpl implements BookingContractService {
             BookingNotificationService bookingNotificationService,
             Clock clock,
             @Value("${app.upload.max-file-size-bytes:8388608}") long maxBytes,
-            com.fptufa26.ecomotion.user.service.UserService userService) {
+            com.fptufa26.ecomotion.user.service.UserService userService,
+            com.fptufa26.ecomotion.booking.service.BookingPaymentLedgerService yearlyLedger) {
         this.bookingRepository = bookingRepository;
         this.snapshotRepository = snapshotRepository;
         this.documentStorageService = documentStorageService;
@@ -71,6 +77,7 @@ public class BookingContractServiceImpl implements BookingContractService {
         this.clock = clock;
         this.maxBytes = maxBytes;
         this.userService = userService;
+        this.yearlyLedger = yearlyLedger;
     }
 
     @Override
@@ -95,12 +102,14 @@ public class BookingContractServiceImpl implements BookingContractService {
                 && storedPath.startsWith(STORAGE_ENTITY + "/" + userId + "/")
                 && storedPath.endsWith(".pdf");
 
-        boolean canUpload = booking.getStatus() == BookingStatus.ACCEPTED
+        boolean termsAccepted = snapshotTermsAccepted(booking);
+        boolean canUpload = booking.getStatus() == BookingStatus.ACCEPTED && termsAccepted
                 && scheduleService.hasUnexpiredHold(booking.getId(), clock.instant());
 
         String restrictionReason = canUpload
                 ? null
-                : "Chỉ upload hợp đồng sau khi nhà cung cấp chấp nhận và trong thời gian giữ lịch.";
+                : !termsAccepted ? "Cần đồng ý điều khoản trước khi nộp hợp đồng đã ký."
+                : "Chỉ nộp hợp đồng sau khi nhà cung cấp chấp nhận và trong thời gian giữ lịch.";
 
         return new BookingContractStatusResponse(
                 booking.getBookingCode(),
@@ -122,7 +131,7 @@ public class BookingContractServiceImpl implements BookingContractService {
             String bookingCode,
             MultipartFile file) {
         Booking booking = bookingRepository
-                .findBookingByBookingCodeAndRenter_User_Id(
+                .findByBookingCodeAndRenterUserIdForUpdate(
                         bookingCode,
                         userId)
                 .orElseThrow(() -> new BookingNotFoundException(
@@ -142,6 +151,9 @@ public class BookingContractServiceImpl implements BookingContractService {
         DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
                 booking.getRenter(), booking.getVehicle(), booking.getPickupTime(), booking.getPlannedEndAt());
 
+        if (!snapshotTermsAccepted(booking)) {
+            throw new BookingContractNotAllowedException("Cần đồng ý điều khoản trước khi nộp hợp đồng đã ký.");
+        }
         byte[] content = readPdf(file);
         String filename = "contract-" + UUID.randomUUID() + ".pdf";
 
@@ -171,9 +183,9 @@ public class BookingContractServiceImpl implements BookingContractService {
             Long userId,
             String bookingCode) {
         Booking booking = bookingRepository
-                .findByBookingCodeAndRenter_User_Id(
-                        bookingCode,
-                        userId)
+                .findByBookingCode(bookingCode)
+                .filter(row -> row.getRenter().getUser().getId().equals(userId)
+                        || row.getVehicle().getProvider().getUser().getId().equals(userId))
                 .orElseThrow(() -> new BookingNotFoundException(
                         "Không tìm thấy đơn thuê: " + bookingCode));
 
@@ -185,7 +197,7 @@ public class BookingContractServiceImpl implements BookingContractService {
             throw new BookingContractNotFoundException();
         }
 
-        if (!storedPath.startsWith(STORAGE_ENTITY + "/" + userId + "/")
+        if (!storedPath.startsWith(STORAGE_ENTITY + "/" + booking.getRenter().getUser().getId() + "/")
                 || !storedPath.endsWith(".pdf")) {
             throw new BookingContractNotAllowedException(
                     "Contract is not stored in the supported private PDF format");

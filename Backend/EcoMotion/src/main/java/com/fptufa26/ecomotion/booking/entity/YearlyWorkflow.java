@@ -33,10 +33,19 @@ public class YearlyWorkflow {
     private Long settlementEvidenceId;
     private Long refundEvidenceId;
     private Long refundReviewDisputeId;
+    @ElementCollection
+    @CollectionTable(name="yearly_refund_transfer", joinColumns=@JoinColumn(name="booking_id"),
+            uniqueConstraints=@UniqueConstraint(name="uk_yearly_refund_bank_ref", columnNames={"booking_id", "bank_reference"}))
+    @OrderColumn(name="transfer_index")
+    private java.util.List<YearlyRefundTransfer> refundTransfers = new java.util.ArrayList<>();
     @Column(precision = 14, scale = 2)
     private BigDecimal refundVerifiedReceived = BigDecimal.ZERO;
     private long completedKm;
     private LocalDate returnedOn;
+    private LocalDate requestedReturnOn;
+    private java.time.Instant settlementAcceptedAt;
+    private Long settlementAcceptedBy;
+    private java.time.Instant completedAt;
     private LocalDate failureOn;
     @Column(precision = 14, scale = 2)
     private BigDecimal excessKmRate = BigDecimal.ZERO;
@@ -58,6 +67,8 @@ public class YearlyWorkflow {
     private BigDecimal excessKmFee = BigDecimal.ZERO;
     @Column(precision = 14, scale = 2)
     private BigDecimal otherCharges = BigDecimal.ZERO;
+    @Column(columnDefinition = "text")
+    private String settlementChargesJson;
     @Column(precision = 14, scale = 2)
     private BigDecimal rentPaid = BigDecimal.ZERO;
     @Column(precision = 14, scale = 2)

@@ -138,6 +138,8 @@ public class TripEndConfirmationService {
      */
     @Transactional
     public void completeIfReady(Booking booking) {
+        if (booking.getPlan() != null && booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+                && ledger.yearlyRoundingUnit(booking.getId()).isPresent()) return;
         if (booking.getSettlementRequestedAt() == null || !SETTLEMENT_STATUSES.contains(booking.getStatus())) return;
         if (!isEndSettled(booking.getId())) return;
         boolean activeDispute = disputeQueries.getObject().findByBooking(booking.getId()).stream()

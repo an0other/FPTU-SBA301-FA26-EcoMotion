@@ -7,7 +7,7 @@ const unwrap = (response) => response.data?.data
 export const yearlyWorkflowService = {
   async load(role, code) {
     const base = path(role, code)
-    const [workflow, handover, payments, evidence, contract, reviews] = await Promise.all([
+    const [workflow, handover, payments, evidence, contract, reviews, registration, operations, refunds, booking] = await Promise.all([
       apiClient.get(base + '/workflow').then(unwrap),
       apiClient.get(base + '/handover').then(unwrap),
       apiClient.get(base + '/payments').then(unwrap).catch((error) => {
@@ -17,8 +17,20 @@ export const yearlyWorkflowService = {
       apiClient.get('/bookings/' + encodeURIComponent(code) + '/evidences').then(unwrap),
       role === 'renter' ? yearlyRentalService.getContractStatus(code) : Promise.resolve(null),
       apiClient.get(base + '/reviews/history').then(unwrap),
+      apiClient.get(base + '/registration').then(unwrap),
+      apiClient.get(base + '/operations').then(unwrap),
+      apiClient.get('/refunds/booking/' + encodeURIComponent(code)).then(unwrap),
+      role === 'renter' ? apiClient.get('/renter/bookings/' + encodeURIComponent(code)).then(unwrap) : Promise.resolve(null),
     ])
-    return { workflow, handover, payments: payments || [], evidence: evidence || [], contract, reviews }
+    let returnAssessment = null, assessmentError = ''
+    if (workflow?.returnedOn) {
+      try { returnAssessment = unwrap(await apiClient.get(base + '/return-assessment')) }
+      catch (error) { assessmentError = error.message || 'Chưa tính được đối chiếu trả xe.' }
+    }
+    return { workflow, handover, payments: payments || [], evidence: evidence || [], contract, reviews, registration, operations, refunds: refunds || [], booking, returnAssessment, assessmentError }
+  },
+  async downloadProviderContract(code) {
+    return (await apiClient.get(path('provider', code) + '/contract', { responseType: 'blob' })).data
   },
   async action(role, code, action, body = {}) {
     return unwrap(await apiClient.post(path(role, code) + '/' + action, body))

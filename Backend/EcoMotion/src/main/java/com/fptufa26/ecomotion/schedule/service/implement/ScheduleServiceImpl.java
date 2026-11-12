@@ -63,9 +63,24 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
     }
 
+    @Override
+    public List<Long> yearlyInspectionVehicleIds(Long bookingId) {
+        return vehicleScheduleRepository.findByBooking_Id(bookingId).stream()
+                .filter(s -> s.getStatus() == ScheduleStatus.ACTIVE && s.getType() == ScheduleType.MAINTENANCE
+                        && "YEARLY_INSPECTION".equals(s.getReason()) && YEARLY_INSPECTION_END.equals(s.getEndAt()))
+                .map(s -> s.getVehicle().getId()).distinct().toList();
+    }
+
     private Instant reservationEnd(Booking booking, Instant end) {
         return booking.getPlan() != null && booking.getPlan().getPlanType() == PlanType.YEARLY
                 ? YearlyRentalRules.reservationEnd(end) : end;
+    }
+
+    @Override
+    public Instant holdExpiresAt(Long bookingId) {
+        return vehicleScheduleRepository.findByBooking_Id(bookingId).stream()
+                .filter(row -> row.getStatus() == ScheduleStatus.HELD && row.getExpiresAt() != null)
+                .map(VehicleSchedule::getExpiresAt).max(Instant::compareTo).orElse(null);
     }
 
     @Override
@@ -78,10 +93,15 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     @Override
     public List<OccupiedScheduleWindow> occupiedWindows(Long vehicleId, Instant from, Instant to) {
-        return vehicleScheduleRepository.findOccupiedInRange(vehicleId, from, to).stream()
+        var rows = new java.util.ArrayList<>(vehicleScheduleRepository.findOccupiedInRange(vehicleId, from, to).stream()
                 .map(schedule -> new OccupiedScheduleWindow(
-                        schedule.getStartAt(), schedule.getEndAt(), schedule.getType()))
-                .toList();
+                        schedule.getStartAt(), schedule.getEndAt(), schedule.getType())).toList());
+        if (vehicleScheduleRepository.hasYearlyCustody(vehicleId, null)
+                || vehicleScheduleRepository.hasYearlyReplacementReservation(vehicleId, null, from,
+                    to.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate().plusDays(1))) {
+            rows.add(new OccupiedScheduleWindow(from, to, ScheduleType.BOOKED));
+        }
+        return java.util.List.copyOf(rows);
     }
 
     @Override
@@ -169,8 +189,16 @@ public class ScheduleServiceImpl implements ScheduleService {
         }
         if (vehicleScheduleRepository.existsOccupiedOverlapExcludingBooking(
                 vehicle.getId(), window.start(), window.end(), bookingId)) {
-            throw new ConflictException(
-                    "Xe thay thế không còn trống trong khoảng thời gian đã chọn");
+            boolean sameVehicle = booking.getVehicle().getId().equals(vehicle.getId());
+            String action = sameVehicle && booking.getActualStartAt() == null
+                    ? "Không thể nhận xe vào ngày thực tế đã chọn"
+                    : sameVehicle ? "Không thể đổi thời gian sử dụng xe" : "Xe thay thế không còn trống";
+            throw new ConflictException(action + ": khoảng sử dụng từ "
+                    + start.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate()
+                    + " đến " + end.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate()
+                    + " trùng lịch đặt/chặn xe khác. Lịch đã giữ bắt đầu "
+                    + booking.getPickupTime().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate()
+                    + "; nhận sớm hoặc muộn cần khoảng 12 tháng mới còn trống.");
         }
     }
 

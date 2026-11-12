@@ -70,7 +70,7 @@ class DrivingLicenseEligibilityPolicyTest {
         assertThatThrownBy(() ->
                 DrivingLicenseEligibilityPolicy.requireEligibleForBooking(renter, vehicle, start, end))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("OCR/QR");
+                .hasMessageContaining("Admin");
 
         renter.setLicenseVerified(true);
         vehicle.setSeatCount(10);

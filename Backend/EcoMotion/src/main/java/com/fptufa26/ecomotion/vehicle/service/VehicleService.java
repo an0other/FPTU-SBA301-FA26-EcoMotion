@@ -52,6 +52,7 @@ public interface VehicleService {
 
     long countTotalVehicles();
 
+    List<Vehicle> findApprovedProviderVehicles(Long providerId);
     Optional<Vehicle> findVehicleById(Long id);
 
     Optional<Vehicle> findVehicleByIdAndProviderId(Long vehicleId, Long providerId);

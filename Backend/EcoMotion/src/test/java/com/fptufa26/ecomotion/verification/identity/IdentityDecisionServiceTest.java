@@ -90,9 +90,9 @@ class IdentityDecisionServiceTest {
     }
 
     @Test
-    void providerBelowThresholdDoesNotEnterAdminQueue() {
+    void providerLowSimilarityRemainsAvailableForCombinedManualReview() {
         var strict = new IdentityDecisionServiceImpl(attempts, identities, users, fingerprints, sessions, mapper, clock, "0.9");
-        assertEquals(NEEDS_CHANGES, strict.submit(1L, attempt.getPublicId(), 3, true).status());
+        assertEquals(READY_TO_SUBMIT, strict.submit(1L, attempt.getPublicId(), 3, true).status());
         verifyNoInteractions(identities);
     }
 
@@ -101,14 +101,17 @@ class IdentityDecisionServiceTest {
         when(attempts.findFirstByUser_IdOrderByIdDesc(1L)).thenReturn(Optional.of(attempt));
         assertEquals(attempt.getPublicId(), service(true).submitProviderEvidence(1L));
         assertEquals(SUBMITTED, attempt.getStatus());
+        assertEquals(1, attempt.getReviewHistory().size());
+        assertEquals("SUBMIT", attempt.getReviewHistory().getFirst().getEventType());
+        assertEquals("front", attempt.getReviewHistory().getFirst().getFrontKey());
+        assertTrue(attempt.isEvidenceRetained());
         verify(users, never()).applyVerifiedIdentity(anyLong(), any());
     }
 
     @Test
-    void providerAlsoRequiresConfiguredThreshold() {
-        var error = assertThrows(IdentityAiException.class, () -> service(false).submit(1L, attempt.getPublicId(), 3, true));
-        assertEquals("IDENTITY_THRESHOLD_NOT_CONFIGURED", error.getErrorCode());
-        assertEquals(READY_TO_SUBMIT, attempt.getStatus());
+    void providerManualPreparationDoesNotRequireAutomatedThreshold() {
+        assertEquals(READY_TO_SUBMIT, service(false).submit(1L, attempt.getPublicId(), 3, true).status());
+        verifyNoInteractions(identities);
     }
 
     @Test
@@ -120,42 +123,77 @@ class IdentityDecisionServiceTest {
     }
 
     @Test
-    void renterRequiresConfiguredPolicyAndNeverQueuesAdmin() {
+    void renterCanQueueWithoutAutomatedThreshold() {
         user.setRole(Role.RENTER);
         attempt.setRole(Role.RENTER);
-        var error = assertThrows(IdentityAiException.class, () -> service(false).submit(1L, attempt.getPublicId(), 3, true));
-        assertEquals("IDENTITY_THRESHOLD_NOT_CONFIGURED", error.getErrorCode());
-        assertEquals(READY_TO_SUBMIT, attempt.getStatus());
+        assertEquals(SUBMITTED, service(false).submit(1L, attempt.getPublicId(), 3, true).status());
+        verify(users, never()).applyVerifiedIdentity(anyLong(), any());
     }
 
     @Test
-    void renterPassingPolicyGetsSystemDecision() {
+    void renterPassingPolicyStillRequiresAdminDecision() {
         user.setRole(Role.RENTER);
         attempt.setRole(Role.RENTER);
         var result = service(true).submit(1L, attempt.getPublicId(), 3, true);
-        assertEquals(APPROVED, result.status());
-        assertEquals("SYSTEM", result.actor());
-        assertTrue(result.accountActivated());
+        assertEquals(SUBMITTED, result.status());
+        assertNull(result.actor());
+        assertFalse(result.accountActivated());
+        verify(users, never()).applyVerifiedIdentity(anyLong(), any());
+        var approved = service(true).review(2L, attempt.getPublicId(), 3, "APPROVE", null);
+        assertEquals(APPROVED, approved.status());
+        assertEquals("ADMIN", approved.actor());
         verify(users).applyVerifiedIdentity(eq(1L), any());
     }
 
     @Test
-    void failedRenterPolicyReturnsNeedsChangesWithoutAdmin() {
+    void lowSimilarityRenterGoesToManualReview() {
         user.setRole(Role.RENTER);
         attempt.setRole(Role.RENTER);
         var strict = new IdentityDecisionServiceImpl(attempts, identities, users, fingerprints, sessions, mapper, clock,
                 "0.9");
-        assertEquals(NEEDS_CHANGES, strict.submit(1L, attempt.getPublicId(), 3, true).status());
+        assertEquals(SUBMITTED, strict.submit(1L, attempt.getPublicId(), 3, true).status());
         verifyNoInteractions(identities);
     }
 
     @Test
-    void duplicateIdentityRequiresExplicitLink() {
+    void renterSupplementRequiresFreshVideoAndStaleReviewIsRejected() {
+        user.setRole(Role.RENTER);
+        attempt.setRole(Role.RENTER);
+        attempt.setVideoSha256("old-video");
+        service(false).submit(1L, attempt.getPublicId(), 3, true);
+        assertThrows(IdentityAiException.class, () -> service(false).review(2L, attempt.getPublicId(), 2, "APPROVE", null));
+        var invalid = assertThrows(IdentityAiException.class, () -> service(false).reviewRenter(
+                2L, attempt.getPublicId(), 3, "NEEDS_CHANGES", "FACE_UNCLEAR", " "));
+        assertEquals("IDENTITY_REVIEW_NOTE_REQUIRED", invalid.getErrorCode());
+        assertEquals(1, attempt.getReviewHistory().size());
+        assertEquals(NEEDS_CHANGES, service(false).reviewRenter(2L, attempt.getPublicId(), 3,
+                "NEEDS_CHANGES", "FACE_UNCLEAR", "Vui lòng quay lại video ở nơi đủ sáng.").status());
+        assertEquals(2, attempt.getReviewHistory().size());
+        var review = attempt.getReviewHistory().get(1);
+        assertEquals("Vui lòng quay lại video ở nơi đủ sáng.", review.getNote());
+        assertEquals("old-video", review.getVideoSha256());
+        assertTrue(attempt.isEvidenceRetained());
+        assertThrows(AccessDeniedException.class, () -> service(false).historyEvidence(1L,
+                attempt.getPublicId(), 1L, "front"));
+        attempt.setStatus(READY_TO_SUBMIT);
+        assertEquals("IDENTITY_NEW_EVIDENCE_REQUIRED", assertThrows(IdentityAiException.class,
+                () -> service(false).submit(1L, attempt.getPublicId(), 3, true)).getErrorCode());
+        attempt.setVideoSha256("new-video");
+        assertEquals(SUBMITTED, service(false).submit(1L, attempt.getPublicId(), 3, true).status());
+        assertEquals(3, attempt.getReviewHistory().size());
+        assertEquals("old-video", review.getVideoSha256());
+        assertEquals("new-video", attempt.getReviewHistory().get(2).getVideoSha256());
+    }
+
+    @Test
+    void sameCccdOtherRoleCanBeReviewedWithoutAccountLink() {
         attempt.setStatus(SUBMITTED);
-        when(identities.findByCccdFingerprint(anyString())).thenReturn(Optional.of(new PersonIdentity()));
-        var error = assertThrows(IdentityAiException.class, () -> service(false).review(2L, attempt.getPublicId(), 3, "APPROVE", null));
-        assertEquals("IDENTITY_LINK_REQUIRED", error.getErrorCode());
-        verify(users, never()).applyVerifiedIdentity(anyLong(), any());
+        var existing = new PersonIdentity();existing.setId(20L);existing.setFullName("Test");existing.setDateOfBirth(LocalDate.of(2000,1,1));existing.setStatus(com.fptufa26.ecomotion.verification.identity.enums.PersonIdentityStatus.VERIFIED);
+        when(identities.findByCccdFingerprint(anyString())).thenReturn(Optional.of(existing));
+        when(identities.findByIdForUpdate(20L)).thenReturn(Optional.of(existing));
+        assertEquals(APPROVED, service(false).review(2L, attempt.getPublicId(), 3, "APPROVE", null).status());
+        verify(users).applyVerifiedIdentity(1L, existing);
+        verify(identities, never()).saveAndFlush(any());
     }
 
     @Test
@@ -217,10 +255,10 @@ class IdentityDecisionServiceTest {
     }
 
     @Test
-    void readinessDoesNotTreatUploadedButBelowThresholdVideoAsPassed() {
+    void readinessUsesMotionAndWorkflowWithoutMakingIdentityDecision() {
         when(attempts.findFirstByUser_IdOrderByIdDesc(1L)).thenReturn(Optional.of(attempt));
         assertTrue(service(true).providerEvidenceReady(1L));
         var strict = new IdentityDecisionServiceImpl(attempts, identities, users, fingerprints, sessions, mapper, clock, "0.9");
-        assertFalse(strict.providerEvidenceReady(1L));
+        assertTrue(strict.providerEvidenceReady(1L));
     }
 }

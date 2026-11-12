@@ -1,3 +1,45 @@
+## Cập nhật phản hồi biên lai và hoàn dư — 12/11/2026
+
+- API mới: `POST /api/provider/payment-requests/{id}/evidences/{evidenceId}/reject`, body `{ "reason": "Không tìm thấy giao dịch, cần bổ sung biên lai" }`. Chỉ provider sở hữu khoản thuộc YEARLY; xử lý biên lai PENDING mới nhất khi khoản đang PROOF_SUBMITTED. Tiền đã đối soát và ledger giữ nguyên. Có tiền đã áp dụng thì trở về PARTIALLY_PAID; chưa có thì REJECTED. Biên lai cũ/đã xử lý, VNPay pending và khoản gói khác bị chặn. API reject cũ giữ nguyên.
+- UI năm có ba lựa chọn phía provider: ghi nhận thực nhận; chưa thấy tiền/yêu cầu sửa biên lai; tiền đã nhận cần đối soát bằng modal/API bank-reconciliation chung. Không tìm thấy tiền không tạo PAID. Tiền ngoại lệ được ghi nhận chưa phân bổ, không tự tạo hoàn bằng đường bank-reconciliation.
+- Renter có thể đồng ý số đã ghi nhận hoặc báo PAYMENT_MISMATCH bằng API dispute/upload-evidence hiện có. Quyền báo sai lệch lấy từ disputeCategories của chi tiết booking; không bỏ điều kiện quyền/hạn phản hồi chung.
+- UI tải `GET /api/refunds/booking/{code}` và hiển thị các khoản hoàn riêng, tách khỏi hoàn cọc/tiền thuê của quyết toán năm. Dùng lại tài khoản nhận hoàn, RefundProofModal và RefundReceiptTimeline; không tạo hệ thống hoàn thứ hai, không tự chuyển ngân hàng.
+- Provider ghi dư trong đường confirm hiện có sẽ tạo nghĩa vụ hoàn OVERPAY gắn giao dịch nhận gốc. Renter cung cấp tài khoản qua `PATCH /api/renter/bookings/{code}/refund-account`. Provider chuyển thật rồi `POST /api/payment-transactions/{id}/refund-proof`; renter dùng `/api/refunds/{refundId}/received` hoặc `/not-received`. Khoản UNDER_REVIEW/FAILED đi qua trang tài chính để tiếp tục đối soát; không gửi lại tiền khi chưa rõ giao dịch trước.
+- Chỉ gói năm dùng guard hasUnsettledYearlyRefunds: khoản chưa hoàn, FAILED, WAITING nhận tiền hoặc REPORTED_NOT_RECEIVED chặn chuyển hoàn cọc và hoàn tất. Giữ nguyên cơ chế phản hồi/auto-confirm 72 giờ của hệ thống chung; UI phân biệt auto-confirm với renter xác nhận. Hoàn qua gateway đã xác minh vẫn theo quy trình chung.
+- Chặn cấn trừ dư vào kỳ thuê/quyết toán năm, chặn từ chối nghĩa vụ hoàn dư năm đã ghi nhận. Luồng kết thúc chung không tự đóng hợp đồng năm dùng policy mới; YearlyWorkflowService vẫn kiểm tra nghĩa vụ trước complete.
+- Tính nguồn có thể hoàn đã trừ cả SECURITY_DEPOSIT_REFUND để không coi cọc đã hoàn là tiền còn có thể hoàn lần nữa. Hãy xử lý các khoản hoàn riêng trước hoàn cọc; không gộp phần dư vào quyết toán năm lần hai.
+- Nộp biên lai mới cho MONTHLY_INSTALLMENT/ADJUSTMENT của YEARLY đã bắt đầu thuê mở cửa sổ đối soát mới 60 phút, giữ firstProofAt lịch sử. Không đổi hold hoặc hạn cọc trước bàn giao của luồng thường.
+- Đợt này không thêm bảng/cột, không cần reset DB hoặc seed. Các migration từ lần sửa trước vẫn phải được áp dụng nếu DB chưa cập nhật.
+
+> **Sửa luồng tiền khai báo và thực nhận 12/11/2026:** API proofs/multipart giữ nguyên transferredAmount người dùng nhập, không thay bằng số còn phải trả. Gói năm yêu cầu nhập số tiền thực chuyển/thực nhận rõ ràng. Provider được đối soát ADJUSTMENT của gói năm; trả thiếu chuyển PARTIALLY_PAID, giữ nguyên tổng nghĩa vụ, số còn thiếu = nghĩa vụ − số đã áp dụng. Mỗi lần chuyển bổ sung dùng mã ngân hàng và confirmationId riêng; retry cùng lần xác nhận giữ confirmationId. Xác nhận đủ ADJUSTMENT không tự hoàn tất hợp đồng, còn bước hoàn cọc/đóng hồ sơ.
+>
+> Biên lai là khai báo, không phải giao dịch ngân hàng đã xác minh và không cộng tổng các ảnh thành số đã nhận. Provider nhập số thực nhận từ sao kê; số này có thể khác số renter khai. UI hiển thị số tiền dạng VND cạnh ô nhập để kiểm tra thiếu/thừa số 0. QR vẫn mặc định số còn phải trả; khai số tiền biên lai không thay đổi lệnh chuyển ngân hàng.
+>
+> **Dữ liệu cũ:** biên lai đã bị ghi sai số tiền bởi phiên bản trước không tự sửa vì hệ thống không biết số ngân hàng thật. Provider đối chiếu sao kê và nhập đúng số thực nhận; có thể từ chối biên lai để renter nộp lại khi chưa đối soát. Không đổi tổng nghĩa vụ từ 255,1 triệu thành 25 triệu chỉ vì khách chuyển 25 triệu. Không xóa hoặc tự sửa giao dịch tiền đã xác nhận.
+
+> **Sửa lỗi xác nhận hoàn tiền 12/11/2026:** SQLState 22001 (`value too long for type character varying(20)`) khi ghi hoàn cọc là do `payment_transaction.type` chỉ dài 20, trong khi SECURITY_DEPOSIT_REFUND dài 23 ký tự. Entity và schema đã mở lên varchar(32). Với DB đang có dữ liệu, dùng migration `20261112_yearly_refund_type_width.sql`; migration cũng đồng bộ CHECK loại giao dịch và chiều tiền cho cọc/hoàn cọc. Không xóa giao dịch hoặc reset DB. Nếu dùng Hibernate ddl-auto=update, khởi động lại BE để cập nhật độ dài; các CHECK tự viết trong schema SQL cần được cập nhật bằng migration.
+>
+> Sau cập nhật schema, tải lại booking và xác nhận nhận tiền hoàn. Request lỗi bị rollback, không phải một khoản hoàn đã ghi thành công; vẫn kiểm tra trạng thái hiện tại trước khi retry, không yêu cầu provider chuyển tiền lại. Tab Hợp đồng & lịch sử có điều khoản đã lưu cùng công thức hạn mức km theo tháng, cộng km từng xe và trừ ngày ân hạn khi tính phí trễ.
+
+> Cập nhật flow vận hành 12/11/2026: sau nhận xe, FE đọc `GET R/P/operations` để biết quyền thao tác và việc cần làm. Quyền vẫn được kiểm tra lại ở từng API ghi. Hợp đồng PDF chưa bổ sung cơ chế ký/ràng buộc mới.
+
+## API bổ sung và thay đổi flow vận hành
+
+| API | Cách dùng |
+|---|---|
+| GET R/P/operations | Trả các cờ canRequestReturn, canEditReturn, canWithdrawReturn, canInspectReturn, canConfirmReturn, canProposeSettlement, canAcceptSettlement, canTransferRefund, canConfirmRefund, canComplete, canPayRent, canPayAdjustment; nextRole/nextTab/nextMessage/needsAction; reopenVehicleIds; financialIssue. Không dùng cờ FE thay cho kiểm tra quyền ở server. |
+| POST R/returns | `{ "version": 1, "mode": "EARLY", "requestedOn": "2026-11-20" }`. Ngày hẹn không trước hôm nay. Cho cập nhật khi RETURN_REQUESTED tự nguyện, trước kiểm định. STANDARD không hẹn trước hạn. |
+| POST R/returns/withdraw | `{ "version": 1 }`. Rút yêu cầu tự nguyện trước kiểm định; tiếp tục thuê và mở thanh toán kỳ thuê. Không dùng cho PROVIDER_FAILURE. |
+| POST P/incidents/{id}/resolution | Gửi version của report, responsibility (OWNER_MAINTENANCE hoặc RENTER_DAMAGE), outcome, note, approvedAmount. Chỉ REIMBURSE có tiền hoàn >0 và không quá hóa đơn. Lưu RESOLUTION_PROPOSED, chưa tự đổi xe/kết thúc. |
+| POST R/incidents/{id}/confirm | Với RESOLUTION_PROPOSED: đồng ý trách nhiệm/phương án. END_PROVIDER mới chuyển sang RETURN_REQUESTED; REIMBURSE chuyển AWAITING_TRANSFER; REPLACE chuyển AWAITING_CONFIRMATION; FIXED/RENTER_PAID đóng report. Với TRANSFER_RECORDED: xác nhận tiền đã nhận. |
+| POST R/incidents/{id}/reject-resolution | `{ "version": 1, "note": "Nội dung cần làm rõ" }`; report trở lại OPEN để provider đề xuất lại. |
+
+Gửi quyết toán phải có `charges` (mảng rỗng nếu không có phụ phí), từng khoản có bằng chứng. Không gửi tổng phụ phí thay cho chi tiết. Tiền cọc khấu trừ là cách thanh toán, không cộng thêm vào phí. Phiên bản đồng ý và thời điểm hoàn tất được lưu, trả ở workflow dưới settlementAcceptedAt và completedAt.
+
+Xác nhận biên bản trả xe độc lập với quyết toán tiền: nếu còn tiền chờ đối soát, vẫn xác nhận ngày/ảnh/km hợp lệ; không cho chốt tiền khi chưa rõ số thực nhận. Khi đã yêu cầu trả, ngừng thu kỳ thuê mới; sau đồng ý quyết toán chỉ mở ADJUSTMENT. Lịch sử/biên lai vẫn xem được ở chế độ chỉ đọc. Chưa hoàn tiền không đồng nghĩa xe còn đang được sử dụng.
+
+DB đang giữ dữ liệu: áp dụng `20261112_yearly_flow_actions.sql` cùng migration chi tiết quyết toán `20261112_yearly_settlement_details.sql` theo quy trình DB của nhóm. Không cần reset seed để dùng giao diện mới.
+
 # API gói năm — mô tả và cách sử dụng
 
 > Kịch bản seed cập nhật 10/11/2026 dùng 3 renter, Provider và Admin. Booking MONTHLY/HAPPY-END phục vụ vận hành và quyết toán; EM-Y2-CANCEL thuộc renter happy-end, đã trả cọc/kỳ đầu nhưng chưa bàn giao. Hủy đơn này dùng API hủy trước nhận và phân xử YEARLY_CANCELLATION, không dùng returns/settlement của hợp đồng đã nhận xe. Thứ tự màn hình, dữ liệu mẫu và cách xử lý thay đổi nằm tại [hướng dẫn demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).
@@ -163,7 +205,7 @@ Không dùng DELETE ảnh làm thao tác thường của flow năm: minh chứng
 |---|---|---|---|
 | POST P/handover/dispatch | Provider | Không cần | Điều khoản đã chấp nhận, booking CONFIRMED, cọc + tháng 1 đã đủ; trả Handover |
 | POST P/handover/arrive | Provider | {"initialKm":10000,"evidenceId":501} | Đang giao hoặc đã đến nhưng chưa nhận; ghi km và ảnh, trả Handover |
-| POST R/handover/receive | Renter | Không cần | Xe ARRIVED; xác nhận đã kiểm tra và nhận, trả Handover |
+| POST R/handover/receive | Renter | {"version":2} | Dùng version của Handover đang xem; sai phiên bản trả 409, bắt buộc xem lại ảnh/km |
 
 Thứ tự NOT_DISPATCHED → DISPATCHED → ARRIVED → RECEIVED. Receive chốt actualStart, dueOn sau 12 tháng, kiểm tra GPLX/lịch xe lại và cập nhật mốc 12 kỳ. Không truyền version hợp đồng vào các endpoint handover này vì DTO không yêu cầu.
 
@@ -175,7 +217,7 @@ Thứ tự NOT_DISPATCHED → DISPATCHED → ARRIVED → RECEIVED. Receive chố
 | POST R/returns | Renter | {"version":3,"mode":"EARLY"} | View, RETURN_REQUESTED |
 | POST P/returns/inspection | Provider | {"version":4,"returnedOn":"2026-11-07","finalKm":10500,"evidenceId":502} | View, RETURN_INSPECTED |
 | POST R/returns/confirm | Renter | {"version":5} | View, RETURNED; booking AWAITING_FINAL_PAYMENT, ghi nhận xe đã trả |
-| POST P/settlement | Provider | {"version":6,"otherCharges":0,"depositDeduction":0,"note":"Không có hư hỏng thêm","evidenceId":null} | View, SETTLEMENT_PROPOSED; hệ thống tính tiền |
+| POST P/settlement | Provider | {"version":6,"otherCharges":0,"depositDeduction":0,"note":"Không có hư hỏng thêm","evidenceId":null,"charges":[]} | View, SETTLEMENT_PROPOSED; hệ thống tính tiền |
 | POST R/settlement/accept | Renter | {"version":7} | View, SETTLEMENT_ACCEPTED; tạo ADJUSTMENT nếu còn thiếu, dừng các kỳ chưa thu |
 
 mode của renter:
@@ -192,8 +234,8 @@ Preview chưa gồm kiểm định/km vượt/phụ phí. Khi settlement, hệ t
 
 | Method / URL | Bên | Body mẫu | Điều kiện / tác dụng |
 |---|---|---|---|
-| POST P/refund/transfer | Provider | {"version":8,"bankReference":"DEMO-REFUND-001","evidenceId":503} | Đã đồng ý quyết toán, khoản bổ sung đã đủ; ghi bằng chứng chuyển tiền, REFUND_TRANSFER_RECORDED |
-| POST R/refund/confirm | Renter | {"version":9} | Xác nhận đã nhận tiền; ghi các khoản hoàn tiền thuê/cọc riêng, REFUND_RECEIVED |
+| POST P/refund/transfer | Provider | {"version":8,"bankReference":"DEMO-REFUND-001","evidenceId":503,"amount":20000000} | Đã đồng ý quyết toán, khoản bổ sung đã đủ; ghi bằng chứng chuyển tiền, REFUND_TRANSFER_RECORDED |
+| POST R/refund/confirm | Renter | {"version":9} | Xác nhận số tiền của lần chuyển đang chờ; ghi ledger theo lần này. Còn thiếu thì SETTLEMENT_ACCEPTED, đủ tổng thì REFUND_RECEIVED |
 | POST P/complete | Provider | {"version":10} | Đủ tiền, tiền hoàn đã xác nhận nếu có, report đã đóng; COMPLETED |
 | POST P/reopen | Provider | {"version":11,"availableOn":"2026-11-08","vehicleId":301} | Mở lịch xe đã kiểm định từ ngày mai trở đi; vehicleId có thể bỏ để dùng xe hiện tại |
 
@@ -301,7 +343,7 @@ R là `/api/renter/yearly-bookings/{code}`, A là `/api/admin/yearly-bookings/{c
 | POST | R/refund/review | requestId, version của workflow, note, evidenceId, receivedAmount |
 | POST | R/incidents/{incidentId}/review | requestId, version của workflow, note, evidenceId |
 | POST | A/reviews/refund | requestId, version, disputeId, outcome, receivedAmount, note, evidenceReference |
-| POST | A/reviews/incident | requestId, version, disputeId, incidentId, outcome, approvedAmount, note, evidenceReference |
+| POST | A/reviews/incident | requestId, version, disputeId, incidentId, responsibility, outcome, approvedAmount, note, evidenceReference |
 
 `receivedAmount` là số tiền cộng dồn. Trong request renter đó chỉ là khai báo; trong kết luận Admin đó là số đã được xác minh.
 
@@ -341,3 +383,35 @@ Các bảng hiện hữu cần migration `20261110_yearly_provider_business_clos
 - `reviewOpen` trên UI chỉ là bảo vệ giao diện; quyền/version/dispute phải được kiểm tra ở backend. Không khẳng định mọi endpoint, đặc biệt cancel replacement, đều đã có cùng một guard.
 - Code hiện cho đổi xe khác giá, xe đắt hơn không thu thêm và xe rẻ hơn giảm trừ theo chặng. Đây là mở rộng so với mục 11 của business spec cũ; xem ghi chú trạng thái ở đầu business spec và checklist demo, chưa coi là policy đã nghiệm thu.
 - Cần kiểm tra riêng giảm trừ khi PROVIDER_FAILURE, timeline ngày trả sau đổi xe và thu/hoàn trùng. Chưa có xác nhận E2E cho các ca này; không sửa code hoặc đổi contract trong lần cập nhật tài liệu.
+
+
+## Bổ sung hợp đồng API sau rà soát 1–5 (12/11/2026)
+
+- GET handover trả thêm `version`. POST handover/receive phải gửi version của **handover**, không phải workflow. Provider sửa ảnh/km làm version tăng; renter cũ nhận 409, FE tải lại và bỏ dấu xác nhận cũ.
+- Admin reviews/incident có `responsibility`: OWNER_MAINTENANCE hoặc RENTER_DAMAGE. UI gửi kết luận độc lập, không bị khóa theo đề xuất provider. Giữ nguyên reportedCategory/proposedCategory để đối chiếu. Đang có giao dịch hoàn ứng chưa rõ kết quả thì phải đối soát trước; REIMBURSE bắt buộc số tiền > 0 và <= hóa đơn.
+- Admin reviews/settlement bắt buộc `charges` (danh sách rỗng nếu không có phí). Mỗi khoản dùng cùng ExtraCharge như provider: category, description, amount, evidenceId, incidentId tùy trường hợp. otherCharges phải bằng tổng charges; không thu lại hóa đơn đã ghi nhận RENTER_PAID.
+- Workflow View trả thêm `settlementCharges` và `refundTransfers`. Mỗi transfer có key, bankReference, amount, verifiedAmount, status, evidenceId, submittedAt, verifiedAt, verifiedBy.
+- POST refund/transfer bắt buộc `amount` của lần chuyển hiện tại, > 0 và <= refundRemaining. Chỉ gửi ở SETTLEMENT_ACCEPTED; không ghi đè lần PENDING hoặc dùng lại bankReference trong cùng booking.
+- Refund confirm xác nhận toàn bộ **lần chuyển**, không mặc định toàn bộ khoản hoàn của hợp đồng. Ví dụ tổng 48,5 triệu: xác nhận lần A 20 triệu => còn 28,5 triệu và chưa được complete; xác nhận lần B 28,5 triệu => REFUND_RECEIVED rồi provider mới complete.
+- Admin refund receivedAmount vẫn là số cộng dồn đã xác minh. BE lấy phần tăng thêm, giới hạn bởi lần chuyển PENDING và ghi ledger phần tăng đó. FAILED_VERIFIED không được cộng thêm tiền; PARTIAL_RECEIVED chỉ mở chuyển tiếp khi phần chưa nhận không còn treo. HOLD không ghi tiền.
+- Ledger tiền thuê hoàn và cọc hoàn được tách theo từng lần chuyển, có khóa chống ghi trùng <= 64 ký tự. Không áp dụng thay đổi này cho các gói khác.
+- DB giữ dữ liệu cũ cần áp dụng `20261112_yearly_refund_transfers.sql` trước khi chạy validate; create tự tạo bảng. Lịch sử trước cập nhật không có đủ bằng chứng từng lần thì không thể tự suy đoán để backfill; cần đối soát dữ liệu lịch sử trước khi dùng tiếp nhánh hoàn cũ.
+
+Ví dụ phán quyết phụ phí Admin:
+```json
+{
+  "requestId": "uuid-moi",
+  "version": 6,
+  "disputeId": 4,
+  "returnedOn": "2026-11-12",
+  "finalKm": 10000,
+  "otherCharges": 500000,
+  "depositDeduction": 1500000,
+  "note": "Đã đối chiếu phí vệ sinh và phí trễ theo hợp đồng",
+  "evidenceId": 180,
+  "charges": [
+    {"category":"CLEANING","description":"Vệ sinh theo hóa đơn đã xác minh","amount":500000,"evidenceId":181,"incidentId":null}
+  ]
+}
+```
+Các ID/version là ví dụ; lấy từ hồ sơ thực tế, không copy cứng khi gọi API.

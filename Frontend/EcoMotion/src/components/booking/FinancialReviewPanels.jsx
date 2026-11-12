@@ -1,3 +1,4 @@
+import YearlyChargesEditor from '../yearly-rental/YearlyChargesEditor'
 import { useEffect, useRef, useState } from 'react'
 import EvidenceImage from './EvidenceImage'
 import { financialReviewService as service } from '../../services/financialReviewService'
@@ -64,12 +65,15 @@ export function AdminYearlyReviewPanel({ dispute, onChanged }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const pending = useRef(null)
-  useEffect(() => { let live = true; service.yearly(dispute.bookingCode).then(d => { if (live) setData(d) }).catch(e => { if (live) setError(e.message) }); return () => { live = false } }, [dispute.bookingCode])
+  const [charges, setCharges] = useState([])
+  useEffect(() => { let live = true; service.yearly(dispute.bookingCode).then(d => { if (live) { setData(d); setCharges(d.workflow.settlementCharges || []) } }).catch(e => { if (live) setError(e.message) }); return () => { live = false } }, [dispute.bookingCode])
   const cancellation = dispute.category === 'YEARLY_CANCELLATION'
   async function submit(event) {
     event.preventDefault()
     if (busy) return
     const form = readForm(event)
+    form.charges = charges.map(c => ({ ...c, amount: Number(c.amount), evidenceId: Number(c.evidenceId) }))
+    form.otherCharges = form.charges.reduce((sum, c) => sum + c.amount, 0)
     const body = { ...form, disputeId: dispute.id }
     if (cancellation) body.refundAmount = Number(form.refundAmount)
     else Object.assign(body, { version: data.workflow.version, finalKm: Number(form.finalKm), otherCharges: Number(form.otherCharges), depositDeduction: Number(form.depositDeduction), evidenceId: Number(form.evidenceId) })
@@ -79,7 +83,7 @@ export function AdminYearlyReviewPanel({ dispute, onChanged }) {
     try {
       await (cancellation ? service.cancellation : service.settlement)(dispute.bookingCode, yearlyRulingPayload(dispute, data.workflow, form, pending.current.requestId))
       pending.current = null; await onChanged?.()
-    } catch (e) { setError(e.message) } finally { setBusy(false) }
+    } catch (e) { setError(e.message); try { setData(await service.yearly(dispute.bookingCode)) } catch { } } finally { setBusy(false) }
   }
   return <section className="space-y-3 rounded-lg border border-amber-300 p-4">
     <h3 className="font-bold">Phân xử {cancellation ? 'hủy trước nhận xe' : 'kiểm định và quyết toán năm'}</h3>
@@ -91,7 +95,7 @@ export function AdminYearlyReviewPanel({ dispute, onChanged }) {
       </> : <>
         <label className="block">Ngày trả xe được xác minh<input name="returnedOn" type="date" required defaultValue={data.workflow.returnedOn || ''} className={inputClass} /></label>
         <label className="block">Km khi trả xe<input name="finalKm" type="number" min="0" step="1" required defaultValue={data.workflow.finalKm ?? ''} className={inputClass} /></label>
-        <label className="block">Phụ phí được giữ lại (đ)<input name="otherCharges" type="number" min="0" step="0.01" required defaultValue={data.workflow.money.otherCharges} className={inputClass} /></label>
+        <YearlyChargesEditor rows={charges} onChange={setCharges} evidence={data.evidence} incidents={data.workflow.incidents} busy={busy} />
         <label className="block">Khấu trừ tiền bảo đảm (đ)<input name="depositDeduction" type="number" min="0" step="0.01" required defaultValue={data.workflow.money.depositDeduction} className={inputClass} /></label>
         <label className="block">Bằng chứng đã kiểm tra<select name="evidenceId" required className={inputClass}><option value="">Chọn bằng chứng của hợp đồng</option>{data.evidence.map(e => <option key={e.id} value={e.id}>{e.note || e.originalFileName || 'Bằng chứng'} · {new Date(e.createdAt).toLocaleDateString('vi-VN')}</option>)}</select></label>
       </>}

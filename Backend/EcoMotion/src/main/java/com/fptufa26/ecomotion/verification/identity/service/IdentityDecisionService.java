@@ -13,6 +13,8 @@ public interface IdentityDecisionService {
     UUID submitProviderEvidence(Long userId);
     void reviewProviderEvidence(Long adminId, Long userId, UUID attemptId, String decision, String reasonCode);
     IdentityDecisionResponse submit(Long userId, UUID attemptId, long version, boolean confirmed);
+    IdentityDecisionResponse reviewRenter(Long adminId, UUID attemptId, long version, String decision, String reasonCode, String note);
+    byte[] historyEvidence(Long adminId, UUID attemptId, Long eventId, String kind);
     IdentityDecisionResponse review(Long adminId, UUID attemptId, long version, String decision, String reasonCode);
     List<IdentityDecisionResponse> pending(Long adminId, int page,
             com.fptufa26.ecomotion.verification.identity.enums.IdentityAttemptStatus status);

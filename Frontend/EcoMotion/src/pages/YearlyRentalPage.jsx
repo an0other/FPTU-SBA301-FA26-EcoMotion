@@ -69,8 +69,10 @@ export default function YearlyRentalPage() {
           </p>
         )}
 
-        <div className="grid items-start gap-6 lg:grid-cols-2">
-          <div className="space-y-6">
+        <div className="space-y-6">
+          <details id="driving-license" className="rounded-xl border border-slate-200 bg-white p-4" open={!bookingCode && !licenseState.data?.yearlyBookingEligible}>
+            <summary className="cursor-pointer font-semibold">Hồ sơ GPLX · {licenseState.data?.yearlyBookingEligible ? 'Đủ điều kiện sơ bộ — xem hoặc cập nhật' : 'Kiểm tra điều kiện trước khi gửi yêu cầu'}</summary>
+            <div className="mt-4">
             {licenseState.loading ? (
               <p role="status" className="rounded-xl bg-white p-6 text-sm text-slate-500">
                 Đang tải GPLX…
@@ -82,12 +84,13 @@ export default function YearlyRentalPage() {
                 key={JSON.stringify(licenseState.data)}
                 license={licenseState.data}
                 onSaved={() => {
-                  setMessage('DocumentAI đã đọc và lưu dữ liệu GPLX.')
+                  setMessage('Đã cập nhật hồ sơ GPLX. Bản nộp mới chỉ có hiệu lực sau khi Admin chấp nhận.')
                   reloadLicense()
                 }}
               />
             ) : null}
-          </div>
+            </div>
+          </details>
 
           <div>
             {!bookingCode && vehicleId && planId ? (
@@ -125,10 +128,6 @@ export default function YearlyRentalPage() {
                 role="renter"
                 bookingCode={bookingCode}
                 bookingStatus={contractState.data.bookingStatus}
-                onChanged={() => {
-                  setMessage('Đã lưu hợp đồng.')
-                  reloadContract()
-                }}
               />
             ) : null}
           </div>

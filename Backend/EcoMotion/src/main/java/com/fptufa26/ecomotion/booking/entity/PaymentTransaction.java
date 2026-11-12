@@ -50,7 +50,7 @@ public class PaymentTransaction {
     private BookingCharge charge;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 32)
     private PaymentType type;
 
     @Column(nullable = false, precision = 14, scale = 2)

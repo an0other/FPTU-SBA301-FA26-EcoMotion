@@ -60,8 +60,9 @@ public class UserServiceImpl implements UserService {
     public boolean canUsePhone(Long userId, String phone) {
         var owner = userId == null ? null : userRepository.findById(userId).orElse(null);
         return userRepository.findByPhone(phone).stream().allMatch(other -> userId != null && (other.getId().equals(userId)
-                || owner != null && owner.getIdentity() != null && other.getIdentity() != null
-                && owner.getIdentity().getId().equals(other.getIdentity().getId()) && owner.getRole() != other.getRole()
+                || owner != null && owner.getRole() != other.getRole()
+                && (owner.getIdentity() == null || other.getIdentity() == null
+                    || owner.getIdentity().getId().equals(other.getIdentity().getId()))
                 && java.util.Set.of(Role.RENTER, Role.PROVIDER).contains(owner.getRole())
                 && java.util.Set.of(Role.RENTER, Role.PROVIDER).contains(other.getRole())));
     }
@@ -192,6 +193,13 @@ public class UserServiceImpl implements UserService {
         }
         if (user.getPhone() == null || user.getPhone().isBlank() || user.getPhoneVerifiedAt() == null) {
             throw identityConflict("IDENTITY_PHONE_VERIFICATION_REQUIRED", "Tài khoản chưa hoàn tất xác nhận số điện thoại. Người đăng ký cần xác nhận OTP trước khi Admin duyệt danh tính.");
+        }
+        if (userRepository.existsByIdentity_IdAndRole(identity.getId(), user.getRole())) {
+            throw identityConflict("IDENTITY_ROLE_ALREADY_EXISTS", "CCCD này đã có tài khoản cùng vai trò. Mỗi CCCD chỉ có một Renter và một Provider.");
+        }
+        if (userRepository.findByPhone(user.getPhone()).stream().anyMatch(other -> !other.getId().equals(user.getId())
+                && other.getIdentity() != null && !other.getIdentity().getId().equals(identity.getId()))) {
+            throw identityConflict("IDENTITY_PHONE_DOCUMENT_MISMATCH", "Số điện thoại đang thuộc tài khoản vai trò khác có CCCD khác. Admin cần đối chiếu lại danh tính.");
         }
         user.setIdentity(identity);
         if (user.getRole() == Role.PROVIDER) user.setIdentityReviewedAt(java.time.Instant.now());

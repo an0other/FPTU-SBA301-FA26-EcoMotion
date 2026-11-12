@@ -36,12 +36,45 @@ public record ProviderBookingResponse(
         Instant actualEndAt,
         boolean atRisk,
         String riskMessage,
-        String paymentStatus
+        String paymentStatus,
+        String planType
 ) {
+    public ProviderBookingResponse(
+        Long bookingId,
+        String bookingCode,
+        String vehicleName,
+        String vehicleImageUrl,
+        String licensePlate,
+        String renterName,
+        Integer passengerCount,
+        String rentalType,
+        String rentalDuration,
+        Instant pickupTime,
+        String pickupAddress,
+        BigDecimal pickupLatitude,
+        BigDecimal pickupLongitude,
+        String driverNote,
+        Long driverId,
+        String driverName,
+        BookingStatus status,
+        String executionStatus,
+        BigDecimal totalAmount,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant assignedAt,
+        Instant driverConfirmedAt,
+        Instant actualArrivedAt,
+        Instant actualStartAt,
+        Instant actualEndAt,
+        boolean atRisk,
+        String riskMessage,
+        String paymentStatus
+    ) { this(bookingId, bookingCode, vehicleName, vehicleImageUrl, licensePlate, renterName, passengerCount, rentalType, rentalDuration, pickupTime, pickupAddress, pickupLatitude, pickupLongitude, driverNote, driverId, driverName, status, executionStatus, totalAmount, createdAt, updatedAt, assignedAt, driverConfirmedAt, actualArrivedAt, actualStartAt, actualEndAt, atRisk, riskMessage, paymentStatus, null); }
     @com.fasterxml.jackson.annotation.JsonProperty("actionRequired")
     public String actionRequired() {
         if (status == null) return "NEEDS_ATTENTION";
         if (atRisk || status == BookingStatus.CANCELLATION_REVIEW || "RECONCILIATION_REQUIRED".equals(paymentStatus)) return "NEEDS_ATTENTION";
+        if (status == BookingStatus.CONFIRMED && "YEARLY".equals(planType)) return "UPCOMING";
         return switch (status) {
             case PENDING -> "APPROVAL";
             case ACCEPTED, AWAITING_DEPOSIT -> "PAYMENT";

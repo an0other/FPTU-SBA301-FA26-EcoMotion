@@ -466,11 +466,11 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 throw new ConflictException("Thời hạn yêu cầu thuê năm đã hết. Người thuê cần gửi yêu cầu mới.");
             }
             DrivingLicenseEligibilityPolicy.requireEligibleForBooking(
-                    booking.getRenter(), booking.getVehicle(), booking.getPickupTime(), yearly ? YearlyRentalRules.reservationEnd(end) : end);
+                    booking.getRenter(), booking.getVehicle(), booking.getPickupTime(), end);
             scheduleService.release(booking.getId());
         }
         AvailabilityPolicy.Window window = AvailabilityPolicy.bufferedWindow(
-                booking.getVehicle(), booking.getPickupTime(), end);
+                booking.getVehicle(), booking.getPickupTime(), yearly ? YearlyRentalRules.reservationEnd(end) : end);
         if (!scheduleService.isRangeFree(booking.getVehicle().getId(), window.start(), window.end())) {
             throw new ConflictException("Xe không còn trống trong khoảng thời gian đã chọn");
         }
@@ -1189,7 +1189,8 @@ public class ProviderBookingServiceImpl implements ProviderBookingService {
                 booking.getActualEndAt(),
                 risk.atRisk() || booking.isDriverReplacementRequired(),
                 booking.isDriverReplacementRequired() ? booking.getDriverIssueReason() : risk.userMessage(),
-                paymentStatus
+                paymentStatus,
+                booking.getPlan().getPlanType().name()
         );
     }
 

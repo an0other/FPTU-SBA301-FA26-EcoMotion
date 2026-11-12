@@ -47,6 +47,17 @@ class UserIdentityApprovalTest {
         verifyNoInteractions(repository);
     }
 
+    @Test
+    void cannotApproveSecondAccountForSameIdentityAndRole() {
+        var repository = mock(UserRepository.class);var em = mock(EntityManager.class);var user = provider();
+        when(em.find(User.class, 1L, LockModeType.PESSIMISTIC_WRITE)).thenReturn(user);
+        when(repository.existsByIdentity_IdAndRole(8L, Role.PROVIDER)).thenReturn(true);
+        var service = new UserServiceImpl(repository,null,null,null,null,em,new StandardEnvironment());
+        assertThatThrownBy(()->service.applyVerifiedIdentity(1L, verifiedIdentity())).isInstanceOfSatisfying(IdentityAiException.class,
+            ex->assertThat(ex.getErrorCode()).isEqualTo("IDENTITY_ROLE_ALREADY_EXISTS"));
+        assertThat(user.getIdentity()).isNull();
+    }
+
     private User provider() {
         var user = new User();
         user.setId(1L);

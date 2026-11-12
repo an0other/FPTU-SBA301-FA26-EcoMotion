@@ -14,6 +14,8 @@ from identity_verification.check_challenge import (
 from identity_verification.face_alignment import align_face_in_image
 from identity_verification.face_matching import (
     create_session,
+    assess_match,
+    model_provenance,
     extract_embedding_from_image,
 )
 from identity_verification.inspect_head_pose import (
@@ -23,8 +25,13 @@ from identity_verification.inspect_head_pose import (
 from identity_verification.video_reader import iter_video_frames
 
 
-def verify_video(cccd_path: Path, video_path: Path):
+def verify_video(cccd_path: Path, video_path: Path, progress=None):
+    def emit(stage, **details):
+        if progress:
+            progress(dict(stage=stage, **details))
+    emit('LOADING_MODELS')
     session = create_session()
+    emit('REFERENCE_FACE')
 
     with Image.open(cccd_path) as source:
         reference_image = ImageOps.exif_transpose(source).convert("RGB")
@@ -35,9 +42,11 @@ def verify_video(cccd_path: Path, video_path: Path):
     pose_samples = []
     matching_frames = []
 
+    emit('READING_VIDEO', sampledFrames=0)
     with create_landmarker() as landmarker:
         with closing(iter_video_frames(video_path, sample_fps=2.0)) as frames:
             for sample in frames:
+                emit('ANALYZING_VIDEO', sampledFrames=len(pose_samples), videoSeconds=pose_samples[-1]['timestamp'] if pose_samples else 0)
                 image = sample["image"]
                 pose = inspect_pose_in_image(landmarker, image)
 
@@ -80,6 +89,7 @@ def verify_video(cccd_path: Path, video_path: Path):
                 })
                 matching_frames.append(item)
 
+    emit('CHECKING_CHALLENGE', sampledFrames=len(pose_samples))
     completed = check_challenge_samples(pose_samples)
 
     scores = [
@@ -87,21 +97,36 @@ def verify_video(cccd_path: Path, video_path: Path):
         for item in matching_frames
         if item["status"] == "SCORED"
     ]
+    from identity_verification.config import get_settings
+    settings=get_settings()
+    emit('ASSESSING_FACE_SIMILARITY',sampledFrames=len(pose_samples))
+    assessment=assess_match(scores,settings.face_match_low_threshold,settings.face_match_high_threshold,
+        settings.face_match_min_frames,settings.face_match_calibration_id or 'face-match-observation-v1',model_provenance()['sha256'])
     challenge_passed = len(completed) == len(EXPECTED)
     reasons = []
 
     if not challenge_passed:
-        reasons.append("MOTION_CHALLENGE_INCOMPLETE")
+        if pose_samples and all(item["faces"] == 0 for item in pose_samples):
+            reasons.append("NO_FACE_DETECTED")
+        elif pose_samples and all(item["faces"] != 1 for item in pose_samples):
+            reasons.append("NO_SINGLE_FACE_SEQUENCE")
+        elif not any(item["faces"] == 1 and item["yaw"] is not None for item in pose_samples):
+            reasons.append("HEAD_POSE_UNAVAILABLE")
+        else:
+            reasons.append("MOTION_CHALLENGE_INCOMPLETE")
 
     if not scores:
         reasons.append("NO_USABLE_FRONTAL_FACE")
 
+    if assessment['status']=='INSUFFICIENT_EVIDENCE':
+        reasons.append('INSUFFICIENT_FACE_SAMPLES')
     workflow_status = (
         "RETRY_REQUIRED"
         if reasons
         else "READY_FOR_REVIEW"
     )
 
+    emit('FINALIZING', sampledFrames=len(pose_samples))
     return {
         "sampledFrames": len(pose_samples),
         "motionChallenge": {
@@ -122,6 +147,7 @@ def verify_video(cccd_path: Path, video_path: Path):
             "status": workflow_status,
             "reasons": reasons,
         },
+        "matchAssessment": assessment,
         "identityDecision": "NOT_EVALUATED",
         "automaticApproval": False,
     }

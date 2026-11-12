@@ -1,11 +1,15 @@
+import IdentityProcessingProgress from '../../components/identity/IdentityProcessingProgress'
+import AdminLicenseReviews from './AdminLicenseReviews'
+import IdentityReviewHistory from '../../components/identity/IdentityReviewHistory'
+import VerificationEvidenceSummary from '../../components/identity/VerificationEvidenceSummary'
 import { useCallback, useEffect, useState } from 'react'
 import { identityVerificationService as identity } from '../../services/identityVerificationService'
 import { providerOnboardingService as provider } from '../../services/providerOnboardingService'
 import { buttonClass, secondaryClass, cardClass, inputClass, identityMessage, statusLabels, humanDate, downloadBlob } from '../../components/identity/identityUi'
 
-const reasons = { DOCUMENT_UNREADABLE: 'Giấy tờ chưa rõ', FACE_UNCLEAR: 'Khuôn mặt/video chưa rõ', DETAILS_INCONSISTENT: 'Thông tin chưa nhất quán', ADDRESS_REQUIRED: 'Cần bổ sung địa chỉ/vị trí', BANK_FIELDS_REQUIRED: 'Cần bổ sung thông tin ngân hàng', OTHER_REVIEW_REQUIRED: 'Cần kiểm tra, bổ sung thêm', APPEAL_ACCEPTED: 'Chấp nhận mở lại hồ sơ' }
+const reasons = { DOCUMENT_UNREADABLE: 'Giấy tờ chưa rõ', FACE_UNCLEAR: 'Khuôn mặt/video chưa rõ', FACE_MISMATCH: 'Khuôn mặt chưa khớp ảnh CCCD (Admin đối chiếu)', DETAILS_INCONSISTENT: 'Thông tin chưa nhất quán', ADDRESS_REQUIRED: 'Cần bổ sung địa chỉ/vị trí', BANK_FIELDS_REQUIRED: 'Cần bổ sung thông tin ngân hàng', OTHER_REVIEW_REQUIRED: 'Cần kiểm tra, bổ sung thêm', APPEAL_ACCEPTED: 'Chấp nhận mở lại hồ sơ' }
 
-function PrivateEvidence({ id, kind, reviewId }) {
+function PrivateEvidence({ id, kind, reviewId, eventId }) {
   const [blob, setBlob] = useState(null)
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
@@ -14,7 +18,7 @@ function PrivateEvidence({ id, kind, reviewId }) {
   return <div className="space-y-2 rounded-xl border border-slate-200 p-3"><button className={secondaryClass} disabled={busy} onClick={async () => {
     setBusy(true); setError('')
     try {
-      const data = await (reviewId ? provider.historyEvidence(id, reviewId, kind) : identity.downloadProviderIdentityEvidence(id, kind))
+      const data = await (eventId ? identity.downloadHistoryEvidence(id, eventId, kind) : reviewId ? provider.historyEvidence(id, reviewId, kind) : identity.downloadProviderIdentityEvidence(id, kind))
       const header = new Uint8Array(await data.slice(0, 12).arrayBuffer())
       const type = kind === 'video' ? header[0] === 0x1a ? 'video/webm' : 'video/mp4' : header[0] === 0x89 ? 'image/png' : 'image/jpeg'
       setBlob(new Blob([data], { type }))
@@ -41,7 +45,7 @@ function SubmittedIdentity({ attemptId, userId, reviewId }) {
     request.then(result => { if (alive) setData(result) }).catch(err => { if (alive) setError(identityMessage(err)) })
     return () => { alive = false }
   }, [attemptId, userId, reviewId])
-  return <div className="space-y-3"><h3 className="font-bold">CCCD và video kèm hồ sơ</h3>{error && <p role="alert" className="text-sm text-red-700">{error}</p>}{!data && !error && <p role="status">Đang tải bằng chứng…</p>}{data && <><dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Họ tên CCCD', data.document?.fullName], ['Số CCCD', data.document?.documentNumber], ['Ngày sinh', data.document?.dateOfBirth], ['Ngày hết hạn', data.document?.expiryDate], ['Địa chỉ', data.document?.address]].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd>{value || 'Chưa đọc được'}</dd></div>)}</dl><div className="rounded-xl bg-blue-50 p-4 text-sm"><p>Động tác: {data.video?.motionChallenge?.status === 'PASS' ? 'Đã hoàn thành' : 'Chưa hoàn thành'}</p><p>Số frame chấm được: {data.video?.faceMatching?.scoredFrames ?? '—'}</p><p>Điểm đối chiếu trung vị: {data.video?.faceMatching?.median?.toFixed(4) ?? '—'} (không phải phần trăm)</p></div><div className="grid gap-3">{['front', 'back', 'video'].map(kind => <PrivateEvidence key={kind} id={reviewId ? userId : attemptId} reviewId={reviewId} kind={kind} />)}</div></>}</div>
+  return <div className="space-y-3"><h3 className="font-bold">CCCD và video kèm hồ sơ</h3>{error && <p role="alert" className="text-sm text-red-700">{error}</p>}{!data && !error && <p role="status">Đang tải bằng chứng…</p>}{data && <><dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Họ tên CCCD', data.document?.fullName], ['Số CCCD', data.document?.documentNumber], ['Ngày sinh', data.document?.dateOfBirth], ['Ngày hết hạn', data.document?.expiryDate], ['Địa chỉ', data.document?.address]].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd>{value || 'Chưa đọc được'}</dd></div>)}</dl><VerificationEvidenceSummary document={data.document} video={data.video} admin /><div className="grid gap-3">{['front', 'back', 'video'].map(kind => <PrivateEvidence key={kind} id={reviewId ? userId : attemptId} reviewId={reviewId} kind={kind} />)}</div></>}</div>
 }
 
 function ReviewDetail({ mode, id, onReviewed, onClose }) {
@@ -71,27 +75,29 @@ function ReviewDetail({ mode, id, onReviewed, onClose }) {
       {data.decisionReason || data.reasonCode ? <p className="text-sm text-amber-800">Phản hồi hiện tại: {identityMessage(data.decisionReason || data.reasonCode)}</p> : null}
       {mode === 'identity' ? <>
         <dl className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Họ tên CCCD', data.document?.fullName], ['Số CCCD', data.document?.documentNumber], ['Ngày sinh', data.document?.dateOfBirth], ['Ngày hết hạn', data.document?.expiryDate], ['Địa chỉ', data.document?.address]].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd>{value || 'Chưa đọc được'}</dd></div>)}</dl>
-        <div className="rounded-xl bg-blue-50 p-4 text-sm"><p>Động tác: {data.video?.motionChallenge?.status === 'PASS' ? 'Đã hoàn thành' : 'Chưa hoàn thành'}</p><p>Số frame chấm được: {data.video?.faceMatching?.scoredFrames ?? '—'}</p><p>Điểm đối chiếu trung vị: {data.video?.faceMatching?.median?.toFixed(4) ?? '—'} (không phải phần trăm)</p><p className="mt-2">Đối chiếu giấy tờ và video trước khi quyết định. Kết quả AI chỉ hỗ trợ xét duyệt.</p></div>
+        <VerificationEvidenceSummary document={data.document} video={data.video} admin />
+        {!!data.pipelineReports?.length && <details className="rounded-xl border p-3"><summary className="cursor-pointer font-semibold">Lịch sử pipeline AI</summary>{data.pipelineReports.filter(run => run.status !== 'PROCESSING').map(run => <div key={run.id} className="mt-3"><p>{run.kind} · phiên bản {run.revision}</p><IdentityProcessingProgress task={{kind:run.kind,startedAt:Date.parse(run.startedAt),finishedAt:Date.parse(run.finishedAt)}} remote={{status:run.status,aiProgress:run.progress,errorCode:run.errorCode,seenProcessing:true}} completed /></div>)}</details>}
+        <IdentityReviewHistory entries={data.reviewHistory} admin renderEvidence={entry => <div className="grid gap-3">{['front', 'back', 'video'].map(kind => <PrivateEvidence key={`${entry.id}-${kind}`} id={id} eventId={entry.id} kind={kind} />)}</div>} />
         <div className="grid gap-3">{['front', 'back', 'video'].map(kind => <PrivateEvidence key={kind} id={id} kind={kind} />)}</div>
-        <button className={secondaryClass} disabled={busy} onClick={() => perform(async () => setRelated(await provider.detail(data.userId)))}>Xem form Provider đã lưu</button>{related && <ProfileDetails data={related} />}
+        {data.role === 'PROVIDER' && <><button className={secondaryClass} disabled={busy} onClick={() => perform(async () => setRelated(await provider.detail(data.userId)))}>Xem form Provider đã lưu</button>{related && <ProfileDetails data={related} />}</>}
       </> : <>{data.identityAttemptId && <SubmittedIdentity key={data.identityAttemptId} attemptId={data.identityAttemptId} />}<ProfileDetails data={data} /><p className="text-sm">Danh tính: {data.identityVerified ? 'Đã xác minh' : 'Sẽ xác minh cùng khi chấp nhận hồ sơ'}</p><button className={secondaryClass} disabled={busy} onClick={() => perform(async () => setHistory(await provider.history(id)))}>Xem lịch sử xét duyệt</button>{history && <ol className="space-y-2 text-sm">{history.map((entry, index) => <li key={`${entry.version}-${index}`} className="rounded-xl bg-slate-50 p-3">{humanDate(entry.reviewedAt)} · {entry.decision} · {entry.reasonCode || 'Đã chấp nhận'} · Admin {entry.adminId}<p className="mt-1">{entry.note}</p><details className="mt-2"><summary className="cursor-pointer font-semibold">Xem hồ sơ tại lần duyệt này</summary>{entry.profileSnapshotJson && <ProfileDetails data={{ profile: JSON.parse(entry.profileSnapshotJson) }} />}{entry.hasIdentitySnapshot && <SubmittedIdentity userId={id} reviewId={entry.id} />}</details></li>)}</ol>}</>}
-      {data.status === 'SUBMITTED' && <form className="space-y-3 border-t border-slate-200 pt-4" onSubmit={event => { event.preventDefault(); perform(async () => {
-        if (mode === 'identity') await identity.reviewProviderIdentity(id, data.version, decision, decision === 'APPROVE' ? null : reason)
+      {(data.status === 'SUBMITTED' || mode === 'identity' && data.status === 'REJECTED') && <form className="space-y-3 border-t border-slate-200 pt-4" onSubmit={event => { event.preventDefault(); perform(async () => {
+        if (mode === 'identity') await identity.reviewRenterIdentity(id, data.version, decision, decision === 'APPROVE' ? null : reason, decision === 'APPROVE' ? null : note)
         else await provider.review(id, data.version, decision, decision === 'APPROVE' ? null : reason, decision === 'APPROVE' ? null : note)
         await onReviewed()
       }) }}>
         <label className="block text-sm">Quyết định<select className={`${inputClass} mt-1`} disabled={busy} value={decision} onChange={event => { setDecision(event.target.value); setChecked(false) }}>{(data.status === 'REJECTED' ? [['REOPEN', 'Mở lại để bổ sung']] : [['APPROVE', 'Chấp nhận'], ['NEEDS_CHANGES', 'Yêu cầu bổ sung'], ['REJECT', 'Từ chối']]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        {decision !== 'APPROVE' && <label className="block text-sm">Lý do bắt buộc<select className={`${inputClass} mt-1`} required value={reason} disabled={busy} onChange={event => setReason(event.target.value)}><option value="">Chọn lý do</option>{Object.entries(reasons).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>}
-        {decision !== 'APPROVE' && <label className="block text-sm">Hướng dẫn bổ sung / lý do cụ thể<textarea className={`${inputClass} mt-1`} required maxLength={1000} value={note} disabled={busy} onChange={event => setNote(event.target.value)} /></label>}
+        {decision !== 'APPROVE' && <label className="block text-sm">Lý do bắt buộc<select className={`${inputClass} mt-1`} required value={reason} disabled={busy} onChange={event => setReason(event.target.value)}><option value="">Chọn lý do</option>{Object.entries(reasons).filter(([code]) => mode !== 'identity' || !['ADDRESS_REQUIRED', 'BANK_FIELDS_REQUIRED'].includes(code)).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>}
+        {decision !== 'APPROVE' && <label className="block text-sm">Hướng dẫn bổ sung / lý do cụ thể<textarea className={`${inputClass} mt-1`} required minLength={5} maxLength={1000} value={note} disabled={busy} onChange={event => setNote(event.target.value)} /></label>}
         <label className="flex gap-2 text-sm"><input type="checkbox" checked={checked} disabled={busy} onChange={event => setChecked(event.target.checked)} />Tôi đã kiểm tra thông tin và bằng chứng liên quan, xác nhận quyết định này.</label>
-        <button className={buttonClass} disabled={busy || !checked || decision !== 'APPROVE' && !reason}>{busy ? 'Đang lưu quyết định…' : 'Xác nhận quyết định'}</button>
+        <button className={buttonClass} disabled={busy || !checked || decision !== 'APPROVE' && (!reason || note.trim().length < 5)}>{busy ? 'Đang lưu quyết định…' : 'Xác nhận quyết định'}</button>
       </form>}
     </>}
   </section>
 }
 
 export default function AdminIdentityTab() {
-  const mode = 'application'
+  const [mode, setMode] = useState('application')
   const [status, setStatus] = useState('SUBMITTED')
   const [page, setPage] = useState(0)
   const [items, setItems] = useState([])
@@ -102,12 +108,15 @@ export default function AdminIdentityTab() {
   const [notice, setNotice] = useState('')
   useEffect(() => {
     let alive = true
+    if (mode === 'license') return () => { alive = false }
     queueMicrotask(() => { if (alive) { setLoading(true); setError('') } })
-    const promise = mode === 'identity' ? identity.pendingProviderIdentities(page, status) : provider.pending(page, status)
+    const promise = mode === 'identity' ? identity.pendingRenterIdentities(page, status) : provider.pending(page, status)
     promise.then(data => { if (alive) setItems(data) }).catch(err => { if (alive) { setError(identityMessage(err)); setItems([]) } }).finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [mode, status, page, revision])
-  return <div className="space-y-5"><div><h1 className="text-2xl font-bold">Xác minh & onboarding Provider</h1><p className="mt-2 text-sm text-slate-500">Xem CCCD/video cùng thông tin dịch vụ và duyệt một lần để kích hoạt Provider.</p></div>
+  if (mode === 'license') return <div className="space-y-4"><button className={secondaryClass} onClick={() => { setMode('application'); setSelected(null) }}>← Danh tính & Provider</button><AdminLicenseReviews /></div>
+  return <div className="space-y-5"><div><h1 className="text-2xl font-bold">Xét duyệt danh tính & Provider</h1><p className="mt-2 text-sm text-slate-500">Duyệt danh tính renter; hồ sơ Provider được duyệt kết hợp với thông tin dịch vụ.</p></div>
+    <div className="flex flex-wrap gap-2"><select aria-label="Loại hồ sơ" className={inputClass} value={mode} onChange={event => { setMode(event.target.value); setPage(0); setSelected(null); setNotice('') }}><option value="application">Hồ sơ Provider</option><option value="identity">Danh tính renter</option><option value="license">Hồ sơ GPLX</option></select></div>
     <div className="flex flex-wrap gap-2"><select aria-label="Trạng thái hồ sơ" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" value={status} onChange={event => { setStatus(event.target.value); setPage(0); setSelected(null) }}>{['SUBMITTED', 'APPROVED', 'NEEDS_CHANGES', 'REJECTED'].map(value => <option key={value} value={value}>{statusLabels[value]}</option>)}</select><button className={secondaryClass} disabled={loading} onClick={() => { setSelected(null); setRevision(value => value + 1) }}>Cập nhật</button></div>
     {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}{error && <p role="alert" className="text-red-700">{error}</p>}
     {loading ? <p role="status">Đang lấy danh sách…</p> : <div className="grid gap-3 md:grid-cols-2">{items.map(item => <button key={item.attemptId || item.userId} className={`${cardClass} text-left hover:border-brand-500`} onClick={() => setSelected(mode === 'identity' ? item.attemptId : item.userId)}><p className="break-all font-semibold">{item.fullName || item.profile?.displayName || item.email || `Tài khoản ${item.userId}`}</p><p className="mt-1 break-all text-sm text-slate-500">{item.email}</p><p className="mt-2 text-sm">{statusLabels[item.status]} · {humanDate(item.submittedAt)}</p><span className="mt-3 block text-sm font-semibold text-brand-700">Xem và xét duyệt →</span></button>)}{!items.length && <p className="text-sm text-slate-500">Không có hồ sơ ở trạng thái này.</p>}</div>}

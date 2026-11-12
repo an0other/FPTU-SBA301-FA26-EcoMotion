@@ -296,7 +296,7 @@ class P1ClosureIntegrationTest {
         yearly.replyReview(providerId,code(),new YearlyReviewRequests.Reply("reply",d,"Provider evidence",evidence));
         view=yearly.get(renterId,code());
         var ruling=new YearlyReviewRequests.SettlementRuling("ruling",view.version(),d,java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")),100L,
-                new BigDecimal("100000"),new BigDecimal("100000"),"Verified inspection and final charges",evidence);
+                new BigDecimal("100000"),new BigDecimal("100000"),"Verified inspection and final charges",evidence,java.util.List.of(new YearlyWorkflowService.ExtraCharge("OTHER","Verified charge",new BigDecimal("100000"),evidence,null)));
         var result=yearly.adjudicateSettlement(adminId,code(),ruling);yearly.adjudicateSettlement(adminId,code(),ruling);
         assertThat(result.stage()).isEqualTo("SETTLEMENT_ACCEPTED");assertThat(result.money().balanceDue()).isZero();assertThat(result.money().depositRefund()).isZero();
         yearly.complete(providerId,code(),new YearlyWorkflowService.Version(result.version()));assertThat(status()).isEqualTo(BookingStatus.COMPLETED);

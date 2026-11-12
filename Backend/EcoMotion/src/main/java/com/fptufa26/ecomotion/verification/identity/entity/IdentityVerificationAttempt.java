@@ -129,6 +129,10 @@ public class IdentityVerificationAttempt {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @OneToMany(mappedBy = "attempt", cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @OrderBy("id ASC")
+    private java.util.List<IdentityReviewEvent> reviewHistory = new java.util.ArrayList<>();
+
     public boolean hasRequiredNewEvidence() {
         return (requiredPreviousFrontSha == null || !java.util.Objects.equals(requiredPreviousFrontSha, frontSha256)
                 || !java.util.Objects.equals(requiredPreviousBackSha, backSha256))

@@ -5,7 +5,6 @@ import { providerOnboardingService as api } from '../../services/providerOnboard
 import { identityVerificationService as identity } from '../../services/identityVerificationService'
 import PhoneVerification from '../../components/identity/PhoneVerification'
 import IdentityVerificationPanel from '../../components/identity/IdentityVerificationPanel'
-import AccountLinkPanel from '../../components/identity/AccountLinkPanel'
 import { PickupMap } from '../../components/booking/PickupMap'
 import { buttonClass, secondaryClass, cardClass, inputClass, identityMessage, statusLabels } from '../../components/identity/identityUi'
 
@@ -75,7 +74,6 @@ export default function ProviderOnboardingPage() {
       {step === 3 && application?.status === 'REJECTED' && <p className="text-sm text-slate-600">Hồ sơ bị từ chối. Bạn có thể sửa thông tin, bổ sung giấy tờ và gửi lại.</p>}
       {step === 0 && summary && !summary.phoneVerified && <section className={cardClass}><PhoneVerification verified={summary.phoneVerified} onVerified={async () => { await load(); await refreshUser() }} /></section>}
       {step === 0 && summary && !identitySent && <>
-        <details className={cardClass}><summary className="cursor-pointer font-semibold">Tôi đã có tài khoản Renter: liên kết để dùng lại danh tính</summary><div className="mt-4"><AccountLinkPanel userId={user.userId} onChanged={async () => { await load(); await refreshUser(); setRevision(value => value + 1) }} /></div></details>
         {summary.phoneVerified && <IdentityVerificationPanel key={revision} onPrepared={() => go(1)} onChanged={async () => { await load(); await refreshUser() }} />}
       </>}
       {step === 0 && identitySent && <section className={`${cardClass} space-y-3`}><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">Xác minh danh tính</h2><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">{application.identityVerified ? 'Đã được duyệt' : 'CCCD/video đã chuẩn bị'}</span></div><p className="text-sm text-slate-500">Hoàn thiện thông tin dịch vụ rồi gửi chung với CCCD/video cho Admin duyệt một lần.</p><details><summary className="cursor-pointer text-sm font-semibold text-brand-700">Xem chi tiết xác minh</summary><div className="mt-4"><IdentityVerificationPanel key={revision} onPrepared={() => go(1)} onChanged={load} /></div></details></section>}

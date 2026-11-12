@@ -2,6 +2,7 @@ package com.fptufa26.ecomotion.booking.dto.request;
 
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
+import com.fptufa26.ecomotion.booking.service.YearlyWorkflowService.ExtraCharge;
 import java.time.LocalDate;
 
 public final class YearlyReviewRequests {
@@ -17,7 +18,13 @@ public final class YearlyReviewRequests {
             @NotNull @Min(1) Long disputeId, @NotNull @Min(1) Long incidentId,
             @NotBlank @Pattern(regexp="HOLD|FIXED|RENTER_PAID|REIMBURSE|END_PROVIDER|TRANSFER_VERIFIED|FAILED_TRANSFER") String outcome,
             @NotNull @DecimalMin("0") @Digits(integer=12,fraction=2) BigDecimal approvedAmount,
-            @NotBlank @Size(max=1000) String note, @NotBlank @Size(max=500) String evidenceReference) {}
+            @NotBlank @Size(max=1000) String note, @NotBlank @Size(max=500) String evidenceReference,
+            @Pattern(regexp="OWNER_MAINTENANCE|RENTER_DAMAGE") String responsibility) {
+        public IncidentRuling(String requestId, Long version, Long disputeId, Long incidentId, String outcome,
+                BigDecimal approvedAmount, String note, String evidenceReference) {
+            this(requestId, version, disputeId, incidentId, outcome, approvedAmount, note, evidenceReference, null);
+        }
+    }
     public record Complaint(@NotBlank @Size(max=80) String requestId, @NotNull @Min(0) Long version,
                             @NotBlank @Size(max=1000) String note, @NotNull @Min(1) Long evidenceId) {}
     public record Reply(@NotBlank @Size(max=80) String requestId, @NotNull @Min(1) Long disputeId,
@@ -26,7 +33,8 @@ public final class YearlyReviewRequests {
             @NotNull @Min(1) Long disputeId, @NotNull LocalDate returnedOn, @NotNull @Min(0) Long finalKm,
             @NotNull @DecimalMin("0") @Digits(integer=12,fraction=2) BigDecimal otherCharges,
             @NotNull @DecimalMin("0") @Digits(integer=12,fraction=2) BigDecimal depositDeduction,
-            @NotBlank @Size(max=1000) String note, @NotNull @Min(1) Long evidenceId) {}
+            @NotBlank @Size(max=1000) String note, @NotNull @Min(1) Long evidenceId,
+            @NotNull @Size(max=20) java.util.List<@jakarta.validation.Valid ExtraCharge> charges) {}
     public record CancellationRuling(@NotBlank @Size(max=80) String requestId, @NotNull @Min(1) Long disputeId,
             @NotNull @DecimalMin("0") @Digits(integer=12,fraction=2) BigDecimal refundAmount,
             @NotBlank @Size(max=1000) String note, @NotBlank @Size(max=500) String evidenceReference) {}

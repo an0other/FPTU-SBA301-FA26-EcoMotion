@@ -11,6 +11,7 @@ import com.fptufa26.ecomotion.schedule.dto.response.OccupiedScheduleWindow;
 public interface ScheduleService {
     void markYearlyInspection(Booking booking, Vehicle vehicle, java.time.LocalDate returnedOn);
     void reopenYearlyVehicle(Long bookingId, Long vehicleId, java.time.LocalDate availableOn);
+    List<Long> yearlyInspectionVehicleIds(Long bookingId);
 
 
     boolean isRangeFree(Long vehicleId, Instant start, Instant end);
@@ -37,6 +38,7 @@ public interface ScheduleService {
     boolean confirmUnexpiredHold(Long bookingId, Instant now);
 
     boolean hasUnexpiredHold(Long bookingId, Instant now);
+    Instant holdExpiresAt(Long bookingId);
 
     void release(Long bookingId);
 

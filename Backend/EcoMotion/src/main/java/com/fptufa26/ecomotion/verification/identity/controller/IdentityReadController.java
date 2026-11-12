@@ -33,7 +33,9 @@ public class IdentityReadController {
     public com.fptufa26.ecomotion.verification.identity.dto.response.IdentityStatusResponse activationStatus(@Valid @RequestBody Activation request) {
         var principal = tokens.verifyActivation(request.activationToken());
         var user = users.findById(principal.userId()).orElseThrow(ActivationTokenInvalidException::new);
-        if (user.getStatus() != UserStatus.PENDING || user.getRole() != principal.role()
+        // Read-only status remains available to the valid activation token after approval.
+        // Mutation/evidence endpoints still require PENDING or an authenticated account.
+        if ((user.getStatus() != UserStatus.PENDING && user.getStatus() != UserStatus.ACTIVE) || user.getRole() != principal.role()
                 || !user.getEmail().equals(principal.email())) throw new ActivationTokenInvalidException();
         return reads.status(user.getId());
     }

@@ -1,3 +1,33 @@
+## Kiểm tra UI phản hồi và hoàn tiền riêng — 12/11/2026
+
+Không cần đổi account hoặc reset seed. Dùng booking đang ở đúng giai đoạn, mỗi lần chuyển là mã ngân hàng riêng. Các số dưới đây minh họa, đối chiếu số thực tế của booking trên UI.
+
+1. Renter gửi biên lai cho một khoản chưa đủ tiền; provider mở chi tiết và chọn **Chưa thấy tiền / yêu cầu sửa biên lai**, nhập lý do. Renter mở lại để xem phản hồi, nộp lại. Không phát sinh tiền PAID chỉ vì gửi/từ chối ảnh.
+2. Provider ghi nhận một phần, ví dụ 25 triệu; renter gửi biên lai cho phần còn thiếu. Provider yêu cầu sửa biên lai mới: 25 triệu đã ghi nhận phải được giữ nguyên, chỉ bằng chứng mới bị từ chối. Renter nộp lại và provider xác nhận phần còn thiếu. Không dùng nút từ chối toàn bộ khoản để đảo tiền cũ.
+3. Renter mở khoản đã ghi nhận: **Đồng ý số đã ghi nhận** hoặc **Số tiền không đúng? Báo sai lệch**. Báo sai lệch cần số tổng thực chuyển cho riêng khoản đó và ảnh giao dịch; dùng quy trình Admin hiện có. Không nhập tổng tiền của mọi tháng vào một khoản.
+4. Demo chuyển dư: nếu còn 25 triệu mà provider thực nhận 30 triệu, nhập 30 triệu theo sao kê. Nghĩa vụ chỉ thanh toán 25 triệu, khoản hoàn dư là 5 triệu gắn với giao dịch nhận. Retry cùng confirmationId không tạo hoàn lần hai.
+5. Trong mục **Thanh toán → Hoàn tiền riêng**, renter bổ sung tài khoản nhận hoàn. Provider kiểm tra thông tin, chuyển đúng số dư ngoài hệ thống rồi bấm **Đã chuyển hoàn — gửi biên lai**. Chưa có tài khoản thì không cho gửi chứng từ xác nhận hoàn.
+6. Renter xem biên lai và chọn **Đã nhận tiền** hoặc **Chưa nhận được tiền**. Chưa nhận thì giữ đối soát; không tự gửi thêm giao dịch hoàn lần hai. Cơ chế 72 giờ chung được giữ; tự xác nhận hiển thị riêng, không ghi là renter trực tiếp xác nhận.
+7. Khi hoàn riêng còn WAITING/FAILED/đang đối soát, provider chưa được chuyển hoàn cọc hoặc đóng hợp đồng năm. Sau xử lý xong mới tiếp tục hoàn cọc/tiền thuê theo quyết toán năm. Không nhập lại 5 triệu dư vào khoản hoàn thuê/cọc.
+8. Ở bước kiểm định/quyết toán, renter có nút **Chưa đồng ý biên bản / quyết toán — yêu cầu xem xét**, mở form lý do và bằng chứng. Không chỉ có một lựa chọn xác nhận.
+9. Các khoản hoàn cần xét duyệt/tiếp tục sau lỗi được mở ở **Tài chính → Yêu cầu hoàn tiền**, theo mã khoản hoàn hiển thị trên UI năm. Tiền ngoại lệ qua **Tiền đã nhận nhưng cần đối soát** chưa được áp vào nghĩa vụ và chưa tự tạo khoản hoàn; tiếp tục xử lý theo quy trình tài chính chung.
+
+Đã kiểm tra code và các test tập trung; chưa xác nhận browser E2E trên DB demo thật. Không chuyển tiền ngân hàng thật chỉ để kiểm thử.
+
+> **Test thanh toán thiếu số 0 (cập nhật 12/11/2026):** trên một khoản bổ sung còn 255.100.000 đ, renter khai 25.000.000 đ và upload biên lai → provider phải thấy khai báo đúng 25.000.000 đ, trong khi nghĩa vụ vẫn 255.100.000 đ. Provider nhập thực nhận 25.000.000 đ theo sao kê, dùng mã giao dịch mới → trạng thái Đã trả một phần, đã đối soát 25.000.000 đ, còn 230.100.000 đ. Renter nộp phần còn lại bằng giao dịch khác → provider xác nhận đúng phần đó → hết nợ bổ sung nhưng còn thủ tục hoàn tiền/hoàn tất. Retry cùng confirmationId không tạo thêm giao dịch. Không dùng lại mã ngân hàng cho hai lần chuyển khác nhau. Nếu sao kê khác khai báo, provider nhập theo sao kê; không lấy mặc định số trên biên lai.
+>
+> Biên lai tạo trước bản sửa có thể đã bị lưu theo tổng phải trả. Không tự sửa dữ liệu cũ thành số suy đoán; provider nhập đúng thực nhận hoặc từ chối để renter nộp lại nếu chưa đối soát. Số trên QR là số còn phải trả, không tự thay đổi theo ô khai số tiền biên lai.
+
+> **Flow vận hành UI cập nhật 12/11/2026:** dùng năm mục Tổng quan & xe / Thanh toán / Sự cố & đổi xe / Trả xe & quyết toán / Hợp đồng & lịch sử. Thanh việc cần làm chỉ rõ bên đang xử lý; người còn lại thấy thông tin chờ, không được nhắc bấm xác nhận sai bước.
+>
+> **Điểm cần test lại trên DB demo:** (1) Đang thuê → gửi ngày dự kiến trả → sửa/rút trước kiểm định. (2) Provider gửi kiểm định → form chuyển sang trạng thái đã gửi, chỉ chỉnh khi mở phần chỉnh sửa → renter xác nhận ngày/ảnh/km. (3) Đã trả xe → provider tính phí km/trễ và nhập từng phụ phí có bằng chứng → xem trước → gửi → renter đồng ý. (4) Chỉ khoản bổ sung quyết toán được thanh toán; kỳ cũ và biên lai vẫn xem nhưng không chuyển tiền tiếp. (5) Provider gửi biên lai hoàn → renter xác nhận tiền → provider hoàn tất. (6) Report → provider đề xuất trách nhiệm/phương án → renter đồng ý hoặc phản hồi; sau đồng ý mới hoàn bảo trì / chọn xe thay thế / bắt đầu trả do lỗi provider. (7) Sau nhận xe thay thế, xe cũ được mở lịch riêng tại Tổng quan sau kiểm định; km toàn hợp đồng bằng tổng từng chặng. (8) Còn tiền cần đối soát vẫn xác nhận trả xe được, nhưng chưa chốt quyết toán.
+>
+> Không cần đổi account, biến môi trường hoặc reset seed cho các thay đổi UI này. Các nhánh kết thúc loại trừ nhau vẫn cần dùng booking đúng kịch bản. Chưa chạy E2E DB thật cho bản cập nhật này.
+
+> Flow đăng ký đến nhận xe cập nhật 12/11/2026: xem [YEARLY_REGISTRATION_FLOW_VI.md](YEARLY_REGISTRATION_FLOW_VI.md). UI hiện theo năm bước; cọc và tháng đầu là hai giao dịch riêng. Không dùng flow cũ để bỏ qua điều khoản hoặc bắt đầu thuê trước khi nhận xe.
+
+> **Luồng GPLX mới:** bản nộp cần người dùng xác nhận và Admin xét duyệt, OCR/QR không tự đặt licenseVerified. Seed cũ giữ nguyên để tương thích. Cần áp dụng migration GPLX trước khi chạy bản mới; xem [đặc tả và hướng dẫn chuyển đổi](../verification/implementation/IMPLEMENTATION-PLAN-VI.md). Mô tả tự xác minh OCR/QR bên dưới là hành vi lịch sử, không dùng cho bản nộp mới.
+
 # Demo gói năm: 3 renter, một tuyến chính và các nhánh kiểm tra
 
 
@@ -216,3 +246,56 @@ Tuyến A–D ưu tiên fixture cùng giá, không phát sinh giảm trừ đổ
 Phân xử YEARLY_INCIDENT/YEARLY_REFUND đi qua panel/API năm riêng; không dùng lựa chọn OTHER của luồng tranh chấp chung thay cho chúng. Với lỗi tiền hoặc trạng thái, lưu request/response, ảnh và log; không chỉnh SQL hoặc thay expected để demo tiếp như thành công.
 
 Kiểm tra sau cùng: cùng một chi phí sửa chữa không bị thu lại qua otherCharges/cọc; hoàn ứng không cộng thành rentPaid; tổng tiền hoàn được xác minh không vượt tổng nghĩa vụ. Hai hướng khác nhau phải dùng booking/snapshot demo riêng, không đảo trạng thái booking đã kết thúc.
+
+
+## Giao diện gói năm tự lái và điểm kiểm chứng sau cập nhật
+
+Gói năm không có phân công tài xế; hàng chờ và màn chi tiết Provider đều dựa vào planType.
+Lịch xe cả kỳ thuê được kiểm tra ngay ở bước chọn ngày và kiểm tra lại khi gửi. Trạng thái không rõ/lỗi tải lịch không được coi là xe trống.
+Trước quyết toán chỉ hiển thị tổng tiền hợp đồng và tiền cọc/tiền thuê đã xác nhận; không hiển thị bảng quyết toán toàn số 0 khi chưa có đề xuất.
+Bàn giao luôn có khu vực riêng và chỉ rõ bước còn thiếu: điều khoản, hợp đồng đã ký, cọc và tháng đầu được đối soát.
+Sau đủ điều kiện: Provider bắt đầu giao → nhập km/ảnh xe đã đến → Renter xác nhận đã kiểm tra và nhận xe.
+BE vốn hỗ trợ ngày nhận thực tế sớm hơn dự kiến, kiểm tra lại lịch xe và hạn GPLX, neo lại 12 tháng cùng lịch kỳ thanh toán.
+Không bỏ qua khoản trả trước chỉ để cho phép nhận xe sớm. Khi chạy ddl-auto=create, mỗi lần restart BE sẽ làm mất dữ liệu đang thao tác.
+
+
+## Phân biệt trạng thái yêu cầu và hợp đồng
+
+Trạng thái Booking trả từ API workflow là nguồn hiển thị ưu tiên ở cả hai vai trò. `TERMS_DRAFT` không có nghĩa đơn vẫn đang chờ duyệt: nếu Booking đã CANCELLED/REJECTED thì phải hiện kết quả tương ứng, ẩn thao tác điều khoản/bàn giao. Chỉ PENDING mới có nút Chấp nhận/Từ chối ở đầu trang Provider; ACCEPTED mới cấu hình km/phí. Không khôi phục đơn đã hủy để demo: tạo yêu cầu mới khi lịch xe còn trống.
+
+Đối chiếu API local: EM-2026-000058 có trạng thái CANCELLED, cancelReason RENTER_REQUEST. Đây không phải trường hợp cần hiện nút chấp nhận trở lại.
+
+Gói năm thuê trọn xe tự lái không hỏi số người đi cùng. Trường passengerCount của API dùng chung tạm giữ giá trị tương thích 1, không biểu diễn số khách thực tế, không dùng để báo giá hay điều phối tài xế gói năm.
+
+Trước gửi yêu cầu, UI tách tiền thuê 12 tháng, tiền bảo đảm, phí giao/nhận và trình tự: gửi miễn thanh toán → Provider chấp nhận → chốt điều khoản/ký hợp đồng → chuyển riêng bảo đảm và tháng đầu → trả trước từng kỳ → quyết toán. Không hiển thị giá cả năm như số cần trả ngay.
+
+Tham khảo cách phân biệt tiền thuê và khoản bảo đảm của SIXT: https://www.sixt.com/help-center/sections/payment-methods-and-deposits/ và thanh toán định kỳ SIXT+: https://www.sixt.com/plus/help-center/articles/payment/ . Đây là tham khảo bố cục thông tin, không sao chép chính sách giá hay phương thức thu tiền của họ.
+
+## Cập nhật UI sự cố và đổi xe
+- Sau nhận xe dùng các tab Tổng quan & xe, Thanh toán, Sự cố & đổi xe, Trả xe & quyết toán, Hợp đồng & lịch sử.
+- Hoàn bảo trì cần provider ghi nhận đã chuyển và biên lai, sau đó renter xác nhận đã nhận. Chọn phương án hoàn tiền chưa có nghĩa giao dịch đã xảy ra.
+- Xe dự phòng Y9 (51Y-00009) và Y12 (51Y-00012) không được gắn booking khi seed. Không reset hoặc giải phóng lịch để ép demo; chọn ngày đổi rồi dùng danh sách BE đã lọc.
+- Đề nghị đổi xe có ảnh và thông số hai xe. Renter đồng ý đề nghị, provider gửi biên bản/km, renter xác nhận đã nhận xe mới là các bước riêng.
+
+
+## Cập nhật màn hình 12/11/2026
+
+- Hồ sơ năm có thẻ tóm tắt cọc, khoản cần thanh toán, sự cố và quyết toán.
+- Trả xe chia ba bước: Trả xe & kiểm định → Chốt tiền & thanh toán → Hoàn tiền & hoàn tất. Bấm bước đã qua để xem lại.
+- Bảng tiền đã chốt là snapshot; số bổ sung đã đối soát/còn thiếu hiện tại hiển thị riêng. Admin phân xử không được hiển thị thành renter đã xác nhận.
+- Khi đang khiếu nại sự cố, vẫn có thể hủy đề nghị đổi xe chưa hoàn tất để Admin tiếp tục xử lý.
+- [Kết quả kiểm thử UI, số tiền và giới hạn kiểm chứng](YEARLY_RENTAL_UI_UAT_20261112.md). Bố trí tài khoản seed chưa thay đổi trong đợt UI này.
+
+
+### Lưu ý demo sau sửa 1–5
+
+- Provider sửa ảnh/km nhận xe thì renter phải xem lại phiên bản mới và đánh dấu xác nhận lại; thông báo 409 ở tab cũ là đúng nghiệp vụ.
+- Admin được chọn trách nhiệm đã xác minh độc lập; phụ phí phải có từng khoản/mô tả/ảnh, không nhập một tổng tự do.
+- Khi hoàn tiền, nhập số của lần chuyển hiện tại. Renter bấm “Xác nhận đã nhận đủ tiền của lần chuyển này”. Nếu còn thiếu, provider chuyển lần tiếp theo bằng mã mới. Chỉ hoàn tất khi tổng đã nhận đủ.
+- Ví dụ demo hoàn 48,5 triệu: chuyển 20 triệu, xác nhận; còn 28,5 triệu; chuyển tiếp và xác nhận, sau đó hoàn tất.
+- Chi tiết thanh toán/QR đang mở được cập nhật khi số đã đối soát thay đổi; chờ cập nhật xong trước khi chuyển tiền.
+
+
+### Nhập tiền cọc/tháng đầu sau sửa form
+
+Có thể nhập 50000000 hoặc 50.000.000; dòng tiền bên dưới cho biết số hệ thống sẽ ghi nhận. Không nhập số thập phân như 15,1 để biểu thị 15,1 triệu. Khi đồng bộ chậm, vẫn có thể nhập và sửa draft; chờ nút gửi mở lại rồi xác nhận. Tháng đầu chưa nhận xe có hạn Trước bàn giao, các tháng sau giữ hạn trước kỳ.

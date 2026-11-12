@@ -83,6 +83,37 @@ class IdentityAiAssessmentServiceTest {
     }
 
     @Test
+    void preservesEvidenceAndReadsLegacySnapshotsWithoutInventingConfidence() throws Exception {
+        when(documents.readCitizenId(any(), anyString(), any(), anyString())).thenReturn(Map.of(
+                "documentType", "VN_CITIZEN_ID", "status", "REVIEW_REQUIRED", "code", "PROCESSED",
+                "data", Map.of("documentNumber", "001234567890", "fullName", "Test Person", "dateOfBirth", "1990-01-01"),
+                "statusReasons", List.of("REQUIRED_FIELDS_NEED_REVIEW"),
+                "qrData", Map.of("status", "DISABLED"),
+                "fields", Map.of("fullName", Map.of("source", "OCR", "confidence", .72, "needsReview", true),
+                        "documentNumber", Map.of("confidence", Double.NaN)),
+                "checks", List.of(Map.of("step", "FUTURE_CHECK", "status", "UNKNOWN_RESULT", "side", "FRONT"))));
+        var image = image();
+        var result = service.readDocuments(10L, image.getBytes(), image.getBytes());
+        var evidence = result.evidence();
+        assertEquals("DISABLED", evidence.qrStatus());
+        assertEquals("NOT_ESTABLISHED", evidence.calibrationStatus());
+        assertEquals("INCONCLUSIVE", evidence.checks().getFirst().status());
+        var name = evidence.fields().stream().filter(f -> f.name().equals("fullName")).findFirst().orElseThrow();
+        assertEquals(.72, name.confidence());
+        assertTrue(name.needsReview());
+        assertTrue(evidence.fields().stream().filter(f -> f.name().equals("documentNumber")).findFirst().orElseThrow().confidence() == null);
+        var mapper = new tools.jackson.databind.ObjectMapper();
+        var stored = mapper.readValue(mapper.writeValueAsString(result),
+                com.fptufa26.ecomotion.verification.identity.dto.response.IdentityAiAssessmentResponse.DocumentRead.class);
+        assertEquals(evidence, stored.evidence());
+        var legacy = mapper.readValue("{\"documentType\":\"VN_CITIZEN_ID\",\"requiredFieldsReadable\":true}",
+                com.fptufa26.ecomotion.verification.identity.dto.response.IdentityAiAssessmentResponse.DocumentRead.class);
+        assertTrue(legacy.requiredFieldsReadable());
+        assertTrue(legacy.evidence() == null);
+        verifyNoInteractions(videos);
+    }
+
+    @Test
     void stopsBeforeVideoWhenDocumentIsUnreadable() throws Exception {
         when(documents.readCitizenId(any(), anyString(), any(), anyString())).thenReturn(Map.of(
                 "documentType", "VN_CITIZEN_ID", "status", "RETAKE_REQUIRED", "code", "PROCESSED"));

@@ -11,6 +11,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface IdentityVerificationAttemptRepository extends JpaRepository<IdentityVerificationAttempt, Long> {
+    org.springframework.data.domain.Page<IdentityVerificationAttempt> findByUser_IdOrderByIdDesc(
+            Long userId, org.springframework.data.domain.Pageable pageable);
     boolean existsByActiveUserId(Long userId);
     Optional<IdentityVerificationAttempt> findFirstByUser_IdOrderByIdDesc(Long userId);
 

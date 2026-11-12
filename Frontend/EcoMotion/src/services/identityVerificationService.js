@@ -58,7 +58,7 @@ export const identityVerificationService = {
       { activationToken, version, confirmed })).data
   },
 
-  async pendingProviderIdentities(page = 0, status = 'SUBMITTED') {
+  async pendingRenterIdentities(page = 0, status = 'SUBMITTED') {
     return (await apiClient.get('/admin/identity-attempts', { params: { page, status } })).data
   },
 
@@ -66,13 +66,33 @@ export const identityVerificationService = {
     return (await apiClient.get(`/admin/identity-attempts/${id}`)).data
   },
 
-  async reviewProviderIdentity(id, version, decision, reasonCode) {
+  async reviewRenterIdentity(id, version, decision, reasonCode, note) {
     return (await apiClient.post(`/admin/identity-attempts/${id}/review`,
-      { version, decision, reasonCode })).data
+      { version, decision, reasonCode, note })).data
   },
 
+  async downloadHistoryEvidence(id, eventId, kind) {
+    return (await apiClient.get(`/admin/identity-attempts/${id}/history/${eventId}/evidence/${kind}`, { responseType: 'blob' })).data
+  },
   async downloadProviderIdentityEvidence(id, kind) {
     return (await apiClient.get(`/admin/identity-attempts/${id}/evidence/${kind}`, { responseType: 'blob' })).data
+  },
+  async processing(id, activationToken, signal) {
+    const options = { timeout: 10000, signal }
+    return activationToken
+      ? (await apiClient.post(`/auth/activate/identity-attempts/${id}/progress`, { activationToken }, options)).data
+      : (await apiClient.get(`/identity/attempts/${id}/progress`, options)).data
+  },
+  async attemptHistory(page = 0, activationToken) {
+    return activationToken
+      ? (await apiClient.post('/auth/activate/identity-attempts/history', { activationToken }, { params: { page } })).data
+      : (await apiClient.get('/identity/attempts/history', { params: { page } })).data
+  },
+  async ownHistoryEvidence(id, eventId, kind, activationToken, signal) {
+    const options = { responseType: 'blob', signal }
+    return activationToken
+      ? (await apiClient.post(`/auth/activate/identity-attempts/${id}/history/${eventId}/evidence/${kind}`, { activationToken }, options)).data
+      : (await apiClient.get(`/identity/attempts/${id}/history/${eventId}/evidence/${kind}`, options)).data
   },
   async createAttempt() {
     return (await apiClient.post('/identity/attempts')).data
@@ -86,27 +106,27 @@ export const identityVerificationService = {
     return (await apiClient.get(`/identity/attempts/${id}`)).data
   },
 
-  async uploadDocuments(id, version, { cccdFront, cccdBack }) {
+  async uploadDocuments(id, version, { cccdFront, cccdBack }, onUploadProgress) {
     const form = new FormData()
     form.append('version', version)
     form.append('cccdFront', cccdFront)
     form.append('cccdBack', cccdBack)
-    return (await apiClient.post(`/identity/attempts/${id}/documents`, form, { timeout: 420000 })).data
+    return (await apiClient.post(`/identity/attempts/${id}/documents`, form, { timeout: 420000, onUploadProgress })).data
   },
 
-  async uploadVideo(id, version, video) {
+  async uploadVideo(id, version, video, onUploadProgress) {
     const form = new FormData()
     form.append('version', version)
     form.append('video', video)
-    return (await apiClient.post(`/identity/attempts/${id}/video`, form, { timeout: 420000 })).data
+    return (await apiClient.post(`/identity/attempts/${id}/video`, form, { timeout: 420000, onUploadProgress })).data
   },
 
   async cancelAttempt(id, version) {
     return (await apiClient.post(`/identity/attempts/${id}/cancel`, { version })).data
   },
 
-  async downloadEvidence(id, kind) {
-    return (await apiClient.get(`/identity/attempts/${id}/evidence/${kind}`, { responseType: 'blob' })).data
+  async downloadEvidence(id, kind, signal) {
+    return (await apiClient.get(`/identity/attempts/${id}/evidence/${kind}`, { responseType: 'blob', signal })).data
   },
 
   async activationAttempt(activationToken, action = '', id) {
@@ -114,30 +134,30 @@ export const identityVerificationService = {
     return (await apiClient.post(`/auth/activate/identity-attempts${suffix}`, { activationToken })).data
   },
 
-  async uploadActivationDocuments(activationToken, id, version, { cccdFront, cccdBack }) {
+  async uploadActivationDocuments(activationToken, id, version, { cccdFront, cccdBack }, onUploadProgress) {
     const form = new FormData()
     form.append('activationToken', activationToken)
     form.append('version', version)
     form.append('cccdFront', cccdFront)
     form.append('cccdBack', cccdBack)
-    return (await apiClient.post(`/auth/activate/identity-attempts/${id}/documents`, form, { timeout: 420000 })).data
+    return (await apiClient.post(`/auth/activate/identity-attempts/${id}/documents`, form, { timeout: 420000, onUploadProgress })).data
   },
 
-  async uploadActivationVideo(activationToken, id, version, video) {
+  async uploadActivationVideo(activationToken, id, version, video, onUploadProgress) {
     const form = new FormData()
     form.append('activationToken', activationToken)
     form.append('version', version)
     form.append('video', video)
-    return (await apiClient.post(`/auth/activate/identity-attempts/${id}/video`, form, { timeout: 420000 })).data
+    return (await apiClient.post(`/auth/activate/identity-attempts/${id}/video`, form, { timeout: 420000, onUploadProgress })).data
   },
 
   async cancelActivationAttempt(activationToken, id, version) {
     return (await apiClient.post(`/auth/activate/identity-attempts/${id}/cancel`, { activationToken, version })).data
   },
 
-  async downloadActivationEvidence(activationToken, id, kind) {
+  async downloadActivationEvidence(activationToken, id, kind, signal) {
     return (await apiClient.post(`/auth/activate/identity-attempts/${id}/evidence/${kind}`,
-      { activationToken }, { responseType: 'blob' })).data
+      { activationToken }, { responseType: 'blob', signal })).data
   },
 
   async assess(files) {

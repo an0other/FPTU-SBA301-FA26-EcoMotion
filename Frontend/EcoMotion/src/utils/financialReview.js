@@ -2,11 +2,14 @@ export const refundOutcomes = ['HOLD', 'TRANSFER_VERIFIED', 'FAILED_VERIFIED', '
 
 export function financialReviewNote(entry) {
   const text = entry.payload || ''
+  if (entry.outcome === 'SETTLEMENT_PROPOSED') {
+    try { return JSON.parse(text).note || 'Đã lưu bảng quyết toán chi tiết để người thuê đối chiếu.' } catch { return 'Đã lưu đề xuất quyết toán.' }
+  }
   return text.match(/note=(.*?)(?:, evidence|, transaction|\]$)/s)?.[1] || 'Đã ghi nhận thay đổi để đối chiếu.'
 }
 
 export function financialReviewLabel(outcome) {
-  return ({ REFUND_HOLD: 'Tiếp tục đối soát tiền hoàn năm', REFUND_FAILED_VERIFIED: 'Cho chuyển lại phần hoàn còn thiếu', REFUND_PARTIAL_RECEIVED: 'Đã xác minh nhận một phần tiền hoàn', REFUND_CONFIRMED_RECEIVED: 'Đã xác minh nhận đủ tiền hoàn', INCIDENT_HOLD: 'Tiếp tục xem xét report', INCIDENT_RULING: 'Admin đã phân xử report', INCIDENT_TRANSFER_VERIFIED: 'Admin xác minh đã nhận hoàn ứng', INCIDENT_FAILED_TRANSFER: 'Admin cho thực hiện lại hoàn ứng', REFUND_DISPUTE: 'Người thuê báo thiếu tiền hoàn', INCIDENT_DISPUTE: 'Người thuê yêu cầu xem xét report', HOLD: 'Tiếp tục đối soát', TRANSFER_VERIFIED: 'Đã xác minh chuyển tiền', FAILED_VERIFIED: 'Đã xác minh không chuyển hoặc thu hồi tiền', WRONG_RECIPIENT: 'Đang xử lý chuyển nhầm', DISPUTE: 'Người thuê yêu cầu xem xét', PROVIDER_REPLY: 'Nhà xe phản hồi', SETTLEMENT_RULING: 'Đã phân xử quyết toán', CANCELLATION_RULING: 'Đã phân xử hủy hợp đồng' })[outcome] || 'Cập nhật hồ sơ'
+  return ({ RETURN_REQUESTED: 'Gửi / cập nhật yêu cầu trả xe', RETURN_WITHDRAWN: 'Rút yêu cầu, tiếp tục thuê', RETURN_CONFIRMED: 'Hai bên đã xác nhận trả xe', SETTLEMENT_PROPOSED: 'Gửi bảng quyết toán', SETTLEMENT_ACCEPTED: 'Đồng ý phiên bản quyết toán', YEARLY_COMPLETED: 'Hoàn tất hợp đồng năm', INCIDENT_PROPOSED: 'Provider đề xuất xử lý sự cố', INCIDENT_ACCEPTED: 'Renter đồng ý phương án sự cố', INCIDENT_REJECTED: 'Renter yêu cầu làm rõ phương án', REFUND_HOLD: 'Tiếp tục đối soát tiền hoàn năm', REFUND_FAILED_VERIFIED: 'Cho chuyển lại phần hoàn còn thiếu', REFUND_PARTIAL_RECEIVED: 'Đã xác minh nhận một phần tiền hoàn', REFUND_CONFIRMED_RECEIVED: 'Đã xác minh nhận đủ tiền hoàn', INCIDENT_HOLD: 'Tiếp tục xem xét report', INCIDENT_RULING: 'Admin đã phân xử report', INCIDENT_TRANSFER_VERIFIED: 'Admin xác minh đã nhận hoàn ứng', INCIDENT_FAILED_TRANSFER: 'Admin cho thực hiện lại hoàn ứng', REFUND_DISPUTE: 'Người thuê báo thiếu tiền hoàn', INCIDENT_DISPUTE: 'Người thuê yêu cầu xem xét report', HOLD: 'Tiếp tục đối soát', TRANSFER_VERIFIED: 'Đã xác minh chuyển tiền', FAILED_VERIFIED: 'Đã xác minh không chuyển hoặc thu hồi tiền', WRONG_RECIPIENT: 'Đang xử lý chuyển nhầm', DISPUTE: 'Người thuê yêu cầu xem xét', PROVIDER_REPLY: 'Nhà xe phản hồi', SETTLEMENT_RULING: 'Đã phân xử quyết toán', CANCELLATION_RULING: 'Đã phân xử hủy hợp đồng' })[outcome] || 'Cập nhật hồ sơ'
 }
 
 export function reconciliationPayload(refund, form, requestId) {

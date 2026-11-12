@@ -77,7 +77,7 @@ export default function AcceptBookingModal({ booking, isOpen, onClose, onSuccess
           <p className="text-sm text-slate-600 leading-relaxed">
             Bạn có chắc chắn muốn chấp nhận đơn thuê{' '}
             <strong className="font-mono font-bold text-slate-900">{booking.bookingCode}</strong>?
-            Sau khi chấp nhận, người thuê sẽ được thông báo để tiến hành đặt cọc giữ xe.
+            {booking.planType === 'YEARLY' ? 'Sau khi chấp nhận, bạn cần chốt điều khoản. Người thuê đồng ý và tải hợp đồng đã ký, sau đó mới thanh toán tiền bảo đảm và tháng đầu.' : 'Sau khi chấp nhận, người thuê sẽ được thông báo để tiến hành đặt cọc giữ xe.'}
           </p>
 
           {/* Booking mini summary */}

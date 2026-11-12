@@ -39,7 +39,8 @@ export const vehicleService = {
     const { data } = await apiClient.get(`/vehicles/${vehicleId}/availability`, {
       params: { from, to },
     })
-    return data?.data ?? { occupiedSlots: [] }
+    if (!Array.isArray(data?.data?.occupiedSlots)) throw new Error('Chưa nhận được lịch xe hợp lệ. Vui lòng thử lại.')
+    return data.data
   },
 
 }

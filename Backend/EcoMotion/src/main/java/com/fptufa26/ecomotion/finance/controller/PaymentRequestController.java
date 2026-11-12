@@ -183,6 +183,14 @@ public class PaymentRequestController {
         return ApiResponse.success(paymentRequestService.recordBankTransferForReconciliation(id, principal.getUserId(), request));
     }
 
+    @PostMapping("/api/provider/payment-requests/{id}/evidences/{evidenceId}/reject")
+    @PreAuthorize("hasRole('PROVIDER')")
+    public ApiResponse<PaymentRequestResponse> rejectYearlyEvidence(
+            @AuthenticationPrincipal SecurityUser principal, @PathVariable Long id,
+            @PathVariable Long evidenceId, @Valid @RequestBody RejectPaymentRequest request) {
+        return ApiResponse.success(paymentRequestService.rejectYearlyEvidence(id, evidenceId, principal.getUserId(), request));
+    }
+
     @PostMapping({"/api/v1/provider/payment-requests/{id}/reject", "/api/provider/payment-requests/{id}/reject"})
     @PreAuthorize("hasAnyRole('PROVIDER', 'ADMIN')")
     @Operation(summary = "Provider rejects payment proof with reason")

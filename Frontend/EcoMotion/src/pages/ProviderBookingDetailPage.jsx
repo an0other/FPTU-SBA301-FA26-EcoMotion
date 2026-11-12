@@ -568,6 +568,7 @@ export default function ProviderBookingDetailPage() {
           </div>
         </section>}
 
+        {booking.planType === 'YEARLY' && <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">{booking.status === 'PENDING' ? 'Việc cần làm: chấp nhận hoặc từ chối yêu cầu bằng các nút ở đầu trang. Chấp nhận xong, chốt điều khoản km/phí trong hợp đồng bên dưới.' : booking.status === 'ACCEPTED' ? 'Đã chấp nhận yêu cầu: chốt điều khoản km/phí bên dưới, rồi chờ người thuê đồng ý và nộp hợp đồng đã ký.' : ['CANCELLED','REJECTED','CANCELLATION_REVIEW'].includes(booking.status) ? 'Đơn này đã hủy/từ chối; không còn thao tác chấp nhận. Nếu muốn thuê tiếp, người thuê cần gửi yêu cầu mới sau khi kiểm tra lịch xe.' : 'Đơn thuê năm tự lái. Thanh toán theo tháng, tiền bảo đảm và bàn giao được xử lý trong hợp đồng bên dưới.'}</p>}
         {booking.planType === 'YEARLY' && <YearlyWorkflowPanel key={booking.bookingCode} role="provider" bookingCode={booking.bookingCode} bookingStatus={booking.status} onChanged={refetch} />}
 
         {booking.planType !== 'YEARLY' && workflow?.canProposeAlternative && (
@@ -585,6 +586,9 @@ export default function ProviderBookingDetailPage() {
           />
         )}
 
+        <details open={booking.planType !== 'YEARLY'} className={booking.planType === 'YEARLY' ? 'rounded-xl border bg-white p-4' : undefined}>
+          <summary hidden={booking.planType !== 'YEARLY'} className="cursor-pointer text-sm font-semibold">Thông tin khách hàng, yêu cầu ban đầu và lịch sử chung</summary>
+          {booking.planType === 'YEARLY' && <p className="my-4 rounded-lg bg-blue-50 p-3 text-sm">Thao tác trả xe, tiền đang phải trả và tiền hoàn nằm trong các mục của Hợp đồng thuê năm ở trên. Các thông tin bên dưới dùng tra cứu yêu cầu ban đầu.</p>}
         {/* 4. Khách hàng & Lịch trình đón & 5. Chi phí & Quyết toán */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* 4. Khách hàng & Lịch trình đón (7 cols) */}
@@ -629,7 +633,7 @@ export default function ProviderBookingDetailPage() {
                     </strong>
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-1">
-                    <span className="text-slate-500">Giờ đón khách:</span>
+                    <span className="text-slate-500">{booking.planType === 'YEARLY' ? 'Nhận xe dự kiến:' : 'Giờ đón khách:'}</span>
                     <strong className="text-brand-900 font-bold">{formatDateTime(booking.pickupTime)}</strong>
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-1">
@@ -643,7 +647,7 @@ export default function ProviderBookingDetailPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-start gap-2.5 text-xs">
                 <Icon name="pin_drop" className="text-[18px] text-brand-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold text-slate-700 block">Điểm đón khách:</span>
+                  <span className="font-bold text-slate-700 block">{booking.planType === 'YEARLY' ? 'Điểm giao / nhận xe:' : 'Điểm đón khách:'}</span>
                   <span className="text-slate-900 font-medium">{booking.pickupAddress}</span>
                 </div>
               </div>
@@ -675,25 +679,25 @@ export default function ProviderBookingDetailPage() {
                 </h2>
 
                 <div className="mt-3 rounded-lg border border-brand-200 bg-slate-50 p-4 text-center">
-                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">Tổng chi phí</span>
+                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">{booking.planType === 'YEARLY' ? 'Giá trị thuê 12 tháng · chưa gồm bảo đảm' : 'Tổng chi phí'}</span>
                   <span className="text-2xl font-black font-mono text-brand-900 mt-1 block">
-                    {formatVnd(estimatedGrandTotal({ totalAmount: booking.totalAmount, pickupFee: booking.pickupFee, charges: booking.charges }))}
+                    {formatVnd(booking.planType === 'YEARLY' ? booking.slotPrice : estimatedGrandTotal({ totalAmount: booking.totalAmount, pickupFee: booking.pickupFee, charges: booking.charges }))}
                   </span>
                   <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    {booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán & quyết toán' : 'Tiền thuê, phí đón và phụ phí chưa miễn'}
+                    {booking.planType === 'YEARLY' ? 'Không phải khoản cần thanh toán ngay. Xem lịch từng kỳ và số đã nhận trong hợp đồng thuê năm.' : booking.status === 'COMPLETED' ? 'Đã hoàn tất thanh toán & quyết toán' : 'Tiền thuê, phí đón và phụ phí chưa miễn'}
                   </span>
                 </div>
               </div>
 
               {/* Policy Snapshot breakdown */}
               <div className="space-y-2 text-xs border-t border-slate-100 pt-3">
-                {workflow?.confirmedPaid != null && Number(workflow.confirmedPaid) > 0 ? (
+                {booking.planType !== 'YEARLY' && workflow?.confirmedPaid != null && Number(workflow.confirmedPaid) > 0 ? (
                   <div className="flex justify-between text-slate-600">
                     <span>Đã thu (xác nhận):</span>
                     <strong className="text-emerald-800 font-mono">{formatVnd(workflow.confirmedPaid)}</strong>
                   </div>
                 ) : null}
-                {workflow?.remainingAmount != null && Number(workflow.remainingAmount) > 0 ? (
+                {booking.planType !== 'YEARLY' && workflow?.remainingAmount != null && Number(workflow.remainingAmount) > 0 ? (
                   <div className="flex justify-between text-slate-600">
                     <span>Còn phải thu:</span>
                     <strong className="text-amber-900 font-mono">{formatVnd(workflow.remainingAmount)}</strong>
@@ -706,16 +710,16 @@ export default function ProviderBookingDetailPage() {
                   </div>
                 ) : null}
                 <div className="flex justify-between text-slate-600">
-                  <span>Giá 1 slot thuê:</span>
+                  <span>{booking.planType === 'YEARLY' ? 'Tiền thuê toàn bộ 12 tháng:' : 'Giá 1 slot thuê:'}</span>
                   <strong className="text-slate-900 font-mono">{formatVnd(booking.slotPrice)}</strong>
                 </div>
-                {booking.depositRatio != null && (
+                {booking.planType !== 'YEARLY' && booking.depositRatio != null && (
                   <div className="flex justify-between text-slate-600">
                     <span>Tỷ lệ đặt cọc:</span>
                     <strong className="text-slate-900">{Number(booking.depositRatio * 100).toFixed(0)}%</strong>
                   </div>
                 )}
-                {booking.allowedOvertimeMinutes != null && (
+                {booking.planType !== 'YEARLY' && booking.allowedOvertimeMinutes != null && (
                   <div className="flex justify-between text-slate-600">
                     <span>Vượt giờ miễn phí:</span>
                     <strong className="text-slate-900">{booking.allowedOvertimeMinutes} phút</strong>
@@ -786,6 +790,7 @@ export default function ProviderBookingDetailPage() {
               </div>
             </div>
 
+            {booking.planType !== 'YEARLY' && <>
             {/* Assigned Driver Card */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
@@ -872,6 +877,8 @@ export default function ProviderBookingDetailPage() {
               )}
             </div>
 
+            </>}
+
             {/* Live GPS Map & Execution Milestones */}
             {booking.driverName && (
               <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
@@ -937,6 +944,7 @@ export default function ProviderBookingDetailPage() {
               </div>
             )}
 
+            {booking.planType !== 'YEARLY' && <>
             {/* Surcharges Breakdown Table */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
@@ -1080,6 +1088,8 @@ export default function ProviderBookingDetailPage() {
                 </div>
               )}
             </div>
+
+            </>}
 
             {/* Incident Records Section */}
             {incidents.length > 0 && (
@@ -1272,6 +1282,7 @@ export default function ProviderBookingDetailPage() {
             </div>
           </div>
         </div>
+        </details>
       </div>
 
       {/* Incident Resolution Dialog */}

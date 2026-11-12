@@ -1,3 +1,5 @@
+> **Luồng GPLX mới:** bản nộp cần người dùng xác nhận và Admin xét duyệt, OCR/QR không tự đặt licenseVerified. Seed cũ giữ nguyên để tương thích. Cần áp dụng migration GPLX trước khi chạy bản mới; xem [đặc tả và hướng dẫn chuyển đổi](../verification/implementation/IMPLEMENTATION-PLAN-VI.md). Mô tả tự xác minh OCR/QR bên dưới là hành vi lịch sử, không dùng cho bản nộp mới.
+
 > Chính sách demo đã mở rộng: B, B1, B2 được hỗ trợ, bỏ mốc ngày cấp 2025. Chính sách theo commit `11ef8eb`; điều kiện tuổi, hạn GPLX và số chỗ vẫn được kiểm tra.
 
 > **Seed/demo cập nhật 10/11/2026:** cả ba renter new/monthly/happy-end đều có B2 demo, không cần upload GPLX thật để đi tuyến yearly. Dùng 3 renter + Provider + Admin; EM-Y2-CANCEL dùng chung renter happy-end, khác xe/khoảng thuê. Các bảng A1, EM-SEED-YEARLY-* và mô tả seed cũ bên dưới là lịch sử; lấy trạng thái hiện hành từ [kịch bản demo](YEARLY_RENTAL_DEMO_TEST_GUIDE_VI.md).

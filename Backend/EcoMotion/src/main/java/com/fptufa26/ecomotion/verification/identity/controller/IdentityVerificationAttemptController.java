@@ -68,14 +68,60 @@ public class IdentityVerificationAttemptController {
         return download(decisions.evidence(user.getUserId(), id, kind), kind);
     }
 
+    @GetMapping("/api/admin/identity-attempts/{id}/history/{eventId}/evidence/{kind}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<byte[]> historyEvidenceAdmin(@AuthenticationPrincipal SecurityUser user,
+            @PathVariable UUID id, @PathVariable Long eventId, @PathVariable String kind) {
+        return download(decisions.historyEvidence(user.getUserId(), id, eventId, kind), kind);
+    }
+
     @PostMapping("/api/admin/identity-attempts/{id}/review")
     @PreAuthorize("hasRole('ADMIN')")
     public com.fptufa26.ecomotion.verification.identity.dto.response.IdentityDecisionResponse review(
             @AuthenticationPrincipal SecurityUser user, @PathVariable UUID id,
             @Valid @RequestBody ReviewRequest request) {
-        throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
-                org.springframework.http.HttpStatus.GONE, "PROVIDER_COMBINED_REVIEW_REQUIRED",
-                "Vui lòng duyệt CCCD/video và thông tin dịch vụ chung tại hồ sơ Provider.");
+        var detail = decisions.detail(user.getUserId(), id);
+        if (detail.role() != com.fptufa26.ecomotion.user.enums.Role.RENTER) {
+            throw new com.fptufa26.ecomotion.verification.identity.exception.IdentityAiException(
+                    org.springframework.http.HttpStatus.GONE, "PROVIDER_COMBINED_REVIEW_REQUIRED",
+                    "Vui lòng duyệt CCCD/video và thông tin dịch vụ chung tại hồ sơ Provider.");
+        }
+        return decisions.reviewRenter(user.getUserId(), id, request.version(), request.decision(), request.reasonCode(), request.note());
+    }
+
+    @GetMapping("/api/identity/attempts/{id}/progress")
+    @PreAuthorize("hasAnyAuthority('ROLE_RENTER', 'ROLE_PROVIDER', 'ROLE_PROVIDER_ONBOARDING')")
+    public com.fptufa26.ecomotion.verification.identity.dto.response.IdentityProcessingResponse progress(
+            @AuthenticationPrincipal SecurityUser user, @PathVariable UUID id) {
+        return attempts.progress(user.getUserId(), id);
+    }
+
+    @PostMapping("/api/auth/activate/identity-attempts/{id}/progress")
+    public com.fptufa26.ecomotion.verification.identity.dto.response.IdentityProcessingResponse activationProgress(
+            @PathVariable UUID id, @Valid @RequestBody ActivationRequest request) {
+        return attempts.progress(activationUser(request.activationToken()), id);
+    }
+
+    @GetMapping("/api/identity/attempts/history")
+    @PreAuthorize("hasAnyAuthority('ROLE_RENTER', 'ROLE_PROVIDER', 'ROLE_PROVIDER_ONBOARDING')")
+    public java.util.List<IdentityAttemptResponse> history(@AuthenticationPrincipal SecurityUser user,
+            @RequestParam(defaultValue = "0") int page) { return attempts.history(user.getUserId(), page); }
+
+    @PostMapping("/api/auth/activate/identity-attempts/history")
+    public java.util.List<IdentityAttemptResponse> activationHistory(@Valid @RequestBody ActivationRequest request,
+            @RequestParam(defaultValue = "0") int page) { return attempts.history(activationUser(request.activationToken()), page); }
+
+    @GetMapping("/api/identity/attempts/{id}/history/{eventId}/evidence/{kind}")
+    @PreAuthorize("hasAnyAuthority('ROLE_RENTER', 'ROLE_PROVIDER', 'ROLE_PROVIDER_ONBOARDING')")
+    public ResponseEntity<byte[]> ownHistoryEvidence(@AuthenticationPrincipal SecurityUser user,
+            @PathVariable UUID id, @PathVariable Long eventId, @PathVariable String kind) {
+        return download(attempts.historyEvidence(user.getUserId(), id, eventId, kind), kind);
+    }
+
+    @PostMapping("/api/auth/activate/identity-attempts/{id}/history/{eventId}/evidence/{kind}")
+    public ResponseEntity<byte[]> activationHistoryEvidence(@PathVariable UUID id, @PathVariable Long eventId,
+            @PathVariable String kind, @Valid @RequestBody ActivationRequest request) {
+        return download(attempts.historyEvidence(activationUser(request.activationToken()), id, eventId, kind), kind);
     }
 
     @PostMapping("/api/identity/attempts")
@@ -199,7 +245,7 @@ public class IdentityVerificationAttemptController {
             boolean confirmed) { }
     public record ReviewRequest(@NotNull @Min(0) Long version,
             @NotBlank @io.swagger.v3.oas.annotations.media.Schema(allowableValues={"APPROVE","NEEDS_CHANGES","REJECT","REOPEN"}) String decision,
-            String reasonCode) { }
+            String reasonCode, @jakarta.validation.constraints.Size(max = 1000) String note) { }
 
     public record ActivationRequest(@NotBlank String activationToken) {
     }

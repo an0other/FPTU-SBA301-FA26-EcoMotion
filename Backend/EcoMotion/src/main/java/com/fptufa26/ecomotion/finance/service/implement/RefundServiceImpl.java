@@ -95,6 +95,7 @@ public class RefundServiceImpl implements RefundService {
         if (!booking.getRenter().getUser().getId().equals(currentUserId)) {
             throw new AccessDeniedException("Chỉ khách thuê của đơn mới được chọn cấn trừ");
         }
+        if (booking.getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY) throw new ConflictException("Gói năm hoàn tiền dư riêng, chưa hỗ trợ cấn trừ vào kỳ thuê hoặc quyết toán");
         RefundRequest refund = refundRequestRepository.findByIdForUpdate(refundRequestId).orElseThrow();
         entityManager.refresh(refund, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         if (!RefundMath.excessEvent(refund.getSourceEventId())) {
@@ -214,6 +215,8 @@ public class RefundServiceImpl implements RefundService {
             refund.setUpdatedAt(now);
             }
         } else if ("REJECT".equals(action)) {
+            if (refund.getBooking().getPlan().getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+                    && RefundMath.excessEvent(refund.getSourceEventId())) throw new ConflictException("Không từ chối nghĩa vụ hoàn tiền chuyển dư đã ghi nhận; cần đối soát nếu thông tin sai");
             if (request.rejectionReason() == null || request.rejectionReason().isBlank()
                     || request.rejectionReason().trim().length() > 500) {
                 throw new InvalidPaymentOperationException("Lý do từ chối phải từ 1 đến 500 ký tự");
@@ -445,7 +448,7 @@ public class RefundServiceImpl implements RefundService {
                 .filter(r -> r.getPaymentTransaction() != null && r.getPaymentTransaction().getType() == PaymentType.REFUND)
                 .map(r -> r.getPaymentTransaction().getId()).collect(java.util.stream.Collectors.toSet());
         BigDecimal unlinkedRefunds = bookingPaymentLedgerService.listTransactions(bookingId).stream()
-                .filter(t -> t.getType() == PaymentType.REFUND && t.getDirection() == PaymentDirection.OUT
+                .filter(t -> (t.getType() == PaymentType.REFUND || t.getType() == PaymentType.SECURITY_DEPOSIT_REFUND) && t.getDirection() == PaymentDirection.OUT
                         && (t.getStatus() == PaymentStatus.PENDING || t.getStatus() == PaymentStatus.PAID)
                         && !linkedTransactions.contains(t.getId()))
                 .map(PaymentTransaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);

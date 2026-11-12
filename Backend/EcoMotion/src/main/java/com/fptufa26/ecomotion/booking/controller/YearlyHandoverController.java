@@ -1,6 +1,7 @@
 package com.fptufa26.ecomotion.booking.controller;
 
 import com.fptufa26.ecomotion.booking.service.YearlyHandoverService;
+import com.fptufa26.ecomotion.booking.service.YearlyWorkflowService;
 import com.fptufa26.ecomotion.common.response.ApiResponse;
 import com.fptufa26.ecomotion.common.security.SecurityUser;
 import jakarta.validation.Valid;
@@ -38,7 +39,8 @@ public class YearlyHandoverController {
 
     @PostMapping("/api/renter/yearly-bookings/{code}/handover/receive")
     @PreAuthorize("hasRole('RENTER')")
-    public ApiResponse<YearlyHandoverService.Handover> receive(@AuthenticationPrincipal SecurityUser user, @PathVariable String code) {
-        return ApiResponse.success(service.receive(user.getUserId(), code));
+    public ApiResponse<YearlyHandoverService.Handover> receive(@AuthenticationPrincipal SecurityUser user, @PathVariable String code,
+            @Valid @RequestBody YearlyWorkflowService.Version request) {
+        return ApiResponse.success(service.receive(user.getUserId(), code, request.version()));
     }
 }

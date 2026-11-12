@@ -46,7 +46,7 @@ public class FileDownloadController {
         if (storedPath.startsWith("payment-evidence/")
                 || storedPath.startsWith("refund-proof/")
                 || storedPath.matches("booking/[0-9]+/payment-proof-.*")
-                || storedPath.matches("renter/[0-9]+/driving-license-(front|back)-.*")) {
+                || storedPath.matches("renter/[0-9]+/(driving-license-|license-review-).*")) {
             return ResponseEntity.notFound().build();
         }
 

@@ -73,6 +73,7 @@ public class YearlyRentalDataSeeder {
         LocalDate activeStart = today.minusMonths(3).minusDays(2);
         demoVehicle(template, 1);
         demoVehicle(template, 9);
+        demoVehicle(template, 12);
         Renter active = findRenter("renter.yearly.monthly@ecomotion.vn");
         Renter closing = findRenter("renter.yearly.happy-end@ecomotion.vn");
         seedLicense(findRenter("renter.yearly.new@ecomotion.vn"), "B2");

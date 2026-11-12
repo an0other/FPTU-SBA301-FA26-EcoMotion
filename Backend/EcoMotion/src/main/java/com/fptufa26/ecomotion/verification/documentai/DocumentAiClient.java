@@ -23,6 +23,7 @@ public class DocumentAiClient {
     private final RestClient restClient;
     private final String baseUrl;
     private final String apiKey;
+    private final Duration readTimeout;
 
     public DocumentAiClient(
             @Value("${app.document-ai.base-url:}") String baseUrl,
@@ -32,6 +33,7 @@ public class DocumentAiClient {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(connectTimeout);
         requestFactory.setReadTimeout(readTimeout);
+        this.readTimeout = readTimeout;
         this.restClient = RestClient.builder().requestFactory(requestFactory).build();
         this.baseUrl = baseUrl == null ? "" : baseUrl.trim().replaceAll("/+$", "");
         this.apiKey = apiKey == null ? "" : apiKey.trim();
@@ -66,7 +68,9 @@ public class DocumentAiClient {
         body.add("document_type", documentType);
 
         try {
-            Map<String, Object> response = restClient.post()
+            Map<String, Object> response = com.fptufa26.ecomotion.verification.progress.AiProgressContext.active()
+                    ? com.fptufa26.ecomotion.verification.progress.AiJobPolling.run(restClient, baseUrl + "/v1/documents/jobs", apiKey, body, readTimeout)
+                    : restClient.post()
                     .uri(baseUrl + "/v1/documents/read")
                     .header("X-API-Key", apiKey)
                     .contentType(MediaType.MULTIPART_FORM_DATA)

@@ -105,7 +105,10 @@ public class Booking {
     /** Chuyến đã được chốt kết thúc: Tài xế kết thúc là đủ; dữ liệu cũ do Renter xác nhận/AUTO vẫn được chấp nhận. */
     public boolean isEndAccepted() {
         return driverEndConfirmedAt != null || renterEndConfirmedAt != null || renterConfirmedAt != null
-                || "AUTO".equals(endConfirmationMethod);
+                || "AUTO".equals(endConfirmationMethod)
+                || ("ADMIN".equals(endConfirmationMethod) && plan != null
+                    && plan.getPlanType() == com.fptufa26.ecomotion.vehicle.enums.PlanType.YEARLY
+                    && actualEndAt != null && providerConfirmedAt != null);
     }
 
     @Column(name = "actual_end_at")

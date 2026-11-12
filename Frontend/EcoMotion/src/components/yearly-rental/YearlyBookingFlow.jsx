@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { vehicleService } from '../../services/vehicleService'
+import YearlyPickupCalendar from './YearlyPickupCalendar'
 import { useVehicle } from '../../hooks/useVehicle'
 import { createBooking, quotePickup, getBookingStartPolicy } from '../../services/bookingService'
 import { readErrorMessage } from '../../services/apiClient'
@@ -49,11 +51,13 @@ export default function YearlyBookingFlow({
   const navigate = useNavigate()
   const { vehicle, loading, error: vehicleError, notFound, reload } = useVehicle(vehicleId)
   const [step, setStep] = useState(1)
+  const [availability, setAvailability] = useState(null)
+  const [calendar, setCalendar] = useState(null)
+  const [calendarRefresh, setCalendarRefresh] = useState(0)
   const [startPolicy, setStartPolicy] = useState(null)
   const [startPolicyError, setStartPolicyError] = useState('')
   const [start, setStart] = useState(() => vietnamInputValue(Date.now() + 30 * 60 * 60 * 1000))
   const [pickup, setPickup] = useState({ address: '', latitude: null, longitude: null })
-  const [passengerCount, setPassengerCount] = useState(1)
   const [pickupState, setPickupState] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -69,8 +73,6 @@ export default function YearlyBookingFlow({
     return () => { active = false }
   }, [])
 
-  const maximumStart = startPolicy?.latestPickupTime
-    ? vietnamInputValue(new Date(startPolicy.latestPickupTime).getTime()) : undefined
   const plan = vehicle?.plans?.find((item) => String(item.id) === String(planId))
   const pickupTime = useMemo(() => parseVietnamInput(start), [start])
   const withinStartWindow = Boolean(pickupTime && startPolicy
@@ -84,8 +86,33 @@ export default function YearlyBookingFlow({
       && license.licenseExpiry >= vietnamDate(plannedEnd.getTime()),
   )
   const validVehicle = Boolean(vehicle && plan && plan.planType === 'YEARLY')
+  const calendarFrom = `${minimumStart}:00+07:00`
+  const calendarTo = startPolicy?.latestPickupTime ? calendarYearEnd(new Date(startPolicy.latestPickupTime)) : null
+  const calendarEnd = calendarTo ? new Date(`${vietnamDate(calendarTo.getTime()+86400000)}T00:00:00+07:00`).toISOString() : ''
+  const calendarKey = validVehicle && calendarEnd ? `${vehicleId}/${calendarFrom}/${calendarEnd}/${calendarRefresh}` : ''
+  useEffect(()=>{
+    if(!calendarKey)return
+    let alive=true
+    vehicleService.getAvailability(vehicleId,calendarFrom,calendarEnd).then(data=>{if(alive)setCalendar({key:calendarKey,slots:data.occupiedSlots,error:''})})
+      .catch(()=>{if(alive)setCalendar({key:calendarKey,slots:[],error:'Chưa tải được lịch xe. Bấm cập nhật lịch để thử lại.'})})
+    return ()=>{alive=false}
+  },[calendarKey,vehicleId,calendarFrom,calendarEnd])
+  const availabilityFrom = pickupTime?.toISOString()
+  const availabilityTo = plannedEnd ? new Date(`${vietnamDate(plannedEnd.getTime() + 24 * 60 * 60 * 1000)}T00:00:00+07:00`).toISOString() : undefined
+  const availabilityKey = validVehicle && availabilityFrom && availabilityTo ? `${vehicleId}/${availabilityFrom}/${availabilityTo}` : ''
+  useEffect(() => {
+    if (!availabilityKey) return
+    let alive = true
+    const timer=setTimeout(() => vehicleService.getAvailability(vehicleId,availabilityFrom,availabilityTo)
+      .then(value=>{if(alive)setAvailability({key:availabilityKey,slots:value.occupiedSlots || [],error:''})})
+      .catch(()=>{if(alive)setAvailability({key:availabilityKey,slots:[],error:'Chưa kiểm tra được lịch xe. Vui lòng thử lại hoặc chọn xe khác.'})}),350)
+    return ()=>{alive=false;clearTimeout(timer)}
+  },[availabilityKey,vehicleId,availabilityFrom,availabilityTo])
+  const availabilityPending = !!availabilityKey && availability?.key !== availabilityKey
+  const occupied = availability?.key === availabilityKey && availability.slots.some(slot=>new Date(slot.startAt)<new Date(availabilityTo) && new Date(slot.endAt)>pickupTime)
+  const availabilityError = availability?.key === availabilityKey ? availability.error : ''
   const maxPassengers = Math.max(1, (vehicle?.seatCount ?? 2) - 1)
-  const effectivePassengers = Math.min(passengerCount, maxPassengers)
+  const effectivePassengers = 1
 
   const pickupRequest = useMemo(() => {
     if (!validVehicle || pickup.latitude == null || pickup.longitude == null) return null
@@ -140,9 +167,15 @@ export default function YearlyBookingFlow({
       return
     }
 
+    if (availabilityPending || occupied || availabilityError) { setStep(1);setError('Hãy chọn thời gian xe còn trống và kiểm tra lịch xe trước khi tiếp tục.');return }
     setSubmitting(true)
     setError('')
     try {
+      const latestAvailability=await vehicleService.getAvailability(vehicleId,availabilityFrom,availabilityTo)
+      if ((latestAvailability.occupiedSlots || []).some(slot=>new Date(slot.startAt)<new Date(availabilityTo) && new Date(slot.endAt)>pickupTime)) {
+        setAvailability({key:availabilityKey,slots:latestAvailability.occupiedSlots,error:''});setStep(1)
+        throw new Error('Lịch xe vừa thay đổi. Vui lòng chọn khoảng thời gian hoặc xe khác.')
+      }
       const booking = await createBooking({
         vehicleId: Number(vehicle.id),
         planId: Number(plan.id),
@@ -227,20 +260,9 @@ export default function YearlyBookingFlow({
       {step === 1 && (
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-card sm:p-6">
           <h3 className="text-lg font-bold text-slate-900">Thời hạn thuê</h3>
-          <label className="mt-4 block max-w-sm text-sm font-semibold text-slate-700">
-            Thời gian nhận xe
-            <input
-              type="datetime-local"
-              value={start}
-              min={minimumStart}
-              max={maximumStart}
-              onChange={(event) => {
-                setStart(event.target.value)
-                setStep(1)
-              }}
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"
-            />
-          </label>
+          <YearlyPickupCalendar value={start} minimum={minimumStart} maximum={startPolicy?.latestPickupTime}
+            slots={calendar?.key===calendarKey?calendar.slots:null} loading={!calendarKey || calendar?.key!==calendarKey}
+            error={calendar?.key===calendarKey?calendar.error:''} onChange={setStart} onRefresh={()=>setCalendarRefresh(value=>value+1)} />
           {startPolicyError && <p role="alert" className="mt-2 text-sm text-red-700">Chưa tải được giới hạn ngày: {startPolicyError}. Vui lòng tải lại trang.</p>}
           {startPolicy && <p className="mt-2 text-sm text-slate-600">Ngày nhận xe cách hiện tại ít nhất 3 giờ và tối đa {startPolicy.maxAdvanceMonths} tháng.</p>}
           {startPolicy && pickupTime && !withinStartWindow && <p role="alert" className="mt-2 text-sm text-red-700">Ngày nhận xe phải nằm trong giới hạn đặt trước.</p>}
@@ -262,7 +284,7 @@ export default function YearlyBookingFlow({
             )}
             {!licenseCoversTerm && (
               <div>
-                <a href="#driving-license" className="mt-2 inline-block font-semibold underline">
+                <a href="#driving-license" onClick={() => { const section = document.getElementById('driving-license'); if (section) section.open = true }} className="mt-2 inline-block font-semibold underline">
                   Tải hoặc cập nhật GPLX
                 </a>
               </div>
@@ -273,10 +295,13 @@ export default function YearlyBookingFlow({
               Bản demo chỉ hỗ trợ xe tối đa 9 chỗ tính cả người lái.
             </p>
           )}
+          {availabilityPending && <p role="status" className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Đang kiểm tra lịch xe cho toàn bộ 12 tháng…</p>}
+          {(occupied || availabilityError) && <div role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{availabilityError || 'Xe đã có lịch trong kỳ thuê này, bao gồm thời gian chuẩn bị xe. Hãy đổi ngày nhận hoặc chọn xe khác trước khi tiếp tục.'}<Link className="ml-2 font-semibold underline" to="/">Chọn xe khác</Link></div>}
+          {!availabilityPending && !occupied && !availabilityError && availability?.key === availabilityKey && <p className="mt-3 text-sm text-emerald-800">Xe hiện còn trống trong kỳ thuê đã chọn. Lịch được kiểm tra lại khi gửi yêu cầu.</p>}
           <button
             type="button"
             onClick={() => setStep(2)}
-            disabled={!licenseCoversTerm || vehicle.seatCount > 9 || !withinStartWindow}
+            disabled={!licenseCoversTerm || vehicle.seatCount > 9 || !withinStartWindow || availabilityPending || occupied || !!availabilityError}
             className="mt-5 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Tiếp tục chọn điểm nhận
@@ -294,9 +319,10 @@ export default function YearlyBookingFlow({
           driverNote=""
           setDriverNote={() => {}}
           passengerCount={effectivePassengers}
-          setPassengerCount={setPassengerCount}
+          setPassengerCount={() => {}}
+          showPassengers={false}
           seatCount={vehicle.seatCount}
-          driverIncluded
+          driverIncluded={false}
           selfDrive
           maxPassengers={maxPassengers}
           onBack={() => setStep(1)}
@@ -313,7 +339,7 @@ export default function YearlyBookingFlow({
             <div><dt className="text-slate-500">Xe</dt><dd className="font-semibold">{vehicleName}</dd></div>
             <div><dt className="text-slate-500">Thời gian</dt><dd className="font-semibold">{formatVietnamDateTime(pickupTime)} · 12 tháng</dd></div>
             <div><dt className="text-slate-500">Điểm nhận</dt><dd className="font-semibold">{pickup.address}</dd></div>
-            <div><dt className="text-slate-500">Hành khách ngoài người lái</dt><dd className="font-semibold">{effectivePassengers}</dd></div>
+            <div><dt className="text-slate-500">Hình thức</dt><dd className="font-semibold">Tự lái · sử dụng xe trong 12 tháng</dd></div>
             <div><dt className="text-slate-500">Giá thuê cả kỳ</dt><dd className="font-semibold">{formatCurrency(planPrice)}</dd></div>
             <div><dt className="text-slate-500">Phí giao/nhận dự kiến</dt><dd className="font-semibold">{formatCurrency(pickupFee)}</dd></div>
             <div><dt className="text-slate-500">Tiền bảo đảm (chưa gồm tiền thuê tháng đầu)</dt><dd className="font-semibold">{formatCurrency(upfrontAmount)}</dd></div>
@@ -322,6 +348,17 @@ export default function YearlyBookingFlow({
             Gửi yêu cầu chưa phát sinh thanh toán. Nhà cung cấp có 24 giờ để phản hồi; nếu chấp nhận, bạn cần tải hợp đồng đã ký
             trong thời hạn giữ xe, sau đó thanh toán tiền bảo đảm và tiền thuê tháng đầu. Đơn thuê năm tự lái, không phân công tài xế.
           </p>
+          <section className="mt-4 space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4" aria-label="Lộ trình thanh toán">
+            <h4 className="font-bold">Bạn sẽ thanh toán như thế nào?</h4>
+            <ol className="list-decimal space-y-2 pl-5 text-sm">
+              <li><strong>Gửi yêu cầu: 0 đ.</strong> Provider kiểm tra xe và phản hồi. Chưa chuyển tiền ở bước này.</li>
+              <li><strong>Chốt điều khoản và ký hợp đồng.</strong> Kiểm tra km, phí vượt km, trả sớm/trễ và hạn giữ xe trước khi đồng ý.</li>
+              <li><strong>Trước nhận xe:</strong> thanh toán riêng tiền bảo đảm {formatCurrency(upfrontAmount)} và kỳ thuê tháng đầu theo lịch hợp đồng. Phí giao/nhận dự kiến {formatCurrency(pickupFee)} được ghi rõ trong hợp đồng và yêu cầu thanh toán.</li>
+              <li><strong>Trong kỳ thuê:</strong> trả trước từng tháng theo số tiền, ngày đến hạn và tài khoản nhận tiền trên mỗi yêu cầu. Tổng tiền thuê 12 tháng là {formatCurrency(planPrice)}, không phải số phải trả ngay.</li>
+              <li><strong>Kết thúc:</strong> kiểm định xe, đối soát phí và tiền đã trả; hoàn phần tiền bảo đảm còn lại sau các khấu trừ được thống nhất.</li>
+            </ol>
+            <p className="text-xs text-slate-600">Thông tin chuyển khoản và nội dung thanh toán chỉ sử dụng từ yêu cầu thanh toán của hợp đồng. Báo đã chuyển tiền chưa đồng nghĩa Provider đã xác nhận nhận tiền.</p>
+          </section>
           <div className="mt-5 flex flex-wrap justify-between gap-3">
             <button type="button" onClick={() => setStep(2)} className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm font-semibold">
               Quay lại

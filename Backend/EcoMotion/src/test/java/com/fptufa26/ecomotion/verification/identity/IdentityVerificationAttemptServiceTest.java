@@ -75,6 +75,31 @@ class IdentityVerificationAttemptServiceTest {
     }
 
     @Test
+    void exposesRealProcessingClockAndRestrictsHistoricalEvidenceToOwnerAndEvent() {
+        attempt.setStatus(PROCESSING);
+        attempt.setProcessingStage("VIDEO");
+        attempt.setOperationStartedAt(now.minusSeconds(20));
+        var progress = service.progress(1L, attempt.getPublicId());
+        assertEquals("VIDEO", progress.processingStage());
+        assertEquals(now.minusSeconds(20), progress.startedAt());
+        assertEquals(now.plusSeconds(580), progress.deadlineAt());
+        assertThrows(IdentityAiException.class, () -> service.historyEvidence(1L, attempt.getPublicId(), 99L, "front"));
+        attempt.setFrontKey("original-front");
+        attempt.setSubmittedAt(now);
+        var event = new com.fptufa26.ecomotion.verification.identity.entity.IdentityReviewEvent(
+                attempt, "SUBMIT", "USER", 1L, null, null, now);
+        org.springframework.test.util.ReflectionTestUtils.setField(event, "id", 99L);
+        attempt.getReviewHistory().add(event);
+        attempt.setFrontKey("replacement-front");
+        attempt.setSubmittedAt(null);
+        when(storage.read("original-front", 100)).thenReturn(new byte[]{7});
+        assertArrayEquals(new byte[]{7}, service.historyEvidence(1L, attempt.getPublicId(), 99L, "front"));
+        when(repository.findOwnedForUpdate(attempt.getPublicId(), 1L)).thenReturn(Optional.empty());
+        assertThrows(IdentityAiException.class, () -> service.historyEvidence(1L, attempt.getPublicId(), 99L, "front"));
+        verify(storage, times(1)).read("original-front", 100);
+    }
+
+    @Test
     void expiresAttemptAndReleasesActiveSlot() {
         attempt.setExpiresAt(now);
         var response = service.get(1L, attempt.getPublicId());

@@ -159,7 +159,8 @@ public class IdentityAiAssessmentServiceImpl implements IdentityAiAssessmentServ
                 && number != null && number.matches("[0-9]{12}")
                 && name != null && validBirthDate(birth);
         return new DocumentRead(type, status, text(raw.get("code")), number, name, birth,
-                text(data.get("expiryDate")), text(data.get("sex")), text(data.get("address")), readable);
+                text(data.get("expiryDate")), text(data.get("sex")), text(data.get("address")), readable,
+                com.fptufa26.ecomotion.verification.documentai.DocumentAiEvidence.from(raw));
     }
 
     private boolean validBirthDate(String value) {

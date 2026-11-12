@@ -25,6 +25,10 @@ public class YearlyIncident {
     @Column(length = 2000)
     private String category;
     @Column(length = 2000)
+    private String reportedCategory;
+    @Column(length = 2000)
+    private String proposedCategory;
+    @Column(length = 2000)
     private String description;
     @Column(length = 2000)
     private String status;

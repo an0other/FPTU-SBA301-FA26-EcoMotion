@@ -66,6 +66,14 @@ public class RefundEventServiceImpl implements RefundEventService {
                 .map(RefundRequest::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasUnsettledYearlyRefunds(Long bookingId) {
+        return refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream().anyMatch(r ->
+                r.getStatus() != RefundStatus.REJECTED && r.getStatus() != RefundStatus.REFUNDED
+                || "WAITING".equals(r.getReceiptStatus()) || "REPORTED_NOT_RECEIVED".equals(r.getReceiptStatus()));
+    }
+
     @Transactional(readOnly = true)
     public boolean hasOpenRefunds(Long bookingId) {
         return refundRequestRepository.findByBooking_IdOrderByCreatedAtDesc(bookingId).stream()
@@ -483,7 +491,7 @@ public class RefundEventServiceImpl implements RefundEventService {
                 .map(PaymentTransaction::getId)
                 .toList();
         return transactions.stream()
-                .filter(tx -> tx.getType() == PaymentType.REFUND && tx.getDirection() == PaymentDirection.OUT)
+                .filter(tx -> (tx.getType() == PaymentType.REFUND || tx.getType() == PaymentType.SECURITY_DEPOSIT_REFUND) && tx.getDirection() == PaymentDirection.OUT)
                 .filter(tx -> tx.getStatus() == PaymentStatus.PENDING || tx.getStatus() == PaymentStatus.PAID)
                 .filter(tx -> tx.getId() != null && !linked.contains(tx.getId()))
                 .toList();

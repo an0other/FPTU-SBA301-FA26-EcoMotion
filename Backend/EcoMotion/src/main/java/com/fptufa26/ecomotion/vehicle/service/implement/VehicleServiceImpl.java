@@ -57,6 +57,12 @@ public class VehicleServiceImpl implements VehicleService {
     private final VehicleDocumentRepository vehicleDocumentRepository;
 
     @Override
+    public List<Vehicle> findApprovedProviderVehicles(Long providerId) {
+        return vehicleRepository.findByProvider_IdOrderByIdAsc(providerId).stream()
+                .filter(v -> v.getStatus() == VehicleStatus.APPROVED).toList();
+    }
+
+    @Override
     public PageResponse<VehicleCardResponse> listRentableVehicles(String keyword, String location,
                                                                   String fuelType, String planType,
                                                                   BigDecimal maxPrice,

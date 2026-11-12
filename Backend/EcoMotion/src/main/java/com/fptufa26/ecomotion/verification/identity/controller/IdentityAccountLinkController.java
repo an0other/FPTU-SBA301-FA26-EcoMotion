@@ -21,6 +21,11 @@ public class IdentityAccountLinkController {
     private final IdentityAccountLinkService links;
     private final TokenService tokens;
     private final UserService users;
+    @ModelAttribute
+    public void accountLinkingRemoved() {
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.GONE,
+                "Account linking is disabled. Register and submit each role for separate admin review.");
+    }
 
     @PostMapping("/api/identity/links")
     @PreAuthorize("hasAnyRole('RENTER','PROVIDER')")

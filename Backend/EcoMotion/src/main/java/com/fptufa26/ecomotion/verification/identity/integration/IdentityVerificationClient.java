@@ -26,6 +26,7 @@ public class IdentityVerificationClient {
     private final RestClient client;
     private final String baseUrl;
     private final String apiKey;
+    private Duration jobTimeout = Duration.ofSeconds(180);
 
     @Autowired
     public IdentityVerificationClient(
@@ -34,6 +35,7 @@ public class IdentityVerificationClient {
             @Value("${app.identity.ai.connect-timeout:5s}") Duration connectTimeout,
             @Value("${app.identity.ai.read-timeout:180s}") Duration readTimeout) {
         this(buildClient(connectTimeout, readTimeout), baseUrl, apiKey);
+        this.jobTimeout = readTimeout;
     }
 
     private static RestClient buildClient(Duration connectTimeout, Duration readTimeout) {
@@ -58,7 +60,10 @@ public class IdentityVerificationClient {
         body.add("cccd", resource(front, frontFilename));
         body.add("video", resource(video, "capture.video"));
         try {
-            IdentityVideoResult result = client.post()
+            IdentityVideoResult result = com.fptufa26.ecomotion.verification.progress.AiProgressContext.active()
+                    ? new tools.jackson.databind.ObjectMapper().convertValue(
+                        com.fptufa26.ecomotion.verification.progress.AiJobPolling.run(client, baseUrl + "/v1/verifications/jobs", apiKey, body, jobTimeout), IdentityVideoResult.class)
+                    : client.post()
                     .uri(baseUrl + "/v1/verifications")
                     .header("X-API-Key", apiKey)
                     .contentType(MediaType.MULTIPART_FORM_DATA)
@@ -144,7 +149,31 @@ public class IdentityVerificationClient {
                 || matching.median() > matching.maximum())) {
             throw invalidResponse();
         }
-        boolean ready = "PASS".equals(result.motionChallenge().status()) && matching.scoredFrames() > 0;
+        var assessment=result.matchAssessment();
+        if(assessment!=null) {
+            if(assessment.status()==null || !Set.of("NO_USABLE_FACE","INSUFFICIENT_EVIDENCE","NOT_CALIBRATED","LIKELY_MATCH","LOW_SIMILARITY","INCONCLUSIVE").contains(assessment.status())
+                || !"cosine_similarity".equals(assessment.metric()) || assessment.comparedFrames()==null || !assessment.comparedFrames().equals(matching.scoredFrames())
+                || assessment.minimumFrames()==null || assessment.minimumFrames()<1 || assessment.minimumFrames()>60
+                || assessment.score()!=null && !validScore(assessment.score())
+                || assessment.modelSha256()==null || !assessment.modelSha256().matches("[a-f0-9]{64}")) throw invalidResponse();
+            boolean configured=assessment.lowThreshold()!=null || assessment.highThreshold()!=null;
+            if(configured && (!validScore(assessment.lowThreshold()) || !validScore(assessment.highThreshold()) || assessment.lowThreshold()>=assessment.highThreshold()
+                || !"EXPERIMENTAL".equals(assessment.calibrationStatus()))) throw invalidResponse();
+            if(!configured && (!"NOT_CALIBRATED".equals(assessment.calibrationStatus()) || Set.of("LIKELY_MATCH","LOW_SIMILARITY","INCONCLUSIVE").contains(assessment.status()))) throw invalidResponse();
+        }
+        if(assessment!=null) {
+            if(assessment.policyVersion()==null || assessment.policyVersion().isBlank()) throw invalidResponse();
+            if(matching.scoredFrames()>0 && (assessment.score()==null || Math.abs(assessment.score()-matching.median())>0.000001)) throw invalidResponse();
+            if(matching.scoredFrames()==0 && assessment.score()!=null) throw invalidResponse();
+            String expected=matching.scoredFrames()==0 ? "NO_USABLE_FACE"
+                : matching.scoredFrames()<assessment.minimumFrames() ? "INSUFFICIENT_EVIDENCE"
+                : assessment.lowThreshold()==null ? "NOT_CALIBRATED"
+                : assessment.score()>=assessment.highThreshold() ? "LIKELY_MATCH"
+                : assessment.score()<assessment.lowThreshold() ? "LOW_SIMILARITY" : "INCONCLUSIVE";
+            if(!expected.equals(assessment.status())) throw invalidResponse();
+        }
+        boolean ready = "PASS".equals(result.motionChallenge().status()) && matching.scoredFrames() > 0
+                && (assessment==null || !Set.of("NO_USABLE_FACE","INSUFFICIENT_EVIDENCE").contains(assessment.status()));
         if (ready != "READY_FOR_REVIEW".equals(result.workflow().status())) {
             throw invalidResponse();
         }
